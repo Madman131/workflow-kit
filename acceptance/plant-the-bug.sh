@@ -174,6 +174,10 @@ printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "
 rm -f "$ADOPTER/.claude/kit.config.json"; printf '%s' "$GOODCFG" > "$WORK/realcfg.json"; ln -s "$WORK/realcfg.json" "$ADOPTER/.claude/kit.config.json"
 assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "symlinked kit.config.json -> code write BLOCKED (fail-closed)"
 rm -f "$ADOPTER/.claude/kit.config.json"; printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
+# config path that is a DIRECTORY (not a regular file) -> the !isFile branch -> fail-closed
+rm -f "$ADOPTER/.claude/kit.config.json"; mkdir -p "$ADOPTER/.claude/kit.config.json"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "kit.config.json is a DIRECTORY -> code write BLOCKED (!isFile fail-closed)"
+rmdir "$ADOPTER/.claude/kit.config.json"; printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
 # UNREADABLE config (chmod 000) -> fail-closed deny (EACCES must not read as absent)
 chmod 000 "$ADOPTER/.claude/kit.config.json"
 assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "unreadable (chmod 000) config -> code write BLOCKED (EACCES != absent)"

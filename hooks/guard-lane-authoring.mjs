@@ -363,7 +363,10 @@ process.stdin.on("end", () => {
   // EXECUTED_PATH_RE falls back to defaults, so a path gated ONLY by a config-added source dir is not
   // identified as gated and would slip through the early-allow below (a fail-open). When the config is
   // unreadable we cannot trust that identification, so we block everything NOT statically safe
-  // (docs/memory/declaration/ledger — config-independent). Docs still proceed; all code fails closed.
+  // (only the docs/ and memory/ SUBTREES + the declaration + the ledger — config-independent). Note
+  // this is broader than "docs proceed": a ROOT-level doc (README.md, LICENSE) and every code path
+  // fail closed until the config is fixed. Fail-CLOSED is the correct direction; the deny message
+  // points remediation at Bash / re-running init (the Write tool itself is blocked while corrupt).
   if (!kitConfig.ok && !isStaticallySafe(rel)) {
     const logged = writeLedger(projectRoot, "deny", "kit-config-malformed", undefined, rel, undefined, input?.session_id, undefined, undefined);
     if (!logged) deny(projectRoot, rel, "ledger-error", input?.session_id);
