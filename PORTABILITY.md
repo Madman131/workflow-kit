@@ -64,6 +64,30 @@ their fakes). If you gate by hand instead, record that in `core/BINDINGS.md § T
 `core/GATES.md` as the doctrine (freeze the artifact · require a verdict not just a receipt · exit 3 is
 never a pass) rather than a script you must run.
 
+## Known limitations (v1.0) — scoped by the threat model
+
+These were surfaced by the v1.0 gate and consciously left as-is; they are recorded here rather than
+hidden. The stated threat model is **cooperative-but-fallible agents, not intrusion detection**
+(`core/WORKFLOW.md` § threat-model calibration) — hostile-evasion hardening needs explicit scope.
+
+- **Symlink hardening in the working-tree guards is incomplete (hostile-evasion).** The `pre-commit`
+  hook `lstat`-rejects a symlinked declaration and a symlinked `kit.config.json` (fail-closed), and the
+  loaders reject a symlinked config. But `guard-cross-repo-writes.mjs` uses a **lexical** root check, so
+  a symlinked *in-repo directory* pointing outside the repo is not caught at write time, and
+  `guard-lane-authoring.mjs` does not reject a symlinked *declaration* (the commit-time `pre-commit`
+  does). Deliberately following a symlink to escape a boundary is hostile-evasion, out of the stated
+  model; the every-lane commit floor is the backstop. Characterized (not fixed) in
+  `acceptance/plant-the-bug.sh` § F12 so a future hardening flips the assertion visibly.
+- **The cross-repo guard ships scratch roots.** `guard-cross-repo-writes.mjs` allows writes to the
+  project dir, `~/.claude`, and `/tmp` / `/private/tmp` (the last two so Claude worktrees under `/tmp`
+  work). An adopter inherits those exemptions — if your workflow never uses `/tmp` worktrees you may
+  tighten them, but the method's private-worktree pattern relies on them.
+- **A few `[P]` method docs carry illustrative origin-repo names.** `core/REVIEW.md` cites `pil/` as a
+  code-dir example; `core/README.md` names `docs/PIL_ARCHITECTURE.md` / `docs/open_work_current_state.md`
+  as layer-model examples an adopter won't have. These are illustrative prose only — **no control has a
+  functional dependency on the origin repo** (verified: repo is passed via `-C`/cwd; no hardcoded
+  absolute paths in any portable script). Same class as the cosmetic gate-runner naming above.
+
 ## What is portable verbatim vs generated
 
 - `[P]` (verbatim): `core/*` method docs, the three hooks, `pre-commit`, `check-doc-size.mjs`,

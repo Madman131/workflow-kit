@@ -16,7 +16,7 @@
 
 import { execFileSync } from "node:child_process";
 import {
-  chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync,
+  chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -75,6 +75,12 @@ const PACKAGE_SCRIPTS = {
 function log(msg) { console.log(msg); }
 function warn(msg) { console.warn(`  ! ${msg}`); }
 
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
+}
+// Single non-empty path segment (no separators) — the shape the loaders' isSegmentArray requires.
+function isSegment(s) { return typeof s === "string" && s.length > 0 && !s.includes("/") && !s.includes("\\"); }
+
 function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 
 // Copy refusing to clobber unless force. Returns "written" | "skipped".
@@ -116,22 +122,45 @@ function mergeSettings(targetSettings, kitSettings, force) {
     if (existing === null || typeof existing !== "object" || Array.isArray(existing)) existing = {};
   }
   const kit = JSON.parse(readFileSync(kitSettings, "utf8"));
-  existing.hooks ||= {};
+  // VALIDATE SHAPE, never trust it — a parseable-but-non-standard settings.json must not silently
+  // swallow our registrations. `existing.hooks` as an ARRAY (or string/number) would take the
+  // registrations as named properties that JSON.stringify DROPS → guards written to disk but never
+  // registered (a silent fail-open). A non-array event bucket would crash `.find`. Reset any
+  // non-standard shape to the expected type, loudly, and install ours.
+  if (!isPlainObject(existing.hooks)) {
+    if (existing.hooks !== undefined) warn(`existing ${targetSettings} had a non-standard "hooks" (${Array.isArray(existing.hooks) ? "array" : typeof existing.hooks}) — replacing it with the standard object shape so the guards register`);
+    existing.hooks = {};
+  }
   const dest = existing.hooks;
   for (const event of Object.keys(kit.hooks)) {
-    dest[event] ||= [];
+    if (!Array.isArray(dest[event])) {
+      if (dest[event] !== undefined) warn(`existing ${targetSettings} "hooks.${event}" was not an array — replacing it`);
+      dest[event] = [];
+    }
     for (const group of kit.hooks[event]) {
       // Merge by matcher; dedupe hook entries by command string.
-      let bucket = dest[event].find((g) => g.matcher === group.matcher);
+      let bucket = dest[event].find((g) => isPlainObject(g) && g.matcher === group.matcher);
       if (!bucket) { bucket = { matcher: group.matcher, hooks: [] }; dest[event].push(bucket); }
-      bucket.hooks ||= [];
+      if (!Array.isArray(bucket.hooks)) bucket.hooks = [];
       for (const h of group.hooks) {
-        if (!bucket.hooks.some((x) => x.command === h.command)) bucket.hooks.push(h);
+        if (!bucket.hooks.some((x) => isPlainObject(x) && x.command === h.command)) bucket.hooks.push(h);
       }
     }
   }
   ensureDir(path.dirname(targetSettings));
   writeFileSync(targetSettings, JSON.stringify(existing, null, 2) + "\n");
+  // Post-write self-check: confirm every registration we intended is actually present on disk, so a
+  // future serialization surprise can never let init report success on an unprotected repo.
+  const roundtrip = JSON.parse(readFileSync(targetSettings, "utf8"));
+  for (const event of Object.keys(kit.hooks)) {
+    for (const group of kit.hooks[event]) {
+      for (const h of group.hooks) {
+        const present = Array.isArray(roundtrip?.hooks?.[event]) &&
+          roundtrip.hooks[event].some((g) => Array.isArray(g?.hooks) && g.hooks.some((x) => x?.command === h.command));
+        if (!present) return "verify-failed";
+      }
+    }
+  }
   return "written";
 }
 
@@ -154,6 +183,12 @@ function gitConfig(target, key, value) {
   } catch { return false; }
 }
 
+// Compare paths by realpath so the macOS /tmp -> /private/tmp symlink (where worktrees live) does not
+// read as a spurious subdir mismatch. Falls back to path.resolve if realpath fails.
+function realpathOrSelf(p) {
+  try { return realpathSync(p); } catch { return path.resolve(p); }
+}
+
 function isGitRepo(target) {
   try {
     execFileSync("git", ["-C", target, "rev-parse", "--git-dir"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -168,6 +203,18 @@ function main() {
 
   const T = args.target;
   const force = args.force;
+
+  // Validate the repo-specific families UP FRONT (before writing anything). The loaders require single
+  // path SEGMENTS for source dirs and risk tokens; a nested value like "app/server" would be written to
+  // kit.config.json and then rejected as MALFORMED by every control — fail-closed but SILENT, the kind
+  // of footgun that gets a frustrated adopter to disable the control (FM5). Catch it here, loudly.
+  for (const [flag, list] of [["--source-dirs", args.sourceDirs], ["--risk-tokens", args.riskTokens]]) {
+    const bad = (list || []).filter((s) => !isSegment(s));
+    if (bad.length) { console.error(`init: ${flag} values must be single path segments (no "/"); got ${JSON.stringify(bad)}. The controls match top-level dirs / word fragments — pass e.g. "app", not "app/server".`); process.exit(2); }
+  }
+  const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || n === ".." || n.startsWith("../"); });
+  if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }
+
   ensureDir(T);
   log(`workflow-kit init → ${T}`);
   const remaining = []; // unfilled placeholders the adopter must complete
@@ -176,19 +223,35 @@ function main() {
   const core = copyTree(path.join(KIT_ROOT, "core"), path.join(T, "core"), force);
   log(`  core/ method docs: ${core.filter(([, s]) => s === "written").length} written, ${core.filter(([, s]) => s === "skipped").length} kept`);
 
-  // 2. [P] PreToolUse hooks (verbatim mechanism).
+  // 2. [P] PreToolUse hooks (verbatim mechanism). Report kept-vs-written honestly: a KEPT (existing)
+  // hook may be STALE, so "installed" would over-claim (a control believed current but actually old).
+  let hooksKept = 0;
   for (const h of readdirSync(path.join(KIT_ROOT, "hooks"))) {
     const d = path.join(T, ".claude", "hooks", h);
-    if (copyGuarded(path.join(KIT_ROOT, "hooks", h), d, force) === "written") chmodX(d);
+    if (copyGuarded(path.join(KIT_ROOT, "hooks", h), d, force) === "written") chmodX(d); else hooksKept++;
   }
-  log(`  .claude/hooks/: 3 PreToolUse guards installed`);
+  log(hooksKept
+    ? `  .claude/hooks/: ${3 - hooksKept} installed, ${hooksKept} EXISTING kept — may be STALE; re-run with --force to update`
+    : `  .claude/hooks/: 3 PreToolUse guards installed`);
 
   // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
   const pc = path.join(T, ".githooks", "pre-commit");
-  if (copyGuarded(path.join(KIT_ROOT, "githooks", "pre-commit"), pc, force) === "written") chmodX(pc);
+  const pcResult = copyGuarded(path.join(KIT_ROOT, "githooks", "pre-commit"), pc, force);
+  if (pcResult === "written") chmodX(pc);
+  else warn(`existing .githooks/pre-commit KEPT — it may be a STALE or no-op hook; re-run with --force to install the kit's version (an outdated pre-commit still lets undeclared commits through)`);
   if (isGitRepo(T)) {
-    if (gitConfig(T, "core.hooksPath", ".githooks")) log(`  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`);
-    else warn(`could not set core.hooksPath — run: git -C ${T} config core.hooksPath .githooks`);
+    // FM3/subdir footgun: `git config` writes to the repo the target belongs to. If T is a SUBDIR of a
+    // larger repo, core.hooksPath is set on the PARENT pointing at parent/.githooks while the hook was
+    // written under T/.githooks — unreachable. Warn rather than silently misconfigure.
+    let top = null;
+    try { top = execFileSync("git", ["-C", T, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(); } catch { /* handled below */ }
+    if (top && realpathOrSelf(top) !== realpathOrSelf(T)) {
+      warn(`${T} is a SUBDIRECTORY of git repo ${top} — core.hooksPath would be set on the parent and miss ${T}/.githooks. Adopt at the repo ROOT, or configure the hook manually.`);
+    } else if (gitConfig(T, "core.hooksPath", ".githooks")) {
+      log(`  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`);
+    } else {
+      warn(`could not set core.hooksPath — run: git -C ${T} config core.hooksPath .githooks`);
+    }
   } else {
     warn(`${T} is not a git repo yet — after 'git init', run: git config core.hooksPath .githooks (FM1: unset ⇒ the pre-commit control is silently absent)`);
   }
@@ -213,9 +276,12 @@ function main() {
   copyGuarded(path.join(KIT_ROOT, "templates", "kit-precommit.test.mjs"), path.join(T, "tests", "kit-precommit.test.mjs"), force);
   log(`  tests/kit-precommit.test.mjs: FM1 guard installed (wire test:kit-controls into CI)`);
 
-  // 5. settings.json — MERGE the PreToolUse registrations.
-  mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
-  log(`  .claude/settings.json: PreToolUse registrations merged`);
+  // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
+  // the guards were not actually registered (that is the "manufactured assurance" fail-open).
+  const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
+  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse registrations merged`);
+  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 3 PreToolUse guards are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
+  else warn(`.claude/settings.json: post-write verification FAILED — the guards are NOT confirmed on disk. Inspect ${path.join(T, ".claude", "settings.json")} before trusting the Claude-lane controls.`);
 
   // 6. .claude/kit.config.json — the [G] repo-specific families (the ONLY parameterized DATA).
   const config = {};
@@ -224,9 +290,12 @@ function main() {
   if (args.stateDocs) config.stateDocs = args.stateDocs;
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  if (existsSync(cfgPath) && !force) warn(`exists, kept (use --force to overwrite): ${cfgPath}`);
+  let cfgKept = false;
+  if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else { ensureDir(path.dirname(cfgPath)); writeFileSync(cfgPath, JSON.stringify(config, null, 2) + "\n"); }
-  log(`  .claude/kit.config.json: ${Object.keys(config).length ? Object.keys(config).join(", ") : "empty (portable defaults)"}`);
+  log(cfgKept
+    ? `  .claude/kit.config.json: EXISTING kept — on-disk file unchanged; the flags you passed were NOT applied`
+    : `  .claude/kit.config.json: ${Object.keys(config).length ? Object.keys(config).join(", ") : "empty (portable defaults)"}`);
 
   // 7. [G] generated files from templates (placeholders the adopter completes).
   const vars = {
@@ -247,7 +316,7 @@ function main() {
     const text = fillTemplate(path.join(KIT_ROOT, "templates", tmpl), vars);
     ensureDir(path.dirname(d));
     writeFileSync(d, text);
-    if (/\{\{[A-Z_]+\}\}/.test(text)) remaining.push(dst);
+    if (/\{\{[A-Z0-9_]+\}\}/.test(text)) remaining.push(dst); // include digit-bearing tokens ({{INVARIANT_1}})
   }
   log(`  [G] entry stubs + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP generated`);
 

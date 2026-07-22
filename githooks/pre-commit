@@ -3,7 +3,7 @@
 // it never decides whether the declared tier is semantically correct.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 // Git always reports repository paths with POSIX separators, including on Windows.
@@ -35,7 +35,12 @@ function isSegmentArray(v) {
 }
 // Absent config ⇒ defaults-only (legitimate). Present-but-corrupt ⇒ { ok:false } ⇒ the main flow fails closed.
 function loadKitConfig() {
-  if (!existsSync(KIT_CONFIG)) return { ok: true, laneRiskTokens: [] };
+  let st;
+  try { st = lstatSync(KIT_CONFIG); }
+  catch { return { ok: true, laneRiskTokens: [] }; } // truly absent ⇒ defaults
+  // A SYMLINKED/non-regular config is FAIL-CLOSED, not treated as absent (a dangling symlink would
+  // otherwise silently drop the repo-specific deny tokens). Matches readDeclaration's symlink handling.
+  if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
   let parsed;
   try { parsed = JSON.parse(readFileSync(KIT_CONFIG, "utf8")); } catch { return { ok: false }; }
   if (!isPlainObject(parsed)) return { ok: false };

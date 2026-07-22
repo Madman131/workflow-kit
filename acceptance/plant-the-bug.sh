@@ -40,9 +40,11 @@ mkdir -p "$ADOPTER" "$OUTSIDE"
 git init -q "$ADOPTER"
 git -C "$ADOPTER" config user.email a@a; git -C "$ADOPTER" config user.name a
 node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
-  --remote-url git@github.com:you/adopter.git --source-dirs src \
+  --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
   --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" >/dev/null
-mkdir -p "$ADOPTER/src" "$ADOPTER/docs"   # app dirs the adopter would already have
+mkdir -p "$ADOPTER/src" "$ADOPTER/docs" "$ADOPTER/policy"   # app dirs the adopter would already have
+# 'policy' is a CONFIG-ONLY source dir (not a portable default) — used to test that a malformed config
+# still fails closed for a path gated SOLELY by config (the F1 fail-open regression).
 echo "-- adopted (init ran) --"
 
 H_XREPO="$ADOPTER/.claude/hooks/guard-cross-repo-writes.mjs"
@@ -118,6 +120,48 @@ if git -C "$ADOPTER" commit -q -m "undeclared code, hook on" 2>/dev/null; then b
 git -C "$ADOPTER" reset -q src/feature.mjs; rm -f "$ADOPTER/src/feature.mjs"
 printf 'note\n' > "$ADOPTER/docs/readme-note.md"; git -C "$ADOPTER" add docs/readme-note.md
 if git -C "$ADOPTER" commit -q -m "docs only"; then ok "WITH hook on: docs-only commit passes (no over-block)"; else bad "docs-only commit should pass"; fi
+
+GOODCFG='{"executedPathDirs":["src","policy"],"laneRiskTokens":["billing"],"stateDocs":["docs/state.md"]}'
+
+echo
+echo "(F1 regression) malformed config STILL fails closed for a CONFIG-ONLY-gated path"
+# policy/authz.rego is gated ONLY via config executedPathDirs and is not a default code extension —
+# the exact path that slipped through the early-allow before the fix.
+rm -f "$DECL"
+printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"policy/authz.rego"}}' "$ADOPTER")" "valid config, undeclared: config-only-gated policy/authz.rego BLOCKED"
+printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"policy/authz.rego"}}' "$ADOPTER")" "MALFORMED config: config-only-gated path STILL BLOCKED (fail-open fixed)"
+
+echo
+echo "(F5) pre-commit fails closed on a malformed config (code commit blocked)"
+rm -f "$DECL"; printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
+printf 'export const g=1;\n' > "$ADOPTER/src/g.mjs"; git -C "$ADOPTER" add src/g.mjs
+if git -C "$ADOPTER" commit -q -m "malformed cfg code" 2>/dev/null; then bad "pre-commit malformed-config: commit should be BLOCKED"; else ok "pre-commit malformed-config: code commit BLOCKED (fail-closed)"; fi
+git -C "$ADOPTER" reset -q src/g.mjs 2>/dev/null; rm -f "$ADOPTER/src/g.mjs"
+
+echo
+echo "(F5) check-doc-size CLI discriminates (clean pass / over-cap FAIL / malformed FAIL)"
+printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
+(cd "$ADOPTER" && node scripts/check-doc-size.mjs >/dev/null 2>&1) && ok "check-doc-size: clean adopter tree -> exit 0" || bad "check-doc-size: clean tree should pass"
+cp "$ADOPTER/core/WORKFLOW.md" "$WORK/WORKFLOW.bak"; head -c 25000 /dev/zero | tr '\0' 'x' >> "$ADOPTER/core/WORKFLOW.md"
+if (cd "$ADOPTER" && node scripts/check-doc-size.mjs >/dev/null 2>&1); then bad "check-doc-size: over-cap core doc should FAIL"; else ok "check-doc-size: over-cap core doc -> exit 1 (discriminates)"; fi
+cp "$WORK/WORKFLOW.bak" "$ADOPTER/core/WORKFLOW.md"
+printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
+if (cd "$ADOPTER" && node scripts/check-doc-size.mjs >/dev/null 2>&1); then bad "check-doc-size: malformed config should FAIL"; else ok "check-doc-size: malformed config -> exit 1 (fail-closed)"; fi
+printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
+
+echo
+echo "(F12 characterization — DEFERRED: hostile-evasion, out of stated threat model; revisit when hardened)"
+# guard-cross-repo-writes uses a LEXICAL root check, so a symlinked in-repo dir pointing OUTSIDE is not
+# caught. This asserts CURRENT (deferred) behavior so a future hardening flips it visibly.
+mkdir -p "$OUTSIDE/target"; ln -s "$OUTSIDE/target" "$ADOPTER/escape"
+if [ "$(guard_decision "$H_XREPO" '{"tool_input":{"file_path":"escape/x.md"}}' "$ADOPTER")" = "allow" ]; then
+  ok "DEFERRED(documented): a symlinked in-repo dir escaping the repo is NOT caught by the lexical cross-repo guard"
+else
+  ok "cross-repo guard now catches the symlinked escape — hardening landed; update the F12 disposition"
+fi
+rm -f "$ADOPTER/escape"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

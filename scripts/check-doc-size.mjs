@@ -35,7 +35,7 @@
 // Usage: node scripts/check-doc-size.mjs [--json]
 // Exit 0 = every governed doc passes. Exit 1 = at least one FAIL.
 
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -79,13 +79,24 @@ function isPlainObjectC(v) {
   return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
 }
 function isRepoPathArray(v) {
-  return Array.isArray(v) && v.every((s) =>
-    typeof s === "string" && s.length > 0 && !s.startsWith("/") && !s.includes("\\") &&
-    s !== ".." && !s.startsWith("../"));
+  return Array.isArray(v) && v.every((s) => {
+    if (typeof s !== "string" || s.length === 0 || s.startsWith("/") || s.includes("\\")) return false;
+    // Reject any path that ESCAPES the repo root — including an EMBEDDED `..` such as
+    // "docs/../../outside.md" (normalize collapses it to "../outside.md"), not just a leading "../".
+    // An escaping stateDoc would make check-doc-size govern (and pass on) a file OUTSIDE the repo,
+    // leaving the intended in-repo doc ungoverned — a fail-open.
+    const norm = path.posix.normalize(s);
+    return norm !== ".." && !norm.startsWith("../") && !path.posix.isAbsolute(norm);
+  });
 }
 export function loadKitConfig(root = REPO_ROOT) {
   const file = path.join(root, ".claude", "kit.config.json");
-  if (!existsSync(file)) return { ok: true, stateDocs: [], memoryDir: null };
+  let st;
+  try { st = lstatSync(file); }
+  catch { return { ok: true, stateDocs: [], memoryDir: null }; } // truly absent ⇒ no repo STATE docs
+  // A SYMLINKED/non-regular config FAILS CLOSED (CLI exits 1), not treated as absent — consistent with
+  // the write-gates; a dangling/injected symlink config must not silently change what is governed.
+  if (st.isSymbolicLink() || !st.isFile()) return { ok: false, error: `${file} is a symlink or non-regular file — refusing (fail closed)` };
   let parsed;
   try { parsed = JSON.parse(readFileSync(file, "utf8")); }
   catch { return { ok: false, error: `${file} is present but not valid JSON` }; }
@@ -147,7 +158,7 @@ export function classify(text) {
   return match ? match[1] : null;
 }
 
-export function checkDoc(relPath, { root = REPO_ROOT } = {}) {
+export function checkDoc(relPath, { root = REPO_ROOT, stateDocs = [] } = {}) {
   const abs = path.join(root, relPath);
   if (!existsSync(abs)) {
     return { path: relPath, ok: false, reason: `governed doc is MISSING (moved or renamed without updating this list?)` };
@@ -217,6 +228,21 @@ export function checkDoc(relPath, { root = REPO_ROOT } = {}) {
   }
 
   if (declared === "STATE") {
+    // STATE is advisory (WARN, never a hard cap) — so a CAPPED boot doc (an entry stub or any core/*.md)
+    // must NOT be allowed to declare STATE to dodge its cap. Only a doc the repo EXPLICITLY declared as a
+    // STATE doc in kit.config.json `stateDocs` may carry CLASS: STATE; any other doc doing so FAILS.
+    if (!stateDocs.includes(relPath)) {
+      return {
+        path: relPath,
+        bytes,
+        class: declared,
+        ok: false,
+        reason:
+          `CLASS: STATE is only permitted for a doc declared in kit.config.json "stateDocs" — ${relPath} is ` +
+          `not one, so declaring STATE here would evade its hard size cap. Use CLASS: BINDING or ` +
+          `CLASS: REFERENCE, or declare this path as a stateDoc if it is genuinely a regenerated state head.`,
+      };
+    }
     // A CLASS: STATE doc is a regenerated current-state head (e.g. docs/open_work_current_state.md). It
     // legitimately grows between regenerations, so its size is ADVISORY (a WARN), never a hard cap that
     // would block an unrelated commit. It still FAILS CLOSED on missing/unreadable (handled above by the

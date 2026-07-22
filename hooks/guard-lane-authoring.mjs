@@ -55,7 +55,14 @@ function isSegmentArray(v) {
 // handler fails CLOSED on a gated write. Partial config (one field absent) is fine (⇒ that field empty).
 function loadKitConfig(projectRoot) {
   const file = path.join(projectRoot, KIT_CONFIG);
-  if (!existsSync(file)) return { ok: true, executedPathDirs: [], laneRiskTokens: [] };
+  let st;
+  try { st = lstatSync(file); }
+  catch { return { ok: true, executedPathDirs: [], laneRiskTokens: [] }; } // truly absent ⇒ defaults
+  // A SYMLINKED (or non-regular) config is FAIL-CLOSED, not treated as absent: a dangling symlink
+  // would otherwise read as "absent ⇒ defaults" and silently DROP the repo-specific deny families
+  // (a fail-open), and a symlink to an external file is config injection. Matches pre-commit's and
+  // check-doc-size's handling of the declaration file.
+  if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
   let parsed;
   try { parsed = JSON.parse(readFileSync(file, "utf8")); } catch { return { ok: false }; }
   if (!isPlainObject(parsed)) return { ok: false };
@@ -84,9 +91,16 @@ function normalizeRepoPath(value) {
   return collapsed;
 }
 
+// The config-INDEPENDENT "definitely not gated" set — docs/memory + the declaration/ledger files.
+// On a MALFORMED config, EXECUTED_PATH_RE cannot be trusted to identify a config-gated source dir, so
+// the handler blocks everything NOT in this static set (fail closed) instead of relying on isGatedPath.
+function isStaticallySafe(rel) {
+  const folded = rel.toLowerCase();
+  return folded === DECLARATION || folded === LEDGER || folded.startsWith("docs/") || folded.startsWith("memory/");
+}
 function isGatedPath(rel) {
   const folded = rel.toLowerCase();
-  if (folded === DECLARATION || folded === LEDGER || folded.startsWith("docs/") || folded.startsWith("memory/")) return false;
+  if (isStaticallySafe(rel)) return false;
   return CODE_EXT_RE.test(rel) || CODE_BASENAME_RE.test(path.posix.basename(rel)) ||
     EXECUTED_PATH_RE.test(rel) || folded.startsWith("scripts/") || folded.startsWith("tests/") ||
     GOVERNED_CONTROL_TREE_RE.test(rel) || !path.posix.basename(rel).includes(".");
@@ -328,17 +342,20 @@ process.stdin.on("end", () => {
   rel = rel.split(path.sep).join("/");
 
   const symlinkPath = hasSymlinkTraversal(projectRoot, abs);
-  if (!symlinkPath && !isGatedPath(rel)) process.exit(0);
 
-  // FAIL CLOSED on a corrupt config: a gated (code) write cannot proceed while the repo-specific
-  // deny-set is unreadable — the exact "mis-parameterized guard fails open" case. Docs writes already
-  // exited above, so this only blocks code. Ledger it (ledger failure itself blocks, per below).
-  if (!kitConfig.ok) {
+  // FAIL CLOSED on a corrupt config BEFORE the not-gated early-exit. On a malformed config
+  // EXECUTED_PATH_RE falls back to defaults, so a path gated ONLY by a config-added source dir is not
+  // identified as gated and would slip through the early-allow below (a fail-open). When the config is
+  // unreadable we cannot trust that identification, so we block everything NOT statically safe
+  // (docs/memory/declaration/ledger — config-independent). Docs still proceed; all code fails closed.
+  if (!kitConfig.ok && !isStaticallySafe(rel)) {
     const logged = writeLedger(projectRoot, "deny", "kit-config-malformed", undefined, rel, undefined, input?.session_id, undefined, undefined);
     if (!logged) deny(projectRoot, rel, "ledger-error", input?.session_id);
     else deny(projectRoot, rel, "kit-config-malformed", input?.session_id);
     process.exit(0);
   }
+
+  if (!symlinkPath && !isGatedPath(rel)) process.exit(0);
 
   const sessionId = input?.session_id;
   const result = declarationState(projectRoot, sessionId);
