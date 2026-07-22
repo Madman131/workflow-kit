@@ -7,13 +7,15 @@
 > ladder, decorrelation, free-vs-folded passes, PM dispositions and the 3-round stop — is
 > `core/WORKFLOW.md` § Gate and `core/REVIEW.md`, both BINDING. This file is **how to invoke**:
 > runners, flags, receipts, exit codes, traps. Missing a section here costs you an invocation
-> detail, never a rule.
+> detail, never a rule — **except `## PM disposition — riders on a DEFER`: two binding riders kept
+> here for gate-time reachability (the disposition *doctrine* stays in `core/WORKFLOW.md` § Gate).**
 >
 > Merged 2026-07-18 from `docs/CODEX_GATE_PROTOCOL.md` + `docs/GEMINI_GATE_PROTOCOL.md`; the routing
 > banner and the model·effort matrix each existed in four places and are now stated once.
 
 ## Contents
 - [Non-negotiable gate contract](#non-negotiable-gate-contract) — do NOT weaken
+- [PM disposition — riders on a DEFER](#pm-disposition--riders-on-a-defer) — self-contradiction escalates · behavioral defers get a labeled test
 - [Routing — which family gates what](#routing--which-family-gates-what) — pick by WHO BUILT
 - [Model · effort matrix](#model--effort-matrix) — change class → model · effort
 - [Codex gate](#codex-gate) — what it does · how to run · rounds & receipts · retired mechanisms · traps
@@ -37,6 +39,23 @@
   hunt the gaps. A critical/autonomous gate is NO-GO unless a genuinely free pass is named.
 - **Read-only, verify-not-trust:** Codex checks mitigation claims *against the code*, never accepts them on the
   doc's word. The Owner spot-checks that the free pass was truly unframed.
+
+## PM disposition — riders on a DEFER
+
+*Two riders on the PM `DEFER` disposition, read at disposition time — what a legitimate `DEFER`
+additionally owes. The disposition **doctrine** (the rubric, **Precedence**, the 3-round soft stop) is
+`core/WORKFLOW.md` § Gate. Distinct from **Precedence** — which forbids `DEFER`ring a *confirmed
+material* failure at all; these two fire on a `DEFER` that is individually legitimate.*
+
+- **Self-contradiction ESCALATEs — never a silent PM-DEFER.** Before finalizing any `DEFER`, ask:
+  *does deferring this leave the change contradicting its own stated purpose, or a named invariant it
+  claims?* If yes → `ESCALATE` the fix-now-vs-defer trade to the Owner, don't PM-`DEFER` it. Scope the
+  **check** to the change's stated purpose so it fires rarely, not on every deferrable edge.
+- **A behavioral DEFER gets a labeled characterization test.** When the deferred item is a *behavioral*
+  limitation (not a build-it-later feature), add a test asserting the **current** behavior, labeled
+  `DEFERRED — not desired; see <ticket>; delete when fixed`. The label is load-bearing: unlabeled, the
+  test reads as *spec* and discourages the very fix it documents; labeled, a future fix flips it visibly
+  instead of silently passing.
 
 ## Routing — which family gates what
 
