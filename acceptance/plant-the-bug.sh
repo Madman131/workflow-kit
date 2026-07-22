@@ -12,6 +12,9 @@ KIT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 ADOPTER="$WORK/adopter"
 OUTSIDE="$WORK/outside"
+# Codex prompts are USER-GLOBAL (~/.codex/prompts). Point init at a scratch dir so the acceptance run
+# is HERMETIC — it must never touch a real ~/.codex/prompts on the machine running the suite.
+CODEX_PROMPTS="$WORK/codex-prompts"
 SID="sess-accept-1"
 FAILURES=0
 trap 'rm -rf "$WORK"' EXIT
@@ -41,11 +44,75 @@ git init -q "$ADOPTER"
 git -C "$ADOPTER" config user.email a@a; git -C "$ADOPTER" config user.name a
 node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
-  --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" >/dev/null
+  --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" \
+  --codex-prompts-dir "$CODEX_PROMPTS" >/dev/null
 mkdir -p "$ADOPTER/src" "$ADOPTER/docs" "$ADOPTER/policy"   # app dirs the adopter would already have
 # 'policy' is a CONFIG-ONLY source dir (not a portable default) — used to test that a malformed config
 # still fails closed for a path gated SOLELY by config (the F1 fail-open regression).
 echo "-- adopted (init ran) --"
+
+echo
+echo "(commands) /thread-restart install wiring — a productivity NUDGE, not a control (no block/permit pair)"
+# The command ships NO enforcement, so it gets no failing-first/blocking-second proof. What IS gated is
+# the init WIRING: the three assets land in the right place, are syntactically valid, carry the
+# load-bearing method text verbatim, and a re-run is idempotent.
+CMD_CLAUDE="$ADOPTER/.claude/commands/thread-restart.md"
+CMD_CODEX="$CODEX_PROMPTS/thread-restart.md"
+[ -f "$CMD_CLAUDE" ] && ok "Claude command lands at .claude/commands/thread-restart.md" || bad "Claude command missing at $CMD_CLAUDE"
+[ -f "$CMD_CODEX" ]  && ok "Codex prompt lands in the (overridable) codex prompts dir"    || bad "Codex prompt missing at $CMD_CODEX"
+# syntactically valid per harness: Claude command opens with YAML frontmatter; Codex prompt with an H1.
+head -1 "$CMD_CLAUDE" | grep -q '^---$' && ok "Claude command opens with YAML frontmatter" || bad "Claude command missing YAML frontmatter"
+head -1 "$CMD_CODEX"  | grep -q '^# '   && ok "Codex prompt opens with a markdown H1"       || bad "Codex prompt missing an H1"
+# The two genuinely-SHARED load-bearing strings are present in BOTH assets. (The rest of the method
+# prose is lightly harness-adapted — memory nouns, example ids, a Claude-only spawn offer — so we assert
+# only the parts that are byte-identical across harnesses; those are what the digest method rests on.)
+check_method_text() { # $1=file $2=harness-label
+  if grep -q "VERIFY before finalizing" "$1" && grep -q "Index, don't duplicate" "$1"; then
+    ok "shared load-bearing method text (verify-before-finalize + index-don't-duplicate) present in the $2 asset"
+  else
+    bad "shared method text missing from the $2 asset ($1) — verbatim copy broken?"
+  fi
+}
+check_method_text "$CMD_CLAUDE" "Claude"
+check_method_text "$CMD_CODEX"  "Codex"
+# the AGENTS.md fallback pointer was appended (idempotent marker), exactly once.
+assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$ADOPTER/AGENTS.md")" "AGENTS.md carries the thread-restart fallback pointer (exactly once)"
+
+echo
+echo "(commands idempotency) a second init KEEPS user edits — no clobber, no duplicate pointer"
+# Plant a real USER EDIT into each installed asset first: a source-identical SHA check would stay GREEN
+# even if copyGuarded regressed to overwrite (a re-copy is byte-identical), so the file must be MUTATED
+# for the no-clobber assertion to be non-vacuous.
+printf '\n<!-- user edit: keep me -->\n' >> "$CMD_CLAUDE"
+printf '\n<!-- user edit: keep me -->\n' >> "$CMD_CODEX"
+CLAUDE_EDIT_SHA="$(shasum "$CMD_CLAUDE" | awk '{print $1}')"
+CODEX_EDIT_SHA="$(shasum "$CMD_CODEX" | awk '{print $1}')"
+AGENTS_SHA1="$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')"
+node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
+  --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
+  --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" \
+  --codex-prompts-dir "$CODEX_PROMPTS" >/dev/null 2>&1 && ok "re-run init exits 0 (idempotent)" || bad "re-run init should exit 0"
+assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$ADOPTER/AGENTS.md")" "AGENTS pointer still appears exactly once after re-run (no duplication)"
+assert_eq "$CLAUDE_EDIT_SHA" "$(shasum "$CMD_CLAUDE" | awk '{print $1}')" "re-run KEEPS a user-edited Claude command (no clobber without --force)"
+assert_eq "$CODEX_EDIT_SHA"  "$(shasum "$CMD_CODEX" | awk '{print $1}')" "re-run KEEPS a user-edited Codex prompt (no clobber without --force)"
+assert_eq "$AGENTS_SHA1" "$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')" "AGENTS.md unchanged on re-run"
+
+echo
+echo "(commands failure-isolation) a blocked user-global Codex write must NOT abort the repo-local adopt"
+# The Codex prompt is the ONE out-of-repo write. Point it at a path blocked by a regular FILE (so the
+# ensureDir mkdir throws): init must WARN-and-continue, still install the repo-local Claude command +
+# AGENTS pointer, and exit 0. If the try/catch around that write regressed, init would abort here.
+FRESH="$WORK/fresh"; git init -q "$FRESH"; git -C "$FRESH" config user.email a@a; git -C "$FRESH" config user.name a
+touch "$WORK/codex-blocker"
+if node "$KIT/bin/init.mjs" --target "$FRESH" --repo-name fresh \
+     --remote-url git@github.com:you/fresh.git --codex-prompts-dir "$WORK/codex-blocker" >/dev/null 2>&1; then
+  ok "blocked Codex write: init still exits 0 (repo-local adopt not aborted)"
+else
+  bad "blocked Codex write ABORTED init — failure isolation regressed"
+fi
+[ -f "$FRESH/.claude/commands/thread-restart.md" ] && ok "blocked Codex write: repo-local Claude command STILL installed" || bad "Claude command missing after a blocked Codex write"
+assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$FRESH/AGENTS.md")" "blocked Codex write: AGENTS pointer STILL appended"
+[ -f "$WORK/codex-blocker/thread-restart.md" ] && bad "a Codex prompt should NOT exist under the blocked path" || ok "blocked Codex write: no Codex prompt created at the blocked path"
 
 H_XREPO="$ADOPTER/.claude/hooks/guard-cross-repo-writes.mjs"
 H_LANE="$ADOPTER/.claude/hooks/guard-lane-authoring.mjs"

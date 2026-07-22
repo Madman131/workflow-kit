@@ -1,8 +1,36 @@
-# workflow-kit — v1.0
+# workflow-kit — v1.1
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.1
+
+**`/thread-restart` — a dual-harness command asset.** A "smart thread compaction + fresh restart":
+distil the current agent thread into a durable, **verified** digest, then continue in a fresh context
+window that loses nothing essential. It embodies the kit's efficiency principle — a durable handoff plus
+a fresh, task-bounded session — and is a productivity **nudge, not a control** (it ships no enforcement,
+so it carries no fail-closed behavior; `init`'s *wiring* is what the acceptance suite gates, not the
+command's advice).
+
+`init` installs it into **both** harnesses: the Claude command → `.claude/commands/thread-restart.md`,
+the Codex prompt → your Codex prompts dir (`~/.codex/prompts/` by default; `--codex-prompts-dir` to
+override, `--skip-codex-prompt` to opt out), plus a short fallback pointer appended to `AGENTS.md` so a
+Codex / non-Claude lane finds the procedure even where custom slash-commands are unsupported.
+
+**The dual-harness pattern — this is its reference implementation: the *method* is portable, the
+*plumbing* is dual-shipped.** The load-bearing part — index-don't-duplicate · a mandatory
+VERIFY-before-finalize pass · drop-operational-noise — is the **same method** in both, lightly adapted
+per harness in wording (memory nouns like *in-thread* vs *in-conversation*, the example identifier sets,
+a Claude-only fresh-session spawn offer, and the restart verb `/clear` vs `/new`); `init` installs each
+asset **verbatim** — `copyFileSync`, no per-repo rewrite. A third harness is a new wrapper over the same
+method, never a re-derivation. See `PORTABILITY.md`.
+
+**Honest limit.** The agent produces the digest and the one-line restart seed; the **user** performs the
+`/clear` (Claude) or `/new` (Codex). No agent resets its own context — the command never claims it did.
+
+**v1.1 is additive.** The `core/` method docs are unchanged from v1.0 and remain marked `v1.0` — the
+method is stable; v1.1 adds only the `/thread-restart` asset and its `init` wiring.
 
 ## What you get
 
@@ -25,6 +53,11 @@ that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff w
 **The generators** (`templates/`, `[G]` — `init` fills them per repo, never copies verbatim):
 root `CLAUDE.md` / `AGENTS.md` entry stubs, `core/BINDINGS.md`, `core/REPO_INVARIANTS.md`,
 `core/SYSTEM_MAP.md`, and `.claude/kit.config.json` (your repo-specific families).
+
+**The commands** (`commands/`, `[P]` dual-harness assets — `init` installs them into an adopting repo):
+- `commands/claude/thread-restart.md` — the `/thread-restart` Claude command → `.claude/commands/`.
+- `commands/codex/thread-restart.md` — the same procedure as a Codex prompt → your Codex prompts dir.
+- `commands/agents-pointer.md` — the `AGENTS.md` fallback pointer (appended idempotently).
 
 ## Adopt in three steps
 
