@@ -18,13 +18,18 @@ import { execFileSync } from "node:child_process";
 import {
   chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync,
 } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// The Codex prompt is USER-GLOBAL (Codex reads prompts from ~/.codex/prompts, not the repo). Default
+// there, but NEVER hardcode it un-overridably — --codex-prompts-dir parameterizes it and
+// --skip-codex-prompt opts out, so init can run hermetically (tests) and on machines with no Codex.
+const DEFAULT_CODEX_PROMPTS_DIR = path.join(os.homedir(), ".codex", "prompts");
 
 function parseArgs(argv) {
-  const out = { target: process.cwd(), deployBranch: "main", withGateRunners: false, force: false, printPackageScripts: false, help: false };
+  const out = { target: process.cwd(), deployBranch: "main", withGateRunners: false, force: false, printPackageScripts: false, help: false, codexPromptsDir: DEFAULT_CODEX_PROMPTS_DIR, skipCodexPrompt: false };
   const listVal = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -39,6 +44,18 @@ function parseArgs(argv) {
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
     else if (a === "--with-gate-runners") out.withGateRunners = true;
+    else if (a === "--codex-prompts-dir") {
+      // Validate the value: a bare/trailing flag, or a value that is itself a flag (e.g.
+      // `--codex-prompts-dir --skip-codex-prompt`), must be a clean exit(2), NOT a silent write to a
+      // directory literally named "--skip-codex-prompt" and NOT `path.resolve(undefined)` throwing.
+      const v = next();
+      if (v === undefined || v.startsWith("--")) {
+        console.error(`init: --codex-prompts-dir requires a directory value (got ${v === undefined ? "nothing" : JSON.stringify(v)})`);
+        process.exit(2);
+      }
+      out.codexPromptsDir = path.resolve(v);
+    }
+    else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
     else { console.error(`init: unknown argument ${JSON.stringify(a)} (try --help)`); process.exit(2); }
@@ -59,6 +76,9 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
+  --codex-prompts-dir <d> where the /thread-restart Codex prompt installs (default: ~/.codex/prompts,
+                          USER-GLOBAL — outside the target repo; parameterize it for a hermetic run)
+  --skip-codex-prompt     do not install the Codex prompt (Claude command + AGENTS.md pointer only)
   --force                 overwrite existing generated files (settings.json is always merged)
   --print-package-scripts print the npm scripts to add to your package.json, then exit
   -h, --help              this help
@@ -173,6 +193,28 @@ function appendGitignore(target, lines) {
   if (text.length && !text.endsWith("\n")) text += "\n";
   text += (text.length ? "\n" : "") + "# workflow-kit: lane declaration + ledger are per-session, gitignored\n" + add.join("\n") + "\n";
   writeFileSync(gi, text);
+  return "written";
+}
+
+// Append the /thread-restart fallback pointer to AGENTS.md if absent (idempotent via a stable marker,
+// same shape as appendGitignore). The pointer text is a single [P] source (commands/agents-pointer.md)
+// so the Claude command, the Codex prompt, and this pointer never drift. A re-run — or an AGENTS.md that
+// already carries the marker — is a clean no-op, and the block is short enough to keep AGENTS.md (an
+// 8 KiB-capped entry doc) well under cap.
+function appendAgentsPointer(target, kitRoot) {
+  const agents = path.join(target, "AGENTS.md");
+  if (!existsSync(agents)) return "absent"; // init generates AGENTS.md before this runs; guard anyway
+  const fragment = readFileSync(path.join(kitRoot, "commands", "agents-pointer.md"), "utf8");
+  const marker = "workflow-kit:thread-restart-pointer";
+  let text;
+  try { text = readFileSync(agents, "utf8"); } catch { return "read-failed"; }
+  if (text.includes(marker)) return "unchanged";
+  if (text.length && !text.endsWith("\n")) text += "\n";
+  text += "\n" + fragment.trimEnd() + "\n";
+  // Failure-ISOLATED like the Codex-prompt write: a read-only / unwritable AGENTS.md (an adopter can
+  // legitimately have one) must NOT abort a mostly-complete adopt after the load-bearing hooks +
+  // commands + pre-commit have already installed. Warn-and-continue via the return; main() logs it.
+  try { writeFileSync(agents, text); } catch { return "write-failed"; }
   return "written";
 }
 
@@ -291,6 +333,34 @@ function main() {
     ? `  tests/kit-precommit.test.mjs: FM1 guard installed (wire test:kit-controls into CI)`
     : `  tests/kit-precommit.test.mjs: EXISTING kept (may be stale; --force to update) — wire test:kit-controls into CI`);
 
+  // 4c. /thread-restart — the dual-harness command asset (v1.1). A productivity NUDGE, not a control:
+  // it ships no enforcement, so it carries no fail-closed behavior. Each asset carries the SAME digest
+  // METHOD (index-don't-duplicate + the mandatory VERIFY-before-finalize pass + drop-operational-noise),
+  // lightly harness-adapted in wording (memory nouns, example ids, a Claude-only spawn offer); init
+  // copies each VERBATIM (no per-repo rewrite). See README/PORTABILITY § dual-harness. copyGuarded
+  // refuses to clobber without --force, so re-runs are idempotent.
+  const claudeCmdDst = path.join(T, ".claude", "commands", "thread-restart.md");
+  const claudeCmdResult = copyGuarded(path.join(KIT_ROOT, "commands", "claude", "thread-restart.md"), claudeCmdDst, force);
+  log(claudeCmdResult === "written"
+    ? `  .claude/commands/thread-restart.md: /thread-restart installed (Claude lane)`
+    : `  .claude/commands/thread-restart.md: EXISTING kept (--force to update)`);
+  if (args.skipCodexPrompt) {
+    log(`  Codex prompt: SKIPPED (--skip-codex-prompt) — the Claude command + AGENTS.md pointer still install`);
+  } else {
+    const codexDst = path.join(args.codexPromptsDir, "thread-restart.md");
+    // The Codex prompt is the ONE install target OUTSIDE the repo (user-global). A failure writing it
+    // (unwritable ~/.codex, a non-directory in the way) must NOT abort the repo-local adopt — the
+    // Claude command + AGENTS.md pointer are the load-bearing install. Warn and continue.
+    try {
+      const codexResult = copyGuarded(path.join(KIT_ROOT, "commands", "codex", "thread-restart.md"), codexDst, force);
+      log(codexResult === "written"
+        ? `  ${codexDst}: /thread-restart Codex prompt installed (USER-GLOBAL, OUTSIDE the repo — override with --codex-prompts-dir, opt out with --skip-codex-prompt)`
+        : `  ${codexDst}: EXISTING kept (--force to update)`);
+    } catch (e) {
+      warn(`could not install the Codex prompt to ${codexDst} (${e && (e.code || e.message) || "error"}) — the repo-local Claude command + AGENTS.md pointer are unaffected; pass --codex-prompts-dir <writable dir> or --skip-codex-prompt to silence this`);
+    }
+  }
+
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
   const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
@@ -334,6 +404,15 @@ function main() {
     if (/\{\{[A-Z0-9_]+\}\}/.test(text)) remaining.push(dst); // include digit-bearing tokens ({{INVARIANT_1}})
   }
   log(`  [G] entry stubs + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP generated`);
+
+  // 7b. AGENTS.md fallback pointer — so a Codex / non-Claude lane finds the /thread-restart procedure
+  // even where custom slash-commands are unsupported (the repo-local .claude/commands/thread-restart.md
+  // is plain, readable markdown). Runs AFTER the AGENTS.md generation above; idempotent via its marker.
+  const ptr = appendAgentsPointer(T, KIT_ROOT);
+  if (ptr === "written") log(`  AGENTS.md: /thread-restart fallback pointer appended`);
+  else if (ptr === "unchanged") log(`  AGENTS.md: /thread-restart pointer already present (unchanged)`);
+  else if (ptr === "absent") warn(`AGENTS.md absent — /thread-restart pointer NOT appended (generate AGENTS.md, then re-run)`);
+  else warn(`could not ${ptr === "read-failed" ? "read" : "write"} AGENTS.md to append the /thread-restart pointer — the rest of the adopt is unaffected; fix AGENTS.md permissions and re-run`);
 
   // 8. .gitignore (lane declaration + ledger are per-session).
   appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl"]);

@@ -3,7 +3,7 @@
 // proves the portable FM1 test itself discriminates (goes RED when core.hooksPath is unset).
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,13 +53,67 @@ test("check-doc-size loadKitConfig is fail-closed: absent -> defaults, malformed
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("init installs the /thread-restart dual-harness assets + AGENTS pointer, idempotently", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-cmd-"));
+  // Codex prompts are user-global; point init at a scratch dir so this test never touches ~/.codex.
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-codex-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    execFileSync("git", ["-C", dir, "config", "user.email", "t@t"]);
+    execFileSync("git", ["-C", dir, "config", "user.name", "t"]);
+    const run = () => execFileSync(
+      "node",
+      [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--codex-prompts-dir", codexDir],
+      { stdio: "ignore" },
+    );
+    run();
+    const claudeCmd = path.join(dir, ".claude", "commands", "thread-restart.md");
+    const codexCmd = path.join(codexDir, "thread-restart.md");
+    const agents = path.join(dir, "AGENTS.md");
+    // lands in the right place
+    assert.ok(existsSync(claudeCmd), "Claude command installed under .claude/commands/");
+    assert.ok(existsSync(codexCmd), "Codex prompt installed into the overridable --codex-prompts-dir");
+    // syntactically valid per harness + the load-bearing method text copied verbatim into both
+    const claudeText = readFileSync(claudeCmd, "utf8");
+    const codexText = readFileSync(codexCmd, "utf8");
+    assert.match(claudeText, /^---\n/, "Claude command opens with YAML frontmatter");
+    assert.match(codexText, /^# /, "Codex prompt opens with a markdown H1");
+    for (const [name, t] of [["Claude", claudeText], ["Codex", codexText]]) {
+      assert.match(t, /VERIFY before finalizing/, `${name} asset: the mandatory verify pass is preserved`);
+      assert.match(t, /Index, don't duplicate/, `${name} asset: index-don't-duplicate is preserved`);
+    }
+    // AGENTS fallback pointer appended exactly once
+    const marker = "workflow-kit:thread-restart-pointer";
+    const occurrences = (s) => s.split(marker).length - 1;
+    assert.equal(occurrences(readFileSync(agents, "utf8")), 1, "AGENTS.md carries the pointer exactly once");
+    // idempotent: a second run neither clobbers a USER-EDITED command nor duplicates the pointer.
+    // Plant a real edit first — hashing the pristine install would pass even if copyGuarded regressed
+    // to overwrite (a re-copy is byte-identical to the source), so it must be MUTATED to be a real test.
+    const editedClaude = readFileSync(claudeCmd, "utf8") + "\n<!-- user edit: keep me -->\n";
+    const editedCodex = readFileSync(codexCmd, "utf8") + "\n<!-- user edit: keep me -->\n";
+    writeFileSync(claudeCmd, editedClaude);
+    writeFileSync(codexCmd, editedCodex);
+    const agentsBefore = readFileSync(agents, "utf8");
+    run();
+    assert.equal(readFileSync(claudeCmd, "utf8"), editedClaude, "re-run KEEPS a user-edited Claude command (no clobber without --force)");
+    assert.equal(readFileSync(codexCmd, "utf8"), editedCodex, "re-run KEEPS a user-edited Codex prompt (no clobber without --force)");
+    assert.equal(readFileSync(agents, "utf8"), agentsBefore, "AGENTS.md unchanged on re-run");
+    assert.equal(occurrences(readFileSync(agents, "utf8")), 1, "pointer still appears exactly once after re-run");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
 test("FM1: init sets core.hooksPath; the portable FM1 test goes RED when it is unset", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-adopt-"));
   try {
     execFileSync("git", ["init", "-q", dir]);
     execFileSync("git", ["-C", dir, "config", "user.email", "t@t"]);
     execFileSync("git", ["-C", dir, "config", "user.name", "t"]);
-    execFileSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter"],
+    // --skip-codex-prompt keeps `npm test` HERMETIC: init otherwise defaults to the user-global
+    // ~/.codex/prompts and this test would write there (a real side effect outside any scratch dir).
+    execFileSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--skip-codex-prompt"],
       { stdio: "ignore" });
     // init applied the FM1 mitigation
     const hp = execFileSync("git", ["-C", dir, "config", "core.hooksPath"], { encoding: "utf8" }).trim();

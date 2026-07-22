@@ -42,6 +42,47 @@ accepted class: gates are **seatbelts for cooperative-but-fallible agents, not i
 (`core/WORKFLOW.md` § threat-model calibration). What the hook buys is that *forgetting* is caught
 while *deliberately overriding* is a visible, deliberate act.
 
+## The `/thread-restart` dual-harness asset (v1.1)
+
+`/thread-restart` is the kit's **reference implementation of the dual-harness pattern**: a portable
+*method* wrapped in per-harness *plumbing*. The method — index-don't-duplicate · a mandatory
+VERIFY-before-finalize pass · drop-operational-noise — is the load-bearing part and is the **same in
+both assets**, lightly adapted per harness in wording (memory nouns like *in-thread* vs
+*in-conversation*, the example identifier sets, and a Claude-only fresh-session spawn offer) plus the
+restart verb; `init` installs each asset **verbatim** (`copyFileSync`, no per-repo rewrite).
+
+| | Claude command | Codex prompt |
+|---|---|---|
+| Source (`[P]`) | `commands/claude/thread-restart.md` | `commands/codex/thread-restart.md` |
+| Installs to | `.claude/commands/thread-restart.md` (repo-local) | your Codex prompts dir (`~/.codex/prompts/` default) |
+| Wrapper | YAML frontmatter + `$ARGUMENTS` | plain markdown, no frontmatter |
+| Restart verb | user runs `/clear` | user runs `/new` (or relaunches `codex`) |
+
+Beyond the wrapper and restart verb, the differences are wording only — the five digest sections and the
+three load-bearing rules are present in both.
+
+**Why dual-shipped rather than one asset.** Slash-command plumbing is harness-specific — a Claude
+command is not a Codex prompt — but the digest METHOD is not. Shipping one asset strands the other
+harness; re-deriving the method per harness lets the two drift. So the method lives as one file per
+harness, kept in lockstep (same sections, same load-bearing rules) and adapted only in wording, never
+re-derived, and each ships verbatim. The one literally single-sourced piece is the **`AGENTS.md`
+fallback pointer** (`commands/agents-pointer.md`, appended idempotently by `init`) — the third leg: it
+points any lane at the repo-local `.claude/commands/thread-restart.md`, which is plain markdown a Codex /
+non-Claude agent can READ and follow even where custom slash-commands are unsupported.
+
+**It is a productivity NUDGE, not a control.** It ships no enforcement and has no fail-closed behavior,
+so — unlike every control in the table above — it carries **no planted-bug proof**. What the acceptance
+suite gates is the **`init` wiring**: the three assets land in the right places, are syntactically
+valid, the method text is present verbatim, and a re-run is idempotent (no clobber, no duplicate
+pointer). `--codex-prompts-dir` keeps that run hermetic — the Codex prompt is user-global, *outside* the
+repo, so the acceptance harness points it at a scratch dir and never touches a real `~/.codex/prompts`.
+
+**Honest limit — no agent resets its own context.** The command produces the verified digest and the
+one-line restart seed (`"Read <digest path> and continue."`). The **user** performs the `/clear`
+(Claude) or `/new` (Codex); the agent cannot, and the command text says so plainly. Treating the digest
+as "the context was reset" would be the same manufactured-assurance failure this kit exists to stop — the
+restart is a user action the asset only prepares.
+
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
 The Codex/Gemini gate runners are copied **verbatim** and are functionally repo-agnostic (the repo is
@@ -91,7 +132,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 ## What is portable verbatim vs generated
 
 - `[P]` (verbatim): `core/*` method docs, the three hooks, `pre-commit`, `check-doc-size.mjs`,
-  `settings.json`, the gate runners.
+  `settings.json`, the gate runners, and the `commands/*` dual-harness assets (`/thread-restart`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
   `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `.claude/kit.config.json`.
 
