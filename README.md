@@ -52,10 +52,21 @@ other non-Claude agent never loads them. What binds *every* lane is the prose in
 ## Parameterization is fail-closed by design
 
 `init` never rewrites hook *source* from your inputs — the mechanism copies verbatim and only *data*
-(`.claude/kit.config.json`) is per-repo. Every control **fails CLOSED** on a malformed config (a
-mis-parameterized deny-set blocks, it does not silently permit). Proven by `acceptance/plant-the-bug.sh`
-and the `tests/` suite, each of which observes every control **both** blocking and permitting — a
-control only ever seen green is a control never observed working.
+(`.claude/kit.config.json`) is per-repo. Each control **fails CLOSED** on a config it cannot read
+(symlinked, permission-denied, or malformed JSON) or that is malformed in a field **that control
+uses** — a mis-parameterized deny-set blocks, it never silently permits. (A field a control does not
+use cannot make *that* control fail open; and even with no config at all, the `pre-commit` floor gates
+every non-docs path, so an *undeclared code commit* is blocked regardless.)
+
+**Coverage: a tripwire and a floor.** The Claude `guard-lane-authoring` write-time gate is a *tripwire*
+— it catches undeclared writes to known code extensions and to your configured/default source dirs, but
+it is not exhaustive (an unusual extension outside a source dir may slip it). The harness-agnostic
+`pre-commit` hook is the *floor*: it treats **every** non-docs path as code, so an undeclared/out-of-scope
+code **commit** is blocked for every lane. Rely on the commit floor for completeness; the write-time
+guards are early, best-effort convenience.
+
+Proven by `acceptance/plant-the-bug.sh` and the `tests/` suite, each of which observes every control
+**both** blocking and permitting — a control only ever seen green is a control never observed working.
 
 ## License
 `init`-generated files are yours. The kit files carry no license header; pick a license for your fork

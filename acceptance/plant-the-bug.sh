@@ -135,9 +135,13 @@ assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input
 
 echo
 echo "(F5) pre-commit fails closed on a malformed config (code commit blocked)"
-rm -f "$DECL"; printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
+# Keep a VALID declaration in place so the undeclared-check passes and the ONLY possible block source
+# is the malformed-config check — otherwise this assertion is vacuous (it would stay green even if the
+# malformed-config branch were reverted to fail-open). Verified by mutation.
+printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
+printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
 printf 'export const g=1;\n' > "$ADOPTER/src/g.mjs"; git -C "$ADOPTER" add src/g.mjs
-if git -C "$ADOPTER" commit -q -m "malformed cfg code" 2>/dev/null; then bad "pre-commit malformed-config: commit should be BLOCKED"; else ok "pre-commit malformed-config: code commit BLOCKED (fail-closed)"; fi
+if git -C "$ADOPTER" commit -q -m "malformed cfg code" 2>/dev/null; then bad "pre-commit malformed-config: commit should be BLOCKED (with a VALID declaration, only the malformed config can block)"; else ok "pre-commit malformed-config: code commit BLOCKED despite a valid declaration (isolates the malformed-config branch)"; fi
 git -C "$ADOPTER" reset -q src/g.mjs 2>/dev/null; rm -f "$ADOPTER/src/g.mjs"
 
 echo
@@ -162,6 +166,26 @@ else
   ok "cross-repo guard now catches the symlinked escape — hardening landed; update the F12 disposition"
 fi
 rm -f "$ADOPTER/escape"
+
+echo
+echo "(round-3) control files fail closed on symlink / unreadable; write-gate is a tripwire, commit is the floor"
+printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
+# symlinked kit.config.json -> fail-closed deny (dropped tokens would be a fail-open)
+rm -f "$ADOPTER/.claude/kit.config.json"; printf '%s' "$GOODCFG" > "$WORK/realcfg.json"; ln -s "$WORK/realcfg.json" "$ADOPTER/.claude/kit.config.json"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "symlinked kit.config.json -> code write BLOCKED (fail-closed)"
+rm -f "$ADOPTER/.claude/kit.config.json"; printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
+# UNREADABLE config (chmod 000) -> fail-closed deny (EACCES must not read as absent)
+chmod 000 "$ADOPTER/.claude/kit.config.json"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "unreadable (chmod 000) config -> code write BLOCKED (EACCES != absent)"
+chmod 644 "$ADOPTER/.claude/kit.config.json"
+# symlinked DECLARATION -> fail-closed (a symlinked declaration must not authorize writes)
+rm -f "$DECL"; printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$WORK/realdecl.json"; ln -s "$WORK/realdecl.json" "$DECL"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "symlinked declaration -> code write BLOCKED (malformed, fail-closed)"
+rm -f "$DECL"
+# the write-time gate is a tripwire (a root .rego is NOT recognized) but the commit FLOOR catches it
+printf 'x\n' > "$ADOPTER/authz.rego"; git -C "$ADOPTER" add authz.rego
+if git -C "$ADOPTER" commit -q -m "undeclared root rego" 2>/dev/null; then bad "commit floor: an undeclared root .rego commit should be BLOCKED"; else ok "commit floor: undeclared root .rego (missed by the write-tripwire) is BLOCKED at commit (every-lane floor)"; fi
+git -C "$ADOPTER" reset -q authz.rego 2>/dev/null; rm -f "$ADOPTER/authz.rego"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

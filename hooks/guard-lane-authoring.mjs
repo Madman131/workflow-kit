@@ -57,7 +57,13 @@ function loadKitConfig(projectRoot) {
   const file = path.join(projectRoot, KIT_CONFIG);
   let st;
   try { st = lstatSync(file); }
-  catch { return { ok: true, executedPathDirs: [], laneRiskTokens: [] }; } // truly absent ⇒ defaults
+  catch (e) {
+    // ONLY a truly-absent file (ENOENT) falls back to defaults. A permission/IO error (EACCES/EIO/…)
+    // means the config EXISTS but cannot be read — FAIL CLOSED (INVARIANTS rule 5: cannot-read-input ⇒
+    // abstain, never green), never silently drop the repo-specific deny families.
+    if (e && e.code === "ENOENT") return { ok: true, executedPathDirs: [], laneRiskTokens: [] };
+    return { ok: false };
+  }
   // A SYMLINKED (or non-regular) config is FAIL-CLOSED, not treated as absent: a dangling symlink
   // would otherwise read as "absent ⇒ defaults" and silently DROP the repo-specific deny families
   // (a fail-open), and a symlink to an external file is config injection. Matches pre-commit's and
@@ -134,7 +140,13 @@ function declarationHash(value) {
 
 function declarationState(projectRoot, sessionId) {
   const file = path.join(projectRoot, DECLARATION);
-  if (!existsSync(file)) return { state: "undeclared" };
+  // A symlinked / non-regular declaration is FAIL-CLOSED (malformed), matching the pre-commit hook and
+  // the kit.config.json loader: a symlinked declaration must not authorize writes via an external file,
+  // and an unreadable one must not read as "undeclared". Only ENOENT is a true "undeclared".
+  let dstat;
+  try { dstat = lstatSync(file); }
+  catch (e) { if (e && e.code === "ENOENT") return { state: "undeclared" }; return { state: "malformed" }; }
+  if (dstat.isSymbolicLink() || !dstat.isFile()) return { state: "malformed" };
 
   let declaration;
   try {
@@ -223,6 +235,10 @@ function writeLedger(projectRoot, decision, state, reason, rel, taskId, sessionI
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
+    // A SYMLINKED ledger would send the append (and any exemption's audit row) OUTSIDE the repo. Reject
+    // it (fail closed → the caller denies). ENOENT is fine — the O_APPEND open creates a regular file.
+    try { const ls = lstatSync(ledger); if (ls.isSymbolicLink() || !ls.isFile()) return false; }
+    catch (e) { if (e && e.code !== "ENOENT") return false; }
     let previous;
     if (existsSync(ledger)) {
       const existing = readFileSync(ledger, "utf8");

@@ -93,7 +93,12 @@ export function loadKitConfig(root = REPO_ROOT) {
   const file = path.join(root, ".claude", "kit.config.json");
   let st;
   try { st = lstatSync(file); }
-  catch { return { ok: true, stateDocs: [], memoryDir: null }; } // truly absent ⇒ no repo STATE docs
+  catch (e) {
+    // Only ENOENT (truly absent) ⇒ no repo STATE docs. A permission/IO error means the config exists
+    // but is unreadable ⇒ FAIL CLOSED (CLI exits 1), never report green on a config it could not read.
+    if (e && e.code === "ENOENT") return { ok: true, stateDocs: [], memoryDir: null };
+    return { ok: false, error: `${file} exists but is unreadable (${e && e.code ? e.code : "error"}) — failing closed` };
+  }
   // A SYMLINKED/non-regular config FAILS CLOSED (CLI exits 1), not treated as absent — consistent with
   // the write-gates; a dangling/injected symlink config must not silently change what is governed.
   if (st.isSymbolicLink() || !st.isFile()) return { ok: false, error: `${file} is a symlink or non-regular file — refusing (fail closed)` };

@@ -37,7 +37,12 @@ function isSegmentArray(v) {
 function loadKitConfig() {
   let st;
   try { st = lstatSync(KIT_CONFIG); }
-  catch { return { ok: true, laneRiskTokens: [] }; } // truly absent ⇒ defaults
+  catch (e) {
+    // Only ENOENT (truly absent) ⇒ defaults. A permission/IO error means the config exists but is
+    // unreadable ⇒ FAIL CLOSED (never silently drop the repo-specific deny tokens).
+    if (e && e.code === "ENOENT") return { ok: true, laneRiskTokens: [] };
+    return { ok: false };
+  }
   // A SYMLINKED/non-regular config is FAIL-CLOSED, not treated as absent (a dangling symlink would
   // otherwise silently drop the repo-specific deny tokens). Matches readDeclaration's symlink handling.
   if (st.isSymbolicLink() || !st.isFile()) return { ok: false };

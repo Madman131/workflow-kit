@@ -212,7 +212,7 @@ function main() {
     const bad = (list || []).filter((s) => !isSegment(s));
     if (bad.length) { console.error(`init: ${flag} values must be single path segments (no "/"); got ${JSON.stringify(bad)}. The controls match top-level dirs / word fragments — pass e.g. "app", not "app/server".`); process.exit(2); }
   }
-  const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || n === ".." || n.startsWith("../"); });
+  const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || s.includes("\\") || n === ".." || n.startsWith("../"); });
   if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }
 
   ensureDir(T);
@@ -236,9 +236,20 @@ function main() {
 
   // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
   const pc = path.join(T, ".githooks", "pre-commit");
-  const pcResult = copyGuarded(path.join(KIT_ROOT, "githooks", "pre-commit"), pc, force);
+  const kitPc = path.join(KIT_ROOT, "githooks", "pre-commit");
+  const pcResult = copyGuarded(kitPc, pc, force);
+  // `pcTrusted` = the every-lane floor is provably the kit's control. Written ⇒ trusted; kept ⇒ trusted
+  // ONLY if its CONTENT matches the kit's. A kept-but-different hook (stale / a no-op) must NEVER be
+  // reported as "binds every lane" — that is the assurance-manufacturing fail this kit exists to stop.
+  let pcTrusted = pcResult === "written";
   if (pcResult === "written") chmodX(pc);
-  else warn(`existing .githooks/pre-commit KEPT — it may be a STALE or no-op hook; re-run with --force to install the kit's version (an outdated pre-commit still lets undeclared commits through)`);
+  else {
+    let same = false;
+    try { same = readFileSync(pc, "utf8") === readFileSync(kitPc, "utf8"); } catch { same = false; }
+    pcTrusted = same;
+    if (same) warn(`existing .githooks/pre-commit KEPT — its content matches the kit's version (OK).`);
+    else warn(`existing .githooks/pre-commit KEPT and its content DIFFERS from the kit's — the every-lane commit floor is NOT the kit's control (it may be stale or a no-op that lets undeclared commits through). Re-run with --force to install the kit's version.`);
+  }
   if (isGitRepo(T)) {
     // FM3/subdir footgun: `git config` writes to the repo the target belongs to. If T is a SUBDIR of a
     // larger repo, core.hooksPath is set on the PARENT pointing at parent/.githooks while the hook was
@@ -248,7 +259,9 @@ function main() {
     if (top && realpathOrSelf(top) !== realpathOrSelf(T)) {
       warn(`${T} is a SUBDIRECTORY of git repo ${top} — core.hooksPath would be set on the parent and miss ${T}/.githooks. Adopt at the repo ROOT, or configure the hook manually.`);
     } else if (gitConfig(T, "core.hooksPath", ".githooks")) {
-      log(`  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`);
+      log(pcTrusted
+        ? `  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`
+        : `  core.hooksPath=.githooks set — but the pre-commit is an EXISTING, UNVERIFIED hook (see warning above); the every-lane guarantee depends on it, NOT confirmed`);
     } else {
       warn(`could not set core.hooksPath — run: git -C ${T} config core.hooksPath .githooks`);
     }
@@ -273,8 +286,10 @@ function main() {
 
   // 4b. Portable FM1 test → the adopter's tests/, so the adopter's CI goes RED if core.hooksPath is
   // ever unset (the pre-commit control silently absent). PORTABILITY.md § FM1.
-  copyGuarded(path.join(KIT_ROOT, "templates", "kit-precommit.test.mjs"), path.join(T, "tests", "kit-precommit.test.mjs"), force);
-  log(`  tests/kit-precommit.test.mjs: FM1 guard installed (wire test:kit-controls into CI)`);
+  const fm1Result = copyGuarded(path.join(KIT_ROOT, "templates", "kit-precommit.test.mjs"), path.join(T, "tests", "kit-precommit.test.mjs"), force);
+  log(fm1Result === "written"
+    ? `  tests/kit-precommit.test.mjs: FM1 guard installed (wire test:kit-controls into CI)`
+    : `  tests/kit-precommit.test.mjs: EXISTING kept (may be stale; --force to update) — wire test:kit-controls into CI`);
 
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
