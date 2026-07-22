@@ -1,0 +1,68 @@
+# BINDINGS — {{REPO_NAME}}
+
+> **CLASS: BINDING** · **generated per repo — NEVER copied to another repo.** Copying one repo's
+> bindings into another is exactly the cross-repo confusion the identity fingerprint exists to
+> prevent. **workflow-kit v1.0 · last-verified {{LAST_VERIFIED_DATE}}.**
+>
+> This file makes falsifiable claims about the environment (paths, models, access) that rot silently —
+> re-verify the date above when you touch it. The portable method is `core/WORKFLOW.md` +
+> `core/REVIEW.md` + `core/OPERATE.md`; nothing there names a project, and nothing here restates method.
+> **Complete every `{{PLACEHOLDER}}` before relying on this file.**
+
+## Roles → models *(default: {{DEFAULT_BUILDER}} is the Builder)*
+Owner = **{{OWNER}}** · PM = **the pinned frontier {{BUILDER_FAMILY}} seat in the active build
+thread** · Builder = **{{DEFAULT_BUILDER}}** · Cold reviewer = **blind {{COLD_PANEL_MODEL}} panel**
+(fresh context) · Cross-family lens = **{{CROSS_FAMILY_LENS}}** · External gate = **{{EXTERNAL_GATE}}**
+· Artifact store = `docs/journal/`.
+
+## ⚠ Enforcement asymmetry — which controls bind which lane
+*(This is the canonical statement of the PM-portability caveat. The three PreToolUse guards are Claude
+Code harness registrations; a non-Claude lane never loads them.)*
+
+| Control | Claude lane | {{OTHER_LANE}} lane | Human by hand |
+|---|---|---|---|
+| `guard-cross-repo-writes` (writes outside repo blocked) | enforced | **NOT enforced** | ❌ |
+| `guard-lane-authoring` (declaration before a code write) | enforced | **NOT enforced** | ❌ |
+| `guard-gate-ladder` (surfaces the tier's ladder) | enforced (sensor) | **NOT enforced** | ❌ |
+| `.githooks/pre-commit` (declaration + scope at commit) | enforced | **enforced** | **enforced** |
+
+**What binds every lane** is prose (this file + `AGENTS.md` + the required PM-disposition emission)
+**plus the harness-agnostic `pre-commit` hook** — the one layer no harness routes around, because all
+writers converge at the commit. A reader who assumes the PreToolUse guards are universal trusts a
+control that is not running. **FM1:** `core.hooksPath` is local config, not tracked — a fresh clone
+with it unset has the pre-commit control silently absent. The kit's `test:kit-controls` suite includes
+a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is loud, not unguarded.
+
+## Tool bindings
+- **Cross-family lens / external gate:** {{GATE_TOOLING}} *(if you use the shipped Codex/Gemini
+  runners, they need `codex` / `agy` at runtime — see `PORTABILITY.md`; if you gate by hand, say so
+  here).*
+- **Cost-inversion lane** (optional, `core/LANES.md`): declaration `.claude/task-lane.json`; ledger
+  `.claude/lane-ledger.jsonl` (gitignored); lane-eligible globs `scripts/**` + `tests/**`.
+- **Repo-specific families** live in `.claude/kit.config.json` (`executedPathDirs`, `laneRiskTokens`,
+  `stateDocs`, `memoryDir`) — read by `guard-lane-authoring`, `pre-commit`, and `check-doc-size`.
+
+## Canonical docs — the read-order, named
+**Boot set (read whole):** identity = `CLAUDE.md` / `AGENTS.md` → method = `core/WORKFLOW.md` →
+`core/REVIEW.md` → `core/OPERATE.md` → bindings = **this file** → `core/SYSTEM_MAP.md`.
+**On demand:** `core/GATES.md` (running a gate) · `core/LANES.md` (using a lane) · {{RUNBOOK_DOC}}.
+**Shipped to the reviewer, never read by the builder:** `core/INVARIANTS.md` + `core/REPO_INVARIANTS.md`.
+Index and layer model: `core/README.md`.
+
+## Gates, deploy & data
+- **Standing mechanical gate** = {{MECHANICAL_GATE}} (must be 0-FAIL).
+- **Live behavior path** = {{LIVE_PATH}}.
+- **T3 set** = {{T3_SET}} — the irreversible / live-prod writes.
+- **Deploy:** pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}. {{DEPLOY_MECHANISM}}.
+- **Core documents** (amendments gated cold + Owner sign-off, no external gate for prose; executable
+  content excepted to the code tiers): the `core/` set + `CLAUDE.md` + `AGENTS.md` + {{OTHER_CORE_DOCS}}.
+
+## Access
+- **Repo:** remote `{{REMOTE_URL}}`; run the identity ritual before any commit/push:
+  `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
+- **Multi-writer norm:** canonical in `core/OPERATE.md` § Multi-writer checkout (ALL agent lanes).
+- **Deploy target:** {{DEPLOY_TARGET}}.
+- **Data:** {{DATA_STORES}}.
+
+## Known gaps
+{{KNOWN_GAPS}}

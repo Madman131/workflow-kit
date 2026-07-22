@@ -1,0 +1,5 @@
+node_modules
+.DS_Store
+# if the kit is ever self-adopted:
+.claude/task-lane.json
+.claude/lane-ledger.jsonl

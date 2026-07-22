@@ -1,0 +1,35 @@
+#!/bin/sh
+# codex-gate-guard/claude — fail-closed shim that keeps a `codex exec` run PURE-CODEX.
+#
+# WHY THIS EXISTS
+#   The `cc@sendbird` Codex plugin's `review`/`adversarial-review` skills can hijack a review-shaped
+#   `codex exec` prompt and route it into `.../scripts/claude-companion.mjs`, which spawns a REAL
+#   `claude`. On a cross-family GATE that silently turns a Codex review into a Claude review whose
+#   output looks valid — a false cross-family GO. This shim makes that impossible for the DEV GATE.
+#   (The analogous risk on an autonomous runtime cron — e.g. a Trader PM-seat where pm_seat=chatgpt —
+#   is handled DIFFERENTLY: a hermetic CODEX_HOME with no dev plugins, NOT this shim, because live
+#   cron code may call `claude` legitimately. Do NOT add this shim to such a cron.)
+#
+# CONTRACT (important): this shim is added to PATH **inline, per-invocation, by the dev-gate wrapper**
+#   scripts/codex-gate.sh, which ALSO exports PIL_BLOCK_CLAUDE_COMPANION=1.
+#   It is therefore only ever executed WITH that var set → it blocks. It is intentionally NOT a
+#   transparent pass-through and must NOT be added to a normal/interactive PATH (doing so would
+#   shadow the real `claude`). If it runs without the var, that is a misconfiguration and it fails
+#   loudly rather than guessing which `claude` to delegate to.
+#
+# The companion resolves the CLI by bare name (`CLAUDE_BIN = "claude"`) and inherits the run's env,
+# so its `claude` spawn hits this shim and is refused (exit 97) — Codex must do the work itself.
+#
+# See: core/GATES.md (Companion guard), docs/journal/codex_gate_cc_plugin_coexistence.md
+
+if [ "${PIL_BLOCK_CLAUDE_COMPANION:-}" = "1" ] || [ "${PIL_BLOCK_CLAUDE_COMPANION:-}" = "true" ]; then
+  printf '%s\n' "codex-gate-guard: BLOCKED a 'claude' invocation during a pure-Codex run (PIL_BLOCK_CLAUDE_COMPANION set)." >&2
+  printf '%s\n' "The cc@sendbird companion must not run a same-family Claude review/analysis here — Codex must do the work itself." >&2
+  # Leave a marker so the wrapper can tell the caller a hijack was attempted+blocked (the -o may be
+  # incomplete; the plugin is installed and should ideally be removed).
+  if [ -n "${PIL_GUARD_HIT_FILE:-}" ]; then printf 'blocked-claude-invocation\n' >> "$PIL_GUARD_HIT_FILE" 2>/dev/null || true; fi
+  exit 97
+fi
+
+printf '%s\n' "codex-gate-guard: this 'claude' shim ran without PIL_BLOCK_CLAUDE_COMPANION set — it must only be on PATH inline via the dev-gate wrapper scripts/codex-gate.sh, never on a normal PATH. (Runtime crons must NOT use this shim; they stay pure-Codex via a hermetic CODEX_HOME instead.)" >&2
+exit 92

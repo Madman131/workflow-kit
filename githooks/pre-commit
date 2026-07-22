@@ -1,0 +1,202 @@
+#!/usr/bin/env node
+// Lane-agnostic commit tripwire. It enforces the current declaration and staged scope;
+// it never decides whether the declared tier is semantically correct.
+
+import { execFileSync } from "node:child_process";
+import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+
+// Git always reports repository paths with POSIX separators, including on Windows.
+const DECLARATION = path.posix.join(".claude", "task-lane.json");
+const SELF = path.posix.join(".githooks", "pre-commit");
+const TASK_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/;
+// The hook deliberately knows only a small docs-only allowlist. Everything else — including
+// unfamiliar extensions and basenames — is code-bearing, so an unknown future file cannot
+// silently weaken enforcement.
+const DOCS_EXTENSION_RE = /\.(?:md|mdx|rst|txt)$/i;
+const DOCS_BASENAME_RE = /^(?:CHANGELOG|CODE_OF_CONDUCT|CONTRIBUTING|COPYING|LICENSE|NOTICE|README)$/i;
+const LANE_CODE_EXT_RE = /\.(?:cjs|js|jsx|mjs|ts|tsx)$/i;
+const EXEMPT_REASONS = new Set(["codex-down", "codex-quota", "trivial-edit"]);
+
+// [P] KIT PARAMETERIZATION — the lane risk tokens are the ONLY repo-shaped data in this hook. They
+// come from .claude/kit.config.json (a [G] binding `init` writes), UNIONed onto portable defaults.
+// This is the SAME seam as .claude/hooks/guard-lane-authoring.mjs, so both controls share one config.
+// A MALFORMED config FAILS CLOSED (blocks a code-bearing commit). LANE_DENY_RE is built in the main
+// flow below once the commit is known code-bearing.
+const KIT_CONFIG = path.posix.join(".claude", "kit.config.json");
+const DEFAULT_LANE_RISK_TOKENS = ["auth", "credential", "deploy", "gate", "migrat", "money", "schema", "security"];
+let LANE_DENY_RE;
+
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function isSegmentArray(v) {
+  return Array.isArray(v) && v.every((s) => typeof s === "string" && s.length > 0 && !s.includes("/"));
+}
+// Absent config ⇒ defaults-only (legitimate). Present-but-corrupt ⇒ { ok:false } ⇒ the main flow fails closed.
+function loadKitConfig() {
+  if (!existsSync(KIT_CONFIG)) return { ok: true, laneRiskTokens: [] };
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(KIT_CONFIG, "utf8")); } catch { return { ok: false }; }
+  if (!isPlainObject(parsed)) return { ok: false };
+  const tokens = parsed.laneRiskTokens === undefined ? [] : parsed.laneRiskTokens;
+  if (!isSegmentArray(tokens)) return { ok: false };
+  return { ok: true, laneRiskTokens: tokens };
+}
+function buildLaneDenyRe(tokens) {
+  return new RegExp("(?:^|/)(?:[^/]*(?:" + tokens.map(escapeRe).join("|") + ")[^/]*)", "i");
+}
+
+function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as mode \"in-thread\" with sessionId, taskId, and tier; mode \"lane\" with sessionId, taskId, and exact allowedFiles; or mode \"exempt\" with sessionId, taskId, and a documented reason. For hook installation run: git config core.hooksPath .githooks`) {
+  process.stderr.write(
+    `pre-commit BLOCKED: ${reason}\n` +
+    `${remediation}\n`,
+  );
+  process.exit(1);
+}
+
+function git(args) {
+  return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function normalizeRepoPath(value) {
+  if (typeof value !== "string" || !value.trim() || /[\x00-\x1f\x7f]/.test(value) || value.includes("\\")) return null;
+  const normalized = value.replace(/^\.\//, "");
+  if (path.posix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) return null;
+  const collapsed = path.posix.normalize(normalized);
+  if (collapsed === "." || collapsed === ".." || collapsed.startsWith("../")) return null;
+  return collapsed;
+}
+
+function stagedPaths() {
+  // --no-renames expands a rename into its delete/add endpoints, so scope cannot hide either path.
+  const raw = git(["diff", "--cached", "--name-only", "-z", "--no-renames"]);
+  return raw.split("\0").filter(Boolean);
+}
+
+function isCodeBearing(rel) {
+  return !DOCS_EXTENSION_RE.test(rel) &&
+    !DOCS_BASENAME_RE.test(path.posix.basename(rel));
+}
+
+function isLaneIneligible(rel) {
+  // Lane scope includes co-staged documentation. Only code-bearing paths are subject to the
+  // lane's scripts/tests + extension + live/stateful eligibility boundary.
+  if (!isCodeBearing(rel)) return false;
+  const folded = rel.toLowerCase();
+  if (!folded.startsWith("scripts/") && !folded.startsWith("tests/")) return true;
+  return !LANE_CODE_EXT_RE.test(rel) || LANE_DENY_RE.test(rel);
+}
+
+function headHasHook() {
+  try {
+    git(["cat-file", "-e", `HEAD:${SELF}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readDeclaration() {
+  let stat;
+  let raw;
+  try {
+    const file = lstatSync(DECLARATION);
+    if (!file.isFile() || file.isSymbolicLink()) return { state: "malformed" };
+    stat = statSync(DECLARATION);
+    raw = readFileSync(DECLARATION, "utf8");
+  } catch {
+    return { state: "undeclared" };
+  }
+
+  let declaration;
+  try {
+    declaration = JSON.parse(raw);
+  } catch {
+    return { state: "malformed" };
+  }
+  if (!isPlainObject(declaration)) return { state: "malformed" };
+
+  const maxAgeHours = declaration.maxAgeHours === undefined ? 24 : declaration.maxAgeHours;
+  if (typeof maxAgeHours !== "number" || !Number.isFinite(maxAgeHours) || maxAgeHours <= 0 || maxAgeHours > 168) {
+    return { state: "malformed" };
+  }
+  const ageMs = Date.now() - stat.mtimeMs;
+  if (ageMs < 0 || ageMs > maxAgeHours * 3600_000) return { state: "stale" };
+
+  if (typeof declaration.sessionId !== "string" || !declaration.sessionId ||
+    typeof declaration.taskId !== "string" || !TASK_ID_RE.test(declaration.taskId)) {
+    return { state: "malformed" };
+  }
+
+  if (declaration.mode === "in-thread") {
+    if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) return { state: "malformed" };
+    // In-thread is the established tier-only route. Git can validate this declaration's
+    // presence/freshness, but it must not invent a path scope the route does not carry.
+    return { state: "in-thread", taskId: declaration.taskId };
+  }
+  if (declaration.mode === "lane") {
+    if (!Array.isArray(declaration.allowedFiles) || declaration.allowedFiles.length === 0) {
+      return { state: "malformed" };
+    }
+    const allowedFiles = declaration.allowedFiles.map(normalizeRepoPath);
+    if (allowedFiles.some((rel) => rel === null) || new Set(allowedFiles).size !== allowedFiles.length) {
+      return { state: "malformed" };
+    }
+    return { state: "lane", allowedFiles: new Set(allowedFiles), taskId: declaration.taskId };
+  }
+  if (declaration.mode === "exempt") {
+    if (!EXEMPT_REASONS.has(declaration.reason)) return { state: "malformed" };
+    return { state: "exempt", taskId: declaration.taskId };
+  }
+  return { state: "malformed" };
+}
+
+let paths;
+try {
+  paths = stagedPaths();
+} catch {
+  fail("the staged set could not be read");
+}
+
+if (paths.length === 0 || paths.every((rel) => !isCodeBearing(rel))) process.exit(0);
+// The commit is code-bearing. Build the parameterized lane deny-set (portable defaults ∪ config).
+const kitConfig = loadKitConfig();
+LANE_DENY_RE = buildLaneDenyRe(DEFAULT_LANE_RISK_TOKENS.concat(kitConfig.ok ? kitConfig.laneRiskTokens : []));
+const bootstrap = !headHasHook();
+if (bootstrap) {
+  if (!paths.includes(SELF)) {
+    fail(`tracked ${SELF} is absent from HEAD but is not staged for bootstrap`,
+      `Remediate by staging ${SELF} for its one-time bootstrap, or use a branch that already contains it.`);
+  }
+  // The hook-only introduction may commit without a declaration. Any co-staged code path
+  // still falls through to the normal current-declaration and exact-scope checks below.
+  if (paths.length === 1) process.exit(0);
+}
+
+// FAIL CLOSED on a corrupt config: a code-bearing commit cannot proceed while the repo-specific
+// deny-set is unreadable — the "mis-parameterized guard fails open" case. Docs-only commits already
+// exited above; a pure hook-bootstrap commit exited above too, so this only blocks real code commits.
+if (!kitConfig.ok) {
+  fail(`${KIT_CONFIG} is present but MALFORMED (not valid JSON, not an object, or laneRiskTokens is not an array of non-empty path segments)`,
+    `Remediate by fixing ${KIT_CONFIG} to shape {"laneRiskTokens":["<token>"]} (optional), deleting it to fall back to the kit's portable defaults, or re-running: node bin/init.mjs`);
+}
+
+const declaration = readDeclaration();
+if (!["in-thread", "lane", "exempt"].includes(declaration.state)) fail(`${DECLARATION} is ${declaration.state}`);
+
+if (declaration.state === "lane") {
+  for (const raw of paths) {
+    const rel = normalizeRepoPath(raw);
+    if (!rel || !declaration.allowedFiles.has(rel)) {
+      fail(`staged path ${JSON.stringify(raw)} is outside lane task ${JSON.stringify(declaration.taskId)} allowedFiles`);
+    }
+    if (isLaneIneligible(rel) && !(bootstrap && rel === SELF)) {
+      fail(`staged path ${JSON.stringify(raw)} is lane-ineligible for task ${JSON.stringify(declaration.taskId)}`);
+    }
+  }
+}

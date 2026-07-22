@@ -1,0 +1,28 @@
+# REPO INVARIANTS — {{REPO_NAME}}
+
+> **CLASS: BINDING** · repo-local, **generated per repo — never copied to another repo.**
+> Last verified: {{LAST_VERIFIED_DATE}}.
+>
+> **This file is MACHINE PAYLOAD.** The gate runner cats it into every reviewer payload *alongside*
+> the portable `core/INVARIANTS.md`. Portable epistemics and generic failure classes live there; this
+> file holds only what is true of **this** codebase — keep it short (cap: 8 KiB). A cold reviewer
+> checks a diff against both. **Complete the placeholders; delete rows that do not apply.**
+
+## What this repo is (30 seconds)
+{{REPO_ONE_LINER}}
+
+## Non-negotiable — a diff MUST NOT violate these
+*(The portable rules — IO, exact provenance, boolean string-compare, deploy-order, additive safety,
+fail-closed — are in `core/INVARIANTS.md` and apply here too. These are the repo-specific additions.)*
+
+1. {{INVARIANT_1}}
+2. {{INVARIANT_2}}
+3. {{INVARIANT_3}}
+
+## Failure examples (the generic classes are in `core/INVARIANTS.md`)
+- {{FAILURE_EXAMPLE_1}}
+- {{FAILURE_EXAMPLE_2}}
+
+## Not in this file, deliberately
+{{OUT_OF_SCOPE}} — this file is cat'd into *every* gate payload, where each wasted byte displaces the
+artifact under review.
