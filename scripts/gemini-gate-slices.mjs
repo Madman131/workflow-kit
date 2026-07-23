@@ -2,9 +2,26 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
+
+// The ONE canonical in-repo location a gate step may drop runner-owned artifacts (e.g. a pre-freeze
+// fingerprint --out-dir). It is gitignored, dropped from the freeze index (cold-review-gemini.sh),
+// and excluded from the validator's changed surface below. Exclusion keys on this EXACT path prefix,
+// never on "is this file untracked/an artifact" — an untracked-ness test would fail OPEN (a stray or
+// hostile untracked sibling would silently drop from the reviewed surface). Any UNKNOWN sibling
+// stays in scope and still fails closed.
+const GATE_ARTIFACT_DIR = ".gemini-gate";
+// SCOPE exclusion is CHILDREN-ONLY (`.gemini-gate/<x>`). git emits a bare `.gemini-gate` path only
+// for a REGULAR FILE at that name (a directory is only ever seen via its children) — and a regular
+// file named `.gemini-gate` is NOT the sanctioned artifact dir, so it must stay in scope and fail
+// closed. Excluding the bare name would fail OPEN: the `.gitignore` `.gemini-gate/` rule is
+// directory-only, so such a file is not even ignored.
+function isGateArtifactChild(rel) {
+  return rel.startsWith(`${GATE_ARTIFACT_DIR}/`);
+}
 
 function fail(message) {
   process.stderr.write(`gemini-gate-slices: ${message}\n`);
@@ -45,6 +62,40 @@ function sameArray(a, b) {
 function relativeIfInside(repo, candidate) {
   const rel = path.relative(repo, path.resolve(candidate));
   return rel && !rel.startsWith(`..${path.sep}`) && rel !== ".." ? rel.split(path.sep).join("/") : null;
+}
+
+// `repo` is realpath'd, so a containment test must canonicalize the OTHER path the same way or a
+// symlinked temp root (macOS /var -> /private/var) makes an in-repo path look external and the
+// in-repo --out-dir rejection fails OPEN. An --out-dir need not exist yet, so realpath the longest
+// existing ancestor and re-append the not-yet-created tail.
+function canonicalizeExistingPrefix(target) {
+  let current = path.resolve(target);
+  const tail = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync(current);
+      return tail.length ? path.join(real, ...tail.reverse()) : real;
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return path.resolve(target);
+      tail.push(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+// An --out-dir (and the default temp base) must resolve OUTSIDE the repository, or under the
+// sanctioned .gemini-gate/ dir. "Outside" MUST treat the repo ROOT itself as inside:
+// path.relative(repo, repo) === "" — the most in-repo location, and exactly the one a null-returning
+// relativeIfInside would wave through. Applies to BOTH the explicit and the omitted (mkdtemp) branch
+// so a repo-internal TMPDIR cannot smuggle the default artifacts in-repo either.
+function assertGateOutDirOutsideRepo(repo, dir, label) {
+  const rel = path.relative(repo, canonicalizeExistingPrefix(dir));
+  const inside = rel === "" || (!rel.startsWith(`..${path.sep}`) && rel !== "..");
+  if (!inside) return;
+  const relPosix = rel.split(path.sep).join("/");
+  if (relPosix === GATE_ARTIFACT_DIR || relPosix.startsWith(`${GATE_ARTIFACT_DIR}/`)) return;
+  fail(`gate artifacts must live outside the repository (or under ${GATE_ARTIFACT_DIR}/); refusing in-repo ${label}: ${dir}`);
 }
 
 function repoContextPath(repo, context) {
@@ -146,6 +197,29 @@ function field(block, name) {
   return block.match(new RegExp("^- " + escaped + ": `([^`]*)`$", "m"))?.[1] ?? "";
 }
 
+function journalScopeMismatch(logPath, { command, baseCommit, declared, actual }) {
+  // Diagnostic only — the fail() at the call site is the fail-closed control; a failed append here
+  // NEVER weakens it. The header is deliberately NOT a `## Gemini gate attempt — ` verdict header,
+  // so the durable log's finalize/gc parsers never mistake this for a receipt, while a human sees
+  // exactly which extra/missing file broke the fingerprint (today this was stderr-only).
+  if (typeof logPath !== "string" || !logPath) return;
+  try {
+    const timestamp = new Date().toISOString();
+    const block =
+      `\n## Gemini gate scope-mismatch diagnostic — ${timestamp}\n\n` +
+      "- Record-Kind: `SCOPE_MISMATCH_DIAGNOSTIC`\n" +
+      `- Command: \`${command}\`\n` +
+      `- Base-Commit: \`${baseCommit}\`\n\n` +
+      "### Diagnostic output — NOT A VERDICT\n\n" +
+      "    scope.files does not equal the actual changed surface\n" +
+      `    declared=${JSON.stringify(declared)}\n` +
+      `    actual=${JSON.stringify(actual)}\n`;
+    fs.appendFileSync(path.resolve(logPath), block);
+  } catch {
+    // Non-fatal: diagnosability is best-effort; the scope check still fails closed via fail().
+  }
+}
+
 function gcMain(repo, opts) {
   const ageDaysRaw = opts["age-days"] ?? "14";
   if (!/^\d+$/.test(ageDaysRaw)) fail("gc --age-days must be a whole number of days (zero is allowed)");
@@ -219,7 +293,7 @@ function gcMain(repo, opts) {
 const argv = process.argv.slice(2);
 const command = argv.shift();
 if (command !== "fingerprint" && command !== "validate" && command !== "finalize" && command !== "gc") {
-  fail("usage: fingerprint|validate|finalize --repo <root> --manifest <json> --out-dir <dir> [--slice <name> | --log <file>] | gc --repo <root> --log <durable-log> [--protect-sha <sha>] [--age-days N] [--prune]");
+  fail("usage: fingerprint|validate|finalize --repo <root> --manifest <json> [--out-dir <dir>] [--slice <name> | --log <file>] | gc --repo <root> --log <durable-log> [--protect-sha <sha>] [--age-days N] [--prune]");
 }
 const opts = {};
 while (argv.length) {
@@ -232,7 +306,7 @@ while (argv.length) {
   if (!key?.startsWith("--") || value === undefined) fail(`invalid option near ${key ?? "<end>"}`);
   opts[key.slice(2)] = value;
 }
-const required = command === "gc" ? ["repo", "log"] : ["repo", "manifest", "out-dir"];
+const required = command === "gc" ? ["repo", "log"] : ["repo", "manifest"];
 for (const key of required) if (!opts[key]) fail(`missing --${key}`);
 if (command === "validate" && !opts.slice) fail("validate requires --slice");
 if (command === "finalize" && !opts.log) fail("finalize requires --log");
@@ -253,7 +327,19 @@ if (command === "gc") {
 // still plant an escaping manifest path there, so containment is checked after realpath before any
 // plan/evidence read.
 if (!relativeIfInside(repo, manifestPath)) fail(`slice manifest must resolve inside the frozen repository: ${opts.manifest}`);
-const outDir = path.resolve(opts["out-dir"]);
+// Runner-owned artifacts must never enter the source/frozen worktree: an in-repo --out-dir writes
+// untracked files that `git add -A` (cold-review-gemini.sh freeze_artifact) then bakes into the
+// snapshot as a tracked diff the validator does NOT exclude → a false scope mismatch. Default to a
+// fresh system-temp dir, and reject any in-repo --out-dir EXCEPT the one canonical .gemini-gate/
+// prefix (gitignored + freeze/validator-excluded).
+let outDir;
+if (opts["out-dir"] === undefined) {
+  assertGateOutDirOutsideRepo(repo, os.tmpdir(), "default gate temp base (TMPDIR)");
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), "gemini-gate-"));
+} else {
+  outDir = path.resolve(opts["out-dir"]);
+  assertGateOutDirOutsideRepo(repo, outDir, "--out-dir");
+}
 let plan;
 try {
   plan = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -284,8 +370,15 @@ const untracked = new Set(untrackedList);
 const excluded = new Set(["docs/journal/gemini_review_log.md"]);
 const manifestRel = relativeIfInside(repo, manifestPath);
 if (manifestRel) excluded.add(manifestRel);
-const actualScope = [...new Set([...tracked, ...untrackedList])].filter((file) => !excluded.has(file)).sort();
+// Exclusion is by RECOGNIZED EXACT PATH — the durable log, the manifest, and the one canonical
+// .gemini-gate/ artifact prefix — never by "is this file untracked". An unknown sibling (a stray
+// leftover_debug.mjs, a SECRETS file, an editor temp) is none of these, so it stays in scope and
+// fails closed; that fail-closed distinction is load-bearing and must not regress to untracked-ness.
+const actualScope = [...new Set([...tracked, ...untrackedList])]
+  .filter((file) => !excluded.has(file) && !isGateArtifactChild(file))
+  .sort();
 if (!sameArray(declaredScope, actualScope)) {
+  journalScopeMismatch(opts.log, { command, baseCommit, declared: declaredScope, actual: actualScope });
   fail(`scope.files does not equal the actual changed surface; declared=${JSON.stringify(declaredScope)} actual=${JSON.stringify(actualScope)}`);
 }
 
@@ -368,7 +461,7 @@ fs.writeFileSync(path.join(outDir, "slice-names.txt"), `${normalizedSlices.map((
 fs.writeFileSync(path.join(outDir, "manifest.json"), `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
 
 if (command === "fingerprint") {
-  process.stdout.write(`candidate immutable plan id: ${planId}\nSet approval.status=APPROVED and approval.expected_plan_id=${planId} only after frontier-PM review.\n`);
+  process.stdout.write(`candidate immutable plan id: ${planId}\nArtifacts written under: ${outDir}\nSet approval.status=APPROVED and approval.expected_plan_id=${planId} only after frontier-PM review.\n`);
   process.exit(0);
 }
 

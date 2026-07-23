@@ -41,6 +41,9 @@ CANARY_SPAN=32768
 CANARY_MIN=2
 CANARY_MAX=32
 INLINE_INGEST_MAX_DEFAULT=81920
+# The one canonical in-repo gate-artifact prefix — gitignored, and dropped from the freeze index in
+# freeze_artifact so a stray fingerprint --out-dir there can never bake into the review snapshot.
+GATE_ARTIFACT_DIR=".gemini-gate"
 
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd)"
@@ -162,6 +165,25 @@ resolve_inside_repo() {
   esac
   printf -v "$variable" '%s' "$resolved_relative"
   [ -z "$canonical_variable" ] || printf -v "$canonical_variable" '%s' "$canonical"
+  return 0
+}
+
+refuse_in_repo_gate_tmpdir() {
+  # Runner-owned gate artifacts (the private freeze index, the slice --out-dir) live under $TMPD. If
+  # TMPDIR points INTO the source tree, `git add -A` in freeze_artifact would snapshot them as a
+  # tracked diff the validator does not exclude → a false scope mismatch. Refuse a repo-internal
+  # $TMPD BEFORE the freeze, on stderr, fail-closed. The one sanctioned in-repo location is
+  # $GATE_ARTIFACT_DIR/ (freeze- and validator-excluded), never the ambient temp dir.
+  local tmp_canon root_canon
+  root_canon="$(perl -MCwd=abs_path -e 'my $path = abs_path($ARGV[0]); exit 1 unless defined $path; print $path' "$SOURCE_REPO_ROOT")" \
+    || { ATTEMPT_DETAIL="cannot canonicalize caller repository root for gate-artifact containment"; return 1; }
+  tmp_canon="$(perl -MCwd=abs_path -e 'my $path = abs_path($ARGV[0]); exit 1 unless defined $path; print $path' "$TMPD")" \
+    || { ATTEMPT_DETAIL="cannot canonicalize gate temp dir for containment"; return 1; }
+  case "$tmp_canon" in
+    "$root_canon"|"$root_canon"/*)
+      ATTEMPT_DETAIL="gate artifacts must live outside the repository; refusing an in-repo gate temp dir ($TMPD). Set TMPDIR to a path outside $SOURCE_REPO_ROOT."
+      return 1 ;;
+  esac
   return 0
 }
 
@@ -421,6 +443,18 @@ freeze_artifact() {
     GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" rm -q --cached --ignore-unmatch -- docs/journal/gemini_review_log.md \
       || { ATTEMPT_DETAIL="cannot exclude an untracked Gemini log from the review artifact"; return 1; }
   fi
+  # Runner-owned gate artifacts under the one canonical $GATE_ARTIFACT_DIR/ are never review material.
+  # It is gitignored (so `git add -A` skips it in the common case); this drop from the freeze index is
+  # defense-in-depth for the rare force-added entry, matching the validator's exact-prefix exclusion.
+  # Guard on it being a real, PHYSICAL DIRECTORY (`-d` AND NOT `-L`): a bare regular file OR a symlink
+  # literally named $GATE_ARTIFACT_DIR is NOT the sanctioned dir — it must stay in the snapshot and
+  # fail closed (the validator keeps a bare name in scope, children-only exclusion), so it must not be
+  # swept out here. `-d` alone follows a symlink-to-directory and would sweep such a symlink out,
+  # letting an undeclared `.gemini-gate -> /outside/dir` escape review.
+  if [ -d "$SOURCE_REPO_ROOT/$GATE_ARTIFACT_DIR" ] && [ ! -L "$SOURCE_REPO_ROOT/$GATE_ARTIFACT_DIR" ]; then
+    GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" rm -q -r --cached --ignore-unmatch -- "$GATE_ARTIFACT_DIR" \
+      || { ATTEMPT_DETAIL="cannot exclude the gate-artifact directory from the review artifact"; return 1; }
+  fi
   snapshot_tree="$(GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" write-tree 2>/dev/null)" \
     || { ATTEMPT_DETAIL="cannot write the frozen review-artifact tree"; return 1; }
   ARTIFACT_SHA="$(printf 'PIL Gemini gate review artifact\n' | \
@@ -504,6 +538,11 @@ if [ "$DRY_RUN" = "0" ]; then
   fi
   if ! bind_frozen_inputs; then
     echo "cold-review-gemini: $ATTEMPT_DETAIL; refusing to review ambient or out-of-artifact input." >&2
+    record_attempt FAILED_TOOL "$ATTEMPT_DETAIL"
+    exit 3
+  fi
+  if ! refuse_in_repo_gate_tmpdir; then
+    echo "cold-review-gemini: $ATTEMPT_DETAIL" >&2
     record_attempt FAILED_TOOL "$ATTEMPT_DETAIL"
     exit 3
   fi
@@ -794,8 +833,24 @@ else
   if [ -n "$SLICE_MANIFEST" ]; then
     [ -f "$SLICE_MANIFEST" ] || { echo "cold-review-gemini: slice manifest not found: $SLICE_MANIFEST" >&2; exit 2; }
     mkdir -p "$TMPD/slice"
-    run_slice_tool validate --repo "$REPO_ROOT" --manifest "$SLICE_MANIFEST" --slice "$SLICE_NAME" --out-dir "$TMPD/slice" \
-      || { ATTEMPT_DETAIL="slice plan validation failed — NOT A VERDICT"; record_attempt FAILED_DELIVERY "$ATTEMPT_DETAIL"; exit 3; }
+    slice_validate_failed() {
+      ATTEMPT_DETAIL="slice plan validation failed — NOT A VERDICT
+$(<"$TMPD/validate.err")"
+      cat "$TMPD/validate.err" >&2
+      record_attempt FAILED_DELIVERY "$ATTEMPT_DETAIL"
+      exit 3
+    }
+    # Pass --log ONLY when logging is enabled: the validator journals a scope-mismatch diagnostic to
+    # --log, and --no-log must keep its no-durable-write contract (it is exactly the flag used during
+    # iterative gate development, when a scope mismatch is common). Two explicit branches avoid a
+    # bash-3.2 empty-array expansion under `set -u`.
+    if [ "$DO_LOG" = "1" ]; then
+      run_slice_tool validate --repo "$REPO_ROOT" --manifest "$SLICE_MANIFEST" --slice "$SLICE_NAME" --out-dir "$TMPD/slice" --log "$LOG" 2> "$TMPD/validate.err" \
+        || slice_validate_failed
+    else
+      run_slice_tool validate --repo "$REPO_ROOT" --manifest "$SLICE_MANIFEST" --slice "$SLICE_NAME" --out-dir "$TMPD/slice" 2> "$TMPD/validate.err" \
+        || slice_validate_failed
+    fi
     SLICE_FILES_MAP="$TMPD/slice/files.txt"
     FILES="$(cut -f1 "$SLICE_FILES_MAP" | sed '/^$/d')"
     SLICE_DIFF="$TMPD/slice/diff.txt"

@@ -1,8 +1,32 @@
-# workflow-kit — v1.1
+# workflow-kit — v1.2
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.2
+
+**Gemini-gate runner hardening — post-extraction refinements that ran in anger downstream, now folded
+back into the source of truth.** Three files change: `scripts/gemini-gate-slices.mjs`,
+`scripts/cold-review-gemini.sh`, and the matching doctrine in `core/GATES.md`.
+
+- **Gate artifacts must resolve OUTSIDE the repository** (or under the one canonical, gitignored
+  `.gemini-gate/` prefix). `fingerprint`'s `--out-dir` is now optional and defaults to a fresh
+  system-temp dir; an in-repo `--out-dir` is rejected *before* any evidence is written. This is
+  load-bearing: an in-repo out-dir writes untracked files that `freeze_artifact`'s `git add -A` would
+  otherwise bake into the review snapshot as a **false changed surface**. The refusal is symlink-safe
+  (canonicalizes the longest existing ancestor) and treats the repo root itself as inside.
+- **The validator excludes by RECOGNIZED EXACT PATH** — the durable log, the manifest, and the canonical
+  `.gemini-gate/` dir — **never** by "is this file untracked". An untracked-ness test would fail *open*:
+  an unknown untracked sibling (stray debug file, secrets, editor temp) would silently drop from the
+  reviewed surface. Now it stays in scope, fails closed, and is journaled to the durable log as a
+  non-verdict `SCOPE_MISMATCH_DIAGNOSTIC`.
+- **`cold-review-gemini.sh` refuses a repo-internal `$TMPDIR`** before the freeze and drops a real
+  physical `.gemini-gate/` directory (guarded `-d && ! -L`, so a bare file or symlink of that name stays
+  in scope and fails closed) from the freeze index — defense-in-depth matching the validator's exclusion.
+
+**v1.2 refines one core doc.** Unlike v1.1, this release touches `core/GATES.md` (the fingerprint/validator
+doctrine above). The other `core/` method docs remain unchanged from v1.0.
 
 ## What's new in v1.1
 
