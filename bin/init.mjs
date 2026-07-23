@@ -184,14 +184,14 @@ function mergeSettings(targetSettings, kitSettings, force) {
   return "written";
 }
 
-function appendGitignore(target, lines) {
+function appendGitignore(target, lines, comment = "workflow-kit: lane declaration + ledger are per-session, gitignored") {
   const gi = path.join(target, ".gitignore");
   let text = existsSync(gi) ? readFileSync(gi, "utf8") : "";
   const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
   const add = lines.filter((l) => !have.has(l));
   if (!add.length) return "unchanged";
   if (text.length && !text.endsWith("\n")) text += "\n";
-  text += (text.length ? "\n" : "") + "# workflow-kit: lane declaration + ledger are per-session, gitignored\n" + add.join("\n") + "\n";
+  text += (text.length ? "\n" : "") + `# ${comment}\n` + add.join("\n") + "\n";
   writeFileSync(gi, text);
   return "written";
 }
@@ -416,6 +416,14 @@ function main() {
 
   // 8. .gitignore (lane declaration + ledger are per-session).
   appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl"]);
+  // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
+  // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
+  // but `.gemini-gate/` is the allowed in-repo location; it must be gitignored so cold-review-gemini.sh's
+  // `git add -A` freeze skips it in the common case (the freeze-index rm + the validator's exact-path
+  // exclusion are the defense-in-depth net for a force-added entry). See core/GATES.md § fingerprint.
+  if (args.withGateRunners) {
+    appendGitignore(T, [".gemini-gate/"], "workflow-kit: gate-runner artifact dir (sanctioned in-repo --out-dir prefix; freeze/validator-excluded)");
+  }
 
   // 9. Post-init checklist.
   log(`\nAdopted workflow-kit v${readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim()}. Next:`);

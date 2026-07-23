@@ -1,8 +1,19 @@
-# workflow-kit — v1.2
+# workflow-kit — v1.2.1
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.2.1
+
+**`init --with-gate-runners` now gitignores `.gemini-gate/`.** The v1.2 Gemini-gate doctrine treats the
+one sanctioned in-repo gate-artifact prefix as gitignored (the common-case layer that keeps
+`cold-review-gemini.sh`'s `git add -A` freeze from ever staging it; the freeze-index `rm` + the
+validator's exact-path exclusion remain the defense-in-depth net). Adopting an existing repo missed the
+ignore entry — `init` only managed the per-session lane files. Now, when gate runners are installed, the
+adopter's `.gitignore` gets `.gemini-gate/` too (idempotent; runners-only, so a no-gate adopt is
+unchanged). Re-run `node bin/init.mjs --with-gate-runners` on an already-adopted repo to add just the
+entry — the already-present runner scripts and `core/` docs are kept untouched.
 
 ## What's new in v1.2
 

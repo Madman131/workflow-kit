@@ -1,6 +1,6 @@
 {
   "name": "workflow-kit",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Portable steer -> gate -> garden method + fail-closed enforcement controls for building production systems with AI agents.",
   "type": "module",
   "private": true,
