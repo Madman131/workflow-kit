@@ -2,7 +2,9 @@
 
 > **CLASS: BINDING** — read it whole; missing a section means violating a rule without knowing.
 > **Kit v1.0** (portable). Companion to `core/OPERATE.md`, which governs how ONE agent runs a change.
-> Split out of `core/OPERATE.md`; no rule changed in the move.
+> Split out of `core/OPERATE.md`. **Delegation, Multi-writer checkout and Onboarding moved verbatim.
+> Two things did NOT: § Task-lane declaration was REWRITTEN when the build lane was retired, and the
+> Onboarding read order gained `OWNER_COMMS.md`. Both are recorded in `core/README.md` § Provenance.**
 
 ## Delegation — Gather / Review / Author
 Subagent use *inside* the tiers; changes no tier, no gate. Classify by effect on **authoritative detail** (the shipped artifact + the facts a decision rests on):
@@ -59,7 +61,13 @@ What the route carried, what was dropped with it, and what survived generally: `
   the gate-ladder sensor); its mechanical retirement is a tracked follow-up. History:
   `core/README.md` § Provenance.
 - **Escapes are first-class** (`codex-down` / `codex-quota` / `trivial-edit`) — work never stalls on
-  an unavailable seat — but every escape is ledgered.
+  an unavailable seat. **An exemption skips the DECLARATION ceremony, never a gate:** build in-thread,
+  still run the tier's normal cold pass (substituting seats per `core/REVIEW.md` § External gate), and
+  ledger the escape. No free-text reason is accepted.
+- **Every decision is ledgered, and the ledger FAILS CLOSED.** Each decision appends its exact path,
+  normalized scope, and a canonical declaration hash with an append+sync write; concurrent processes
+  may duplicate a row but can never replace another process's row. **Symlink traversal and any
+  ledger-write failure BLOCK** — so no route, an exemption included, can proceed unlogged.
 
 ## Onboarding a new model
 *To plug a new model into a role, bind it in `BINDINGS.md` and give it the role's access: a **reviewer**

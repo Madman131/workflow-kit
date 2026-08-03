@@ -40,7 +40,7 @@ contributor starts from. Mitigations, both shipped:
 
 `--no-verify` bypasses the pre-commit hook, exactly as the PreToolUse guards are bypassable. That is an
 accepted class: gates are **seatbelts for cooperative-but-fallible agents, not intrusion detection**
-(`core/FOUNDATIONS.md` § threat-model calibration). What the hook buys is that *forgetting* is caught
+(`core/FOUNDATIONS.md` § Principles, Threat-model calibration). What the hook buys is that *forgetting* is caught
 while *deliberately overriding* is a visible, deliberate act.
 
 ## The `/thread-restart` dual-harness asset (v1.1)
@@ -211,7 +211,7 @@ never a pass) rather than a script you must run.
 
 These were surfaced by the v1.0 gate and consciously left as-is; they are recorded here rather than
 hidden. The stated threat model is **cooperative-but-fallible agents, not intrusion detection**
-(`core/FOUNDATIONS.md` § threat-model calibration) — hostile-evasion hardening needs explicit scope.
+(`core/FOUNDATIONS.md` § Principles, Threat-model calibration) — hostile-evasion hardening needs explicit scope.
 
 - **Symlink hardening in the working-tree guards is incomplete (hostile-evasion).** The `pre-commit`
   hook `lstat`-rejects a symlinked declaration and a symlinked `kit.config.json` (fail-closed), and the

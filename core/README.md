@@ -144,14 +144,19 @@ in the move** — the same doctrine at the same total size, re-cut at concept se
 one thing and the terms every file uses are defined before they are used.
 
 **Retired in the same change: `LANES.md`, the cost-inversion lane (Owner ruling).** The lane let a
-cheaper model author spec-able T0/T1 work from a falsifiable ticket. It was retired on measurement,
-not opinion: on the work it governed the cheaper builder cost more and produced less. It carried a
-kill-criterion precisely so it could fail, and it did. Full rationale: root `README.md` § What's new.
+cheaper model author spec-able T0/T1 work from a falsifiable ticket. **Retired by Owner ruling on
+pilot evidence measured in the repo this method was extracted from; that data does not travel with
+the kit, so this is an Owner decision of record, not a claim the kit can substantiate for you.** The
+reported basis was cost: on the work the lane governed, the cheaper builder did not save enough to
+pay for the review rounds a thinner build buys. Note the lane's own kill-criterion keyed on *bounce
+grade*, not on token cost — so this was a judgement against the lane's purpose, not that criterion
+firing. Full rationale: root `README.md` § What's new in v1.4.
 
 - **Dropped with the route** (they governed a route that no longer exists): T0/T1-only eligibility ·
   mis-tier STOPS the lane · no per-file disposition record ⇒ the lane is VOID · the lane seat
   recorded reduced (same-family) · the kill-criterion and its scorecard · the lane-scoped "closes on
-  the full test suite".
+  the full test suite" · the `out-of-scope` BLOCK trigger (only the `lane` route carried a file scope
+  for a declaration to fall outside of).
 - **Survived generally, and were NOT dropped:** a cold reviewer is never weaker than the Builder
   (`REVIEW.md` § Cold review) · the push rules (`OPERATE.md` § Invariants) · the pre-push suite
   baseline (`OPERATE.md` § Working norms) · the **task-lane declaration** itself, which still binds

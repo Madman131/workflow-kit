@@ -18,7 +18,10 @@ delegation, shared-checkout staging, the task-lane declaration, onboarding a new
   terms the whole method leans on — the principles, the roles — were defined two thirds of the way
   into the first file, after several rules had already used them. The new boot order fixes that:
   `FOUNDATIONS` → `WORKFLOW` → `REVIEW` → `ARTIFACT_CLASS` → `OPERATE` → `MULTI_AGENT` → `BINDINGS`
-  → `SYSTEM_MAP` → `OWNER_COMMS`. Nothing was deleted, reworded, or relaxed in the move.
+  → `SYSTEM_MAP` → `OWNER_COMMS`. **No RULE was reworded or relaxed** — verified by byte-diffing each
+  relocated section against v1.3. Two deliberate exceptions, both listed in `core/README.md`
+  § Provenance rather than folded into the "nothing changed" claim: the retired lane's section was
+  rewritten rather than moved, and the onboarding read order gained `OWNER_COMMS.md`.
 - **`core/LANES.md` is retired**, by Owner ruling, and the file is gone. The lane let a cheaper model
   author spec-able T0/T1 work from a falsifiable ticket. Measured on the work it actually governed,
   the cheaper builder spent *more* tokens than the frontier model and produced less — and since
@@ -48,8 +51,10 @@ Do this instead:
    `[P]` method docs and regenerates the `[G]` files, which is what moves your entry stubs and
    `core/BINDINGS.md` onto the new nine-step boot order. Read the `--force` warning in the v1.3 notes
    below first: it is global, so it also rewrites a hand-authored `core/OWNER_COMMS.md` and resets
-   `.claude/kit.config.json`. `init` writes a `.bak` beside each file it overwrites and prints the
-   path, so this is recoverable — but re-apply your own content from those `.bak` files afterwards.
+   `.claude/kit.config.json`. **Commit before you run it.** `init` writes a `.bak` and prints the path
+   only for the six **generated `[G]`** files; the **portable `[P]`** files — every `core/*.md`, the
+   hooks, `pre-commit`, `scripts/` — are overwritten with **no backup**, so local edits to those are
+   recoverable only from git. Re-apply your own content from the `.bak` files afterwards.
 2. **Delete `core/LANES.md` by hand.** `--force` does *not* remove it; `init` only ever writes files,
    it never deletes them. This is the one step no flag does for you.
 3. **Repoint your own local text** — a runbook, custom `CLAUDE.md` additions — from `core/OPERATE.md`
@@ -58,11 +63,21 @@ Do this instead:
 **Verify the upgrade landed** (all three must hold):
 
 ```bash
-ls core/FOUNDATIONS.md core/ARTIFACT_CLASS.md core/MULTI_AGENT.md && ! test -e core/LANES.md && ! grep -n "core/LANES.md" CLAUDE.md AGENTS.md core/BINDINGS.md
+for f in core/FOUNDATIONS.md core/ARTIFACT_CLASS.md core/MULTI_AGENT.md CLAUDE.md AGENTS.md core/BINDINGS.md; do
+  test -f "$f" || { echo "FAIL missing: $f"; exit 1; }
+done
+test -e core/LANES.md && { echo "FAIL still present: core/LANES.md"; exit 1; }
+for f in CLAUDE.md AGENTS.md core/BINDINGS.md; do
+  grep -q "core/LANES.md" "$f" && { echo "FAIL stale pointer in: $f"; exit 1; }
+done
+echo "v1.4 upgrade verified"
 ```
 
-(It greps only the three files that *route* an agent — `core/README.md` still mentions `LANES.md` on
-purpose, in the retirement record, and that mention is correct.)
+It greps only the three files that *route* an agent — `core/README.md` still mentions `LANES.md` on
+purpose, in the retirement record, and that mention is correct. **It tests each file for existence
+first, deliberately:** a bare `! grep ... a b c` returns success when a file is merely *missing*
+(grep exits 2, and `!` turns that into a pass), which would report a half-upgraded repo as clean —
+the exact green-on-broken failure this release exists to remove.
 
 ## What's new in v1.3
 
