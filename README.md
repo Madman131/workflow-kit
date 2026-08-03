@@ -1,8 +1,98 @@
-# workflow-kit — v1.3.0
+# workflow-kit — v1.4.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.4
+
+**The method set was re-cut from 3 files into 6, and the cost-inversion lane was retired.** No rule
+changed in the split: the same doctrine, at the same total size, divided at concept seams instead of
+at the point where one file once got too long to read. The three new docs are `FOUNDATIONS.md`
+(the principles and roles every other doc uses without redefining them — so it is read first),
+`ARTIFACT_CLASS.md` (how a finding is weighed and tiered depending on whether the artifact is run by
+a machine or by an LLM), and `MULTI_AGENT.md` (everything about working alongside other agents:
+delegation, shared-checkout staging, the task-lane declaration, onboarding a new model).
+
+- **Why split at all.** Each of the three originals had grown to carry two unrelated jobs, and the
+  terms the whole method leans on — the principles, the roles — were defined two thirds of the way
+  into the first file, after several rules had already used them. The new boot order fixes that:
+  `FOUNDATIONS` → `WORKFLOW` → `REVIEW` → `ARTIFACT_CLASS` → `OPERATE` → `MULTI_AGENT` → `BINDINGS`
+  → `SYSTEM_MAP` → `OWNER_COMMS`. **No RULE was reworded or relaxed** — verified by byte-diffing each
+  relocated section against v1.3. Two deliberate exceptions, both listed in `core/README.md`
+  § Provenance rather than folded into the "nothing changed" claim: the retired lane's section was
+  rewritten rather than moved, and the onboarding read order gained `OWNER_COMMS.md`.
+- **`core/LANES.md` is retired**, by Owner ruling, and the file is gone. The lane let a cheaper model
+  author spec-able T0/T1 work from a falsifiable ticket. **Retired by Owner ruling on pilot evidence
+  measured in the repo this method was extracted from — that data does not travel with the kit, so
+  this is a decision of record, not a claim the kit can substantiate for you.** The reported basis
+  was cost: the cheaper builder did not save enough to pay for the review rounds a thinner build
+  buys. Note the lane's own kill-criterion keyed on *bounce grade*, not on cost, so this was a
+  judgement against the lane's purpose rather than that criterion firing.
+  What went with it, and what survived generally, is recorded in `core/README.md` § Provenance.
+- **Authoring is in-thread.** The task-lane declaration itself is unchanged and still fails closed —
+  it now lives in `core/MULTI_AGENT.md` § Task-lane declaration.
+- **`core/OWNER_COMMS.md` joins the boot set.** v1.3 shipped the doc but never added it to the entry
+  stubs' read-this-first list, so an agent only met it by accident. It is now step 9.
+
+### Upgrading an existing adopter to v1.4
+
+**This is the first release that RESTRUCTURES `core/`, so a plain re-run is NOT enough — it leaves you
+silently broken.** `init` never overwrites a file it did not write this run. That is the right default
+for an additive release and the wrong one here: a plain re-run installs the three new docs and *keeps*
+your v1.3 copies of the five that were slimmed. Measured on a real two-version adopt, you get
+`core/OPERATE.md` and `core/MULTI_AGENT.md` both carrying the multi-writer section and both calling
+themselves "the authoritative text", three new BINDING docs that no boot set points at, and a live
+`core/BINDINGS.md` pointer to a `core/LANES.md` that should be gone. **Nothing errors** — `doc:size`
+still exits 0. The agent just reads contradictory doctrine, which is exactly the fail-invisibly mode
+`core/README.md` warns about.
+
+Do this instead:
+
+1. **Re-run `init` with your original flags PLUS `--force`.** This is what actually replaces the eight
+   `[P]` method docs and regenerates the `[G]` files, which is what moves your entry stubs and
+   `core/BINDINGS.md` onto the new nine-step boot order. Read the `--force` warning in the v1.3 notes
+   below first: it is global, so it also rewrites a hand-authored `core/OWNER_COMMS.md` and resets
+   `.claude/kit.config.json`. **Commit before you run it.** `init` writes a `.bak` and prints the path
+   only for the seven **generated `[G]`** files (the two entry stubs, four `core/*.md`, and
+   `.claude/kit.config.json`), and only when the content actually differs; the **portable `[P]`** files — every `core/*.md`, the
+   hooks, `pre-commit`, `scripts/` — are overwritten with **no backup**, so local edits to those are
+   recoverable only from git. Re-apply your own content from the `.bak` files afterwards.
+2. **Delete `core/LANES.md` by hand.** `--force` does *not* remove it; `init` only ever writes files,
+   it never deletes them. This is the one step no flag does for you.
+3. **Repoint your own local text** — a runbook, custom `CLAUDE.md` additions — from `core/OPERATE.md`
+   § Multi-writer checkout / § Delegation to `core/MULTI_AGENT.md`.
+
+**Verify the upgrade landed** (all three must hold):
+
+```bash
+for f in core/FOUNDATIONS.md core/ARTIFACT_CLASS.md core/MULTI_AGENT.md \
+         core/WORKFLOW.md core/REVIEW.md core/OPERATE.md \
+         core/SYSTEM_MAP.md core/OWNER_COMMS.md CLAUDE.md AGENTS.md core/BINDINGS.md; do
+  test -f "$f" || { echo "FAIL missing: $f"; exit 1; }
+done
+test -e core/LANES.md && { echo "FAIL still present: core/LANES.md"; exit 1; }
+for f in CLAUDE.md AGENTS.md core/BINDINGS.md; do
+  grep -q "core/LANES.md" "$f" && { echo "FAIL stale pointer in: $f"; exit 1; }
+done
+grep -q "^## Multi-writer checkout" core/OPERATE.md  && { echo "FAIL stale v1.3 doc: core/OPERATE.md"; exit 1; }
+grep -q "^## Principles"            core/WORKFLOW.md && { echo "FAIL stale v1.3 doc: core/WORKFLOW.md"; exit 1; }
+grep -q "^## Artifact-class review physics — code" core/REVIEW.md && { echo "FAIL stale v1.3 doc: core/REVIEW.md"; exit 1; }
+echo "v1.4 upgrade verified"
+```
+
+Three things about that block are deliberate, and each closes a way it previously reported green on a
+broken repo:
+
+- **It tests existence before grepping.** A bare `! grep ... a b c` *succeeds* when a file is merely
+  **missing** (grep exits 2, and `!` turns that into a pass), so a half-upgraded repo read as clean.
+- **It greps for stale pointers only in the three files that ROUTE an agent.** `core/README.md` still
+  mentions `LANES.md` on purpose, in the retirement record, and that mention is correct.
+- **The last three lines are a CONTENT probe, and they are the only thing that can catch the most
+  likely failure** — the five slimmed `[P]` docs not actually being replaced. Every `[P]` doc declares
+  `Kit v1.0` at **both** v1.3 and v1.4 by design (`core/README.md` § Versioning: a version says
+  *current until superseded*), so nothing can tell the two apart by reading a version marker. Those
+  three headings exist in v1.3 and are gone in v1.4, which makes them the available discriminator.
 
 ## What's new in v1.3
 
@@ -126,12 +216,14 @@ method is stable; v1.1 adds only the `/thread-restart` asset and its `init` wiri
 ## What you get
 
 **The method** (`core/`, portable — copies verbatim, versioned `v1.0`):
+- `FOUNDATIONS.md` — the principles (P1–P3) and roles every other doc presupposes. Read first.
 - `WORKFLOW.md` — Steer (tier classification) + the Gate ladder + PM dispositions.
 - `REVIEW.md` — how a review is constructed and judged (cold payload, decorrelation, cross-family lens).
-- `OPERATE.md` — execution protocol, invariants, closeout, working norms, multi-writer staging.
+- `ARTIFACT_CLASS.md` — how findings are weighed and tiered for CODE vs INSTRUCTION artifacts.
+- `OPERATE.md` — execution protocol, invariants, closeout, working norms.
+- `MULTI_AGENT.md` — delegation, multi-writer staging, the task-lane declaration, onboarding.
 - `INVARIANTS.md` — the epistemic rules + failure classes shipped to every reviewer (machine payload).
 - `GATES.md` — the Codex / Gemini gate tool manuals (reference).
-- `LANES.md` — the optional cost-inversion lane (reference).
 - `README.md` — the layer model + staged read.
 
 **The controls** (installed into your repo by `init`):

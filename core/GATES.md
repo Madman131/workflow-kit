@@ -254,7 +254,8 @@ direct-to-main — so it verified nothing on the actual path while implying mani
 Exactly one manifest was ever produced, and the last several real code commits carried none. **A
 dormant control is worse than no control: it manufactures assurance.** Consequence to be explicit
 about: the frontier-thin / cost-inversion lanes lose their *mechanical* release check and fall back to
-the standard ladder + push-GO. `docs/journal/gate_manifests/` is kept as a historical artifact.
+the standard ladder + push-GO. *(Both build lanes were themselves retired later — authoring is
+in-thread; see `core/README.md` § Provenance. This paragraph is kept as the manifest's history.)* `docs/journal/gate_manifests/` is kept as a historical artifact.
 **Do not rebuild it** without first wiring it to the path work actually ships on (a pre-push hook).
 
 ### Gotchas / traps

@@ -355,6 +355,11 @@ CTX_NONE="$(gate_ladder_ctx "$H_GATE" '{"session_id":"'"$SID"'","tool_input":{"c
 assert_eq "" "$CTX_NONE" "WITHOUT a gate command: sensor stays silent (no cry-wolf)"
 
 echo
+# NOTE (kit v1.4.0): this block/permit PAIR is reachable ONLY through the `lane` declaration
+# route, whose DOCTRINE was retired at v1.4.0 while the controls still accept it. When the
+# mechanical retirement lands, this scenario dies with the route and the parameterized
+# deny-set loses its only both-ways demonstration -- re-anchor it on a family the hooks still
+# read (executedPathDirs, per the F1 policy-dir pattern above) rather than deleting it.
 echo "(param) the lane deny-set is load-bearing (parameterization did not fail open)"
 printf '{"mode":"lane","sessionId":"%s","taskId":"accept","allowedFiles":["scripts/billing_job.mjs"]}\n' "$SID" > "$DECL"
 assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"scripts/billing_job.mjs"}}' "$ADOPTER")" "config risk-token 'billing' -> scripts/billing_job.mjs is lane-INELIGIBLE (BLOCKED)"

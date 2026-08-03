@@ -57,7 +57,7 @@ function buildLaneDenyRe(tokens) {
   return new RegExp("(?:^|/)(?:[^/]*(?:" + tokens.map(escapeRe).join("|") + ")[^/]*)", "i");
 }
 
-function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as mode \"in-thread\" with sessionId, taskId, and tier; mode \"lane\" with sessionId, taskId, and exact allowedFiles; or mode \"exempt\" with sessionId, taskId, and a documented reason. For hook installation run: git config core.hooksPath .githooks`) {
+function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as one of the two DOCUMENTED routes: mode \"in-thread\" with sessionId, taskId, and tier; or mode \"exempt\" with sessionId, taskId, and a documented reason. (Mode \"lane\" is still accepted here, but its doctrine was RETIRED with the cost-inversion build lane at kit v1.4.0 — see core/README.md, Provenance; authoring is in-thread.) For hook installation run: git config core.hooksPath .githooks`) {
   process.stderr.write(
     `pre-commit BLOCKED: ${reason}\n` +
     `${remediation}\n`,

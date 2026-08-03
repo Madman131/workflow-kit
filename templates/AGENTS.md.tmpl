@@ -10,14 +10,18 @@ This is the **{{REPO_NAME}}** repo. **Identity tell before any commit/push:**
 Full fingerprint table: `CLAUDE.md`.
 
 ## Read this first — the boot set
-1. **`core/WORKFLOW.md`** — classify (Steer) + the gate ladder.
-2. **`core/REVIEW.md`** — how a review is constructed and judged.
-3. **`core/OPERATE.md`** — execution protocol, invariants, closeout, working norms, **staging**.
-4. **`core/BINDINGS.md`** — roles→models, tools, deploy, access. **When Codex is the Builder, read
+1. **`core/FOUNDATIONS.md`** — the principles (P1–P3) and roles every other doc presupposes.
+2. **`core/WORKFLOW.md`** — classify (Steer) + the gate ladder.
+3. **`core/REVIEW.md`** — how a review is constructed and judged.
+4. **`core/ARTIFACT_CLASS.md`** — how findings are weighed for CODE vs INSTRUCTION artifacts.
+5. **`core/OPERATE.md`** — execution protocol, invariants, closeout, working norms.
+6. **`core/MULTI_AGENT.md`** — delegation, **staging**, the task-lane declaration, onboarding.
+7. **`core/BINDINGS.md`** — roles→models, tools, deploy, access. **When Codex is the Builder, read
    its § "When Codex is the Builder"** — that section replaces the seats, not the method.
-5. **`core/SYSTEM_MAP.md`** — the bounded, `as-of`-dated architecture snapshot.
+8. **`core/SYSTEM_MAP.md`** — the bounded, `as-of`-dated architecture snapshot.
+9. **`core/OWNER_COMMS.md`** — how to write to the Owner (a decision-maker, not a developer).
 
-On demand: `core/GATES.md` (running a gate) · `core/LANES.md` (using a lane) · `core/README.md` (index).
+On demand: `core/GATES.md` (running a gate) · `core/README.md` (index).
 Do **not** "read everything in `core/`" — the read is staged.
 
 ## ⚠ Enforcement asymmetry — the guards that DON'T bind you
@@ -30,7 +34,7 @@ Full model: `PORTABILITY.md`.
 
 ## Multi-writer checkout — surgical staging only
 If more than one agent lane writes this checkout, these rules bind **EVERY** agent. **The canonical
-text is `core/OPERATE.md` § Multi-writer checkout** — the hard prohibitions are repeated here because
+text is `core/MULTI_AGENT.md` § Multi-writer checkout** — the hard prohibitions are repeated here because
 violating one is unrecoverable, but that section governs.
 
 1. **NEVER blanket-stage:** no `git add -A`, `git add .`, or `git commit -a`. Stage explicit paths
@@ -50,7 +54,10 @@ violating one is unrecoverable, but that section governs.
    branch: before any push, check `git log {{DEPLOY_REMOTE_REF}}..HEAD` for ungated work from ANY lane.
 
 ## Before the first code write
-Declare the lane in `.claude/task-lane.json` (session id + kebab task id + exactly one route:
-`lane` · `in-thread` · `exempt`). For the Claude lane the PreToolUse hook blocks an undeclared write;
-**for you, the `pre-commit` hook blocks an undeclared code COMMIT** (fail-closed). Details:
-`core/OPERATE.md` § Optional build lanes, `core/BINDINGS.md` § Tool bindings.
+Declare the task lane in `.claude/task-lane.json` (session id + kebab task id + exactly one route).
+**Use `in-thread` (with the tier), or `exempt` (with a ledgered reason)** — those are the two
+documented routes. A third, `lane`, is still accepted by the controls but its doctrine was RETIRED at
+kit v1.4.0; do not start new work on it. For the Claude lane the PreToolUse hook blocks an undeclared
+write; **for you, the `pre-commit` hook blocks an undeclared code COMMIT** (fail-closed) — and it is
+your ONLY control, so this binds you on your honour plus that hook. Details:
+`core/MULTI_AGENT.md` § Task-lane declaration, `core/BINDINGS.md` § Tool bindings.

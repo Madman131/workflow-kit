@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // .claude/hooks/guard-lane-authoring.mjs — PreToolUse(Write|Edit|MultiEdit|NotebookEdit).
 //
-// WHY THIS EXISTS: core/OPERATE.md — "Optional build lanes" (full procedure: core/LANES.md,
-// Enforcement) says "a prompt is not a control". The lane's process steps are prose until a
-// deterministic layer checks that a declaration exists. This hook makes an undeclared code write
-// visible at the point it is attempted.
+// WHY THIS EXISTS: core/MULTI_AGENT.md — "Task-lane declaration" says "a prompt is not a control".
+// The declaration is prose until a deterministic layer checks that one exists. This hook makes an
+// undeclared code write visible at the point it is attempted.
 //
 // WHAT IT DOES (enforce, never classify — the IO rule): it enforces the DECLARED task disposition
 // for source/config code paths. Lane declarations are session/task-bound, name the exact allowed
@@ -302,12 +301,14 @@ function deny(projectRoot, rel, state, sessionId) {
   }
   const reason =
     `guard-lane-authoring.mjs blocked ${rel}: declaration state is ${state}; this code write is BLOCKED. ` +
-    `See core/OPERATE.md — "Optional build lanes", and core/LANES.md, Enforcement. ` +
-    `Remediate by writing ${path.join(projectRoot, DECLARATION)} as ONE of ` +
-    `\`{"mode":"lane","sessionId":"${session}","taskId":"<kebab-task>","allowedFiles":["<exact/path>"]}\` · ` +
+    `See core/MULTI_AGENT.md — "Task-lane declaration". ` +
+    `Remediate by writing ${path.join(projectRoot, DECLARATION)} as ONE of the two DOCUMENTED routes: ` +
     `\`{"mode":"in-thread","sessionId":"${session}","taskId":"<kebab-task>","tier":"T0"|"T1"|"T2"|"T3"}\` · ` +
     `\`{"mode":"exempt","sessionId":"${session}","taskId":"<kebab-task>","reason":"codex-down"|"codex-quota"|"trivial-edit"}\`; ` +
-    'optional `"maxAgeHours"` defaults to 24. Lane mode is exact-file and rejects the live/chain deny set. ' +
+    'optional `"maxAgeHours"` defaults to 24. ' +
+    'A third mode, `lane`, is still ACCEPTED by this hook but its doctrine was RETIRED with the ' +
+    'cost-inversion build lane at kit v1.4.0 (core/README.md § Provenance) — do not start new work ' +
+    'on it; its mechanical retirement follows. Authoring is in-thread. ' +
     'The declaration is session/task-bound and gitignored; each state change is appended and synced to ' +
     `${path.join(projectRoot, LEDGER)} for Owner spot-check.` +
     (state === "stale"

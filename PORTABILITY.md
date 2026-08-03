@@ -40,7 +40,7 @@ contributor starts from. Mitigations, both shipped:
 
 `--no-verify` bypasses the pre-commit hook, exactly as the PreToolUse guards are bypassable. That is an
 accepted class: gates are **seatbelts for cooperative-but-fallible agents, not intrusion detection**
-(`core/WORKFLOW.md` § threat-model calibration). What the hook buys is that *forgetting* is caught
+(`core/FOUNDATIONS.md` § Principles, Threat-model calibration). What the hook buys is that *forgetting* is caught
 while *deliberately overriding* is a visible, deliberate act.
 
 ## The `/thread-restart` dual-harness asset (v1.1)
@@ -211,7 +211,7 @@ never a pass) rather than a script you must run.
 
 These were surfaced by the v1.0 gate and consciously left as-is; they are recorded here rather than
 hidden. The stated threat model is **cooperative-but-fallible agents, not intrusion detection**
-(`core/WORKFLOW.md` § threat-model calibration) — hostile-evasion hardening needs explicit scope.
+(`core/FOUNDATIONS.md` § Principles, Threat-model calibration) — hostile-evasion hardening needs explicit scope.
 
 - **Symlink hardening in the working-tree guards is incomplete (hostile-evasion).** The `pre-commit`
   hook `lstat`-rejects a symlinked declaration and a symlinked `kit.config.json` (fail-closed), and the
@@ -225,11 +225,13 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   project dir, `~/.claude`, and `/tmp` / `/private/tmp` (the last two so Claude worktrees under `/tmp`
   work). An adopter inherits those exemptions — if your workflow never uses `/tmp` worktrees you may
   tighten them, but the method's private-worktree pattern relies on them.
-- **A few `[P]` method docs carry illustrative origin-repo names.** `core/REVIEW.md` cites `pil/` as a
-  code-dir example; `core/README.md` names `docs/PIL_ARCHITECTURE.md` / `docs/open_work_current_state.md`
-  as layer-model examples an adopter won't have. These are illustrative prose only — **no control has a
-  functional dependency on the origin repo** (verified: repo is passed via `-C`/cwd; no hardcoded
-  absolute paths in any portable script). Same class as the cosmetic gate-runner naming above.
+- **A few `[P]` method docs carry illustrative origin-repo names.** `core/ARTIFACT_CLASS.md` cites
+  `pil/` as a code-dir example; `core/README.md` names `docs/PIL_ARCHITECTURE.md` / `docs/open_work_current_state.md`
+  as layer-model examples an adopter won't have; and several method docs cite a `docs/journal/*.md`
+  file for the postmortem a rule came from, which an adopter also won't have. These are illustrative
+  prose and provenance only — **no control has a functional dependency on the origin repo** (verified:
+  repo is passed via `-C`/cwd; no hardcoded absolute paths in any portable script).
+  Same class as the cosmetic gate-runner naming above.
 
 ## What is portable verbatim vs generated
 
@@ -241,3 +243,10 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 Copying one repo's `[G]` files into another re-creates the cross-repo confusion the identity
 fingerprint exists to prevent. `init` generates them; you never copy them.
+
+**What the kit deliberately does NOT ship.** The origin repo carries a per-repo Codex-lane binding doc
+(`core/LANE_CODEX.md`) holding the concrete Codex-as-Builder seats, the `codex-heavy` compute-weather
+flip, and that repo's effort policy. It is `[G]` for the same reason `BINDINGS.md` is — it names
+specific models and specific budgets — so it is **not** part of the kit. If you run a Codex builder
+lane, bind its seats in your generated `core/BINDINGS.md`; the method itself is model-agnostic
+(`core/MULTI_AGENT.md` § Onboarding a new model).
