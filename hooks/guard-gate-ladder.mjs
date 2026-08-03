@@ -217,7 +217,7 @@ process.stdin.on("end", () => {
     ? `GATE LADDER — declared tier ${tier} · task ${taskId}\n`
     : `GATE LADDER — FAIL-CLOSED to ${tier}: no valid tier declaration for THIS session (${failClosed}).\n` +
       `If you are a reviewer seat, no action is required — do NOT write ${DECLARATION}.\n` +
-      `The declaring PM re-declares per core/OPERATE.md § Optional build lanes.\n`;
+      `The declaring PM re-declares per core/MULTI_AGENT.md § Task-lane declaration.\n`;
 
   const body = `REQUIRED LADDER for ${tier} (families bound in core/BINDINGS.md):\n` +
     `  ${LADDER[tier]}\n` +

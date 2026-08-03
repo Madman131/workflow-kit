@@ -1,8 +1,68 @@
-# workflow-kit — v1.3.0
+# workflow-kit — v1.4.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.4
+
+**The method set was re-cut from 3 files into 6, and the cost-inversion lane was retired.** No rule
+changed in the split: the same doctrine, at the same total size, divided at concept seams instead of
+at the point where one file once got too long to read. The three new docs are `FOUNDATIONS.md`
+(the principles and roles every other doc uses without redefining them — so it is read first),
+`ARTIFACT_CLASS.md` (how a finding is weighed and tiered depending on whether the artifact is run by
+a machine or by an LLM), and `MULTI_AGENT.md` (everything about working alongside other agents:
+delegation, shared-checkout staging, the task-lane declaration, onboarding a new model).
+
+- **Why split at all.** Each of the three originals had grown to carry two unrelated jobs, and the
+  terms the whole method leans on — the principles, the roles — were defined two thirds of the way
+  into the first file, after several rules had already used them. The new boot order fixes that:
+  `FOUNDATIONS` → `WORKFLOW` → `REVIEW` → `ARTIFACT_CLASS` → `OPERATE` → `MULTI_AGENT` → `BINDINGS`
+  → `SYSTEM_MAP` → `OWNER_COMMS`. Nothing was deleted, reworded, or relaxed in the move.
+- **`core/LANES.md` is retired**, by Owner ruling, and the file is gone. The lane let a cheaper model
+  author spec-able T0/T1 work from a falsifiable ticket. Measured on the work it actually governed,
+  the cheaper builder spent *more* tokens than the frontier model and produced less — and since
+  building is only a small fraction of a changeset's cost, a thinner build simply buys review rounds
+  that cost more than either build. It had a kill-criterion so that it could fail, and it did.
+  What went with it, and what survived generally, is recorded in `core/README.md` § Provenance.
+- **Authoring is in-thread.** The task-lane declaration itself is unchanged and still fails closed —
+  it now lives in `core/MULTI_AGENT.md` § Task-lane declaration.
+- **`core/OWNER_COMMS.md` joins the boot set.** v1.3 shipped the doc but never added it to the entry
+  stubs' read-this-first list, so an agent only met it by accident. It is now step 9.
+
+### Upgrading an existing adopter to v1.4
+
+**This is the first release that RESTRUCTURES `core/`, so a plain re-run is NOT enough — it leaves you
+silently broken.** `init` never overwrites a file it did not write this run. That is the right default
+for an additive release and the wrong one here: a plain re-run installs the three new docs and *keeps*
+your v1.3 copies of the five that were slimmed. Measured on a real two-version adopt, you get
+`core/OPERATE.md` and `core/MULTI_AGENT.md` both carrying the multi-writer section and both calling
+themselves "the authoritative text", three new BINDING docs that no boot set points at, and a live
+`core/BINDINGS.md` pointer to a `core/LANES.md` that should be gone. **Nothing errors** — `doc:size`
+still exits 0. The agent just reads contradictory doctrine, which is exactly the fail-invisibly mode
+`core/README.md` warns about.
+
+Do this instead:
+
+1. **Re-run `init` with your original flags PLUS `--force`.** This is what actually replaces the eight
+   `[P]` method docs and regenerates the `[G]` files, which is what moves your entry stubs and
+   `core/BINDINGS.md` onto the new nine-step boot order. Read the `--force` warning in the v1.3 notes
+   below first: it is global, so it also rewrites a hand-authored `core/OWNER_COMMS.md` and resets
+   `.claude/kit.config.json`. `init` writes a `.bak` beside each file it overwrites and prints the
+   path, so this is recoverable — but re-apply your own content from those `.bak` files afterwards.
+2. **Delete `core/LANES.md` by hand.** `--force` does *not* remove it; `init` only ever writes files,
+   it never deletes them. This is the one step no flag does for you.
+3. **Repoint your own local text** — a runbook, custom `CLAUDE.md` additions — from `core/OPERATE.md`
+   § Multi-writer checkout / § Delegation to `core/MULTI_AGENT.md`.
+
+**Verify the upgrade landed** (all three must hold):
+
+```bash
+ls core/FOUNDATIONS.md core/ARTIFACT_CLASS.md core/MULTI_AGENT.md && ! test -e core/LANES.md && ! grep -n "core/LANES.md" CLAUDE.md AGENTS.md core/BINDINGS.md
+```
+
+(It greps only the three files that *route* an agent — `core/README.md` still mentions `LANES.md` on
+purpose, in the retirement record, and that mention is correct.)
 
 ## What's new in v1.3
 
@@ -126,12 +186,14 @@ method is stable; v1.1 adds only the `/thread-restart` asset and its `init` wiri
 ## What you get
 
 **The method** (`core/`, portable — copies verbatim, versioned `v1.0`):
+- `FOUNDATIONS.md` — the principles (P1–P3) and roles every other doc presupposes. Read first.
 - `WORKFLOW.md` — Steer (tier classification) + the Gate ladder + PM dispositions.
 - `REVIEW.md` — how a review is constructed and judged (cold payload, decorrelation, cross-family lens).
-- `OPERATE.md` — execution protocol, invariants, closeout, working norms, multi-writer staging.
+- `ARTIFACT_CLASS.md` — how findings are weighed and tiered for CODE vs INSTRUCTION artifacts.
+- `OPERATE.md` — execution protocol, invariants, closeout, working norms.
+- `MULTI_AGENT.md` — delegation, multi-writer staging, the task-lane declaration, onboarding.
 - `INVARIANTS.md` — the epistemic rules + failure classes shipped to every reviewer (machine payload).
 - `GATES.md` — the Codex / Gemini gate tool manuals (reference).
-- `LANES.md` — the optional cost-inversion lane (reference).
 - `README.md` — the layer model + staged read.
 
 **The controls** (installed into your repo by `init`):

@@ -37,15 +37,22 @@ a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is
 - **Cross-family lens / external gate:** {{GATE_TOOLING}} *(if you use the shipped Codex/Gemini
   runners, they need `codex` / `agy` at runtime — see `PORTABILITY.md`; if you gate by hand, say so
   here).*
-- **Cost-inversion lane** (optional, `core/LANES.md`): declaration `.claude/task-lane.json`; ledger
-  `.claude/lane-ledger.jsonl` (gitignored); lane-eligible globs `scripts/**` + `tests/**`.
+- **Task-lane declaration — enforcement paths:** declaration `.claude/task-lane.json`; ledger
+  `.claude/lane-ledger.jsonl` (gitignored); write-time guard `.claude/hooks/guard-lane-authoring.mjs`,
+  commit-time floor `.githooks/pre-commit`. Rules: `core/MULTI_AGENT.md` § Task-lane declaration.
+- **The `lane` route is RETIRED IN DOCTRINE (kit v1.4.0) but still live in machinery.** Both controls
+  still accept `mode:"lane"` and still screen it against the lane-eligible globs `scripts/**` +
+  `tests/**` minus `laneRiskTokens`. Do not start new work on it — authoring is in-thread. The
+  mechanical retirement, and the removal of the token deny-set it is the only consumer of, follow in a
+  dedicated change. Background: `core/README.md` § Provenance.
 - **Repo-specific families** live in `.claude/kit.config.json` (`executedPathDirs`, `laneRiskTokens`,
   `stateDocs`, `memoryDir`) — read by `guard-lane-authoring`, `pre-commit`, and `check-doc-size`.
 
 ## Canonical docs — the read-order, named
-**Boot set (read whole):** identity = `CLAUDE.md` / `AGENTS.md` → method = `core/WORKFLOW.md` →
-`core/REVIEW.md` → `core/OPERATE.md` → bindings = **this file** → `core/SYSTEM_MAP.md`.
-**On demand:** `core/GATES.md` (running a gate) · `core/LANES.md` (using a lane) · {{RUNBOOK_DOC}}.
+**Boot set (read whole):** identity = `CLAUDE.md` / `AGENTS.md` → method = `core/FOUNDATIONS.md` →
+`core/WORKFLOW.md` → `core/REVIEW.md` → `core/ARTIFACT_CLASS.md` → `core/OPERATE.md` →
+`core/MULTI_AGENT.md` → bindings = **this file** → `core/SYSTEM_MAP.md` → `core/OWNER_COMMS.md`.
+**On demand:** `core/GATES.md` (running a gate) · {{RUNBOOK_DOC}}.
 **Shipped to the reviewer, never read by the builder:** `core/INVARIANTS.md` + `core/REPO_INVARIANTS.md`.
 Index and layer model: `core/README.md`.
 
@@ -60,7 +67,7 @@ Index and layer model: `core/README.md`.
 ## Access
 - **Repo:** remote `{{REMOTE_URL}}`; run the identity ritual before any commit/push:
   `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
-- **Multi-writer norm:** canonical in `core/OPERATE.md` § Multi-writer checkout (ALL agent lanes).
+- **Multi-writer norm:** canonical in `core/MULTI_AGENT.md` § Multi-writer checkout (ALL agent lanes).
 - **Deploy target:** {{DEPLOY_TARGET}}.
 - **Data:** {{DATA_STORES}}.
 
