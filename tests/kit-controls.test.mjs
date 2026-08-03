@@ -238,13 +238,13 @@ test("the Stop registration merges into settings.json exactly once, confirmed by
     // mergeSettings that overwrote the file wholesale — the assertion would be about the template,
     // not about the merge. Plant settings a real adopter would have and require they survive.
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-    settings.model = "opus";                                   // a top-level key we know nothing about
+    settings.env = { KIT_MERGE_SENTINEL: "keep-me" };           // a top-level key we know nothing about
     settings.hooks.Stop.push({ hooks: [{ type: "command", command: "afplay /System/Library/Sounds/Glass.aiff" }] });
     settings.hooks.PreToolUse.push({ matcher: "WebFetch", hooks: [{ type: "command", command: "node ./mine.mjs" }] });
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
     run();
     const after = JSON.parse(readFileSync(settingsPath, "utf8"));
-    assert.equal(after.model, "opus", "an unrelated top-level setting SURVIVES the merge (not replaced)");
+    assert.equal(after.env?.KIT_MERGE_SENTINEL, "keep-me", "an unrelated top-level setting SURVIVES the merge (not replaced)");
     const allCommands = [...(after.hooks?.Stop ?? []), ...(after.hooks?.PreToolUse ?? [])].flatMap((g) => g.hooks ?? []).map((h) => h.command);
     assert.ok(allCommands.some((c) => c.includes("afplay")), "the adopter's own Stop hook SURVIVES the merge");
     assert.ok(allCommands.some((c) => c.includes("./mine.mjs")), "the adopter's own PreToolUse hook SURVIVES the merge");
