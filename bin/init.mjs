@@ -3,10 +3,12 @@
 //
 // WHAT IT DOES: copies the portable [P] method + controls into <target>, PARAMETERIZES the
 // repo-specific families into .claude/kit.config.json (a [G] binding), GENERATES the [G] files
-// (entry stubs, BINDINGS, REPO_INVARIANTS, SYSTEM_MAP) from templates with placeholders, MERGES the
-// three Claude Code PreToolUse hook registrations into .claude/settings.json, and — crucially —
-// installs the HARNESS-AGNOSTIC pre-commit hook and sets core.hooksPath, so a non-Claude lane still
-// gets the strongest enforcement floor the kit can give it (see PORTABILITY.md).
+// (entry stubs, BINDINGS, REPO_INVARIANTS, SYSTEM_MAP, OWNER_COMMS) from templates with placeholders,
+// installs the dual-lane SKILLS (one shared body under .agents/skills/, a thin shim per harness),
+// MERGES the Claude Code hook registrations into .claude/settings.json — three PreToolUse guards plus
+// the Stop-event Owner-comms SENSOR, which fails OPEN — and, crucially, installs the HARNESS-AGNOSTIC
+// pre-commit hook and sets core.hooksPath, so a non-Claude lane still gets the strongest enforcement
+// floor the kit can give it (see PORTABILITY.md).
 //
 // SAFETY: it refuses to overwrite an existing generated file without --force (except settings.json,
 // which is MERGED, and .gitignore, which is APPENDED). init never writes hook SOURCE from parameters
@@ -21,22 +23,65 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// ONE predicate for "is the Owner-comms sensor armed?", imported from the hook that enforces it —
+// never a second hand-kept copy here. A paraphrase drifted from the original once already and made
+// init announce ARMED on repos where the hook was unconditionally dormant.
+import { ownerContract } from "../hooks/guard-owner-comms.mjs";
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // The Codex prompt is USER-GLOBAL (Codex reads prompts from ~/.codex/prompts, not the repo). Default
 // there, but NEVER hardcode it un-overridably — --codex-prompts-dir parameterizes it and
 // --skip-codex-prompt opts out, so init can run hermetically (tests) and on machines with no Codex.
 const DEFAULT_CODEX_PROMPTS_DIR = path.join(os.homedir(), ".codex", "prompts");
+// Read once: it stamps the generated core/OWNER_COMMS.md and closes the post-run checklist.
+const KIT_VERSION = readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim();
+
+// Every flag this parser accepts. Used to reject a flag that appears where a VALUE was expected.
+const KNOWN_FLAGS = new Set([
+  "--help", "-h", "--target", "--repo-name", "--owner-name", "--remote-url", "--deploy-branch",
+  "--source-dirs", "--risk-tokens", "--state-docs", "--memory-dir", "--with-gate-runners",
+  "--codex-prompts-dir", "--skip-codex-prompt", "--force", "--print-package-scripts",
+]);
 
 function parseArgs(argv) {
   const out = { target: process.cwd(), deployBranch: "main", withGateRunners: false, force: false, printPackageScripts: false, help: false, codexPromptsDir: DEFAULT_CODEX_PROMPTS_DIR, skipCodexPrompt: false };
   const listVal = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    const next = () => argv[++i];
+    // EVERY value-taking flag goes through this. A bare/trailing flag, an empty value, or a value
+    // that is itself a flag is a clean exit(2) — never `path.resolve(undefined)` throwing a raw stack
+    // trace, never a repo whose name is literally "--force" while the swallowed flag silently changes
+    // overwrite semantics, and never `--codex-prompts-dir ""` resolving to the CWD and writing
+    // "USER-GLOBAL" prompts into the repo root. Validating two flags and not their siblings is how
+    // the second footgun survives the fix for the first, so this is uniform by construction.
+    const next = () => {
+      const v = argv[++i];
+      // Reject a value that is a KNOWN FLAG (so `--target -h` cannot swallow the help flag and adopt
+      // into a directory named "-h"), or any unrecognized `--long` form. Matching on the flag TABLE
+      // rather than on a leading "-" is deliberate: a blanket dash rule also rejects a legitimate
+      // `--source-dirs -generated`, which `isSegment()` accepts and which has no alternative spelling
+      // because slashes are separately forbidden.
+      if (v === undefined || !v.trim() || KNOWN_FLAGS.has(v) || v.startsWith("--")) {
+        console.error(`init: ${a} requires a value, and it must not be another flag (got ${v === undefined ? "nothing" : JSON.stringify(v)})`);
+        process.exit(2);
+      }
+      return v;
+    };
     if (a === "--help" || a === "-h") out.help = true;
     else if (a === "--target") out.target = path.resolve(next());
     else if (a === "--repo-name") out.repoName = next();
+    else if (a === "--owner-name") {
+      // Extra shape rules beyond non-empty: this value becomes the `## How to talk to <name> — Owner,
+      // not a developer` heading that the Stop sensor parses. ANY line terminator splits that heading
+      // — and JavaScript's `^`/`$` under /m break on U+2028/U+2029 too, not just CR/LF — so the sensor
+      // would report as named-and-armed while never matching. A "{{" would read as still-unfilled.
+      const v = next();
+      if (/[\r\n\u2028\u2029]/.test(v) || v.includes("{{")) {
+        console.error(`init: --owner-name requires a plain one-line name (got ${JSON.stringify(v)})`);
+        process.exit(2);
+      }
+      out.ownerName = v.trim();
+    }
     else if (a === "--remote-url") out.remoteUrl = next();
     else if (a === "--deploy-branch") out.deployBranch = next();
     else if (a === "--source-dirs") out.sourceDirs = listVal(next());
@@ -44,17 +89,7 @@ function parseArgs(argv) {
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
     else if (a === "--with-gate-runners") out.withGateRunners = true;
-    else if (a === "--codex-prompts-dir") {
-      // Validate the value: a bare/trailing flag, or a value that is itself a flag (e.g.
-      // `--codex-prompts-dir --skip-codex-prompt`), must be a clean exit(2), NOT a silent write to a
-      // directory literally named "--skip-codex-prompt" and NOT `path.resolve(undefined)` throwing.
-      const v = next();
-      if (v === undefined || v.startsWith("--")) {
-        console.error(`init: --codex-prompts-dir requires a directory value (got ${v === undefined ? "nothing" : JSON.stringify(v)})`);
-        process.exit(2);
-      }
-      out.codexPromptsDir = path.resolve(v);
-    }
+    else if (a === "--codex-prompts-dir") out.codexPromptsDir = path.resolve(next());
     else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
@@ -69,6 +104,9 @@ Usage: node bin/init.mjs [--target <dir>] [options]
 
   --target <dir>          repo to adopt into (default: cwd)
   --repo-name <name>      fills the [G] templates' {{REPO_NAME}}
+  --owner-name <name>     fills core/OWNER_COMMS.md's {{OWNER_NAME}} — the person the agent reports
+                          to. Omitted ⇒ the placeholder stays and the Owner-comms Stop SENSOR stays
+                          DORMANT (it allows unconditionally until the Owner is named)
   --remote-url <url>      fills {{REMOTE_URL}} (the identity fingerprint)
   --deploy-branch <b>     fills {{DEPLOY_BRANCH}} (default: main)
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
@@ -76,9 +114,11 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
-  --codex-prompts-dir <d> where the /thread-restart Codex prompt installs (default: ~/.codex/prompts,
-                          USER-GLOBAL — outside the target repo; parameterize it for a hermetic run)
-  --skip-codex-prompt     do not install the Codex prompt (Claude command + AGENTS.md pointer only)
+  --codex-prompts-dir <d> where the Codex prompts install — /thread-restart and the skill shims
+                          (default: ~/.codex/prompts, USER-GLOBAL — outside the target repo;
+                          parameterize it for a hermetic run)
+  --skip-codex-prompt     do not install any Codex prompt (the Claude command, the Claude skill
+                          shims, the shared skill bodies and the AGENTS.md pointer still install)
   --force                 overwrite existing generated files (settings.json is always merged)
   --print-package-scripts print the npm scripts to add to your package.json, then exit
   -h, --help              this help
@@ -109,6 +149,39 @@ function copyGuarded(src, dst, force) {
   ensureDir(path.dirname(dst));
   copyFileSync(src, dst);
   return "written";
+}
+
+// --force is GLOBAL and it is also the remedy init itself recommends for a stale hook ("re-run with
+// --force to update"). That combination silently destroys hand-authored content in the `[G]` files —
+// most painfully core/OWNER_COMMS.md, whose whole value is the paragraphs a human wrote about a
+// person, and .claude/kit.config.json, whose loss quietly WIDENS the lane guards back to defaults.
+// Before overwriting a file whose content differs from what we are about to write, keep a .bak beside
+// it and say so. Cheap, reversible, and it makes the documented upgrade path non-destructive.
+// Returns "not-needed" (no existing file, or identical content) | "backed-up" | "FAILED".
+// FAILED is load-bearing: the caller MUST NOT overwrite. A backup that silently does not happen is
+// worse than no backup at all, because the console says the upgrade path is recoverable.
+function backupBeforeOverwrite(dst, nextText) {
+  if (!existsSync(dst)) return "not-needed";
+  let current;
+  // Unreadable but present: we cannot preserve it, so we must not destroy it either.
+  try { current = readFileSync(dst, "utf8"); } catch { return "FAILED"; }
+  if (current === nextText) return "not-needed";  // identical — nothing to preserve
+  const bak = `${dst}.bak`;
+  try { writeFileSync(bak, current); } catch { return "FAILED"; }
+  warn(`OVERWROTE ${dst} (--force); your previous version is saved at ${bak}`);
+  return "backed-up";
+}
+
+// Write `text` to `dst`, but never destroy differing content we failed to preserve. Returns whether
+// the write happened, so callers report honestly rather than assuming.
+function writeWithBackup(dst, text) {
+  if (backupBeforeOverwrite(dst, text) === "FAILED") {
+    warn(`REFUSED to overwrite ${dst}: its previous content could not be backed up (is ${dst}.bak writable?). The existing file is UNCHANGED — move it aside yourself, then re-run.`);
+    return false;
+  }
+  ensureDir(path.dirname(dst));
+  writeFileSync(dst, text);
+  return true;
 }
 
 function copyTree(srcDir, dstDir, force, filter = () => true) {
@@ -259,22 +332,26 @@ function main() {
 
   ensureDir(T);
   log(`workflow-kit init → ${T}`);
-  const remaining = []; // unfilled placeholders the adopter must complete
+  const remaining = []; // generated files still carrying unfilled placeholders
+  const remainingTokens = new Map(); // dst -> the specific placeholder names still unfilled
 
   // 1. [P] core method docs (verbatim).
   const core = copyTree(path.join(KIT_ROOT, "core"), path.join(T, "core"), force);
   log(`  core/ method docs: ${core.filter(([, s]) => s === "written").length} written, ${core.filter(([, s]) => s === "skipped").length} kept`);
 
-  // 2. [P] PreToolUse hooks (verbatim mechanism). Report kept-vs-written honestly: a KEPT (existing)
-  // hook may be STALE, so "installed" would over-claim (a control believed current but actually old).
+  // 2. [P] Claude-lane hooks (verbatim mechanism): the three PreToolUse guards, which fail CLOSED,
+  // plus the Stop-event Owner-comms SENSOR, which fails OPEN and is a nudge, not enforcement (see
+  // PORTABILITY.md § the Owner-comms sensor). Report kept-vs-written honestly: a KEPT (existing) hook
+  // may be STALE, so "installed" would over-claim (a control believed current but actually old).
+  const hookFiles = readdirSync(path.join(KIT_ROOT, "hooks")).sort();
   let hooksKept = 0;
-  for (const h of readdirSync(path.join(KIT_ROOT, "hooks"))) {
+  for (const h of hookFiles) {
     const d = path.join(T, ".claude", "hooks", h);
     if (copyGuarded(path.join(KIT_ROOT, "hooks", h), d, force) === "written") chmodX(d); else hooksKept++;
   }
   log(hooksKept
-    ? `  .claude/hooks/: ${3 - hooksKept} installed, ${hooksKept} EXISTING kept — may be STALE; re-run with --force to update`
-    : `  .claude/hooks/: 3 PreToolUse guards installed`);
+    ? `  .claude/hooks/: ${hookFiles.length - hooksKept} installed, ${hooksKept} EXISTING kept — may be STALE; re-run with --force to update`
+    : `  .claude/hooks/: ${hookFiles.length} hooks installed — PreToolUse guards (fail CLOSED) + the guard-owner-comms Stop sensor (fails OPEN)`);
 
   // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
   const pc = path.join(T, ".githooks", "pre-commit");
@@ -361,12 +438,123 @@ function main() {
     }
   }
 
+  // 4d. SKILLS — the shared-body dual-lane install (v1.3). ONE canonical body per skill lives at
+  // .agents/skills/<name>/ (harness-neutral); each harness gets a THIN SHIM that does nothing but
+  // point at it. Same reasoning as the /thread-restart dual-harness asset — the plumbing is
+  // harness-specific, the METHOD must not be re-derived per harness — taken one step further: here
+  // the method is not merely kept in lockstep across two copies, it is literally ONE file.
+  //
+  // THIS IS THE MECHANISM, NOT A ONE-OFF. Both sides are DISCOVERED FROM DISK, so adding a skill to
+  // the kit means dropping a body dir in `skills/<name>/` and a shim in `skill-shims/<lane>/<name>.md`
+  // — no edit here. Shims are enumerated SEPARATELY from bodies rather than derived from them,
+  // because a shim need not have a body of its own: `humanize-bullet` is an ALIAS pointing at
+  // `humanize`'s body. copyGuarded refuses to clobber without --force, so re-runs are idempotent.
+  const skillsSrc = path.join(KIT_ROOT, "skills");
+  const shimsSrc = path.join(KIT_ROOT, "skill-shims");
+  const subdirsOf = (dir) => (existsSync(dir)
+    ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort() : []);
+  const shimNamesFor = (lane) => {
+    const dir = path.join(shimsSrc, lane);
+    return existsSync(dir)
+      ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md"))
+        .map((e) => e.name.slice(0, -".md".length)).sort()
+      : [];
+  };
+
+  const bodyNames = subdirsOf(skillsSrc);
+  const claudeShims = shimNamesFor("claude");
+  const codexShims = shimNamesFor("codex");
+  // Track the INSTALLED shim path per lane+name, so verification below reads what the harness will
+  // actually load rather than what the kit shipped.
+  const installedShims = [];
+  // Failure-ISOLATED like the Codex prompt, and for a sharper reason: this whole block is a NUDGE,
+  // and step 5 below — registering the guards in settings.json — is a CONTROL. An ENOTDIR from a
+  // `.claude/skills` that happens to be a regular file, or a broken symlink under `.agents/skills`,
+  // must not abort the run before the guards are registered, which would leave hook files on disk
+  // with zero registrations: exactly the silent fail-open mergeSettings' own read-back exists to stop.
+  try {
+    for (const name of bodyNames) copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force);
+    for (const name of claudeShims) {
+      const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
+      copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force);
+      installedShims.push(["claude", name, dst]);
+    }
+    log(bodyNames.length || claudeShims.length
+      ? `  skills: ${bodyNames.length} shared body(ies) → .agents/skills/ · ${claudeShims.length} Claude shim(s) → .claude/skills/<name>/SKILL.md (existing files kept; --force to update)`
+      : `  skills: none shipped in this kit version`);
+  } catch (e) {
+    warn(`the repo-local skills install failed (${e && (e.code || e.message) || "error"}) — /humanize and any other skill may be missing or partial. This is a NUDGE, not a control: the guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
+  }
+
+  if (args.skipCodexPrompt) {
+    log(`  Codex skill prompts: SKIPPED (--skip-codex-prompt) — the shared bodies + Claude shims still install`);
+  } else {
+    let cInstalled = 0, cKept = 0, cFailed = 0;
+    for (const name of codexShims) {
+      const dst = path.join(args.codexPromptsDir, `${name}.md`);
+      // The Codex prompts dir is a FLAT, user-global namespace shared with the command prompts
+      // (/thread-restart). A skill whose name collides would silently replace a command under --force.
+      // Refuse rather than clobber: a kit-authoring mistake, caught at the one moment anyone is looking.
+      if (existsSync(path.join(KIT_ROOT, "commands", "codex", `${name}.md`))) {
+        warn(`skill shim "${name}" collides with the Codex COMMAND prompt of the same name — skipped. Rename the skill in skill-shims/codex/ (this dir is a flat user-global namespace).`);
+        cFailed++;
+        continue;
+      }
+      // Failure-ISOLATED, exactly like the /thread-restart Codex prompt: this is the ONE install
+      // target outside the repo, and an unwritable ~/.codex must never abort a mostly-complete adopt.
+      try {
+        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force) === "written") cInstalled++; else cKept++;
+        installedShims.push(["codex", name, dst]);
+      } catch (e) {
+        cFailed++;
+        warn(`could not install the Codex skill prompt ${dst} (${e && (e.code || e.message) || "error"}) — the repo-local bodies + Claude shims are unaffected; pass --codex-prompts-dir <writable dir> or --skip-codex-prompt to silence this`);
+      }
+    }
+    if (codexShims.length) {
+      log(`  ${args.codexPromptsDir}: ${cInstalled} Codex skill prompt(s) installed, ${cKept} kept${cFailed ? `, ${cFailed} FAILED (see warning)` : ""} (USER-GLOBAL, OUTSIDE the repo)`);
+    }
+  }
+
+  // A shim is worthless if the body it names is not on disk — it becomes a menu entry that dead-ends.
+  //
+  // Read the INSTALLED shim, never the kit's source copy. Without --force an existing shim is KEPT,
+  // so the file the harness loads may be an edited or stale one this run never wrote; validating the
+  // kit's pristine copy instead would certify a shim we never looked at — the stale-asset trap init
+  // already handles honestly for hooks (`may be STALE`) and the pre-commit floor (`pcTrusted`).
+  //
+  // And a shim naming NO body at all is a FAILURE, not a pass. Zero matches means zero comparisons,
+  // so "no dangling reference" would be vacuously true for precisely the broken artifact this check
+  // exists to catch — a live risk because two later work-stages add skills through this mechanism.
+  const BODY_REF_RE = /\.agents\/skills\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+\.md)/g;
+  let dangling = 0, verified = 0;
+  for (const [lane, name, dst] of installedShims) {
+    let text;
+    try { text = readFileSync(dst, "utf8"); }
+    catch { warn(`${lane} skill shim "${name}" could not be read back at ${dst} — its body reference is UNVERIFIED`); dangling++; continue; }
+    const refs = [...text.matchAll(BODY_REF_RE)];
+    if (!refs.length) {
+      warn(`${lane} skill shim "${name}" names NO .agents/skills/<name>/<file>.md body — a shim carries no rules of its own, so this command would dead-end`);
+      dangling++;
+      continue;
+    }
+    for (const m of refs) {
+      if (existsSync(path.join(T, ".agents", "skills", m[1], m[2]))) { verified++; continue; }
+      warn(`${lane} skill shim "${name}" points at .agents/skills/${m[1]}/${m[2]}, which is NOT installed — that command would dead-end`);
+      dangling++;
+    }
+  }
+  if (installedShims.length) {
+    log(dangling
+      ? `  skills: ${dangling} shim reference(s) do NOT resolve (see warnings above) — those commands dead-end`
+      : `  skills: ${verified} body reference(s) across ${installedShims.length} installed shim(s) all resolve on disk`);
+  }
+
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
   const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
-  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse registrations merged`);
-  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 3 PreToolUse guards are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
-  else warn(`.claude/settings.json: post-write verification FAILED — the guards are NOT confirmed on disk. Inspect ${path.join(T, ".claude", "settings.json")} before trusting the Claude-lane controls.`);
+  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse + Stop registrations merged (verified by read-back)`);
+  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 3 PreToolUse guards and the Stop sensor are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
+  else warn(`.claude/settings.json: post-write verification FAILED — the registrations are NOT confirmed on disk. Inspect ${path.join(T, ".claude", "settings.json")} before trusting the Claude-lane controls.`);
 
   // 6. .claude/kit.config.json — the [G] repo-specific families (the ONLY parameterized DATA).
   const config = {};
@@ -377,7 +565,14 @@ function main() {
   const cfgPath = path.join(T, ".claude", "kit.config.json");
   let cfgKept = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
-  else { ensureDir(path.dirname(cfgPath)); writeFileSync(cfgPath, JSON.stringify(config, null, 2) + "\n"); }
+  else {
+    ensureDir(path.dirname(cfgPath));
+    const cfgText = JSON.stringify(config, null, 2) + "\n";
+    // A --force re-run with no family flags rewrites this to `{}`, silently WIDENING the lane guards
+    // (a deny-set the adopter configured simply disappears). Keep the previous version, and refuse
+    // the overwrite outright if it cannot be kept.
+    if (!writeWithBackup(cfgPath, cfgText)) cfgKept = true;
+  }
   log(cfgKept
     ? `  .claude/kit.config.json: EXISTING kept — on-disk file unchanged; the flags you passed were NOT applied`
     : `  .claude/kit.config.json: ${Object.keys(config).length ? Object.keys(config).join(", ") : "empty (portable defaults)"}`);
@@ -387,6 +582,12 @@ function main() {
     REPO_NAME: args.repoName || "{{REPO_NAME}}",
     REMOTE_URL: args.remoteUrl || "{{REMOTE_URL}}",
     DEPLOY_BRANCH: args.deployBranch || "main",
+    // core/OWNER_COMMS.md is `[G]` because it NAMES A PERSON — copying one repo's into another
+    // re-creates exactly the cross-repo confusion the identity fingerprint exists to prevent. Only
+    // the name is fillable from a flag; {{OWNER_PROFILE}}, {{IRREVERSIBLE_ASSET}} and
+    // {{OWNER_SHORTHAND}} are judgment calls the adopter completes by hand (listed in the checklist).
+    OWNER_NAME: args.ownerName || "{{OWNER_NAME}}",
+    KIT_VERSION,
   };
   const gen = [
     ["CLAUDE.md.tmpl", "CLAUDE.md"],
@@ -394,16 +595,57 @@ function main() {
     ["BINDINGS.md.tmpl", "core/BINDINGS.md"],
     ["REPO_INVARIANTS.md.tmpl", "core/REPO_INVARIANTS.md"],
     ["SYSTEM_MAP.md.tmpl", "core/SYSTEM_MAP.md"],
+    ["OWNER_COMMS.md.tmpl", "core/OWNER_COMMS.md"],
   ];
+  let genWritten = 0, genKept = 0, genRefused = 0;
   for (const [tmpl, dst] of gen) {
     const d = path.join(T, dst);
-    if (existsSync(d) && !force) { warn(`exists, kept (use --force to overwrite): ${d}`); continue; }
+    if (existsSync(d) && !force) { warn(`exists, kept (use --force to overwrite): ${d}`); genKept++; continue; }
     const text = fillTemplate(path.join(KIT_ROOT, "templates", tmpl), vars);
-    ensureDir(path.dirname(d));
-    writeFileSync(d, text);
-    if (/\{\{[A-Z0-9_]+\}\}/.test(text)) remaining.push(dst); // include digit-bearing tokens ({{INVARIANT_1}})
+    // --force must not destroy hand-authored [G] content — and must not proceed if it cannot preserve it.
+    if (writeWithBackup(d, text)) genWritten++; else genRefused++;
   }
-  log(`  [G] entry stubs + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP generated`);
+  // Count a REFUSED write separately from a KEPT one. Folding them together produced a summary that
+  // said "your version is backed up first" about the one file whose backup had just failed — and left
+  // the tree MIXED (later docs regenerated, that one not), which the reader has to know to fix.
+  if (genRefused) {
+    warn(`[G] generation is INCOMPLETE: ${genWritten} regenerated, ${genRefused} REFUSED (see above). The tree now MIXES kit-current and older [G] files. Resolve the refused file(s), then re-run --force.`);
+  }
+  log(genKept || genRefused
+    ? `  [G] CLAUDE + AGENTS + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP + OWNER_COMMS: ${genWritten} generated, ${genKept} EXISTING kept${genKept ? " (--force to regenerate; your version is backed up first)" : ""}${genRefused ? `, ${genRefused} REFUSED (NOT backed up, NOT overwritten)` : ""}`
+    : `  [G] entry stubs + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP + OWNER_COMMS generated`);
+
+  // Scan the files ON DISK for unfilled placeholders — NOT the text this run happened to write.
+  // A kept file contributed nothing to that text, so a re-run (the documented upgrade path) reported
+  // "(none — all filled)" while the doc on disk still literally read "this touches
+  // {{IRREVERSIBLE_ASSET}}". The checklist is the ONLY thing that surfaces the three flag-unfillable
+  // OWNER tokens, so a false all-clear there is the difference between a completed contract and a
+  // template nobody finished.
+  for (const [, dst] of gen) {
+    let text;
+    try { text = readFileSync(path.join(T, dst), "utf8"); } catch { continue; }
+    const unfilled = [...new Set([...text.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)].map((m) => m[1]))]; // digit-bearing too ({{INVARIANT_1}})
+    if (unfilled.length) { remaining.push(dst); remainingTokens.set(dst, unfilled); }
+  }
+
+  // Report the sensor's state using the HOOK'S OWN predicate (imported, not paraphrased) against the
+  // file on disk. Both halves matter. Re-deriving the test here drifted from the hook and announced
+  // ARMED for a heading the hook could not parse — a retitled section, an em dash normalized to a
+  // hyphen, or no heading at all. And reading the FLAG rather than the file would announce ARMED on a
+  // re-run where `--owner-name` was passed but the existing doc was kept. Either is a false statement
+  // about a control's state, which this kit treats as worse than having no control.
+  const contract = ownerContract(T);
+  const ownerDoc = path.join(T, "core", "OWNER_COMMS.md");
+  log(!existsSync(ownerDoc)
+    ? `  core/OWNER_COMMS.md: NOT present — the Stop sensor is DORMANT (it allows unconditionally)`
+    : contract
+      ? `  core/OWNER_COMMS.md: Owner "${contract.ownerName}", ${contract.questionTokens.length} question-shorthand token(s) — the Stop sensor is ARMED. It fails OPEN, so a clean run still proves nothing.`
+      : `  core/OWNER_COMMS.md: the Stop sensor is DORMANT (it allows unconditionally) — no "## How to talk to <name> — Owner, not a developer" heading with the name filled in. Pass --owner-name, or fix that heading by hand.`);
+  // ARMED is not COMPLETE. The sensor arms on the NAME alone, but rules 4 and 7 read as boilerplate
+  // until the rest is written, and the block text it emits points the agent at this very doc.
+  if (contract && (remainingTokens.get("core/OWNER_COMMS.md") || []).length) {
+    warn(`core/OWNER_COMMS.md is ARMED but still has unfilled placeholders (${(remainingTokens.get("core/OWNER_COMMS.md") || []).map((t) => `{{${t}}}`).join(", ")}) — the contract an agent is pointed at is incomplete. See the checklist below.`);
+  }
 
   // 7b. AGENTS.md fallback pointer — so a Codex / non-Claude lane finds the /thread-restart procedure
   // even where custom slash-commands are unsupported (the repo-local .claude/commands/thread-restart.md
@@ -426,13 +668,28 @@ function main() {
   }
 
   // 9. Post-init checklist.
-  log(`\nAdopted workflow-kit v${readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim()}. Next:`);
+  log(`\nAdopted workflow-kit v${KIT_VERSION}. Next:`);
   log(`  1. Complete the placeholders in: ${remaining.length ? remaining.join(", ") : "(none — all filled)"}`);
+  // Name the OWNER_COMMS placeholders EXPLICITLY. They are the ones an adopter is least likely to
+  // guess at from the filename — each is a judgment call about a person, not a repo fact — and the
+  // doc is useless (rules 4 and 7 read as boilerplate) until they are answered.
+  const OWNER_TOKEN_HELP = {
+    OWNER_NAME: `the person the agent reports to (or re-run with --owner-name)`,
+    OWNER_PROFILE: `a sentence or two on who they are and how they read`,
+    IRREVERSIBLE_ASSET: `the thing in YOUR repo that cannot be restored`,
+    OWNER_SHORTHAND: `the tokens they actually type (end a QUESTION's gloss with "?")`,
+  };
+  for (const tok of remainingTokens.get("core/OWNER_COMMS.md") || []) {
+    log(`     · core/OWNER_COMMS.md {{${tok}}} — ${OWNER_TOKEN_HELP[tok] || "complete it"}`);
+  }
   log(`  2. Add these scripts to package.json:  node bin/init.mjs --print-package-scripts`);
   log(`  3. Wire "doc:size" + "test:kit-controls" into your CI / npm test.`);
   log(`  4. READ PORTABILITY.md — the three PreToolUse hooks bind ONLY the Claude Code lane. A`);
   log(`     Codex / non-Claude lane is bound by AGENTS.md prose + the pre-commit hook you just`);
   log(`     installed — NOT by the PreToolUse guards. Do not imply otherwise to your team.`);
+  log(`  5. The Stop hook guard-owner-comms.mjs is a SENSOR that fails OPEN — it nudges a`);
+  log(`     rule-1 miss AFTER the message is already sent, and a clean run proves nothing.`);
+  log(`     Never describe it to your team as enforcement. Off switch: WORKFLOW_KIT_COMMS_GUARD=false.`);
 }
 
 main();

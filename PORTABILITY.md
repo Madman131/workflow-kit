@@ -15,6 +15,7 @@ never loads that hook system.
 | `guard-lane-authoring` (declaration before a code write) | **enforced** | not enforced | not enforced |
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | not enforced | not enforced |
 | `.githooks/pre-commit` (declaration + scope, at commit) | **enforced** | **enforced** | **enforced** |
+| `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | not present | not present |
 
 **What binds every lane** is (1) **prose** — `AGENTS.md` + `core/*` + the required PM-disposition
 emission, which a cooperative agent follows — and (2) the **`pre-commit` hook**, the one deterministic
@@ -83,6 +84,107 @@ one-line restart seed (`"Read <digest path> and continue."`). The **user** perfo
 as "the context was reset" would be the same manufactured-assurance failure this kit exists to stop — the
 restart is a user action the asset only prepares.
 
+## Owner communication (v1.3) — a `[G]` doc, `[P]` skills, and a sensor that enforces nothing
+
+### `core/OWNER_COMMS.md` is `[G]`, and that is not a formality
+
+It **names a person**. Copying one repo's into another puts the wrong Owner's name, profile,
+irreversible asset, and shorthand in front of an agent that will act on them — the same cross-repo
+confusion the identity fingerprint exists to prevent, in the one file whose whole subject is *who you
+are talking to*. `init` generates it from `templates/OWNER_COMMS.md.tmpl`; you never copy it.
+
+`--owner-name` fills `{{OWNER_NAME}}`. Three placeholders are left for you deliberately, because each
+is a judgment no flag can supply — `{{OWNER_PROFILE}}` (who they are and how they read),
+`{{IRREVERSIBLE_ASSET}}` (the thing in *your* repo that cannot be restored, which is what makes rule 4
+concrete), and `{{OWNER_SHORTHAND}}` (the tokens they actually type). `init` names each in its
+post-run checklist. The generated file declares `CLASS: BINDING`, so `check-doc-size` governs it
+automatically at the 20 KiB method cap along with every other `core/*.md`.
+
+### The skills are `[P]`, but they depend on that `[G]` doc
+
+`skills/humanize/` ships verbatim to every adopter and contains **no Owner-specific text** — it
+refers to the contract by *section shape* (`## How to talk to … — Owner, not a developer`), never by
+name, which is why it can be portable at all. The dependency runs one way: **the skill is inert
+without the generated doc.** `/humanize` on a repo whose `core/OWNER_COMMS.md` is missing or still
+full of placeholders has no rules to rewrite against. Adopt both or neither.
+
+The install mechanism is the `/thread-restart` dual-harness pattern with the duplication removed.
+There, one *method* lives as two files kept in lockstep. Here there is literally **one body** —
+`.agents/skills/<name>/` — and each harness gets a shim whose only job is to point at it:
+
+| | Shared body | Claude shim | Codex shim |
+|---|---|---|---|
+| Source (`[P]`) | `skills/<name>/` | `skill-shims/claude/<name>.md` | `skill-shims/codex/<name>.md` |
+| Installs to | `.agents/skills/<name>/` (repo-local) | `.claude/skills/<name>/SKILL.md` (repo-local) | your Codex prompts dir (user-global) |
+| Holds rules? | **yes — the only copy** | no | no |
+
+Both sides are **discovered from disk**, so adding a skill is dropping a body dir and a shim per lane,
+with no `init` change. Shims are enumerated separately from bodies rather than derived from them,
+because a shim need not have a body: `humanize-bullet` is an **alias** that points at `humanize`'s.
+`init` checks at adopt time that every shim's `.agents/skills/…` reference resolves on disk, so a
+renamed body surfaces as a warning instead of a command that dead-ends. The Codex shims are
+user-global writes and are **failure-isolated** exactly like the `/thread-restart` prompt — an
+unwritable `~/.codex` warns and the repo-local adopt completes.
+
+### `guard-owner-comms.mjs` is a SENSOR. It fails OPEN. Do not call it enforcement.
+
+This is the one hook in the kit that is **not a control**, and the distinction is the whole point of
+this document. Three separate reasons it cannot enforce anything:
+
+1. **It fails open by design.** Every parse error, missing field, unreadable transcript, absent or
+   unfinished `core/OWNER_COMMS.md`, and unrecognized shape **allows**. The write guards fail *closed*
+   because a wrong write is unrecoverable; here a wrong *block* wedges a session that cannot finish a
+   turn. A comms nudge must never be able to stop work. **So a clean run proves nothing.**
+2. **It fires too late to prevent anything.** A Stop hook runs *after* the final message is generated
+   and shown. Blocking does not retract it — it forces an *additional* message. The Owner sees the
+   over-long answer and then a corrected one. That round-trip *is* the benefit, and it is also the
+   ceiling: the bad message was still sent.
+3. **It is dormant until armed, and only ever samples two failure modes.** With `{{OWNER_NAME}}`
+   unfilled it allows unconditionally. Armed, it checks two things — narration in the closing message,
+   and a short question answered past ~350 words of prose — out of seven rules. Rules 2 through 6 are
+   not mechanically checkable and are not checked.
+
+What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method
+doc. The sensor catches one habitual miss, late, sometimes. Off switch:
+`WORKFLOW_KIT_COMMS_GUARD="false"` (explicit string compare — the string `"false"` is truthy, so a
+truthiness read there would be a bug).
+
+**Parameterization.** The hook hardcodes no Owner. It reads the name from the
+`## How to talk to <name> — Owner, not a developer` heading, and harvests the Owner's *question*
+shorthand from the `` `TOKEN` = gloss `` rows — **a gloss containing "?" marks a question** (`AR` =
+"archive ready?"), which is what lets a bare `AR` count as a short question despite carrying no "?"
+and no opener word. A gloss without "?" is an **instruction** (`MIS` = "make it so"), and an
+instruction fairly earns a full work report. Two consequences worth knowing:
+
+- **The heading shape is exact.** Retitle it, or let an editor normalize the em dash to a hyphen, and
+  the sensor goes dormant. It will not guess. `init` reports armed/dormant using the hook's **own
+  imported predicate** — not a paraphrase — so init's word and the hook's behavior cannot drift apart;
+  when they were two hand-written copies, init announced ARMED on repos where the hook allowed
+  everything.
+- **The template's example rows are FENCED, and that fence is load-bearing.** Rows inside a code fence
+  are not harvested, so an adopter who never filled `{{OWNER_SHORTHAND}}` does not silently inherit
+  someone else's vocabulary. Write your real rows *outside* the fence, in that exact backticked shape,
+  or the sensor will not recognize them — which, being fail-open, costs you a nudge and nothing else.
+
+**ARMED is not COMPLETE.** The sensor arms on the *name* alone, because that is the only part `init`
+can fill. A doc that is armed but still carries `{{OWNER_PROFILE}}` / `{{IRREVERSIBLE_ASSET}}` /
+`{{OWNER_SHORTHAND}}` is a contract an agent will be pointed at while rule 4 still literally reads
+"this touches `{{IRREVERSIBLE_ASSET}}`". `init` warns when it sees that combination; finish the doc.
+
+**Proof obligation.** Like `/thread-restart`, and unlike every control, this ships no fail-closed
+behavior — but it is not proof-free either, because it *does* make decisions. Both suites gate it on
+**both directions of every decision it makes**: dormant-allows vs armed-blocks; shorthand undeclared
+vs declared; a short question over-answered vs answered briefly; one of the Owner's *questions* vs one
+of their *instructions*; a question that asks FOR detail (never flagged — telling an agent to withhold
+what was just asked for would be the sensor working against rule 1); narration in the closing message,
+including in a bullet or bold, vs the same words inside a backtick or tilde fence, vs a deferred
+commitment like "I'll deploy once you approve" (not narration); a harness-injected `<system-reminder>`
+block leading *and* trailing the Owner's turn (stripped, never allowed to delete the check); a
+subagent's sidechain prompt (skipped); the block *reason* text itself; and the loop-safety, off-switch,
+unreadable-transcript and malformed-input allows — each asserted to exit 0, because a crash silently
+classified as "allow" would let a hook that threw on every input pass every fail-open test. A sensor
+only ever seen allowing is a sensor never observed working.
+
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
 The Codex/Gemini gate runners are copied **verbatim** and are functionally repo-agnostic (the repo is
@@ -131,10 +233,11 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 ## What is portable verbatim vs generated
 
-- `[P]` (verbatim): `core/*` method docs, the three hooks, `pre-commit`, `check-doc-size.mjs`,
-  `settings.json`, the gate runners, and the `commands/*` dual-harness assets (`/thread-restart`).
+- `[P]` (verbatim): `core/*` method docs, the three PreToolUse hooks, the `guard-owner-comms` Stop
+  sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
+  dual-harness assets (`/thread-restart`), and the `skills/*` bodies + `skill-shims/*` (`/humanize`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
-  `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `.claude/kit.config.json`.
+  `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `core/OWNER_COMMS.md`, `.claude/kit.config.json`.
 
 Copying one repo's `[G]` files into another re-creates the cross-repo confusion the identity
 fingerprint exists to prevent. `init` generates them; you never copy them.
