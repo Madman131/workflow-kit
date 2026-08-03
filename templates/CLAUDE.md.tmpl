@@ -45,7 +45,7 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    per the method.
 4. **Declare the task lane before the first code write.** `.claude/task-lane.json` binds this session
    id + a kebab task id + exactly one route: **`in-thread`** (with the tier) or **`exempt`** (with a
-   ledgered reason — it skips the ceremony, never a gate). Undeclared / malformed / stale ⇒ the hook
+   ledgered reason — it declares no tier, and never skips a gate). Undeclared / malformed / stale ⇒ the hook
    BLOCKS (fail-closed). A third route, `lane`, is still accepted by the controls but its doctrine was
    retired at kit v1.4.0 — do not start new work on it.
 5. **Multi-writer checkout — surgical staging only.** If more than one agent lane writes this

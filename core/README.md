@@ -139,9 +139,16 @@ staging rules from `AGENTS.md`. Header-by-header destination map:
 `docs/journal/workflow_v2_phase2_section_inventory.md`. Plan: `docs/journal/workflow_v2_blueprint.md`.
 
 **Split 3 → 6 method docs (kit v1.4.0).** `FOUNDATIONS.md` was lifted out of `WORKFLOW.md`,
-`ARTIFACT_CLASS.md` out of `REVIEW.md`, and `MULTI_AGENT.md` out of `OPERATE.md`. **No rule changed
-in the move** — the same doctrine at the same total size, re-cut at concept seams so each file states
-one thing and the terms every file uses are defined before they are used.
+`ARTIFACT_CLASS.md` out of `REVIEW.md`, and `MULTI_AGENT.md` out of `OPERATE.md`. **No rule was
+reworded or relaxed** — verified by byte-diffing each relocated section against v1.3; the same
+doctrine at the same total size, re-cut at concept seams so each file states one thing and the terms
+every file uses are defined before they are used.
+
+**Two deliberate exceptions, which that claim does NOT cover.** (1) The retired lane's section was
+**rewritten**, not moved — see the retirement below. (2) The **onboarding read order changed**: it
+now names the six method docs, and it **gained `core/OWNER_COMMS.md`**, which a newly-onboarded model
+was not previously required to read. That is a new mandatory read, i.e. a rule change, and it is
+recorded here rather than folded into the sentence above.
 
 **Retired in the same change: `LANES.md`, the cost-inversion lane (Owner ruling).** The lane let a
 cheaper model author spec-able T0/T1 work from a falsifiable ticket. **Retired by Owner ruling on

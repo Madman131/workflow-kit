@@ -151,6 +151,7 @@ export const GOVERNED_DOCS = [
   "core/MULTI_AGENT.md",
   "core/BINDINGS.md",
   "core/OWNER_COMMS.md",
+  "core/SYSTEM_MAP.md",
   "core/GATES.md",
   "core/INVARIANTS.md",
   "core/REPO_INVARIANTS.md",

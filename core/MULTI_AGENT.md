@@ -61,13 +61,14 @@ What the route carried, what was dropped with it, and what survived generally: `
   the gate-ladder sensor); its mechanical retirement is a tracked follow-up. History:
   `core/README.md` § Provenance.
 - **Escapes are first-class** (`codex-down` / `codex-quota` / `trivial-edit`) — work never stalls on
-  an unavailable seat. **An exemption skips the DECLARATION ceremony, never a gate:** build in-thread,
+  an unavailable seat. **An exemption still declares — it simply declares no tier — and it never skips
+  a gate:** build in-thread,
   still run the tier's normal cold pass (substituting seats per `core/REVIEW.md` § External gate), and
   ledger the escape. No free-text reason is accepted.
-- **Every decision is ledgered, and the ledger FAILS CLOSED.** Each decision appends its exact path,
-  normalized scope, and a canonical declaration hash with an append+sync write; concurrent processes
-  may duplicate a row but can never replace another process's row. **Symlink traversal and any
-  ledger-write failure BLOCK** — so no route, an exemption included, can proceed unlogged.
+- **Gated decisions are ledgered, and the ledger FAILS CLOSED.** A gated decision appends its exact
+  path with an append+sync write; concurrent processes may duplicate a row but can never replace
+  another process's row. **Symlink traversal and any ledger-write failure BLOCK** — so no route, an
+  exemption included, can proceed unlogged.
 
 ## Onboarding a new model
 *To plug a new model into a role, bind it in `BINDINGS.md` and give it the role's access: a **reviewer**
