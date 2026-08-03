@@ -145,6 +145,24 @@ test("init rejects a flag-shaped value for every value-taking flag", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("--risk-tokens is DEPRECATED (v1.5.0): parses, warns loudly, and the dead family is not written", () => {
+  // The lane route this flag parameterized was retired; removal of the flag itself is a breaking CLI
+  // change reserved for v2.0. Until then the contract is parse-warn-ignore: a saved init invocation
+  // keeps working, the warning is loud, and laneRiskTokens never reaches kit.config.json.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-dep-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name",
+      "adopter", "--risk-tokens", "billing", "--source-dirs", "app", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(r.status, 0, `a saved init invocation with --risk-tokens must keep working: ${r.stderr}`);
+    assert.match(r.stderr, /--risk-tokens is DEPRECATED/, "the warning is loud (stderr, not buried in the log)");
+    assert.match(r.stderr, /removed at v2\.0/, "and it states the removal horizon");
+    const cfg = JSON.parse(readFileSync(path.join(dir, ".claude", "kit.config.json"), "utf8"));
+    assert.equal(cfg.laneRiskTokens, undefined, "the dead family is NOT written");
+    assert.deepEqual(cfg.executedPathDirs, ["app"], "…while the live family still is");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("init installs the dual-lane skills: one shared body, a shim per harness, idempotently", () => {
   const { dir, codexDir, run, cleanup } = adopt();
   try {
@@ -254,21 +272,21 @@ test("the Stop registration merges into settings.json exactly once, confirmed by
 });
 
 test("init --force backs up hand-authored [G] content instead of destroying it", () => {
-  const { dir, run, cleanup } = adopt(["--owner-name", "Alex", "--source-dirs", "app", "--risk-tokens", "billing"]);
+  const { dir, run, cleanup } = adopt(["--owner-name", "Alex", "--source-dirs", "app"]);
   try {
     const doc = path.join(dir, "core", "OWNER_COMMS.md");
     const cfg = path.join(dir, ".claude", "kit.config.json");
     // Complete the contract the way an adopter must, then take the upgrade path init itself
     // recommends for a stale hook ("re-run with --force"). --force is GLOBAL, so without a backup it
-    // silently destroys the hand-written Owner doc AND resets the lane deny-set to defaults.
+    // silently destroys the hand-written Owner doc AND resets the source-dir family to defaults.
     writeFileSync(doc, readFileSync(doc, "utf8").replace("{{OWNER_PROFILE}}", "They read fast and hate preamble."));
     run(["--force"]);   // note: no --owner-name and no family flags this time
     assert.ok(existsSync(`${doc}.bak`), "--force leaves a .bak of the previous OWNER_COMMS");
     assert.match(readFileSync(`${doc}.bak`, "utf8"), /They read fast and hate preamble\./,
       "the hand-written Owner profile is recoverable, not lost");
     assert.ok(existsSync(`${cfg}.bak`), "--force leaves a .bak of the previous kit.config.json");
-    assert.match(readFileSync(`${cfg}.bak`, "utf8"), /billing/,
-      "the configured lane deny-set is recoverable — a silent reset to {} WIDENS the guards");
+    assert.match(readFileSync(`${cfg}.bak`, "utf8"), /app/,
+      "the configured executedPathDirs family is recoverable — a silent reset to {} WIDENS the write guard");
 
     // If the backup CANNOT be written, the overwrite must not happen either. Warning about a failed
     // backup and then destroying the file anyway is worse than not offering backups at all, because

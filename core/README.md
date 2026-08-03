@@ -169,14 +169,16 @@ firing. Full rationale: root `README.md` § What's new in v1.4.
   baseline (`OPERATE.md` § Working norms) · the **task-lane declaration** itself, which still binds
   and still fails closed (`MULTI_AGENT.md` § Task-lane declaration).
 
-**Authoring is in-thread. Known state: the route outlived its doctrine.** v1.4.0 retired the lane in
-the METHOD only — both enforcement controls still **ACCEPT** a `mode:"lane"` declaration; neither
-blocks it. That is a doc/machinery inconsistency, **not a control gap**: such a declaration is still
-exact-file allowlisted, screened against the ineligible set, ledgered, and fail-closed to the
-strictest ladder by the gate-ladder sensor — strictly *narrower* than the `in-thread` route beside it.
-Do not start new work on it. Mechanical retirement is a tracked follow-up; until it lands, the two
-controls accept three modes while this method documents two.
+**Authoring is in-thread. The mechanical retirement landed at kit v1.5.0.** v1.4.0 retired the lane
+in the METHOD only, leaving a documented doc/machinery inconsistency: both enforcement controls still
+accepted a `mode:"lane"` declaration. v1.5.0 closed it — both controls now **REFUSE** the route with
+an explicit `lane-retired` state (the block says the route is RETIRED, never that the JSON is wrong),
+and the token deny-set the route was the only consumer of (`laneRiskTokens` plus the built-in
+risk-token defaults) is removed from both hooks. A legacy `laneRiskTokens` key in an older adopter's
+config is ignored, never fatal; `init --risk-tokens` is deprecated (parse-warn-ignore) until its v2.0
+removal.
 
 **Restoring the lane** is not one commit: it needs the retired `LANES.md` procedure back in `core/`,
-its binding facts restored to `MULTI_AGENT.md` § Task-lane declaration, and the lane-eligible globs
-plus the builder seat re-declared in `BINDINGS.md`.
+its binding facts restored to `MULTI_AGENT.md` § Task-lane declaration, the `mode:"lane"` acceptance
++ eligibility machinery (globs and token deny-set) restored to both controls, and the lane-eligible
+globs plus the builder seat re-declared in `BINDINGS.md`.

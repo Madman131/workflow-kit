@@ -110,7 +110,9 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --remote-url <url>      fills {{REMOTE_URL}} (the identity fingerprint)
   --deploy-branch <b>     fills {{DEPLOY_BRANCH}} (default: main)
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
-  --risk-tokens a,b       repo-specific lane risk families ⇒ kit.config.json laneRiskTokens
+  --risk-tokens a,b       DEPRECATED, accepted but IGNORED: the lane route was retired (v1.5.0), so
+                          laneRiskTokens gates nothing and is no longer written; the flag will be
+                          removed at v2.0
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
@@ -154,7 +156,7 @@ function copyGuarded(src, dst, force) {
 // --force is GLOBAL and it is also the remedy init itself recommends for a stale hook ("re-run with
 // --force to update"). That combination silently destroys hand-authored content in the `[G]` files —
 // most painfully core/OWNER_COMMS.md, whose whole value is the paragraphs a human wrote about a
-// person, and .claude/kit.config.json, whose loss quietly WIDENS the lane guards back to defaults.
+// person, and .claude/kit.config.json, whose loss quietly WIDENS the write guard back to defaults.
 // Before overwriting a file whose content differs from what we are about to write, keep a .bak beside
 // it and say so. Cheap, reversible, and it makes the documented upgrade path non-destructive.
 // Returns "not-needed" (no existing file, or identical content) | "backed-up" | "FAILED".
@@ -320,12 +322,19 @@ function main() {
   const force = args.force;
 
   // Validate the repo-specific families UP FRONT (before writing anything). The loaders require single
-  // path SEGMENTS for source dirs and risk tokens; a nested value like "app/server" would be written to
+  // path SEGMENTS for source dirs; a nested value like "app/server" would be written to
   // kit.config.json and then rejected as MALFORMED by every control — fail-closed but SILENT, the kind
   // of footgun that gets a frustrated adopter to disable the control (FM5). Catch it here, loudly.
-  for (const [flag, list] of [["--source-dirs", args.sourceDirs], ["--risk-tokens", args.riskTokens]]) {
-    const bad = (list || []).filter((s) => !isSegment(s));
-    if (bad.length) { console.error(`init: ${flag} values must be single path segments (no "/"); got ${JSON.stringify(bad)}. The controls match top-level dirs / word fragments — pass e.g. "app", not "app/server".`); process.exit(2); }
+  {
+    const bad = (args.sourceDirs || []).filter((s) => !isSegment(s));
+    if (bad.length) { console.error(`init: --source-dirs values must be single path segments (no "/"); got ${JSON.stringify(bad)}. The controls match top-level dirs — pass e.g. "app", not "app/server".`); process.exit(2); }
+  }
+  // DEPRECATED, not removed (removal is a breaking CLI change reserved for v2.0): the flag still
+  // parses so an adopter's saved init invocation keeps working, but it configures nothing — the
+  // `lane` route it parameterized was retired, so the family is no longer written. Loud, so nobody
+  // believes a deny-set is armed when it gates nothing.
+  if (args.riskTokens) {
+    warn(`--risk-tokens is DEPRECATED and was IGNORED: the lane route was retired (kit v1.5.0), laneRiskTokens gates nothing and is no longer written to kit.config.json. This flag will be removed at v2.0.`);
   }
   const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || s.includes("\\") || n === ".." || n.startsWith("../"); });
   if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }
@@ -559,7 +568,8 @@ function main() {
   // 6. .claude/kit.config.json — the [G] repo-specific families (the ONLY parameterized DATA).
   const config = {};
   if (args.sourceDirs) config.executedPathDirs = args.sourceDirs;
-  if (args.riskTokens) config.laneRiskTokens = args.riskTokens;
+  // laneRiskTokens is deliberately NOT written (deprecated with the retired lane route, v1.5.0). An
+  // EXISTING key in an older adopter's config is tolerated by every control: ignored, never fatal.
   if (args.stateDocs) config.stateDocs = args.stateDocs;
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
@@ -568,9 +578,9 @@ function main() {
   else {
     ensureDir(path.dirname(cfgPath));
     const cfgText = JSON.stringify(config, null, 2) + "\n";
-    // A --force re-run with no family flags rewrites this to `{}`, silently WIDENING the lane guards
-    // (a deny-set the adopter configured simply disappears). Keep the previous version, and refuse
-    // the overwrite outright if it cannot be kept.
+    // A --force re-run with no family flags rewrites this to `{}`, silently WIDENING the write guard
+    // (an executedPathDirs family the adopter configured simply disappears). Keep the previous
+    // version, and refuse the overwrite outright if it cannot be kept.
     if (!writeWithBackup(cfgPath, cfgText)) cfgKept = true;
   }
   log(cfgKept

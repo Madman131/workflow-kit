@@ -14,7 +14,7 @@ never loads that hook system.
 | `guard-cross-repo-writes` (writes outside repo blocked) | **enforced** | not enforced | not enforced |
 | `guard-lane-authoring` (declaration before a code write) | **enforced** | not enforced | not enforced |
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | not enforced | not enforced |
-| `.githooks/pre-commit` (declaration + scope, at commit) | **enforced** | **enforced** | **enforced** |
+| `.githooks/pre-commit` (declaration, at commit) | **enforced** | **enforced** | **enforced** |
 | `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | not present | not present |
 
 **What binds every lane** is (1) **prose** — `AGENTS.md` + `core/*` + the required PM-disposition

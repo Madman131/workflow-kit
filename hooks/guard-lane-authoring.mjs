@@ -6,8 +6,9 @@
 // undeclared code write visible at the point it is attempted.
 //
 // WHAT IT DOES (enforce, never classify — the IO rule): it enforces the DECLARED task disposition
-// for source/config code paths. Lane declarations are session/task-bound, name the exact allowed
-// files, and cannot authorize the framework's conservative live/chain deny set.
+// for source/config code paths. Declarations are session/task-bound and name exactly one route:
+// `in-thread` (with the tier) or `exempt` (with a ledgered reason). The retired `lane` route is
+// REFUSED with an explicit `lane-retired` state, never a fall-through to "malformed".
 //
 // HONEST LIMITS (tripwire, not fortress): it binds only Write/Edit-family TOOLS. Bash redirection
 // and codex exec writes are not covered, the same accepted class as guard-cross-repo-writes. It
@@ -25,23 +26,21 @@ const TASK_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/;
 const CODE_EXT_RE = /\.(?:bash|c|cc|cfg|cjs|conf|cpp|cs|css|dart|exs?|fish|fsx?|go|gradle|graphql|gql|groovy|h|htm|html|ini|ipynb|java|js|json|jsx|kts?|less|lua|m|mjs|mm|php|pl|pm|proto|py|r|rb|rs|scala|scss|sh|sol|sql|svelte|swift|tf|tfvars|toml|ts|tsx|vue|ya?ml|zig)$/i;
 const CODE_BASENAME_RE = /^(?:\.[^./][^/]*|bun\.lockb?|Cargo\.lock|composer\.lock|Dockerfile(?:\..*)?|.*\.Dockerfile|Gemfile\.lock|GNUmakefile|Makefile|npm-shrinkwrap\.json|package-lock\.json|Pipfile\.lock|pnpm-lock\.ya?ml|poetry\.lock|Procfile|requirements(?:-[^/]+)?\.txt|uv\.lock|yarn\.lock)$/i;
 const GOVERNED_CONTROL_TREE_RE = /^\.(?:agents|claude|codex)\//i;
-const FRONTIER_CODE_EXT_RE = /\.(?:cjs|js|jsx|mjs|ts|tsx)$/i;
 const EXEMPT_REASONS = new Set(["codex-down", "codex-quota", "trivial-edit"]);
 
-// [P] KIT PARAMETERIZATION — the source-tree dirs and lane risk tokens are the ONLY repo-shaped data
-// in this hook. They come from .claude/kit.config.json (a [G] binding `init` writes), UNIONed onto
-// portable defaults, so the MECHANISM copies verbatim and only the DATA is per-repo. A MALFORMED
-// config FAILS CLOSED (blocks a gated write below) — a mis-parameterized deny-set must never fail
-// open (blueprint § Phase 6). EXECUTED_PATH_RE / FRONTIER_DENY_RE are built per-invocation in the
-// handler from loadKitConfig(); declared `let` here so isGatedPath/isLaneIneligible close over them.
+// [P] KIT PARAMETERIZATION — the source-tree dirs are the ONLY repo-shaped data in this hook. They
+// come from .claude/kit.config.json (a [G] binding `init` writes), UNIONed onto portable defaults,
+// so the MECHANISM copies verbatim and only the DATA is per-repo. A MALFORMED config FAILS CLOSED
+// (blocks a gated write below) — a mis-parameterized deny-set must never fail open (blueprint
+// § Phase 6). EXECUTED_PATH_RE is built per-invocation in the handler from loadKitConfig();
+// declared `let` here so isGatedPath closes over it. (The `laneRiskTokens` family died with the
+// retired `lane` route: an older adopter's config may still CARRY the key, and it is IGNORED — a
+// field no control reads cannot make a control fail open — but a structurally corrupt file still
+// blocks.)
 const KIT_CONFIG = path.join(".claude", "kit.config.json");
 // Portable default source-tree roots (the generic set — no repo-specific dir like `pil`).
 const DEFAULT_EXECUTED_PATH_DIRS = [".github", "bin", "config", "lib", "ops", "schema", "schemas", "src", "tools", "vendor"];
-// Portable default lane risk tokens (the universally-dangerous concepts). Repo-specific families
-// (e.g. a `trader` subsystem) are added via config.laneRiskTokens.
-const DEFAULT_LANE_RISK_TOKENS = ["auth", "credential", "deploy", "gate", "migrat", "money", "schema", "security"];
 let EXECUTED_PATH_RE;
-let FRONTIER_DENY_RE;
 
 function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -60,7 +59,7 @@ function loadKitConfig(projectRoot) {
     // ONLY a truly-absent file (ENOENT) falls back to defaults. A permission/IO error (EACCES/EIO/…)
     // means the config EXISTS but cannot be read — FAIL CLOSED (INVARIANTS rule 5: cannot-read-input ⇒
     // abstain, never green), never silently drop the repo-specific deny families.
-    if (e && e.code === "ENOENT") return { ok: true, executedPathDirs: [], laneRiskTokens: [] };
+    if (e && e.code === "ENOENT") return { ok: true, executedPathDirs: [] };
     return { ok: false };
   }
   // A SYMLINKED (or non-regular) config is FAIL-CLOSED, not treated as absent: a dangling symlink
@@ -72,28 +71,18 @@ function loadKitConfig(projectRoot) {
   try { parsed = JSON.parse(readFileSync(file, "utf8")); } catch { return { ok: false }; }
   if (!isPlainObject(parsed)) return { ok: false };
   const dirs = parsed.executedPathDirs === undefined ? [] : parsed.executedPathDirs;
-  const tokens = parsed.laneRiskTokens === undefined ? [] : parsed.laneRiskTokens;
-  if (!isSegmentArray(dirs) || !isSegmentArray(tokens)) return { ok: false };
-  return { ok: true, executedPathDirs: dirs, laneRiskTokens: tokens };
+  if (!isSegmentArray(dirs)) return { ok: false };
+  // Any other key — including a legacy `laneRiskTokens` left by a pre-v1.5 adopt — is deliberately
+  // NOT validated here: this hook no longer reads it, and a field a control does not use cannot make
+  // that control fail open. Structural corruption (handled above) still fails closed.
+  return { ok: true, executedPathDirs: dirs };
 }
 function buildExecutedPathRe(dirs) {
   return new RegExp("^(?:" + dirs.map(escapeRe).join("|") + ")/", "i");
 }
-function buildFrontierDenyRe(tokens) {
-  return new RegExp("(?:^|/)(?:[^/]*(?:" + tokens.map(escapeRe).join("|") + ")[^/]*)", "i");
-}
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
-}
-
-function normalizeRepoPath(value) {
-  if (typeof value !== "string" || !value.trim() || /[\x00-\x1f\x7f]/.test(value) || value.includes("\\")) return null;
-  const normalized = value.replace(/^\.\//, "");
-  if (path.posix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) return null;
-  const collapsed = path.posix.normalize(normalized);
-  if (collapsed === "." || collapsed === ".." || collapsed.startsWith("../")) return null;
-  return collapsed;
 }
 
 // The config-INDEPENDENT "definitely not gated" set — docs/memory + the declaration/ledger files.
@@ -109,12 +98,6 @@ function isGatedPath(rel) {
   return CODE_EXT_RE.test(rel) || CODE_BASENAME_RE.test(path.posix.basename(rel)) ||
     EXECUTED_PATH_RE.test(rel) || folded.startsWith("scripts/") || folded.startsWith("tests/") ||
     GOVERNED_CONTROL_TREE_RE.test(rel) || !path.posix.basename(rel).includes(".");
-}
-
-function isLaneIneligible(rel) {
-  const folded = rel.toLowerCase();
-  if (!folded.startsWith("scripts/") && !folded.startsWith("tests/")) return true;
-  return !FRONTIER_CODE_EXT_RE.test(rel) || FRONTIER_DENY_RE.test(rel);
 }
 
 function hasSymlinkTraversal(projectRoot, abs) {
@@ -170,28 +153,10 @@ function declarationState(projectRoot, sessionId) {
   if (declaration.sessionId !== sessionId) return { state: "session-mismatch" };
   if (typeof declaration.taskId !== "string" || !TASK_ID_RE.test(declaration.taskId)) return { state: "malformed" };
 
-  if (declaration.mode === "lane") {
-    if (!Array.isArray(declaration.allowedFiles) || declaration.allowedFiles.length === 0) return { state: "malformed" };
-    const allowedFiles = declaration.allowedFiles.map(normalizeRepoPath);
-    if (allowedFiles.some((rel) => rel === null) || new Set(allowedFiles).size !== allowedFiles.length) {
-      return { state: "malformed" };
-    }
-    const allowedFileList = [...allowedFiles].sort();
-    return {
-      state: "lane",
-      taskId: declaration.taskId,
-      sessionId,
-      allowedFiles: new Set(allowedFiles),
-      allowedFileList,
-      declarationHash: declarationHash({
-        mode: "lane",
-        sessionId,
-        taskId: declaration.taskId,
-        allowedFiles: allowedFileList,
-        maxAgeHours,
-      }),
-    };
-  }
+  // RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0). An
+  // explicit state, not a fall-through to "malformed": the agent must be told the route is GONE,
+  // not that its JSON is wrong.
+  if (declaration.mode === "lane") return { state: "lane-retired", taskId: declaration.taskId, sessionId };
   if (declaration.mode === "in-thread") {
     if (["T0", "T1", "T2", "T3"].includes(declaration.tier)) {
       return {
@@ -230,7 +195,7 @@ function declarationState(projectRoot, sessionId) {
   return { state: "malformed" };
 }
 
-function writeLedger(projectRoot, decision, state, reason, rel, taskId, sessionId, hash, allowedFiles) {
+function writeLedger(projectRoot, decision, state, reason, rel, taskId, sessionId, hash) {
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
@@ -263,7 +228,6 @@ function writeLedger(projectRoot, decision, state, reason, rel, taskId, sessionI
 
     const row = { ts: new Date().toISOString(), decision, state, taskId, sessionId, path: rel };
     if (hash) row.declarationHash = hash;
-    if (Array.isArray(allowedFiles)) row.allowedFiles = allowedFiles;
     if (state === "exempt") row.reason = reason;
     // One O_APPEND write prevents concurrent hook processes from replacing one another's rows.
     // fsync makes an allowed exemption fail closed unless its local audit row reaches disk.
@@ -290,11 +254,11 @@ function deny(projectRoot, rel, state, sessionId) {
         permissionDecision: "deny",
         permissionDecisionReason:
           `guard-lane-authoring.mjs blocked ${rel}: ${path.join(projectRoot, KIT_CONFIG)} is present but ` +
-          `MALFORMED (not valid JSON, not an object, or a family is not an array of non-empty path ` +
-          `segments). This code write is BLOCKED (fail-closed) — a corrupt repo-specific deny-set must ` +
-          `never silently permit writes. Remediate by fixing that file to shape ` +
-          `\`{"executedPathDirs":["<dir>"],"laneRiskTokens":["<token>"]}\` (both optional), by deleting it ` +
-          `to fall back to the kit's portable defaults, or by re-running \`node bin/init.mjs\`.`,
+          `MALFORMED (not valid JSON, not an object, or executedPathDirs is not an array of non-empty ` +
+          `path segments). This code write is BLOCKED (fail-closed) — a corrupt repo-specific deny-set ` +
+          `must never silently permit writes. Remediate by fixing that file to shape ` +
+          `\`{"executedPathDirs":["<dir>"]}\` (optional), by deleting it to fall back to the kit's ` +
+          `portable defaults, or by re-running \`node bin/init.mjs\`.`,
       },
     }));
     return;
@@ -306,11 +270,11 @@ function deny(projectRoot, rel, state, sessionId) {
     `\`{"mode":"in-thread","sessionId":"${session}","taskId":"<kebab-task>","tier":"T0"|"T1"|"T2"|"T3"}\` · ` +
     `\`{"mode":"exempt","sessionId":"${session}","taskId":"<kebab-task>","reason":"codex-down"|"codex-quota"|"trivial-edit"}\`; ` +
     'optional `"maxAgeHours"` defaults to 24. ' +
-    'A third mode, `lane`, is still ACCEPTED by this hook but its doctrine was RETIRED with the ' +
-    'cost-inversion build lane at kit v1.4.0 (core/README.md § Provenance) — do not start new work ' +
-    'on it; its mechanical retirement follows. Authoring is in-thread. ' +
     'The declaration is session/task-bound and gitignored; each state change is appended and synced to ' +
     `${path.join(projectRoot, LEDGER)} for Owner spot-check.` +
+    (state === "lane-retired"
+      ? " The `lane` route was RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0) — it is not an available route. Declare `in-thread` with the tier."
+      : "") +
     (state === "stale"
       ? " A stale declaration is treated as absent — re-declare for the CURRENT task (the file's mtime is the staleness clock; rewriting it refreshes it)."
       : "");
@@ -327,12 +291,11 @@ let raw = "";
 process.stdin.on("data", (chunk) => { raw += chunk; });
 process.stdin.on("end", () => {
   const projectRoot = path.resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
-  // Build the parameterized regexes: portable defaults UNION the (valid) config families. On a
+  // Build the parameterized regex: portable defaults UNION the (valid) config family. On a
   // MALFORMED config we build from defaults only (so code paths are still IDENTIFIED as gated) and
   // block any gated write below — never silently trust a corrupt deny-set.
   const kitConfig = loadKitConfig(projectRoot);
   EXECUTED_PATH_RE = buildExecutedPathRe(DEFAULT_EXECUTED_PATH_DIRS.concat(kitConfig.ok ? kitConfig.executedPathDirs : []));
-  FRONTIER_DENY_RE = buildFrontierDenyRe(DEFAULT_LANE_RISK_TOKENS.concat(kitConfig.ok ? kitConfig.laneRiskTokens : []));
   let input;
   try { input = JSON.parse(raw); } catch {
     deny(projectRoot, "<unknown-path>", "malformed-hook-input");
@@ -369,7 +332,7 @@ process.stdin.on("end", () => {
   // fail closed until the config is fixed. Fail-CLOSED is the correct direction; the deny message
   // points remediation at Bash / re-running init (the Write tool itself is blocked while corrupt).
   if (!kitConfig.ok && !isStaticallySafe(rel)) {
-    const logged = writeLedger(projectRoot, "deny", "kit-config-malformed", undefined, rel, undefined, input?.session_id, undefined, undefined);
+    const logged = writeLedger(projectRoot, "deny", "kit-config-malformed", undefined, rel, undefined, input?.session_id, undefined);
     if (!logged) deny(projectRoot, rel, "ledger-error", input?.session_id);
     else deny(projectRoot, rel, "kit-config-malformed", input?.session_id);
     process.exit(0);
@@ -383,11 +346,6 @@ process.stdin.on("end", () => {
   let decision = ["in-thread:T0", "in-thread:T1", "in-thread:T2", "in-thread:T3", "exempt"].includes(state)
     ? "allow"
     : "deny";
-  if (state === "lane") {
-    if (!result.allowedFiles.has(rel)) state = "lane-scope-mismatch";
-    else if (isLaneIneligible(rel)) state = "lane-ineligible";
-    else decision = "allow";
-  }
   if (symlinkPath) {
     state = "symlink-path";
     decision = "deny";
@@ -401,7 +359,6 @@ process.stdin.on("end", () => {
     result.taskId,
     result.sessionId ?? sessionId,
     result.declarationHash,
-    result.allowedFileList,
   );
   if (!logged) {
     deny(projectRoot, rel, "ledger-error", sessionId);

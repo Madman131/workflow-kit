@@ -29,6 +29,10 @@ guard_decision() { # $1=hookfile $2=json $3=cwd
   local out; out="$(printf '%s' "$2" | (cd "$3" && CLAUDE_PROJECT_DIR="$3" node "$1") 2>/dev/null)"
   if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then echo deny; else echo allow; fi
 }
+# Same, but echo the guard's raw JSON output — for asserting the deny REASON, not just the decision.
+guard_output() { # $1=hookfile $2=json $3=cwd
+  printf '%s' "$2" | (cd "$3" && CLAUDE_PROJECT_DIR="$3" node "$1") 2>/dev/null
+}
 # Run guard-gate-ladder; echo its additionalContext (empty if it did not fire).
 gate_ladder_ctx() { # $1=hookfile $2=json $3=cwd
   printf '%s' "$2" | (cd "$3" && CLAUDE_PROJECT_DIR="$3" node "$1") 2>/dev/null
@@ -42,14 +46,23 @@ echo "adopter=$ADOPTER"
 mkdir -p "$ADOPTER" "$OUTSIDE"
 git init -q "$ADOPTER"
 git -C "$ADOPTER" config user.email a@a; git -C "$ADOPTER" config user.name a
-node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
+# --risk-tokens is passed DELIBERATELY: since v1.5.0 it is deprecated (the lane route is retired), so
+# the contract under test is parse-warn-ignore — an adopter's saved init invocation keeps working, the
+# warning is loud, and the dead family is NOT written to kit.config.json.
+INIT_OUT="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
   --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" \
-  --codex-prompts-dir "$CODEX_PROMPTS" >/dev/null
+  --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)" || bad "init with the deprecated --risk-tokens flag must still exit 0"
 mkdir -p "$ADOPTER/src" "$ADOPTER/docs" "$ADOPTER/policy"   # app dirs the adopter would already have
 # 'policy' is a CONFIG-ONLY source dir (not a portable default) — used to test that a malformed config
 # still fails closed for a path gated SOLELY by config (the F1 fail-open regression).
 echo "-- adopted (init ran) --"
+
+echo
+echo "(deprecation) --risk-tokens parses, warns loudly, and writes NOTHING"
+printf '%s' "$INIT_OUT" | grep -q 'risk-tokens is DEPRECATED' && ok "init warns that --risk-tokens is DEPRECATED (parse-warn-ignore, removal reserved for v2.0)" || bad "init must warn about the deprecated --risk-tokens flag"
+grep -q 'laneRiskTokens' "$ADOPTER/.claude/kit.config.json" && bad "init must NOT write laneRiskTokens (the family gates nothing)" || ok "kit.config.json carries NO laneRiskTokens (the dead family is not written)"
+grep -q '"executedPathDirs"' "$ADOPTER/.claude/kit.config.json" && ok "…while executedPathDirs (a live family) IS written" || bad "executedPathDirs missing from kit.config.json"
 
 echo
 echo "(commands) /thread-restart install wiring — a productivity NUDGE, not a control (no block/permit pair)"
@@ -355,25 +368,36 @@ CTX_NONE="$(gate_ladder_ctx "$H_GATE" '{"session_id":"'"$SID"'","tool_input":{"c
 assert_eq "" "$CTX_NONE" "WITHOUT a gate command: sensor stays silent (no cry-wolf)"
 
 echo
-# NOTE (kit v1.4.0): this block/permit PAIR is reachable ONLY through the `lane` declaration
-# route, whose DOCTRINE was retired at v1.4.0 while the controls still accept it. When the
-# mechanical retirement lands, this scenario dies with the route and the parameterized
-# deny-set loses its only both-ways demonstration -- re-anchor it on a family the hooks still
-# read (executedPathDirs, per the F1 policy-dir pattern above) rather than deleting it.
-echo "(param) the lane deny-set is load-bearing (parameterization did not fail open)"
-printf '{"mode":"lane","sessionId":"%s","taskId":"accept","allowedFiles":["scripts/billing_job.mjs"]}\n' "$SID" > "$DECL"
-assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"scripts/billing_job.mjs"}}' "$ADOPTER")" "config risk-token 'billing' -> scripts/billing_job.mjs is lane-INELIGIBLE (BLOCKED)"
-# remove the token from config -> the SAME lane path becomes eligible (proves the token blocked it)
-printf '{"executedPathDirs":["src"],"laneRiskTokens":[],"stateDocs":["docs/state.md"]}\n' > "$ADOPTER/.claude/kit.config.json"
-assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"scripts/billing_job.mjs"}}' "$ADOPTER")" "token removed -> same path is lane-eligible (config is load-bearing)"
+# (v1.5.0) The token deny-set's block/permit pair died with the `lane` route it screened. The route's
+# own REFUSAL is the demonstration now, and the parameterized-config both-ways proof is anchored on
+# executedPathDirs (the F1 policy-dir pattern below).
+echo "(retired route) a mode:\"lane\" declaration is REFUSED at write time — explicit state, says WHY"
+printf '{"mode":"lane","sessionId":"%s","taskId":"accept","allowedFiles":["src/x.mjs"]}\n' "$SID" > "$DECL"
+LANE_OUT="$(guard_output "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")"
+printf '%s' "$LANE_OUT" | grep -q '"permissionDecision":"deny"' && ok "write-time: mode:\"lane\" code write is BLOCKED" || bad "write-time: mode:\"lane\" must be blocked (got: $(printf '%s' "$LANE_OUT" | head -c 100))"
+printf '%s' "$LANE_OUT" | grep -q 'lane-retired' && ok "the deny names the EXPLICIT lane-retired state (not a fall-through to malformed)" || bad "the deny must name the lane-retired state"
+if printf '%s' "$LANE_OUT" | grep -q 'RETIRED' && printf '%s' "$LANE_OUT" | grep -q 'not an available route'; then
+  ok "the remediation says WHY (route RETIRED, not available) and points at the live routes"
+else
+  bad "the deny must carry the retirement remediation string"
+fi
+grep -q '"state":"lane-retired"' "$ADOPTER/.claude/lane-ledger.jsonl" && ok "the refusal is LEDGERED (state lane-retired)" || bad "the lane-retired refusal must append a ledger row"
+# the two DOCUMENTED routes still permit the SAME write — the refusal does not over-block
+printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
+assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "in-thread still permits the SAME write (no over-block)"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"trivial-edit"}\n' "$SID" > "$DECL"
+assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "exempt still permits the SAME write (no over-block)"
 
 echo
 echo "(fail-closed) a MALFORMED config blocks a code write (never silently permits)"
 printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
 printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
 assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "malformed kit.config.json -> code write BLOCKED (fail-closed, even with a valid declaration)"
-# restore a valid config for the commit tests
+# restore a valid config for the commit tests. It DELIBERATELY carries a legacy laneRiskTokens key
+# (a pre-v1.5 adopter's config): tolerated means IGNORED-not-fatal, while a structurally corrupt
+# file (just proven above) still blocks. Distinct properties; both must hold.
 printf '{"executedPathDirs":["src"],"laneRiskTokens":["billing"],"stateDocs":["docs/state.md"]}\n' > "$ADOPTER/.claude/kit.config.json"
+assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "a legacy laneRiskTokens key in an older adopter's config is TOLERATED (ignored, not fatal)"
 
 echo
 echo "(b2) undeclared code COMMIT — harness-agnostic pre-commit (binds EVERY lane)"
@@ -399,7 +423,25 @@ git -C "$ADOPTER" reset -q src/feature.mjs; rm -f "$ADOPTER/src/feature.mjs"
 printf 'note\n' > "$ADOPTER/docs/readme-note.md"; git -C "$ADOPTER" add docs/readme-note.md
 if git -C "$ADOPTER" commit -q -m "docs only"; then ok "WITH hook on: docs-only commit passes (no over-block)"; else bad "docs-only commit should pass"; fi
 
+echo
+echo "(retired route, commit floor) mode:\"lane\" is REFUSED at commit time too — every lane"
+printf '{"mode":"lane","sessionId":"%s","taskId":"accept","allowedFiles":["src/feature2.mjs"]}\n' "$SID" > "$DECL"
+printf 'export const y = 2;\n' > "$ADOPTER/src/feature2.mjs"
+git -C "$ADOPTER" add src/feature2.mjs
+if LANE_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "retired route" 2>&1)"; then
+  bad "commit floor: a mode:\"lane\" declaration must BLOCK a code commit"
+else
+  ok "commit floor: mode:\"lane\" code commit is BLOCKED"
+fi
+printf '%s' "$LANE_COMMIT_ERR" | grep -q 'retired `lane` route' && ok "the block names the retired route explicitly (not a generic malformed)" || bad "the commit block must name the retired lane route"
+printf '%s' "$LANE_COMMIT_ERR" | grep -q 'RETIRED' && ok "the block carries the retirement remediation (says WHY, points at in-thread)" || bad "the commit block must carry the retirement string"
+# the SAME staged file commits under a documented route (no over-block)
+printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
+if git -C "$ADOPTER" commit -q -m "same file, documented route"; then ok "the SAME staged file commits under in-thread (no over-block)"; else bad "in-thread commit of the same file should pass"; fi
+
 GOODCFG='{"executedPathDirs":["src","policy"],"laneRiskTokens":["billing"],"stateDocs":["docs/state.md"]}'
+# GOODCFG keeps the legacy laneRiskTokens key on purpose — every fail-closed proof below runs against
+# a config that ALSO carries the tolerated dead key, so tolerance and fail-closed are proven together.
 
 echo
 echo "(F1 regression) malformed config STILL fails closed for a CONFIG-ONLY-gated path"

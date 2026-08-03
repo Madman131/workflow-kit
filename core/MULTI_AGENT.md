@@ -54,12 +54,10 @@ What the route carried, what was dropped with it, and what survived generally: `
 - **A declaration is required and fails closed.** It binds session id + kebab task id and names
   exactly one route; undeclared, malformed, stale, or session-mismatched ⇒ **BLOCK**. The hook
   enforces the declaration; it never classifies semantics (IO).
-- **Two routes are DOCUMENTED — `in-thread` (with the tier) and `exempt` (with a ledgered reason).**
-  A third, `lane`, belonged to the retired build lane: **the controls still accept it — they do NOT
-  block it** — and nothing here describes how to run it, so do not start new work on that route. It
-  is not a hole (exact-file allowlisted · screened · ledgered · fail-closed to the strictest ladder by
-  the gate-ladder sensor); its mechanical retirement is a tracked follow-up. History:
-  `core/README.md` § Provenance.
+- **Two routes exist — `in-thread` (with the tier) and `exempt` (with a ledgered reason).**
+  A third, `lane`, belonged to the retired build lane and is **REFUSED by both controls with an
+  explicit `lane-retired` state** — at write time and at commit time; the block says the route is
+  RETIRED and points back here. History: `core/README.md` § Provenance.
 - **Escapes are first-class** (`codex-down` / `codex-quota` / `trivial-edit`) — work never stalls on
   an unavailable seat. **An exemption still declares — it simply declares no tier — and it never skips
   a gate:** build in-thread,

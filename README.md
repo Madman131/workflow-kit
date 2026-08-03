@@ -1,8 +1,41 @@
-# workflow-kit — v1.4.0
+# workflow-kit — v1.5.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.5
+
+**The cost-inversion lane's retirement is now mechanical, not just doctrinal.** v1.4 retired the lane
+in the METHOD (deleted `core/LANES.md`) while both enforcement controls still *accepted* a
+`mode:"lane"` declaration — a documented doc/machinery inconsistency. v1.5 completes the retirement
+in the machinery itself:
+
+- **Both controls now REFUSE the route with an explicit named state.** A `mode:"lane"` declaration is
+  blocked at write time (`guard-lane-authoring.mjs`) and at commit time (`.githooks/pre-commit`) with
+  a `lane-retired` state and a remediation that says WHY — the route is RETIRED, not that your JSON
+  is wrong — and points at the two live routes (`in-thread` with the tier · `exempt` with a ledgered
+  reason). The refusal is ledgered like every other gated decision.
+- **The dead lane-eligibility machinery is removed.** The risk-token deny-set (`laneRiskTokens` and
+  the built-in token defaults) had exactly one consumer — lane-eligibility screening — so it is gone
+  from both hooks. The fail-closed posture is UNCHANGED: a structurally corrupt
+  `.claude/kit.config.json` (bad JSON, not an object, symlinked, unreadable) still blocks a code
+  write *and* a code commit, and a malformed `executedPathDirs` still blocks the write guard.
+- **`init --risk-tokens` is DEPRECATED, not removed** (flag removal is a breaking CLI change reserved
+  for v2.0): still parsed so a saved init invocation keeps working, warns loudly that it configures
+  nothing, and no longer writes `laneRiskTokens`. Every control **tolerates** a legacy
+  `laneRiskTokens` key in an older adopter's config — ignored, never fatal.
+- **Neither live route changed.** `in-thread` and `exempt` behave identically to v1.4; the acceptance
+  suite observes the new refusal both ways (blocked with the retirement string at write *and* commit
+  time; the same write/commit permitted under a documented route).
+
+### Upgrading an existing adopter to v1.5
+
+Re-run `init` with your original flags plus `--force` (read the `--force` warning in the v1.3 notes
+first — commit before you run it; `[G]` files get a `.bak`, `[P]` files do not). Dropping
+`--risk-tokens` from your saved invocation is optional — it now just warns. A stale `laneRiskTokens`
+key left in your `kit.config.json` is harmless: every control ignores it. If anything was still using
+the `lane` route (v1.4 already said not to), re-declare it `in-thread` with the tier.
 
 ## What's new in v1.4
 
@@ -260,7 +293,7 @@ cd /path/to/your-repo
 node /path/to/workflow-kit/bin/init.mjs \
   --repo-name your-repo --remote-url git@github.com:you/your-repo.git \
   --owner-name "Your Name" \
-  --source-dirs src,lib --risk-tokens billing,migrations
+  --source-dirs src,lib
 ```
 
 `init` copies the `[P]` files in, generates the `[G]` files from templates, installs the shared skill
@@ -281,9 +314,11 @@ other non-Claude agent never loads them. What binds *every* lane is the prose in
 `init` never rewrites hook *source* from your inputs — the mechanism copies verbatim and only *data*
 (`.claude/kit.config.json`) is per-repo. Each control **fails CLOSED** on a config it cannot read
 (symlinked, permission-denied, or malformed JSON) or that is malformed in a field **that control
-uses** — a mis-parameterized deny-set blocks, it never silently permits. (A field a control does not
-use cannot make *that* control fail open; and even with no config at all, the `pre-commit` floor gates
-every non-docs path, so an *undeclared code commit* is blocked regardless.)
+uses** — a mis-parameterized `executedPathDirs` blocks the write guard, it never silently permits.
+(A field a control does not use cannot make *that* control fail open — which is also why a legacy
+`laneRiskTokens` key from a pre-v1.5 adopt is ignored, never fatal; and even with no config at all,
+the `pre-commit` floor gates every non-docs path, so an *undeclared code commit* is blocked
+regardless.)
 
 **Coverage: a tripwire and a floor.** The Claude `guard-lane-authoring` write-time gate is a *tripwire*
 — it catches undeclared writes to known code extensions and to your configured/default source dirs, but
