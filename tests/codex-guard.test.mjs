@@ -461,8 +461,18 @@ test("the three classes are enforced END TO END by both write guards, each direc
     // 3. EXTRACTABLE ⇒ every target gated. An in-repo patch passes; a patch that carries ONE target
     // out of the repo is denied even though its other target is fine.
     assert.equal(denies(R.run("guard-cross-repo-writes.mjs", patchCall(envelope("*** Add File: src/ok.mjs", "+1"))).stdout), false);
+    // The escape target must land outside EVERY allowed root, and this fixture lives under
+    // os.tmpdir() — which on a stock Linux runner (or any rig with TMPDIR unset) IS `/tmp`, one of
+    // the guard's own allowed scratch roots. A single `../` therefore escaped the repo but landed
+    // back INSIDE the allowlist, where the guard correctly allows, and this assertion went red on
+    // every such rig while passing on macOS's /var/folders default. The fixture had gained a
+    // property no real adopter repo has. Enough `../` to clamp at the filesystem root fixes it
+    // wherever the fixture lives, and keeps the path RELATIVE — which is the load-bearing part,
+    // since resolving a relative `*** Move to:` is what is under test. The deny path never writes,
+    // so the target not existing is fine.
+    const OUTSIDE = `${"../".repeat(12)}kit-test-definitely-outside/stolen.mjs`;
     const escaping = R.run("guard-cross-repo-writes.mjs", patchCall(envelope(
-      "*** Add File: src/ok.mjs", "+1", "*** Update File: src/moved.mjs", "*** Move to: ../sibling/stolen.mjs", "@@", "-a", "+b",
+      "*** Add File: src/ok.mjs", "+1", "*** Update File: src/moved.mjs", `*** Move to: ${OUTSIDE}`, "@@", "-a", "+b",
     )));
     assert.equal(denies(escaping.stdout), true, "a rename that carries a file OUT of the repo is blocked");
     assert.match(escaping.stdout, /outside this repo/);
@@ -641,6 +651,34 @@ test("CHARACTERIZATION — the SHELL-WRITE residual: this guard is a tripwire, a
     assert.match(asPatch.stdout, /"permissionDecision":"deny"/,
       "the identical edit IS blocked when it travels the road the guard watches");
   } finally { R.cleanup(); A.cleanup(); }
+});
+
+test("CHARACTERIZATION — `/tmp` and `/private/tmp` are ALLOWED write roots, so escaping INTO them is permitted", () => {
+  // PRE-EXISTING v1.x design, both lanes, stated in guard-cross-repo-writes' own header: the allowed
+  // roots are the project dir, ~/.claude, /tmp and /private/tmp. A write that leaves the repo for a
+  // scratch root is therefore ALLOWED on purpose — scratch is not a place worth guarding.
+  //
+  // It is pinned here because it surfaced as a phantom bug rather than as a property: this suite's
+  // fixtures live under os.tmpdir(), which is `/tmp` on a stock Linux runner and with TMPDIR unset,
+  // so a one-level `../` escape landed back inside the allowlist and an escape assertion went red on
+  // exactly the rigs adopters use for CI — reading as "the guard is broken" when the guard was
+  // right. A property that can masquerade as a defect belongs in a test that names it.
+  const R = guardRepo();
+  try {
+    const denies = (out) => /"permissionDecision":"deny"/.test(out);
+    // Explicit, not fixture-dependent: an absolute target in a scratch root is ALLOWED…
+    assert.equal(denies(R.run("guard-cross-repo-writes.mjs",
+      patchCall(envelope("*** Add File: /private/tmp/kit-scratch-target.mjs", "+1"))).stdout), false,
+      "/private/tmp is an allowed write root by design");
+    assert.equal(denies(R.run("guard-cross-repo-writes.mjs",
+      patchCall(envelope("*** Add File: /tmp/kit-scratch-target.mjs", "+1"))).stdout), false,
+      "/tmp likewise");
+    // …while a target outside every allowed root is DENIED, which is what makes the two lines above
+    // a statement about the ALLOWLIST rather than about a guard that permits everything.
+    assert.equal(denies(R.run("guard-cross-repo-writes.mjs",
+      patchCall(envelope("*** Add File: /kit-test-definitely-outside/stolen.mjs", "+1"))).stdout), true,
+      "…and anywhere else is still blocked");
+  } finally { R.cleanup(); }
 });
 
 test("CHARACTERIZATION — PRE-EXISTING gating gaps this release inherits and does NOT close", () => {
