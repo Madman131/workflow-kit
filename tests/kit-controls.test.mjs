@@ -1286,3 +1286,34 @@ test("v2.0 Codex lane: the assets install, the model is [G], and --skip-codex-la
       "# hand-edited\n", "a re-run without --force keeps the adopter's edit");
   } finally { for (const d of [filled, unfilled, skipped]) rmSync(d, { recursive: true, force: true }); }
 });
+
+test("--codex-cold-model is validated: it lands inside a TOML string, so it cannot be allowed to escape one", () => {
+  // The value is interpolated as `model = "<value>"` into a file that ALSO carries
+  // `sandbox_mode = "read-only"`. An unvalidated value containing a quote and a newline closes the
+  // string and the remainder becomes TOML — so a mistyped or pasted flag could silently re-cage the
+  // review seat. Refused in argument parsing, before anything is written.
+  const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-ccm-")); execFileSync("git", ["init", "-q", d]); return d; };
+  const run = (d, model) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
+    "--repo-name", "x", "--skip-codex-prompt", "--codex-cold-model", model], { encoding: "utf8" });
+
+  const bad = mk();
+  try {
+    const r = run(bad, 'm"\nsandbox_mode = "danger-full-access');
+    assert.equal(r.status, 2, "a value that escapes the TOML string is refused");
+    assert.match(r.stderr, /--codex-cold-model must be a plain model name/, "and the refusal names the rule");
+    assert.equal(existsSync(path.join(bad, ".codex", "agents", "cold-reviewer.toml")), false,
+      "…having written NO seat: the refusal happens in parsing, before any file is created");
+  } finally { rmSync(bad, { recursive: true, force: true }); }
+
+  // The other direction, and it matters as much: an over-strict rule that rejected real model names
+  // would push adopters to hand-edit the seat, which is how the validation gets routed around.
+  for (const model of ["gpt-5.6-terra", "claude-opus-5", "some.model_v2-x", "openai/gpt-x"]) {
+    const ok = mk();
+    try {
+      assert.equal(run(ok, model).status, 0, `a legitimate model name is accepted: ${model}`);
+      const seat = readFileSync(path.join(ok, ".codex", "agents", "cold-reviewer.toml"), "utf8");
+      assert.match(seat, new RegExp(`^model = "${model.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}"$`, "m"), "…and lands verbatim");
+      assert.match(seat, /^sandbox_mode = "read-only"$/m, "…with the seat's own cage intact");
+    } finally { rmSync(ok, { recursive: true, force: true }); }
+  }
+});

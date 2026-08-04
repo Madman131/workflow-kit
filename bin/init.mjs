@@ -106,7 +106,22 @@ function parseArgs(argv) {
     else if (a === "--with-gate-runners") out.withGateRunners = true;
     else if (a === "--codex-prompts-dir") out.codexPromptsDir = path.resolve(next());
     else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
-    else if (a === "--codex-cold-model") out.codexColdModel = next();
+    else if (a === "--codex-cold-model") {
+      // Shape rules for the same reason --owner-name has them: this value is interpolated into a
+      // TOML STRING (`model = "<value>"`). A `"`, a backslash, or a line terminator does not merely
+      // look wrong — it CLOSES the string and lets the rest of the value become TOML, which in a
+      // file that also carries `sandbox_mode` means a mistyped flag could silently re-cage the
+      // review seat. A "{{" would read as a still-unfilled placeholder to init's own scan.
+      const v = next();
+      // An ALLOWLIST, not a deny-list: a deny-list must enumerate every character that can escape a
+      // TOML string, and missing one is the whole bug. Model names are a small, well-behaved
+      // alphabet, so anything outside it is refused rather than guessed at.
+      if (!/^[A-Za-z0-9._:\/-]+$/.test(v) || v.includes("{{")) {
+        console.error(`init: --codex-cold-model must be a plain model name matching [A-Za-z0-9._:/-]+ (got ${JSON.stringify(v)}). It is interpolated into a TOML string, so quotes, backslashes and line breaks are refused rather than escaped.`);
+        process.exit(2);
+      }
+      out.codexColdModel = v;
+    }
     else if (a === "--skip-codex-lane") out.skipCodexLane = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
