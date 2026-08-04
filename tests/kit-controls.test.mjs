@@ -1344,3 +1344,46 @@ test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cann
     assert.ok(existsSync(path.join(dir, "core", "GATES.md")), "the [P] method docs still landed");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("round-2 seat findings: removed-flag `=` spelling, the hooks DETECTOR, and an honest skip message", () => {
+  const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-r2-")); execFileSync("git", ["init", "-q", d]); return d; };
+  const init = (d, ...extra) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
+    "--repo-name", "x", "--skip-codex-prompt", ...extra], { encoding: "utf8" });
+
+  // 1. `--flag=value` fell through to the generic "unknown argument", so the adopter most likely to
+  // have SCRIPTED the flag was the one who got no migration sentence.
+  const eq = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--risk-tokens=billing"], { encoding: "utf8" });
+  assert.equal(eq.status, 2, "the `=` spelling still exits 2");
+  assert.match(eq.stderr, /--risk-tokens was REMOVED at v2\.0/, "…and now gets the migration message, not 'unknown argument'");
+
+  // 2. The "your config declares hooks" warning is a DETECTOR, and it only matched a TOML table
+  // header. `hooks = "./hooks.json"` is the spelling Codex's own schema uses, so the likeliest one
+  // went undetected — a fail-open in the thing whose job is to notice.
+  for (const spelling of ['hooks = "./hooks.json"\n', "[hooks]\n", "hooks.pre_tool_use = [{}]\n"]) {
+    const d = mk();
+    try {
+      mkdirSync(path.join(d, ".codex"), { recursive: true });
+      writeFileSync(path.join(d, ".codex", "config.toml"), spelling);
+      assert.match(init(d).stderr, /DECLARES HOOKS/,
+        `an adopter config using ${JSON.stringify(spelling.trim())} is detected`);
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  }
+  // …and it must not cry wolf on the kit's own shipped config, or the warning trains adopters to ignore it.
+  const clean = mk();
+  try {
+    assert.equal(init(clean).status, 0);
+    assert.doesNotMatch(init(clean).stderr, /DECLARES HOOKS/, "the kit's own config.toml does NOT trip the detector");
+  } finally { rmSync(clean, { recursive: true, force: true }); }
+
+  // 3. `--skip-codex-lane` printed "SKIPPED" unconditionally — including over a .codex/ that a
+  // previous adopt had already written and that this run left sitting there.
+  const reran = mk();
+  try {
+    assert.equal(init(reran, "--codex-cold-model", "m-1").status, 0);
+    assert.ok(existsSync(path.join(reran, ".codex", "config.toml")), "first adopt wrote .codex/");
+    const second = init(reran, "--skip-codex-lane");
+    assert.match(second.stdout, /ALREADY EXISTS here and was left untouched/,
+      "a re-run with the skip flag says the .codex/ is still there rather than implying it is absent");
+    assert.ok(existsSync(path.join(reran, ".codex", "config.toml")), "…and it genuinely is still there");
+  } finally { rmSync(reran, { recursive: true, force: true }); }
+});

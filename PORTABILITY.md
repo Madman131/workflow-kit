@@ -30,24 +30,50 @@ do not.
 ### Why the Codex lane is unguarded — MEASURED, not assumed (v2.0, 2026-08-04)
 
 Through v1.7 that "not enforced" column was an **assumption**: the guards are Claude registrations,
-so presumably nothing else loads them. v2.0 replaces the assumption with **executed findings**
-against `codex-cli 0.146.0-alpha.9.2`. The conclusion did not change. The confidence, and the reasons,
-did — and two of the reasons are things no amount of reading the code would have revealed.
+so presumably nothing else loads them. v2.0 replaces the assumption with findings executed against
+`codex-cli 0.146.0-alpha.9.2` on 2026-08-04. The conclusion did not change. The confidence, and the
+reasons, did — and two of the reasons are things no amount of reading the code would have revealed.
+
+**PROVENANCE — read this before relying on any claim below, because the claims are not all the same
+kind.** Three classes, and this section marks which is which:
+1. **Checkable in this repo, right now.** Everything about how the KIT's own guards behave — that
+   `guard-cross-repo-writes` exits 0 on a payload with no `file_path` (`hooks/guard-cross-repo-writes.mjs`)
+   and that `guard-lane-authoring` denies it (`hooks/guard-lane-authoring.mjs`), that
+   `templates/settings.json` registers the Claude matchers. Read the files; feed them a payload.
+2. **Checkable against a retained receipt.** The Codex payload SHAPES — `apply_patch`, the patch
+   envelope, multi-target patches, `Bash` for shell — are captured verbatim in
+   `acceptance/fixtures/codex-payload-samples.mjs`. That file is redacted in one respect it names
+   (the absolute `cwd`), and it is a recording, so it authenticates the shapes and nothing more.
+3. **NOT checkable from this repo at all — observed once, in a session whose transcript is not
+   shipped.** The trust gate, the silent skip in `codex exec`, `trust_level` ≠ hook trust, and every
+   statement about the origin repo. They are reported here because they change what an adopter should
+   do, not because this artifact proves them. **Reproduce them yourself before betting on them**; the
+   reproduction is a `codex exec` against a repo with an unapproved hook. A tool that automated that
+   check was written during this work and deliberately not shipped (it belongs with the Codex guard
+   that is still in flight); its contract and recovery pointer are in the fixture file above.
+
+The origin repo is a private repository not distributed with this kit, so its `.gitignore` line
+numbers below are cited for the author's audit trail, not as something you can resolve.
 
 The origin repo this kit was extracted from *did* attempt a Codex lane: it carries
 `.codex/hooks/{guard-cross-repo-writes,guard-lane-authoring,guard-gate-ladder}.mjs` plus a
-`.codex/hooks.json` registering them. **Those hooks have never run — not once.** Two independent
-reasons, either sufficient on its own:
+`.codex/hooks.json` registering them. **No version of those files that can be inspected today could
+have run, and the current one cannot.** (Stated at that strength deliberately: the files are
+gitignored, so their history is unrecoverable — the same fact that makes reason 3 damning makes a
+flat "never, not once" unprovable. What can be shown is that the registration as it stands selects
+nothing and is untrusted.) Two independent reasons, either sufficient on its own:
 
 1. **The matchers match nothing.** That registration listens for tools named
-   `Write|Edit|MultiEdit|NotebookEdit`. Codex has no such tools. A file write arrives as
-   `tool_name: "apply_patch"`; a command arrives as `tool_name: "Bash"`. Nothing selects those hooks.
+   `Write|Edit|MultiEdit|NotebookEdit`. Across every invocation observed, a file write arrived as
+   `tool_name: "apply_patch"` and a command as `tool_name: "Bash"` — never those names. (An absence
+   over observed runs, not a proof that no such tool exists anywhere in Codex; it is enough, because
+   a matcher that never fired in any observed write is not guarding writes.)
 2. **Trust was never granted** (see below). Even with correct matchers, they would have been skipped.
 
 Two further facts make that attempt unrepairable by copying rather than rebuilding — and they are the
 reason v2.0 ships **no Codex hooks at all** rather than porting those files:
 
-- **There is no `file_path` in a Codex write.** The payload is a patch envelope —
+- **No observed Codex write carried a `file_path`.** The payload is a patch envelope —
   `tool_input: {command: "*** Begin Patch\n*** Add File: x.txt\n+…\n*** End Patch"}` — and one
   envelope can add, update, delete and rename **several** files at once. Both write guards key on
   `tool_input.file_path`. Ported as-is, `guard-cross-repo-writes` takes its no-target branch and
@@ -104,9 +130,19 @@ changeset; when it lands, every limit in this section still applies to it.
 **The `.codex/` files v2.0 *does* install are conveniences, not controls.** `init` writes
 `.codex/config.toml` (a pager pin, which removes the DEFAULT pager as a hang risk in a
 non-interactive run — nothing here verifies Codex loaded the file, and a command can still set its
-own `GIT_PAGER`) and
-generates `.codex/agents/cold-reviewer.toml` (a review seat, whose model is yours to bind). Neither
-enforces anything. `--skip-codex-lane` omits both.
+own `GIT_PAGER`) and generates `.codex/agents/cold-reviewer.toml` (a review seat, whose model is
+yours to bind). Neither enforces anything. `--skip-codex-lane` omits **these two, in the repo**; the
+seven Codex PROMPTS `init` also writes are user-global, live outside the repo, and are omitted by
+`--skip-codex-prompt` instead.
+
+**Two honest limits on that review seat, both counting against it.** First, **the kit has never
+watched Codex load it.** `.codex/config.toml` is a documented project config layer; a repo-level
+`.codex/agents/` is *not* something this work verified as a discovery root, so the seat may be inert
+where the kit puts it. Check it against your own Codex before relying on it, and treat the file as a
+starting point rather than a wired control. Second, its `developer_instructions` **restate** the
+cold-review mandate `agents/cold-reviewer.md` already carries for the Claude lane, with nothing
+pinning the two together, so they can drift apart unnoticed. Both are recorded here rather than left
+to be discovered; resolving them belongs with the Codex-lane work still in flight.
 
 ### FM1 — the pre-commit hook fails OPEN on a fresh clone unless configured
 

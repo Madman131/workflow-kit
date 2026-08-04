@@ -125,7 +125,14 @@ function parseArgs(argv) {
     else if (a === "--skip-codex-lane") out.skipCodexLane = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
-    else if (REMOVED_FLAGS.has(a)) { console.error(`init: ${a} was ${REMOVED_FLAGS.get(a)}`); process.exit(2); }
+    // Match BOTH spellings. An adopter who wrote `--risk-tokens=billing` fell through to the generic
+    // "unknown argument" and got no migration sentence — defeating the whole point of this table for
+    // exactly the people most likely to have scripted the flag.
+    else if (REMOVED_FLAGS.has(a) || REMOVED_FLAGS.has(a.split("=")[0])) {
+      const name = REMOVED_FLAGS.has(a) ? a : a.split("=")[0];
+      console.error(`init: ${name} was ${REMOVED_FLAGS.get(name)}`);
+      process.exit(2);
+    }
     else { console.error(`init: unknown argument ${JSON.stringify(a)} (try --help)`); process.exit(2); }
   }
   return out;
@@ -668,7 +675,13 @@ function main() {
   // cross-family gate seat).
   let codexLaneOk = !args.skipCodexLane;
   if (args.skipCodexLane) {
-    log(`  .codex/: SKIPPED (--skip-codex-lane)`);
+    // Say what is TRUE of the tree, not merely what this run did. On a re-run over a repo adopted
+    // WITHOUT the flag, a bare "SKIPPED" reads as "there is no .codex here" while both files sit on
+    // disk. Every other kept-file path in this installer reports honestly; this one did not.
+    const existing = existsSync(path.join(T, ".codex"));
+    log(existing
+      ? `  .codex/: SKIPPED (--skip-codex-lane) — but a .codex/ ALREADY EXISTS here and was left untouched; this run neither wrote nor removed it`
+      : `  .codex/: SKIPPED (--skip-codex-lane)`);
   } else {
     try {
       const cfgDst = path.join(T, ".codex", "config.toml");
@@ -682,7 +695,11 @@ function main() {
         log(`  .codex/config.toml: installed (Codex-lane convenience — NO enforcement; see PORTABILITY.md)`);
       } else {
         let declaresHooks = false;
-        try { declaresHooks = /^\s*\[{1,2}\s*hooks[.\]]/m.test(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
+        // Every TOML spelling of a hooks registration, not just the table header. The scalar form
+        // `hooks = "./hooks.json"` is the one Codex's own schema strings use, so matching only
+        // `[hooks]` left the most likely spelling undetected — a fail-open in a DETECTOR, which is
+        // how an adopter ends up assuming the kit reconciled hooks it never saw. (Found by a cold seat.)
+        try { declaresHooks = /^\s*(?:\[{1,2}\s*hooks[.\]]|hooks\s*[.=])/m.test(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
         warn(`.codex/config.toml: EXISTING kept (--force to update)${declaresHooks
           ? " — and it DECLARES HOOKS. The kit registers none and did not change them; those are yours, and you are responsible for whether they are armed."
           : ""}`);

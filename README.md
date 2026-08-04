@@ -43,8 +43,9 @@ own gated changeset**. It is not in v2.0, and nothing in v2.0 depends on it.
 route was retired, with a stated removal horizon of v2.0; this is that removal. It now **exits 2**
 instead of being silently swallowed, and the message names the flag, the version and the fix. **The
 flag and the config key are separate contracts and only the flag changed:** a legacy `laneRiskTokens`
-key already in your `.claude/kit.config.json` stays **tolerated** by every control — ignored, never
-fatal — so you do not need to edit that file.
+key already in your `.claude/kit.config.json` stays **tolerated** — ignored, never fatal — so you do
+not need to edit that file. (Executed against the write guard, the control that reads that config
+most closely; the commit floor and the other guards never read the key at all.)
 
 **New Codex-lane files — conveniences, NOT controls.** `init` now installs `.codex/config.toml` (pins
 `GIT_PAGER=cat`, removing the default pager as a hang risk in a non-interactive run — nothing
@@ -57,17 +58,22 @@ names it. **Neither enforces anything.** `--skip-codex-lane` omits both.
 
 1. **Drop `--risk-tokens` from your saved `init` invocation.** This is no longer optional — the run
    now fails with exit 2. Nothing replaces it; leave your `kit.config.json` alone.
-2. Re-run `init` with your original flags **plus `--force`** (the `--force` warnings in the v1.4/v1.3
-   notes apply — `[G]` files get a `.bak`, **`[P]` files do not**; commit first, your commit is the
-   backup). `--force` is required because a plain re-run never overwrites a file it did not write that
-   run, so `bin/init.mjs`'s own updates would land while nothing else did.
+2. **Re-run `init` with your original flags — and do NOT add `--force`.** Unlike v1.7, this release
+   edits **no** `[P]` file you already have: the entire installable delta is two brand-new files, and
+   `init` writes new files without `--force`. So `--force` buys you only a refreshed version stamp in
+   `core/OWNER_COMMS.md`, and it **costs** you the hand-authored content of every `[G]` file —
+   your completed Owner contract is reverted to the raw template, and `.claude/kit.config.json` is
+   rewritten from flags, silently dropping any family you added by hand. Both leave a `.bak` and warn,
+   and `init` still exits 0. Most adopters should skip `--force` entirely. (Earlier releases DID need
+   it, which is why the v1.7 and v1.4 notes say so; the rule is per-release, not permanent.)
 3. Read `PORTABILITY.md` § Why the Codex lane is unguarded, and **correct anything your team believes
    about Codex-lane enforcement.** If anyone is relying on those origin-repo `.codex/hooks/*` files,
    they are relying on scripts that have never executed.
 
 **Verify it landed — a green `init` exit is not evidence:**
 
-Run this **in your adopted repo** (omit the first two lines if you passed `--skip-codex-lane`):
+Run this **in your adopted repo** (if you passed `--skip-codex-lane`, omit the first two lines **and
+the `grep` line** — that `grep` reads one of the files you chose not to install):
 
 ```bash
 test -f .codex/config.toml || { echo "FAIL missing .codex/config.toml"; exit 1; }
@@ -306,6 +312,9 @@ model's name).
   PACKET` carries across; there it is a cross-family gate on the same question. The skill says so
   at the point of use. The origin repo's Codex agent config (`.codex/agents/*.toml`) is **not** in
   this release — it ships with the Codex-lane enforcement work reserved for v2.0.
+  **↑ Superseded: v2.0 shipped the agent config but NOT Codex-lane enforcement — the two were
+  separated once the enforcement was measured. See "What's new in v2.0". Do not read this sentence
+  as a claim that v2.0 guards the Codex lane; it does not.**
 
 **v1.6 adds no `core/` method doc changes** — the skill and agents cite the existing doctrine
 (`core/REVIEW.md` payload contract and pass-types, `core/GATES.md` § Model · effort matrix,
