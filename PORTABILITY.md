@@ -229,6 +229,31 @@ durable. Never remove `frontier-consult`'s `tools: []` line when you re-bind it.
 The skill is deliberately de-model-named: `/frontier-review` names the ROLE; alias it to your
 model's name if your team prefers.
 
+## The ritual skills (v1.7) — `[P]` procedures over facts your `[G]` files supply
+
+`/boot`, `/closeout`, and `/lane-declare` ship verbatim through the shared-body mechanism and
+contain no repo-specific text — they lean on the `[G]` files for every concrete fact, the same
+one-way dependency `/humanize` has on `core/OWNER_COMMS.md`:
+
+- **`/boot`** checks identity against **the fingerprint table in your generated entry stub** and
+  walks the boot set. On a repo whose `CLAUDE.md`/`AGENTS.md` placeholders were never completed,
+  step 1 has nothing to compare against — the skill is a checklist over a contract you still owe.
+- **`/closeout`** takes its push-authorization semantics from `core/OPERATE.md` (`[P]`), but the
+  *effect* of pushing — "the deploy branch does X" — is whatever your entry stub names. It never
+  claims your repo auto-deploys; it tells the agent to read what you wrote there.
+- **`/lane-declare` documents the kit's own two controls** — the Claude-lane PreToolUse guard and
+  the every-lane `pre-commit` — including the enforcement asymmetry (the guard binds only the
+  Claude lane; the commit floor binds everyone). If you have replaced or locally edited those
+  controls, the skill's description of their behavior no longer matches your repo: it describes
+  the kit's shipped versions, not whatever sits at those paths.
+
+**The budget checker is kit-repo governance, not an installed control.** `scripts/check-skill-budgets.mjs`
+gates the KIT's own tree (`skills/`, `skill-shims/`, `agents/`) in the kit's `npm test`; `init`
+does **not** copy it into adopters, and nothing in an adopted repo runs it. The installed skill
+bodies still carry their `Word budget:` lines — in your repo those are declared numbers with no
+mechanical enforcement unless you wire your own (copying the checker and re-pointing its class
+roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
+
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
 The Codex/Gemini gate runners are copied **verbatim** and are functionally repo-agnostic (the repo is
@@ -282,7 +307,8 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 - `[P]` (verbatim): `core/*` method docs, the three PreToolUse hooks, the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
-  `/frontier-review`), and the `agents/*` reviewer seat definitions (→ `.claude/agents/`).
+  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`), and the `agents/*` reviewer seat
+  definitions (→ `.claude/agents/`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
   `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `core/OWNER_COMMS.md`, `.claude/kit.config.json`.
 

@@ -1,8 +1,64 @@
-# workflow-kit — v1.6.1
+# workflow-kit — v1.7.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.7
+
+**The three ritual skills — `/boot`, `/closeout`, `/lane-declare` — plus the word-budget gate
+that governs the kit's own instruction artifacts.** The origin repo ran these rituals saturated
+with its own names, paths, and deploy target; the kit ships the portable skeleton: each skill is
+a checklist over doctrine the kit already carries, never a restatement of it.
+
+- **Three new shared-body dual-lane skills** (the v1.3 mechanism, unchanged — one canonical body
+  under `.agents/skills/<name>/`, a thin shim per harness, zero `init` edits):
+  - **`/boot`** — the start-of-session ritual: the identity fingerprint (`git remote get-url
+    origin` against the entry stub's table — never a path), the nine-doc boot set read in order,
+    the other-lane dirty-file check, the task-lane declaration, and the tier recommendation
+    (`core/WORKFLOW.md` § Steer) before the first write.
+  - **`/closeout`** — the PROCEDURE over `core/OPERATE.md` § End-of-work closeout: inventory →
+    gate-ladder check → surgical staging → worktree merge+test → the Owner's push authorization →
+    push → **verify on the ref you actually pushed** → the `CLOSEOUT: ARCHIVE-READY |
+    NOT ARCHIVE-READY` receipt. The doctrine stays in `core/`; where they differ, `core/` wins.
+  - **`/lane-declare`** — writes `.claude/task-lane.json` for the two readers that actually
+    enforce it (the Claude-lane PreToolUse guard; the every-lane `.githooks/pre-commit`), with
+    the cures for `stale`, session-mismatch, and `ledger-error` — described from the kit's own
+    controls, not the origin repo's (the kit ledger has no lock; a `ledger-error` here means the
+    append itself failed).
+- **`scripts/check-skill-budgets.mjs` — budget is now a GATE for the kit's own artifacts, not an
+  honour system.** It runs first in `npm test` and FAILS the build on a violation, governing
+  three classes: `skills/**` (each file declares `Word budget: N` in its head; **marker-less is
+  RED**, never skipped), `skill-shims/**` (class cap 250 words — and a shim *declaring* a budget
+  fails too: rules worth budgeting belong in the body), and `agents/*.md` (class cap 500). Each
+  file carries its OWN number — a body and its reference layer are never summed. The unit is
+  `wc -w` over the whole file, checkable by hand in one command. Two honest limits, stated in
+  the file head: a skills/ number is self-declared (the ratchet pins *recorded* debt only), and
+  the checker governs the KIT repo — `init` does **not** install it into adopters.
+- **The boot-order enumerations are now asserted in lockstep.** The boot set is enumerated in
+  five places (both entry-stub templates, `core/README.md`, `core/MULTI_AGENT.md`,
+  `core/WORKFLOW.md`'s six-method list) and now a sixth (`/boot`); nothing previously asserted
+  they agree, so renaming or adding a method doc could silently drift them apart. A suite test
+  now pins every enumeration to one canon — and proves it can detect a planted reorder and a
+  planted omission.
+- **`core/ARTIFACT_CLASS.md`'s budget citation is repaired.** It pointed at
+  `core/REPO_INVARIANTS.md` § Instruction-artifact word budgets — a section the generated
+  template does not carry, so the pointer dangled in every adopted repo. The standing record is
+  now what actually exists: the `Word budget:` line in the artifact's own head, plus the
+  mechanical checkers. (The origin repo keeps budget doctrine OUT of the reviewer-payload file
+  deliberately; the kit follows.)
+
+**Upgrading — two different rules, read both.** The three skills are NEW files: a plain `init`
+re-run with your original flags installs them (bodies, shims, and the Codex prompts unless
+`--skip-codex-prompt`). But v1.7 also edits two `[P]` files an existing adopter ALREADY has —
+`core/ARTIFACT_CLASS.md` (the citation repair) and `.agents/skills/frontier-review/INVOKE.md`
+(its budget marker) — and `init` never overwrites a file it did not write this run: without
+`--force` those two stay stale while `init` exits 0. So: commit first, then re-run with your
+original flags **plus `--force`** (the `--force` warnings in the v1.4/v1.3 notes apply — `[G]`
+files get a `.bak`, **`[P]` files do not**; your commit is the backup). Verify, because a green
+exit is not evidence: `grep -c 'check-skill-budgets' core/ARTIFACT_CLASS.md` and
+`grep -c 'Word budget' .agents/skills/frontier-review/INVOKE.md` must be non-zero, and
+`.agents/skills/boot/SKILL.md` must exist.
 
 ## What's new in v1.6.1
 
@@ -468,8 +524,12 @@ root `CLAUDE.md` / `AGENTS.md` entry stubs, `core/BINDINGS.md`, `core/REPO_INVAR
 - `skills/humanize/SKILL.md` + `BULLET.md` — the canonical `/humanize` procedure → `.agents/skills/humanize/`.
 - `skills/frontier-review/SKILL.md` — the canonical `/frontier-review` consult procedure →
   `.agents/skills/frontier-review/`.
+- `skills/boot/` · `skills/closeout/` · `skills/lane-declare/` — the ritual skills (v1.7) →
+  `.agents/skills/<name>/`.
 - `skill-shims/claude/*.md` → `.claude/skills/<name>/SKILL.md`; `skill-shims/codex/*.md` → your Codex
   prompts dir. `humanize-bullet` ships in both lanes as an **alias** shim with no body of its own.
+- `scripts/check-skill-budgets.mjs` — the KIT repo's own word-budget gate over these classes (runs
+  first in the kit's `npm test`; **not** installed by `init` — see `PORTABILITY.md`).
 
 **The agents** (`agents/`, `[P]` — reviewer seat definitions → `.claude/agents/`, Claude lane only):
 - `agents/cold-reviewer.md` — the blind cold seat (payload-only mandate; `tools: Read, Grep, Glob`).
