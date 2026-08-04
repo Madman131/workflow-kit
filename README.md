@@ -9,8 +9,9 @@ fold-checks and never merges, and one worker per changeset that owns its own gat
 split was carried in a private note and re-derived by hand for every chip. `/orchestrate` is it,
 written down.
 
-**What it says, in one line each.** One chip = one changeset = one version = one session, run in a
-stated order. The GO belongs to the Owner alone — and it may come straight to a worker, which
+**What it says, in one line each.** One chip = one changeset = one version, in its own session, run
+in a stated order — one way only, since a session can ship a second version when post-merge
+execution finds a defect. The GO belongs to the Owner alone — and it may come straight to a worker, which
 outranks any routing preference. **A GO ratifies a specific artifact**: if the changeset gains a
 commit afterwards it is void until re-confirmed, and heads are pinned by SHA because a chip's branch
 can fork mid-life. Before writing, a chip looks for competing writers in the repo's **lane

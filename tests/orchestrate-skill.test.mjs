@@ -124,6 +124,60 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
   pin(body, "**evidence\n   escalates them, appetite does not.**", "evidence not appetite");
 });
 
+test("the README/PORTABILITY mirrors carry no claim the body has already retracted", () => {
+  // WHY THIS EXISTS — it is the finding of record for this release. The same doctrine is narrated on
+  // FOUR surfaces (SKILL.md, CHIP_BRIEF.md, README.md, PORTABILITY.md) and nothing bound them, so
+  // every correction had to be hand-propagated to three other places. It was missed three times in
+  // three rounds: "proves it is the sole writer" survived in CHIP_BRIEF after the body was fixed,
+  // and the chip/session identity survived in the README after the body dropped it. Each was found
+  // by a review seat, never by the suite. These are cheap NEGATIVE assertions on the retracted
+  // spellings — they cannot prove the surfaces agree in general, only that the specific claims this
+  // release retracted stay retracted everywhere.
+  // SCOPED TO THE SECTION, not the whole file. The first cut searched README.md entire and fired on
+  // a pre-existing /thread-restart sentence that happens to spell "loses nothing essential" — a
+  // guard against a false CLEAR minting a false FAIL, matching a spelling rather than a claim. A
+  // section that cannot be located is a hard failure, never a silently empty search.
+  const section = (text, start, end, label) => {
+    const from = text.indexOf(start);
+    assert.notEqual(from, -1, `${label}: could not locate "${start}" — re-point this test`);
+    const rest = text.slice(from + start.length);
+    const to = end ? rest.indexOf(end) : -1;
+    const body = to === -1 ? rest : rest.slice(0, to);
+    assert.ok(body.trim().length > 200, `${label}: located section is suspiciously short — re-point this test`);
+    return body;
+  };
+  const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
+  const portability = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8");
+  const surfaces = {
+    "README.md § v2.3.0": section(readme, "# workflow-kit — v2.3.0", "# workflow-kit — v2.2.1", "README"),
+    "PORTABILITY.md § /orchestrate": section(portability, "## `/orchestrate` (v2.3)", "\n## ", "PORTABILITY"),
+    "skills/orchestrate/SKILL.md": readFileSync(BODY, "utf8"),
+    "skills/orchestrate/CHIP_BRIEF.md": readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8"),
+  };
+  const retracted = [
+    [/prove[sd]?\s+it\s+is\s+the\s+sole\s+writer/i, "reading lane declarations PROVES sole-writership (it finds declared writers only)"],
+    [/sole-writer proof/i, "calling the sole-writer check a PROOF"],
+    [/one version\s*=\s*one session/i, "the chip/session identity asserted in BOTH directions"],
+    [/loses nothing essential/i, "the degraded mode GUARANTEEING nothing essential is lost"],
+    [/two (?:real )?controls (?:are|remain)/i, "naming two things the kit ENFORCES rather than ships controls for"],
+  ];
+  for (const [file, text] of Object.entries(surfaces)) {
+    for (const [re, what] of retracted) {
+      assert.doesNotMatch(text, re,
+        `${file} still carries a claim this release retracted — ${what}. A correction that lands on ` +
+        `one surface and not its mirrors leaves the old claim shipping.`);
+    }
+  }
+  // The canary: these assertions are worthless if the patterns match nothing anywhere. Prove each
+  // one still BITES by running it against text that does contain the retracted spelling.
+  const decoys = ["a chip proves it is the sole writer by reading", "the sole-writer proof (lane declarations)",
+    "one chip = one changeset = one version = one session", "a shared record, which loses nothing essential",
+    "the kit's two real controls are still the task-lane declaration"];
+  for (const [i, [re, what]] of retracted.entries()) {
+    assert.match(decoys[i], re, `the pattern for "${what}" must still match its own retracted spelling`);
+  }
+});
+
 // ── (2) the reference layers, and the enumerations that must agree with the tree ────────────────
 
 test("both reference layers are named by the body and declare their own budgets", () => {
