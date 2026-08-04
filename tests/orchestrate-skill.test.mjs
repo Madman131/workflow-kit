@@ -1,0 +1,196 @@
+// tests/orchestrate-skill.test.mjs — the /orchestrate skill (v2.3).
+//
+// WHAT IS WORTH PINNING HERE, and what is not. The skill is DOCTRINE: it ships no code, and no
+// control enforces a word of it. So these tests do not pretend to verify behaviour. They pin the
+// two properties that CAN fail silently:
+//
+//   (1) THE LOAD-BEARING CORRECTIONS STAY IN THE BODY. `core/ARTIFACT_CLASS.md` prefers splitting an
+//       over-budget body into a reference layer — but a correction of a FALSE or dangerous default
+//       may never move to a layer the executor might not load. `/orchestrate` sits one word under
+//       its budget, so the next edit is under pressure to displace something; these assertions say
+//       WHICH sentences may not be the thing displaced.
+//   (2) THE SHIPPED ENUMERATIONS AGREE WITH THE SHIPPED TREE. A skill added to `skills/` while
+//       `PORTABILITY.md`'s `[P]` list is left alone makes the doc lie about the artifact — the
+//       failure found on this release (`/sweep` shipped in v2.2.0 and was never added to that list).
+//
+// EVERY PIN IS SELF-CANARIED. A doc-pinning assertion is decoration when its spelling occurs
+// innocently elsewhere in scope: two of five such assertions on an earlier release were dead on
+// their first cut and were caught only by striking the exact phrase. So each pin below is run a
+// second time against a copy of the file with THAT EXACT PHRASE removed, and the test fails unless
+// the removal turns it red. A pin that cannot be reddened is reported as DEAD, not as passing.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import os from "node:os";
+import { fileURLToPath } from "node:url";
+
+const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const BODY = path.join(KIT, "skills", "orchestrate", "SKILL.md");
+
+// Whitespace-flatten before matching: a phrase that WRAPS a line is present to a reader and absent
+// to a naive substring search, which produces a false RED here and (worse) a false "already fixed"
+// when the same technique is used to check a repair.
+const flat = (s) => s.replace(/\s+/g, " ").trim();
+
+/**
+ * Assert `phrase` is present in `text`, then PROVE the assertion is live by deleting that exact
+ * phrase and requiring the same predicate to fail. `label` names what the sentence protects.
+ */
+function pin(text, phrase, label) {
+  const present = flat(text).includes(flat(phrase));
+  assert.ok(present, `${label}: the body must state — "${phrase}"`);
+  // The canary. Strike the FIRST occurrence only — striking every occurrence would leave the
+  // predicate false no matter what, which is a canary that can never fire (this helper shipped
+  // that way for one draft). If the phrase still matches after one strike it occurs elsewhere in
+  // scope, so deleting the load-bearing sentence would NOT redden the assertion: a dead pin.
+  const struck = flat(text).replace(flat(phrase), " ");
+  assert.equal(struck.includes(flat(phrase)), false,
+    `${label}: DEAD PIN — the phrase occurs more than once in scope, so striking the sentence this ` +
+    `assertion exists to protect would leave it green. Pin a longer, unique sentence.`);
+}
+
+// ── (1) the corrections that may not be displaced into a reference layer ────────────────────────
+
+test("the GO discipline is stated IN THE BODY — who gives it, and when it goes stale", () => {
+  const body = readFileSync(BODY, "utf8");
+  // The single most expensive thing to get wrong: a worker that merges on anyone else's word, or
+  // on a GO given for an earlier head. Both halves are corrections of a plausible default, so both
+  // stay in the executor-loaded body.
+  pin(body, "**The GO is the Owner's alone**", "GO ownership");
+  pin(body, "a direct Owner\ninstruction outranks any routing preference", "Owner-direct-to-worker");
+  pin(body, "**A GO ratifies a specific artifact:**", "stale-GO discipline");
+  pin(body, "the GO\nis void until re-confirmed on the new head", "stale-GO consequence");
+  pin(body, "Pin heads by **SHA**, never by branch name", "SHA-not-branch");
+});
+
+test("the sole-writer check names the ARTIFACT it reads, not the convenient one", () => {
+  const body = readFileSync(BODY, "utf8");
+  // A session list is the thing an agent reaches for first and it answers a different question.
+  // A repo was two-writer while a session-list check reported it clear.
+  pin(body, "lane\ndeclarations", "lane declarations named");
+  pin(body, "never a list\nof sessions, which reports liveness, not intent", "session list refused");
+});
+
+test("the honest limits stay in the body — the method/plumbing split and the named degraded mode", () => {
+  const body = readFileSync(BODY, "utf8");
+  // An adopter reading only the body must not conclude the kit ships chips or messaging.
+  pin(body, "**The METHOD is portable; the PLUMBING is not.**", "method/plumbing split");
+  pin(body, "harness features this kit does not ship and must not assume", "no-assumed-plumbing");
+  pin(body, "**Degraded mode", "degraded mode named");
+  pin(body, "What degrades is LATENCY, not the\nrole split", "what degrades");
+});
+
+test("the body admits that none of it is enforced", () => {
+  const body = readFileSync(BODY, "utf8");
+  // The kit's recurring shipped defect is prose claiming enforcement the machinery does not do.
+  // This skill enforces NOTHING, and the sentence saying so is load-bearing.
+  pin(body, "**Nothing on this page is enforced.**", "enforcement honesty");
+  pin(body, "The two things the kit does enforce are the task-lane\ndeclaration and the commit floor",
+    "what IS enforced");
+});
+
+test("the freeze rule is stated as panel-enforced, not as an intention", () => {
+  const body = readFileSync(BODY, "utf8");
+  pin(body, "Freeze compliance is checked by the panel, never promised by the author",
+    "freeze is panel-enforced");
+});
+
+// ── (2) the reference layers, and the enumerations that must agree with the tree ────────────────
+
+test("both reference layers are named by the body and declare their own budgets", () => {
+  const body = readFileSync(BODY, "utf8");
+  for (const sibling of ["CHIP_BRIEF.md", "PROTOCOLS.md"]) {
+    // Scoped to the LOADABLE PATH, not the bare filename. The body names each sibling twice — once
+    // in the budget line, once in the pointer — so `includes("CHIP_BRIEF.md")` stays true after the
+    // pointer is deleted, which is the mention surviving while the instruction to load it is gone.
+    // (Found by mutation: the bare-filename form survived exactly that strike.) The budget
+    // checker's generic reachability rule has the same shape; this is the tighter local pin.
+    assert.ok(body.includes(`.agents/skills/orchestrate/${sibling}`),
+      `the body must point at .agents/skills/orchestrate/${sibling} — a bare mention is not an instruction to load it`);
+    const layer = readFileSync(path.join(KIT, "skills", "orchestrate", sibling), "utf8");
+    assert.match(layer, /^Word budget: \d+/m, `${sibling} declares its own budget`);
+  }
+});
+
+test("PORTABILITY's [P] enumeration names EVERY shipped skill — a doc that omits one lies about the tree", () => {
+  // The failure this exists to stop, executed on this release: `/sweep` shipped in v2.2.0 and the
+  // `[P]` list was never updated, so the adopter-facing inventory of what gets copied verbatim was
+  // wrong for a whole release. Adding a skill is exactly when nobody re-reads that line.
+  const portability = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8");
+  const line = /\[P\]\` \(verbatim\)[\s\S]*?\n- `\[G\]\`/.exec(portability);
+  assert.ok(line, "the [P] enumeration block must be findable — its shape changed, re-point this test");
+  const shipped = execFileSync("ls", [path.join(KIT, "skills")], { encoding: "utf8" }).trim().split("\n");
+  assert.ok(shipped.length >= 7, `sanity: expected the shipped skills to be discovered, got ${shipped.length}`);
+  for (const name of shipped) {
+    assert.ok(line[0].includes(`\`/${name}\``),
+      `PORTABILITY.md's [P] list must name /${name} — it ships verbatim to every adopter`);
+  }
+});
+
+// ── (3) the skill actually installs into an adopter, both lanes ─────────────────────────────────
+
+test("a fresh adopt lands the /orchestrate body and BOTH lane shims, and every pointer resolves", () => {
+  // Presence and registration are the two lies this program shipped one release apart, so the
+  // assertion is not "the file exists" alone: every body reference in every installed shim must
+  // resolve ON DISK IN THE ADOPTER, which is where the path is different from the kit tree.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-orch-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-orch-cx-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    execFileSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--codex-prompts-dir", codexDir], { stdio: "ignore" });
+
+    const body = path.join(dir, ".agents", "skills", "orchestrate", "SKILL.md");
+    const claudeShim = path.join(dir, ".claude", "skills", "orchestrate", "SKILL.md");
+    const codexShim = path.join(codexDir, "orchestrate.md");
+    for (const [label, p] of [["shared body", body], ["Claude shim", claudeShim], ["Codex prompt", codexShim]]) {
+      assert.ok(existsSync(p), `${label} installed at ${p}`);
+    }
+    // Both reference layers travel with the body — a shipped pointer to an uninstalled file is a
+    // dead end in the adopter even though it resolves in the kit tree.
+    for (const sibling of ["CHIP_BRIEF.md", "PROTOCOLS.md"]) {
+      assert.ok(existsSync(path.join(dir, ".agents", "skills", "orchestrate", sibling)),
+        `${sibling} installs beside the body (the body points at it)`);
+    }
+    assert.match(readFileSync(claudeShim, "utf8"), /^---\n/, "Claude shim opens with YAML frontmatter");
+    assert.match(readFileSync(codexShim, "utf8"), /^# /, "Codex prompt opens with a markdown H1");
+    for (const shim of [claudeShim, codexShim]) {
+      const text = readFileSync(shim, "utf8");
+      const refs = [...text.matchAll(/\.agents\/skills\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+\.md)/g)];
+      assert.ok(refs.length > 0, `${shim} names a shared body`);
+      for (const [, skill, file] of refs) {
+        assert.ok(existsSync(path.join(dir, ".agents", "skills", skill, file)),
+          `${shim}: .agents/skills/${skill}/${file} resolves in the ADOPTER`);
+      }
+      assert.doesNotMatch(text, /Word budget/, `${shim} carries no rules of its own`);
+    }
+    // The installed body is the governed artifact, and the corrections must survive the copy: an
+    // install that silently truncated or templated the file would still pass an existence check.
+    const installed = readFileSync(body, "utf8");
+    assert.equal(installed, readFileSync(BODY, "utf8"), "the installed body is byte-identical to the kit's");
+    pin(installed, "**The GO is the Owner's alone**", "installed body keeps the GO rule");
+    pin(installed, "**Nothing on this page is enforced.**", "installed body keeps the enforcement honesty");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
+// ── (4) the canary's own canary ─────────────────────────────────────────────────────────────────
+
+test("the pin helper reports a DEAD pin instead of passing it", () => {
+  // The countermeasure only works if `pin` actually fails on a phrase it cannot redden. Proven
+  // with a phrase that appears TWICE — the exact shape that made two real assertions decorative.
+  assert.throws(
+    () => pin("alpha REPEATED beta REPEATED gamma", "REPEATED", "self-test"),
+    /DEAD PIN/,
+    "a phrase occurring twice must be reported as a dead pin, not silently passed",
+  );
+  // …and the healthy direction still passes, so the helper is not simply always-throwing.
+  assert.doesNotThrow(() => pin("alpha UNIQUE beta", "UNIQUE", "self-test"));
+  // A phrase that is ABSENT fails as a missing pin, not as a dead one.
+  assert.throws(() => pin("alpha beta", "MISSING", "self-test"), /must state/);
+});

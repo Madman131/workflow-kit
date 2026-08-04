@@ -1,3 +1,56 @@
+# workflow-kit — v2.3.0
+
+## What's new in v2.3.0 — `/orchestrate`, the method for work too big for one thread
+
+**The kit could gate a changeset but said nothing about running a PROGRAM.** Everything shipped so
+far assumes one thread building one thing. The method that produced the last seven releases is
+different: an Owner who holds intent and the merge-GO, an orchestrator session that briefs and
+fold-checks and never merges, and one worker per changeset that owns its own gate ladder. That
+split was carried in a private note and re-derived by hand for every chip. `/orchestrate` is it,
+written down.
+
+**What it says, in one line each.** One chip = one changeset = one version = one session, run in a
+stated order. The GO belongs to the Owner alone — and it may come straight to a worker, which
+outranks any routing preference. **A GO ratifies a specific artifact**: if the changeset gains a
+commit afterwards it is void until re-confirmed, and heads are pinned by SHA because a chip's branch
+can fork mid-life. Before writing, a chip proves it is the sole writer by reading the repo's **lane
+declarations** — not a list of sessions, which reports liveness and not intent, and which called a
+repo single-writer while two lanes were committing to it.
+
+**Two reference layers.** `CHIP_BRIEF.md` is what a worker is handed — nine sections, and the three
+failures worth designing against (a re-presented brief carries stale facts; verbatim is not safe by
+default; adapt the remedy to the target's defect surface). `PROTOCOLS.md` is a **bank**: every rule
+with the incident that bought it, anonymised — the freeze that took three violations to stick, the
+probe that certified a mechanism it never observed, the waiter that matched its own shell, the
+merge proof that is permanently false for squash merges.
+
+**Read the limit it states about itself.** The METHOD is portable; the PLUMBING is not. Clickable
+task chips and cross-session messaging are harness features this kit does not ship and does not
+assume, so the body names a degraded mode — a shared append-only record, briefs as files, consults
+as entries in it — and says plainly that what degrades is latency, not the role split. **Nothing in
+the skill is enforced**, and it says so: no control counts rounds, reads a freeze, or checks who
+gave a GO. The kit's two real controls are still the task-lane declaration and the commit floor.
+
+**Also fixed, and it is the same class the last release shipped:** `PORTABILITY.md`'s `[P]`
+inventory — the adopter-facing list of what gets copied verbatim — never gained `/sweep` when
+v2.2.0 shipped it, so for a whole release the document was wrong about the tree it describes.
+Adding a skill is precisely when nobody re-reads that line, so `tests/orchestrate-skill.test.mjs`
+now derives the list from disk and reddens if any shipped skill is missing from it.
+
+**The tests are doc pins, and each one is self-canaried.** A pinning assertion is decoration when
+its spelling occurs innocently elsewhere in scope, so every pin strikes its exact phrase and fails
+unless the strike turns it red — a phrase occurring twice is reported as a DEAD PIN rather than
+passed. 21 mutations against the shipped text, all killed, against a green positive control. Two
+gaps were found that way and fixed: a pointer assertion that a bare filename satisfied after the
+loadable path was deleted, and the helper's own canary, which in its first draft stripped every
+occurrence and so could never fire.
+
+**Upgrading: a plain `init` re-run — do NOT pass `--force`.** This release adds files and edits
+nothing an adopter already has, so a plain re-run ships all of it (executed: the body, both
+reference layers, the Claude shim and the Codex prompt all land, and a hand-edited `[P]` file is
+preserved). `--force` would buy nothing here and **destroys hand-edited `[P]` content with no
+`.bak`** — executed in both directions on an adopter created from v2.2.1.
+
 # workflow-kit — v2.2.1
 
 ## What's new in v2.2.1 — a hotfix, and the check that should have caught it
