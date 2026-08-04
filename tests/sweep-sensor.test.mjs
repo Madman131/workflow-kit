@@ -401,6 +401,31 @@ test("a DELETED or quoted marker does not promote, and one envelope target canno
     "> **CLASS: BINDING**");
 });
 
+test("DESIGN INVARIANT: a sensor IMPORTS patch structure, it never PARSES it", () => {
+  // The round-3 escalation adjudication's closing condition, made mechanical.
+  //
+  // Two scoping defects one review round apart, in OPPOSITE directions (whole envelope to every
+  // target; then no envelope to anyone), were both bespoke envelope logic invented beside the
+  // parser instead of inside it. The fix that dissolved the class was relocating that logic into
+  // the module owning the grammar — so the property worth pinning is not either behaviour, it is
+  // that NO envelope knowledge lives out here at all. With none, the class cannot recur.
+  //
+  // Scoped to CODE, not the file: these tokens appear legitimately in the header comments that
+  // explain the invariant, so a whole-file grep would fail against a correct file — proving a
+  // spelling rather than the property (and it would tempt the next author to delete the docs).
+  const GRAMMAR = /\*\*\* |Begin Patch|End Patch|startsWith\("-"\)|Update File|Move to/;
+  for (const rel of ["hooks/sensor-sweep-owed.mjs", "hooks/sensor-mutation-owed.mjs"]) {
+    const code = readFileSync(path.join(ROOT_DIR, rel), "utf8")
+      .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    assert.doesNotMatch(code, GRAMMAR,
+      `${rel} must import patch structure from payload-targets.mjs, never re-derive it`);
+  }
+  // …and the module that DOES own it exports what the sensors need, or "import it" is empty advice.
+  const owner = readFileSync(path.join(ROOT_DIR, "hooks", "payload-targets.mjs"), "utf8");
+  assert.match(owner, /export function envelopeSections/);
+  assert.match(owner, /export function envelopeAddedText/);
+});
+
 test("the sweep sensor holds NO class regex of its own — one home for the marker pattern", () => {
   // Two transcriptions of one mechanical fact silently differ. The hook imports CLASS_RE; a second
   // copy here is the drift shape, so this asserts the SENTENCE of the design, not a word.

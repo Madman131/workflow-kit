@@ -38,7 +38,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classify, governedDocs, CLASS_RE, loadKitConfig } from "../scripts/check-doc-size.mjs";
-import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative, envelopeSections } from "./payload-targets.mjs";
+import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative, envelopeAddedText } from "./payload-targets.mjs";
 
 
 // The two skill trees an ADOPTER carries (`bin/init.mjs`): `.agents/skills/` holds the canonical
@@ -123,8 +123,11 @@ export function incomingText(ev, extracted, target) {
   if (extracted?.shape !== "apply_patch") {
     return ev?.tool_input?.new_string ?? ev?.tool_input?.content ?? "";
   }
-  const section = envelopeSections(ev?.tool_input?.command ?? "").get(target) ?? "";
-  return section.split("\n").filter((l) => !l.startsWith("-")).join("\n");
+  // DESIGN INVARIANT: this sensor IMPORTS patch structure, it never PARSES it. Everything it knows
+  // about envelopes — sectioning, and which lines are additions — comes from payload-targets.mjs,
+  // the module that owns the grammar. Both scoping defects in this changeset's review ladder were
+  // bespoke envelope logic invented out here; with none left, that class cannot recur.
+  return envelopeAddedText(ev?.tool_input?.command ?? "", target);
 }
 
 const REMINDER = (hits) =>

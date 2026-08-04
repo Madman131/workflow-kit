@@ -131,6 +131,25 @@ export function toRepoRelative(target, root, base) {
  *
  * `Move to` maps BOTH endpoints to the same section, matching how the target list treats them.
  */
+/**
+ * The text ONE target is having ADDED by this envelope: its own section, with deletion lines
+ * removed. This is the shape a consumer actually wants, and it lives HERE for a reason.
+ *
+ * THE DESIGN INVARIANT (round-3 escalation adjudication): a sensor IMPORTS patch structure, it never
+ * PARSES it. Both scoping defects in this changeset's ladder were bespoke envelope logic invented
+ * beside the parser rather than inside it, one round apart, in opposite directions. The first cut of
+ * this function left `-`-line stripping in the sensor — one `startsWith("-")`, which is precisely
+ * "this consumer knows what a deletion looks like". Small, and exactly the seam the recurrence came
+ * through. With the last of it moved here, that class of drift has nowhere left to live.
+ *
+ * `-` marks a deletion in a patch hunk, so a removed `CLASS: BINDING` is not an addition. A markdown
+ * list item is unaffected: in a hunk it reads `+- item`, not `- item`.
+ */
+export function envelopeAddedText(command, target) {
+  const section = envelopeSections(command).get(target) ?? "";
+  return section.split("\n").filter((l) => !l.startsWith("-")).join("\n");
+}
+
 export function envelopeSections(command) {
   const sections = new Map();
   if (typeof command !== "string" || !command) return sections;
