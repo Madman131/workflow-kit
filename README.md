@@ -1,8 +1,65 @@
-# workflow-kit — v1.6.0
+# workflow-kit — v1.6.1
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.6.1
+
+**Three honesty fixes to the enforcement surfaces: the controls stop misdescribing the declaration
+they just read, and the audit ledger records the tier its named reader can actually see.** No
+enforcement decision changes — every allow stays an allow, every block stays a block, and the
+gate-ladder sensor still fails closed to T3 on an exemption. What changes is what the controls
+*say*, and what the ledger *records*. Found by an adopter back-porting the v1.5.0 exempt-tier work,
+then reproduced against live hooks here before any edit.
+
+- **`hooks/guard-lane-authoring.mjs` — the block text admits both polarities.** One state,
+  `exempt-tier-missing`, covers an **absent** tier and a **present-but-invalid** one (`"tier":"T9"`),
+  but the text asserted only that the tier was *MISSING* — false against a file visibly carrying
+  one. It now reads **MISSING OR INVALID**. A control that misdescribes its own input trains the
+  reader to discount it.
+- **`hooks/guard-gate-ladder.mjs` — a true cause for a tiered exemption.** The sensor deliberately
+  does **not** honour an exemption's tier (honouring it would route to a *lighter* ladder exactly
+  when a review seat is already down) — **that resolution is unchanged: still T3, still fail-closed.**
+  But it reported the cause `no-tier` and printed *"no valid tier declaration"* about a declaration
+  that carries one. A tiered, sanctioned-reason exemption now gets its own cause,
+  **`exempt-tier-not-honoured`**, whose text states the tier was read and deliberately not honoured.
+  An **unsanctioned** reason still falls through to the generic cause — both enforcement controls
+  reject it as malformed, so calling it a valid exemption would be the same false-cause defect one
+  branch over.
+- **The exempt ledger row carries the tier in clear text.** In-thread rows already recorded
+  `state:"in-thread:T2"`; exempt rows recorded a bare `state:"exempt"` with the tier only inside
+  `declarationHash` — and the ledger's named consumer is the **Owner's spot-check**, who cannot read
+  a hash. An exempt ALLOW row now carries `tier`; a tier-rejecting DENY row carries `declaredTier`
+  (the value rejected), which is **also in the dedupe key** — it is the only field distinguishing a
+  tier-less deny from a `T9` deny, so without it the second was silently swallowed as a repeat.
+  `declarationHash` is unchanged and still covers the tier.
+
+The same *MISSING*-only wording was live at the **commit floor** (`githooks/pre-commit`) and is fixed
+there too — fixing one layer and leaving its twin lying is the failure mode this release is about.
+`writeLedger` now takes **one named object** instead of a widened positional list, the mechanism that
+corrupted a real audit row in the adopter repo.
+
+**The gate caught this fix committing its own defect twice.** The first cut of `declaredTier` took
+only *string* tiers and truncated them bluntly, so `tier: 7` — a value that was present and rejected —
+was recorded as though absent and then deduped away against a genuinely tier-less row, and two
+different over-long values collapsed onto one. That is the same swallow the field exists to prevent,
+one *type* and one *length* over. Rejected values now carry their type (`7 (number)`), and truncation
+is marked and digest-backed so distinct inputs stay distinct.
+
+**Known divergence, deliberately not fixed here:** the gate-ladder sensor still honours a *symlinked*
+declaration that both enforcement controls reject as malformed, so on that one input it describes a
+declaration the controls refuse. It is pre-existing, already listed among the quirks the hook's own
+header defers to a joint changeset, and the resolution is still T3 either way — but the alignment
+this release buys is **per-field, not total**, and a characterization test pins the gap so it stays
+visible rather than implied-absent.
+
+Both suites extended; every new assertion mutation-proven — thirteen reverts, each turning its test
+red, restored green — including one pinning the fail-closed resolution itself and negative controls
+against assertions passing vacuously.
+
+Upgrading: re-run `init` with your original flags. Existing ledgers are untouched — the new fields
+appear on new rows only.
 
 ## What's new in v1.6
 

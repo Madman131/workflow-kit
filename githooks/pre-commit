@@ -131,7 +131,10 @@ function readDeclaration() {
   if (declaration.mode === "lane") return { state: "lane-retired" };
   // Since v1.5.0 an exemption declares a tier exactly as `in-thread` does: the reason names the
   // unavailable SEAT, which says nothing about how risky the work is. A pre-v1.5 tier-less exemption
-  // is NOT grandfathered — it gets its own explicit state so the block can name the missing field.
+  // is NOT grandfathered — it gets its own explicit state so the block can name the offending field.
+  // That ONE state covers BOTH polarities (absent, and present-but-invalid), so the block text must
+  // say so: asserting "missing" against a file carrying `tier:"T9"` is a control lying about input it
+  // just read.
   if (declaration.mode === "exempt") {
     if (!EXEMPT_REASONS.has(declaration.reason)) return { state: "malformed" };
     if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) return { state: "exempt-tier-missing" };
@@ -177,9 +180,9 @@ if (declaration.state === "lane-retired") {
     + "Declare `in-thread` with the tier. Rules: core/MULTI_AGENT.md, Task-lane declaration.");
 }
 if (declaration.state === "exempt-tier-missing") {
-  fail(`${DECLARATION} declares mode "exempt" without a tier`,
-    'Since kit v1.5.0 an exemption declares a tier exactly as "in-thread" does — the reason names the unavailable SEAT, '
-    + 'which says nothing about how risky the work is. Add "tier": "T0"|"T1"|"T2"|"T3". A pre-v1.5 tier-less exemption '
-    + 'is not grandfathered. Rules: core/MULTI_AGENT.md, Task-lane declaration.');
+  fail(`${DECLARATION} declares mode "exempt" without a valid tier`,
+    'Set "tier": "T0"|"T1"|"T2"|"T3" (the field is MISSING OR INVALID) — since kit v1.5.0 an exemption declares one '
+    + 'exactly as "in-thread" does: the reason names the unavailable SEAT, which says nothing about how risky the work '
+    + 'is. A pre-v1.5 tier-less exemption is not grandfathered. Rules: core/MULTI_AGENT.md, Task-lane declaration.');
 }
 if (!["in-thread", "exempt"].includes(declaration.state)) fail(`${DECLARATION} is ${declaration.state}`);

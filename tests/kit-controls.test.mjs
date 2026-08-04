@@ -3,7 +3,7 @@
 // proves the portable FM1 test itself discriminates (goes RED when core.hooksPath is unset).
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -169,14 +169,25 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
     const tierless = guardSays();
     assert.match(tierless, /"permissionDecision":"deny"/, "a tier-less exemption is BLOCKED (not grandfathered)");
     assert.match(tierless, /exempt-tier-missing/, "…via an explicit state, not a generic malformed");
-    assert.match(tierless, /MISSING its/, "…and the remediation names the missing tier field");
+    // BOTH POLARITIES, one honest string. This ONE state covers an ABSENT tier and a PRESENT-but-
+    // invalid one; the old text asserted only "MISSING its `tier`", which is FALSE against a file
+    // visibly carrying `tier:"T9"` — a control that misdescribes its input trains readers to
+    // discount it. Deliberately NOT asserting on the `"tier":"T0"|…` literal: that already appears
+    // in the generic remediation template emitted for EVERY deny state, so it survives deleting the
+    // whole exempt-tier-missing block. `MISSING OR INVALID` is the string that discriminates.
+    assert.match(tierless, /MISSING OR INVALID/, "…and the remediation admits BOTH polarities");
     // …and every valid tier permits the same write (no over-block).
     for (const tier of ["T0", "T1", "T2", "T3"]) {
       write({ ...base, tier });
       assert.doesNotMatch(guardSays(), /"permissionDecision":"deny"/, `exempt + ${tier} is permitted`);
     }
-    write({ ...base, tier: "T9" });
-    assert.match(guardSays(), /"permissionDecision":"deny"/, "an invalid tier is blocked");
+    for (const bogus of ["T9", "t2"]) {
+      write({ ...base, tier: bogus });
+      const invalid = guardSays();
+      assert.match(invalid, /"permissionDecision":"deny"/, `an invalid tier (${bogus}) is blocked`);
+      assert.match(invalid, /MISSING OR INVALID/,
+        `…and the block does NOT claim the tier is missing from a file carrying ${bogus}`);
+    }
     // The hash covers the tier, so re-tiering an exemption is visible in the ledger as a new hash.
     const hashFor = (tier) => {
       writeFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "");
@@ -186,6 +197,71 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
       return JSON.parse(rows.at(-1)).declarationHash;
     };
     assert.notEqual(hashFor("T0"), hashFor("T3"), "the declarationHash covers the tier (a re-tier is visible)");
+
+    // THE LEDGER'S NAMED CONSUMER IS THE OWNER'S SPOT-CHECK, who cannot read a hash. An ALLOW row
+    // records the tier in CLEAR TEXT (the hash still covers it); a DENY records the value it
+    // rejected, or the trail asserts "missing" about a declaration that visibly carried one.
+    const ledger = path.join(dir, ".claude", "lane-ledger.jsonl");
+    const rows = () => readFileSync(ledger, "utf8").trim().split("\n").filter(Boolean).map((r) => JSON.parse(r));
+    writeFileSync(ledger, "");
+    write({ ...base, tier: "T2" });
+    guardSays();
+    assert.equal(rows().at(-1).tier, "T2", "an exempt ALLOW row carries the clear-text tier");
+    assert.equal(rows().at(-1).state, "exempt", "…on the exempt state");
+    // Absent THEN invalid, same state/decision/task/session/path and no hash on either. Without
+    // `declaredTier` in the DEDUPE KEY the second row is swallowed as a repeat and the trail loses
+    // the only field that distinguishes a tier-less deny from a T9 deny.
+    writeFileSync(ledger, "");
+    write(base);              // absent
+    guardSays();
+    write({ ...base, tier: "T9" });   // present but invalid
+    guardSays();
+    const denies = rows().filter((r) => r.state === "exempt-tier-missing");
+    assert.equal(denies.length, 2, "an absent-tier deny and a T9 deny are TWO rows, not one deduped row");
+    assert.equal(denies[0].declaredTier, undefined, "the ABSENT-tier deny records no value");
+    assert.equal(denies[1].declaredTier, "T9", "the INVALID-tier deny records the value it rejected");
+    // A NON-STRING tier was PRESENT and rejected. Recording nothing would make it indistinguishable
+    // from a genuinely tier-less declaration — and it would then be deduped away against one, which
+    // is the swallow this field exists to prevent, one TYPE over.
+    writeFileSync(ledger, "");
+    write(base);                       // absent
+    guardSays();
+    write({ ...base, tier: 7 });       // present, wrong type
+    guardSays();
+    const typed = rows().filter((r) => r.state === "exempt-tier-missing");
+    assert.equal(typed.length, 2, "an absent-tier deny and a NUMERIC-tier deny are TWO rows");
+    assert.equal(typed[1].declaredTier, "7 (number)", "a present non-string tier is recorded WITH its type, not dropped as absent");
+    // …and a STRING "7" is a different declaration, so it must not dedupe against the number 7.
+    write({ ...base, tier: "7" });
+    guardSays();
+    const bothSevens = rows().filter((r) => r.state === "exempt-tier-missing");
+    assert.equal(bothSevens.length, 3, "the number 7 and the string \"7\" are DIFFERENT rejected values");
+    assert.equal(bothSevens[2].declaredTier, "7", "…the string form is recorded verbatim");
+    // …and two DIFFERENT over-long values must not collide into one row through truncation, which
+    // is the same swallow one LENGTH over.
+    writeFileSync(ledger, "");
+    const long = (suffix) => `${"a".repeat(40)}${suffix}`;
+    write({ ...base, tier: long("X") });
+    guardSays();
+    write({ ...base, tier: long("Y") });
+    guardSays();
+    const longRows = rows().filter((r) => r.state === "exempt-tier-missing");
+    assert.equal(longRows.length, 2, "two distinct over-long tiers are TWO rows (truncation must not collide)");
+    assert.notEqual(longRows[0].declaredTier, longRows[1].declaredTier,
+      "…and they are recorded as DIFFERENT values");
+    for (const row of longRows) {
+      assert.ok(row.declaredTier.length < 120, "a recorded tier stays bounded (unvalidated input in an audit file)");
+      assert.match(row.declaredTier, /truncated/, "…and truncation is marked, not silent");
+    }
+    // NEGATIVE CONTROL for the clear-text tier: `tier` belongs on the exempt ALLOW row and nowhere
+    // else. Without this, production could attach it to every row carrying one — including these
+    // deny rows — and the positive assertion above would still pass.
+    assert.ok(rows().every((r) => r.state !== "exempt" ? r.tier === undefined : true),
+      "no non-exempt row carries a clear-text `tier`");
+    writeFileSync(ledger, "");
+    writeFileSync(decl, JSON.stringify({ mode: "in-thread", sessionId: "s1", taskId: "tier-task", tier: "T3" }) + "\n");
+    guardSays();
+    assert.equal(rows().at(-1).tier, undefined, "an in-thread ALLOW row carries no `tier` field (its state already names it)");
 
     // COMMIT-TIME: the every-lane floor requires it too.
     const commit = (msg) => spawnSync("git", ["-C", dir, "commit", "-q", "-m", msg], { encoding: "utf8" });
@@ -197,9 +273,105 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
     write(base);   // tier-less again
     const blocked = commit("tier-less exempt");
     assert.notEqual(blocked.status, 0, "commit floor: a tier-less exemption BLOCKS a code commit");
-    assert.match(blocked.stderr, /without a tier/, "…and the block names the missing tier");
+    assert.match(blocked.stderr, /without a valid tier/, "…and the block names the tier field");
+    // The commit floor told the SAME lie as the write-time guard: "without a tier" against a file
+    // carrying `tier:"T9"`. Both layers now admit both polarities.
+    write({ ...base, tier: "T9" });
+    const invalidCommit = commit("invalid-tier exempt");
+    assert.notEqual(invalidCommit.status, 0, "commit floor: an INVALID tier blocks too");
+    assert.match(invalidCommit.stderr, /MISSING OR INVALID/,
+      "…and the block does not claim the tier is missing from a file carrying T9");
     write({ ...base, tier: "T1" });
     assert.equal(commit("tiered exempt").status, 0, "the SAME commit passes once the tier is declared");
+  } finally { cleanup(); }
+});
+
+test("the gate-ladder sensor reports a TRUE cause for a tiered exemption (still T3, still fail-closed)", () => {
+  // The sensor deliberately does NOT honour an exemption's tier — honouring it would route to a
+  // LIGHTER ladder exactly when a review seat is already down, i.e. fail-OPEN in a sensor whose
+  // whole value is that it cannot under-gate. That resolution is Owner-ratified doctrine and is
+  // UNCHANGED here. What was wrong was the CAUSE it reported: `no-tier` / "no valid tier
+  // declaration" against a file visibly carrying one.
+  const { dir, cleanup } = adopt(["--skip-codex-prompt"]);
+  try {
+    const gate = path.join(dir, ".claude", "hooks", "guard-gate-ladder.mjs");
+    const decl = path.join(dir, ".claude", "task-lane.json");
+    const write = (obj) => writeFileSync(decl, JSON.stringify(obj) + "\n");
+    const ladderSays = () => {
+      const r = spawnSync("node", [gate], {
+        cwd: dir, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+        input: JSON.stringify({ session_id: "s1", tool_input: { command: "bash scripts/codex-gate.sh -m x" } }),
+      });
+      assert.equal(r.status, 0, `the sensor must exit 0, got ${r.status}: ${r.stderr}`);
+      return { out: r.stdout, err: r.stderr };
+    };
+    const base = { mode: "exempt", sessionId: "s1", taskId: "ladder-task", reason: "codex-down" };
+
+    // T1 is the DISCRIMINATING value: if the sensor ever started honouring the exempt tier, the
+    // fail-closed assertion reddens rather than passing silently.
+    write({ ...base, tier: "T1" });
+    const tiered = ladderSays();
+    assert.match(tiered.out, /FAIL-CLOSED to T3/, "a tiered exemption STILL fails closed to the strictest ladder");
+    assert.match(tiered.out, /exempt-tier-not-honoured/, "…under its own cause code");
+    assert.match(tiered.out, /deliberately NOT honoured/, "…and the text says the tier was not honoured");
+    assert.doesNotMatch(tiered.out, /no valid tier declaration/,
+      "the sensor must NOT claim the declaration lacks a valid tier — it visibly carries T1");
+    assert.match(tiered.err, /exempt tier not honoured/, "the stderr line carries the true cause too");
+    // The T3 ladder body is what actually gets surfaced (the resolution, not just the label).
+    assert.match(tiered.out, /REQUIRED LADDER for T3/, "and the T3 ladder is the one surfaced");
+
+    // THE MIRROR. A valid tier is not enough to call something an exemption: both enforcement
+    // controls reject an unsanctioned reason as malformed, so answering `exempt-tier-not-honoured`
+    // would describe a usable exemption that does not exist — the same false-cause defect one
+    // branch over. Falling through to the generic cause is the honest answer.
+    write({ ...base, reason: "because-I-said-so", tier: "T1" });
+    const unsanctioned = ladderSays();
+    assert.match(unsanctioned.out, /FAIL-CLOSED to T3/, "an unsanctioned reason still fails closed");
+    assert.doesNotMatch(unsanctioned.out, /exempt-tier-not-honoured/,
+      "…but must NOT be reported as a deliberately-not-honoured exemption");
+
+    // A tier-LESS exemption keeps the generic cause: there genuinely is no tier to not-honour.
+    write(base);
+    assert.match(ladderSays().out, /no valid tier declaration/, "a tier-less exemption keeps the generic cause");
+    // EVERY sanctioned reason, and every tier: dropping one from the sensor's set would otherwise
+    // leave these assertions green while that reason silently reported the false generic cause.
+    for (const reason of ["codex-down", "codex-quota", "trivial-edit"]) {
+      for (const tier of ["T0", "T1", "T2", "T3"]) {
+        const out = (write({ ...base, reason, tier }), ladderSays().out);
+        assert.match(out, /FAIL-CLOSED to T3/, `exempt ${reason}/${tier} still fails closed to T3`);
+        assert.match(out, /exempt-tier-not-honoured/, `exempt ${reason}/${tier} reports the true cause`);
+      }
+    }
+    // THE INVARIANT THIS SENSOR IS BUILT ON: no non-in-thread declaration may resolve below T3.
+    // The new branch must not have opened a route to a lighter ladder for ANY mode.
+    for (const decl of [
+      { mode: "lane", sessionId: "s1", taskId: "ladder-task", allowedFiles: ["src/x.mjs"] },
+      { mode: "exempt", sessionId: "s1", taskId: "ladder-task", reason: "codex-down", tier: "T0" },
+      { mode: "nonsense", sessionId: "s1", taskId: "ladder-task", tier: "T0" },
+      { mode: "in-thread", sessionId: "s1", taskId: "ladder-task", tier: "T9" },
+    ]) {
+      write(decl);
+      const out = ladderSays().out;
+      assert.match(out, /FAIL-CLOSED to T3/, `mode ${decl.mode}/${decl.tier} must resolve T3`);
+      assert.match(out, /REQUIRED LADDER for T3/, `…and surface the T3 ladder for ${decl.mode}/${decl.tier}`);
+    }
+    // Contrast direction: a real in-thread declaration still reports its declared tier.
+    write({ mode: "in-thread", sessionId: "s1", taskId: "ladder-task", tier: "T2" });
+    assert.match(ladderSays().out, /declared tier T2/, "an in-thread declaration still reports its tier");
+
+    // CHARACTERIZATION — NOT DESIRED, documented and deferred. This sensor HONOURS a symlinked
+    // declaration; both enforcement controls reject one as malformed. So on this one input the
+    // sensor still describes a declaration the controls refuse. The alignment the reason-check buys
+    // is PER-FIELD, not total, and this test exists so that divergence is visible rather than
+    // implied-absent. Delete it when the joint symlink fix lands (see the hook header's known quirks).
+    const real = path.join(dir, "real-declaration.json");
+    writeFileSync(real, JSON.stringify({ ...base, tier: "T1" }) + "\n");
+    rmSync(decl, { force: true });
+    symlinkSync(real, decl);
+    const symlinked = ladderSays().out;
+    assert.match(symlinked, /FAIL-CLOSED to T3/, "the resolution is still T3 (the safe direction holds)");
+    assert.match(symlinked, /exempt-tier-not-honoured/,
+      "DEFERRED: the sensor honours a symlinked declaration the enforcement controls call malformed");
   } finally { cleanup(); }
 });
 
