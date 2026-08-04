@@ -15,6 +15,15 @@ thread** · Builder = **{{DEFAULT_BUILDER}}** · Cold reviewer = **blind {{COLD_
 (fresh context) · Cross-family lens = **{{CROSS_FAMILY_LENS}}** · External gate = **{{EXTERNAL_GATE}}**
 · Artifact store = `docs/journal/`.
 
+**Frontier consult (`/frontier-review`) — role bindings:** frontier judge = **{{FRONTIER_MODEL}}**
+(the most capable, most expensive tier; judges the packet, nothing else) · workhorse =
+**{{DEFAULT_BUILDER}}** (builds the packet, resumes as decider) · Codex-lane frontier =
+**{{CODEX_FRONTIER_MODEL}}**. The installed agent frontmatter defaults —
+`.claude/agents/frontier-consult.md` `model: fable`, `.claude/agents/cold-reviewer.md`
+`model: opus` — are Claude-harness aliases; if your harness or bindings differ, re-bind here AND in
+those two files. Never remove frontier-consult's `tools: []` line: it is the mechanical packet-only
+cage the skill relies on.
+
 ## ⚠ Enforcement asymmetry — which controls bind which lane
 *(This is the canonical statement of the PM-portability caveat. The three PreToolUse guards are Claude
 Code harness registrations; a non-Claude lane never loads them.)*

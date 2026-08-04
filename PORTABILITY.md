@@ -185,6 +185,32 @@ unreadable-transcript and malformed-input allows — each asserted to exit 0, be
 classified as "allow" would let a hook that threw on every input pass every fail-open test. A sensor
 only ever seen allowing is a sensor never observed working.
 
+## The `/frontier-review` consult seat and the reviewer agents (v1.6)
+
+### The `tools: []` cage is a Claude-harness control — and only there
+
+`agents/frontier-consult.md` installs to `.claude/agents/`, the **Claude Code subagent registry**.
+Its frontmatter `tools: []` is enforced by that harness as *no tools at all*: the consult seat
+cannot read files, run commands, or spawn agents, so "judge only the packet" is mechanical, not a
+promise. Three honesty notes, same spirit as the enforcement-asymmetry table:
+
+- **No other lane has the cage.** A Codex / non-Claude lane has no `.claude/agents/` registry; its
+  consult path is the gate runner (`--with-gate-runners` + the `codex` CLI), where packet-only is
+  achieved by *what you send*, not by a tool restriction. The skill's packet rules are prose there.
+- **The cage is silent, not honest.** A caged seat can still *fabricate* claimed tool use. The
+  cage guarantees no tool ran; it does not make the answer well-grounded — the skill's sufficiency
+  test is what carries that.
+- **`init` verifies the INSTALLED file.** A kept `.claude/agents/frontier-consult.md` may be
+  edited or stale; if the literal `tools: []` line is gone, `init` warns that the cage is NOT
+  confirmed rather than certifying a seat it never looked at (the same pattern as the pre-commit
+  `pcTrusted` check and the shim read-back).
+
+The agent `model:` values (`fable`, `opus`) are **Claude-harness aliases, not kit doctrine** — the
+roles they hold (frontier judge, cold reviewer) are bound per repo in `core/BINDINGS.md`
+(`{{FRONTIER_MODEL}}`, `{{CODEX_FRONTIER_MODEL}}`), and an adopter on different model names edits
+both places. The skill is deliberately de-model-named: `/frontier-review` names the ROLE; alias it
+to your model's name if your team prefers.
+
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
 The Codex/Gemini gate runners are copied **verbatim** and are functionally repo-agnostic (the repo is
@@ -237,7 +263,8 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 - `[P]` (verbatim): `core/*` method docs, the three PreToolUse hooks, the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
-  dual-harness assets (`/thread-restart`), and the `skills/*` bodies + `skill-shims/*` (`/humanize`).
+  dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
+  `/frontier-review`), and the `agents/*` reviewer seat definitions (→ `.claude/agents/`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
   `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `core/OWNER_COMMS.md`, `.claude/kit.config.json`.
 

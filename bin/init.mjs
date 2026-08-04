@@ -558,6 +558,38 @@ function main() {
       : `  skills: ${verified} body reference(s) across ${installedShims.length} installed shim(s) all resolve on disk`);
   }
 
+  // 4e. AGENTS — the reviewer seat definitions (v1.6): every agents/<name>.md ships VERBATIM to
+  // .claude/agents/<name>.md, discovered from disk like the skills. These are Claude-harness assets
+  // (the Agent tool's subagent registry; a non-Claude lane never loads them — PORTABILITY.md).
+  // copyGuarded refuses to clobber without --force, so re-runs are idempotent. Failure-ISOLATED like
+  // the skills block, for the same reason: step 5 below registers the guards (a CONTROL), and an
+  // ENOTDIR from a `.claude/agents` that is a regular file must not abort the run before that merge.
+  try {
+    const agentsSrc = path.join(KIT_ROOT, "agents");
+    const agentFiles = existsSync(agentsSrc)
+      ? readdirSync(agentsSrc, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => e.name).sort()
+      : [];
+    let aInstalled = 0, aKept = 0;
+    for (const name of agentFiles) {
+      if (copyGuarded(path.join(agentsSrc, name), path.join(T, ".claude", "agents", name), force) === "written") aInstalled++; else aKept++;
+    }
+    if (agentFiles.length) {
+      log(`  .claude/agents/: ${aInstalled} review-seat agent(s) installed, ${aKept} kept${aKept ? " — may be STALE; --force to update" : ""} (Claude lane only)`);
+    }
+    // The frontier-consult seat's `tools: []` line is LOAD-BEARING: the harness enforces it as
+    // no-tools-at-all, which is what makes the skill's packet-only limit a control rather than a
+    // promise. Read the INSTALLED file (a kept one may be edited or stale — the pcTrusted pattern):
+    // if that literal line is gone, the cage is gone, and init must say so rather than certify it.
+    const consultDst = path.join(T, ".claude", "agents", "frontier-consult.md");
+    if (existsSync(consultDst)) {
+      let cageOk = false;
+      try { cageOk = /^tools: \[\]$/m.test(readFileSync(consultDst, "utf8")); } catch { cageOk = false; }
+      if (!cageOk) warn(`the installed .claude/agents/frontier-consult.md does NOT carry the literal "tools: []" line — the packet-only cage is NOT confirmed (the seat may hold tools). Re-run with --force to restore the kit's version.`);
+    }
+  } catch (e) {
+    warn(`the review-seat agents install failed (${e && (e.code || e.message) || "error"}) — .claude/agents/ may be missing or partial. The guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
+  }
+
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
   const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);

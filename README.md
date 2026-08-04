@@ -1,8 +1,45 @@
-# workflow-kit — v1.5.1
+# workflow-kit — v1.6.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.6
+
+**The frontier consult — a review seat that judges a packet, not a repo — plus the two reviewer
+agent definitions that make its limits mechanical.** The origin repo ran this seat under model-named
+commands; the kit ships it de-model-named as **`/frontier-review`**, with the models behind it bound
+as ROLES in your generated `core/BINDINGS.md` (adopters may alias the command to their own frontier
+model's name).
+
+- **`skills/frontier-review/` — a new shared-body dual-lane skill** (the v1.3 mechanism, unchanged:
+  one canonical body → `.agents/skills/frontier-review/`, a thin shim per harness). The procedure:
+  spend the changeset's **one frontier firing** on a **single distilled decision question** — by
+  default the fold-check on a remediation delta. The workhorse seat builds a **sufficiency-tested
+  packet** (could a reader who knows nothing else *disprove* the claim from what is here?), the
+  frontier seat judges **only that packet**, and the workhorse resumes as decider
+  (`core/FOUNDATIONS.md` § Principles P3: pin the decider). **`INSUFFICIENT PACKET` is a
+  first-class answer** — the seat names the gap and the skill re-sends once; it never fills gaps.
+- **`agents/` — a new `[P]` asset class: reviewer seat definitions, installed to
+  `.claude/agents/`.** Two ship: `cold-reviewer.md` (the blind cold seat — payload-only, read
+  tools, defaults `model: opus`) and `frontier-consult.md` (the consult seat, defaults
+  `model: fable`). The consult seat's frontmatter holds **`tools: []`, which the Claude harness
+  enforces as *no tools at all*** — packet-only is a control, not a promise. That line is
+  load-bearing: `init` copies agents verbatim, warns when an installed `frontier-consult.md` has
+  lost the literal line, and both test suites assert it survives. Like the skills, discovery is
+  from disk — a future agent is one file dropped in `agents/`, no `init` edit.
+- **`core/BINDINGS.md` gains the consult-role rows** (`{{FRONTIER_MODEL}}`,
+  `{{CODEX_FRONTIER_MODEL}}`): the skill names roles — frontier judge · workhorse · Codex-lane
+  frontier — and the generated bindings say which concrete models hold them.
+- **The Codex lane is referenced generically.** The skill points the Codex-lane consult at the
+  shipped gate runner (needs `init --with-gate-runners` + the `codex` CLI — see `PORTABILITY.md`);
+  the origin repo's Codex agent config (`.codex/agents/*.toml`) is **not** in this release — it
+  ships with the Codex-lane enforcement work reserved for v2.0.
+
+**v1.6 adds no `core/` method doc changes** — the skill and agents cite the existing doctrine
+(`core/REVIEW.md` payload contract and pass-types, `core/GATES.md` § Model · effort matrix,
+`core/WORKFLOW.md` § Gate). Upgrading: re-run `init` with your original flags (no `--force` needed —
+the new files simply install); then fill the two new placeholders in `core/BINDINGS.md`.
 
 ## What's new in v1.5.1
 
@@ -332,8 +369,15 @@ root `CLAUDE.md` / `AGENTS.md` entry stubs, `core/BINDINGS.md`, `core/REPO_INVAR
 
 **The skills** (`skills/` + `skill-shims/`, `[P]` — one shared body, a thin shim per harness):
 - `skills/humanize/SKILL.md` + `BULLET.md` — the canonical `/humanize` procedure → `.agents/skills/humanize/`.
+- `skills/frontier-review/SKILL.md` — the canonical `/frontier-review` consult procedure →
+  `.agents/skills/frontier-review/`.
 - `skill-shims/claude/*.md` → `.claude/skills/<name>/SKILL.md`; `skill-shims/codex/*.md` → your Codex
   prompts dir. `humanize-bullet` ships in both lanes as an **alias** shim with no body of its own.
+
+**The agents** (`agents/`, `[P]` — reviewer seat definitions → `.claude/agents/`, Claude lane only):
+- `agents/cold-reviewer.md` — the blind cold seat (payload-only mandate; `tools: Read, Grep, Glob`).
+- `agents/frontier-consult.md` — the consult seat; its `tools: []` is the harness-enforced
+  packet-only cage the `/frontier-review` skill relies on. Never remove that line.
 
 ## Adopt in three steps
 

@@ -264,6 +264,52 @@ test("init installs the dual-lane skills: one shared body, a shim per harness, i
   } finally { cleanup(); }
 });
 
+test("init installs the frontier-review skill + reviewer agents; the tools: [] cage survives verbatim", () => {
+  const { dir, codexDir, run, cleanup } = adopt();
+  try {
+    const body = path.join(dir, ".agents", "skills", "frontier-review", "SKILL.md");
+    const claudeShim = path.join(dir, ".claude", "skills", "frontier-review", "SKILL.md");
+    const codexShim = path.join(codexDir, "frontier-review.md");
+    const cold = path.join(dir, ".claude", "agents", "cold-reviewer.md");
+    const consult = path.join(dir, ".claude", "agents", "frontier-consult.md");
+    for (const [label, p] of [["shared body", body], ["Claude shim", claudeShim], ["Codex shim", codexShim],
+      ["cold-reviewer agent", cold], ["frontier-consult agent", consult]]) {
+      assert.ok(existsSync(p), `${label} installed at ${p}`);
+    }
+    // the shims point at a body that exists and carry no rules of their own (the shared-body invariant)
+    for (const shim of [claudeShim, codexShim]) {
+      assert.match(readFileSync(shim, "utf8"), /\.agents\/skills\/frontier-review\/SKILL\.md/, `${shim} names the shared body`);
+      assert.doesNotMatch(readFileSync(shim, "utf8"), /Word budget/, `${shim} must not duplicate the body's rules`);
+    }
+    // THE load-bearing line, asserted as the LITERAL string the harness parses. `tools: []` is what
+    // makes the consult seat's packet-only limit mechanical; a reworded or dropped line is the cage gone.
+    const consultText = readFileSync(consult, "utf8");
+    assert.match(consultText, /^tools: \[\]$/m, "frontier-consult carries the literal tools: [] line (the packet cage)");
+    assert.match(readFileSync(cold, "utf8"), /^tools: Read, Grep, Glob$/m,
+      "cold-reviewer keeps its read-only toolset (NOT caged — it must verify claims against the code)");
+    // idempotent: a plain re-run keeps user edits (mutated first, so a regressed overwrite cannot hide)
+    const edited = {};
+    for (const p of [body, consult]) { edited[p] = readFileSync(p, "utf8") + "\n<!-- user edit: keep me -->\n"; writeFileSync(p, edited[p]); }
+    run();
+    for (const p of [body, consult]) assert.equal(readFileSync(p, "utf8"), edited[p], `re-run KEEPS the user-edited ${p} (no clobber without --force)`);
+    // The cage check reads the INSTALLED file (a kept agent may be edited or stale): break the line
+    // and a plain re-run must WARN; --force must restore the kit's verbatim agent. Both directions.
+    writeFileSync(consult, consultText.replace(/^tools: \[\]$/m, "tools: '*'"));
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(r.status, 0, `init should exit 0: ${r.stderr}`);
+    assert.match(r.stderr, /packet-only cage is NOT confirmed/, "init warns when the installed seat has lost the cage");
+    run(["--force"]);
+    assert.equal(readFileSync(consult, "utf8"), readFileSync(path.join(KIT, "agents", "frontier-consult.md"), "utf8"),
+      "--force restores the kit's frontier-consult verbatim ([P]: overwritten, no backup)");
+    assert.match(readFileSync(consult, "utf8"), /^tools: \[\]$/m, "…with the cage line back");
+    const clean = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(clean.status, 0, `init should exit 0: ${clean.stderr}`);
+    assert.doesNotMatch(clean.stderr, /cage is NOT confirmed/, "no cage warning against a healthy installed seat (discriminates, no cry-wolf)");
+  } finally { cleanup(); }
+});
+
 test("init generates core/OWNER_COMMS.md as [G]; --owner-name fills only the name", () => {
   const plain = adopt();
   try {
