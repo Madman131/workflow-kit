@@ -739,6 +739,49 @@ test("init generates core/OWNER_COMMS.md as [G]; --owner-name fills only the nam
   } finally { named.cleanup(); }
 });
 
+test("rule 8 ships in the GENERATED Owner contract and in the INSTALLED /humanize body", () => {
+  // Read what an ADOPTER gets, never the template: a rule that survives in templates/ and dies in
+  // generation is the failure this whole [G] path can have, and grepping the source would miss it.
+  const named = adopt(["--owner-name", "Alex"]);
+  try {
+    const doc = readFileSync(path.join(named.dir, "core", "OWNER_COMMS.md"), "utf8");
+    const rule8 = /^8\. \*\*Questions and recommendations never blend in\.\*\*([\s\S]*?)(?=\n\n)/m.exec(doc);
+    assert.ok(rule8, "the generated contract carries rule 8");
+    for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**"]) {
+      assert.ok(rule8[0].includes(lead), `rule 8 names the ${lead} lead verbatim — the label IS the rule`);
+    }
+    assert.ok(rule8[0].includes("Alex"), "the Owner's real name reached rule 8; a rule addressed to {{OWNER_NAME}} names nobody");
+    assert.doesNotMatch(doc, /^9\. /m, "the rules stop at 8 — a duplicate would renumber silently");
+    // The labels alone are not the rule: a version that kept the three strings and dropped the SHAPE
+    // requirement would satisfy every assertion above while permitting exactly what rule 8 forbids.
+    assert.match(rule8[0], /bolded, on its own bulleted line, with\s+a labeled lead/,
+      "rule 8 still states the SHAPE it requires, not only the labels");
+
+    // The count sweep, made mechanical on the GENERATED side: the claim in the release note is that
+    // no artifact an adopter receives states a rule TOTAL, so a later edit that reintroduces one
+    // (in the contract or in the skill that repairs against it) must go red here, not in review.
+    // A detector must OVER-trigger relative to the thing it warns about, or it is decoration. The
+    // first cut matched "eight rules" and "rules 1-8" and sailed past "eight numbered rules",
+    // "rules 1 through 8" and "rules 1 to 8" — a seat found all three. It allows up to two words
+    // between the number and "rules", and spells the range separators out. It is still a blacklist
+    // of spellings, not a proof: a genuinely novel phrasing of a total would pass, and the sweep in
+    // the release note is what covers that.
+    const COUNT_CLAIM = /\b(six|seven|eight|nine|ten|\d+)\s+(?:\w+\s+){0,2}rules\b|\brules\s*1\s*(?:[-–—]|through|thru|to)\s*\d/i;
+    for (const rel of [["core", "OWNER_COMMS.md"], [".agents", "skills", "humanize", "SKILL.md"],
+      [".agents", "skills", "humanize", "BULLET.md"]]) {
+      const generated = readFileSync(path.join(named.dir, ...rel), "utf8");
+      assert.doesNotMatch(generated, COUNT_CLAIM,
+        `${path.join(...rel)} states no rule TOTAL — a count is what goes stale when a rule is added`);
+    }
+
+    // The skill that repairs a message against these rules must know about the new one, or /humanize
+    // certifies as clean a message rule 8 rejects.
+    const skill = readFileSync(path.join(named.dir, ".agents", "skills", "humanize", "SKILL.md"), "utf8");
+    assert.match(skill, /buried ask/, "the /humanize miss list checks for a buried ask");
+    assert.match(skill, /\(rule 8\)/, "…and points at the rule it comes from");
+  } finally { named.cleanup(); }
+});
+
 test("the Stop registration merges into settings.json exactly once, confirmed by read-back", () => {
   const { dir, run, cleanup } = adopt();
   try {
