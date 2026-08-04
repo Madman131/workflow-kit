@@ -35,6 +35,7 @@
 // extra steps: the dropped target is exactly the one an attacker puts last.
 
 import path from "node:path";
+import { realpathSync } from "node:fs";
 
 // WHICH TREE AM I GUARDING? The Claude harness sets CLAUDE_PROJECT_DIR; Codex does not set it or
 // anything like it. Getting this wrong is not a cosmetic error — a root that does not match the tree
@@ -89,10 +90,83 @@ export function resolvePatchBase(input, projectRoot) {
  */
 export function toRepoRelative(target, root, base) {
   if (typeof target !== "string" || !target) return null;
-  const abs = path.isAbsolute(target) ? target : path.resolve(base, target);
-  const rel = path.relative(root, abs);
+  // PHYSICAL, not lexical. `/tmp` is a symlink to `/private/tmp` on macOS, and this kit's own test
+  // suites run under /tmp-rooted TMPDIRs — so an install registering `--project-dir /tmp/repo`
+  // against a payload reporting `/private/tmp/repo/...` produced a `..` relative path and BOTH
+  // sensors silently skipped the edit. Resolving only the lexical form is the same class of defect
+  // as comparing raw targets: it fails silently, on an ordinary supported layout, not a hostile one.
+  // `realOrSelf` degrades to the lexical path when a component does not exist yet — which is the
+  // normal case for a file being CREATED, and must not be turned into a miss.
+  const realOrSelf = (p) => { try { return realpathSync(p); } catch { return p; } };
+  const rootReal = realOrSelf(path.resolve(root));
+  const baseReal = realOrSelf(path.resolve(base));
+  const abs = path.isAbsolute(target) ? target : path.resolve(baseReal, target);
+  // Resolve the deepest EXISTING ancestor, then re-attach the remainder: realpath on the whole path
+  // throws for a not-yet-created file, and swallowing that would silently drop every new file.
+  let head = abs, tail = "";
+  for (;;) {
+    const resolved = (() => { try { return realpathSync(head); } catch { return null; } })();
+    if (resolved !== null) { head = resolved; break; }
+    const parent = path.dirname(head);
+    if (parent === head) break;
+    tail = tail ? path.join(path.basename(head), tail) : path.basename(head);
+    head = parent;
+  }
+  const absReal = tail ? path.join(head, tail) : head;
+  const rel = path.relative(rootReal, absReal);
   if (!rel || rel.startsWith("..")) return null;
   return rel.split(path.sep).join("/");
+}
+
+/**
+ * Split ONE apply_patch envelope into its PER-TARGET sections: Map(target path -> that target's
+ * own lines). A directive opens a section that runs until the next directive.
+ *
+ * WHY THIS EXISTS. A consumer that needs "what text is this write adding to THIS file" previously
+ * had two bad options: hand every target the whole envelope (one file's marker fires on a sibling
+ * that owes nothing) or hand a multi-target envelope to nobody (a real change to one file goes
+ * unseen). The cross-family seat found BOTH, one round apart — the second was my own fix for the
+ * first. The envelope is already parsed here for targets; sectioning it is the same walk, so the
+ * grammar stays in ONE place rather than being re-derived by each sensor.
+ *
+ * `Move to` maps BOTH endpoints to the same section, matching how the target list treats them.
+ */
+export function envelopeSections(command) {
+  const sections = new Map();
+  if (typeof command !== "string" || !command) return sections;
+  const lines = command.split(/\r?\n/);
+  let current = [];
+  let owners = [];
+  const flush = () => { for (const o of owners) sections.set(o, current.join("\n")); };
+  let lastSource = null;
+  for (const raw of lines) {
+    const line = raw.trimStart();
+    const isDirective = line.startsWith("*** ") && !NON_TARGET_DIRECTIVE_RE.test(line.trimEnd());
+    const m = isDirective ? DIRECTIVE_RE.exec(line) : null;
+    if (m) {
+      flush();
+      const [, kind, rawPath] = m;
+      const target = rawPath.trim();
+      if (kind === "Move to") {
+        // The rename's destination joins the section its SOURCE opened — both endpoints are one edit.
+        owners = lastSource ? [lastSource, target] : [target];
+        current = current.length ? current : [];
+        continue;
+      }
+      lastSource = target;
+      owners = [target];
+      current = [];
+      continue;
+    }
+    // Envelope GRAMMAR (`*** Begin Patch`, `*** End Patch`, …) is not any target's content. Letting
+    // it fall through would put the closing marker inside the last section — harmless for today's
+    // reader, but a section that carries text the target never contained is a small lie that the
+    // next consumer inherits.
+    if (line.startsWith("*** ")) continue;
+    if (owners.length) current.push(raw);
+  }
+  flush();
+  return sections;
 }
 
 // Directives that NAME A TARGET.

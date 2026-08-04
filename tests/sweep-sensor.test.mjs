@@ -8,9 +8,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import {
   parseArgs, resolveFiles, resolveSeat, allRegions, parseSweepOutput, regionsAgree,
@@ -21,6 +23,7 @@ import { sweepOwed, classifyFragment, isSkillFile, SKILL_ROOTS, incomingText } f
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
 import { owesMutationRecord, emissionText } from "../hooks/sensor-mutation-owed.mjs";
 
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scratch = () => mkdtempSync(path.join(os.tmpdir(), "kit-sweep-"));
 
 // ---------------------------------------------------------------- seat resolution (fail-closed)
@@ -295,6 +298,29 @@ test("a target is CANONICALISED before it is matched — `./core/X.md` is not a 
   assert.equal(toRepoRelative("../escape.md", root, base), null);
   assert.equal(toRepoRelative("", root, base), null);
 
+  // PHYSICAL vs LEXICAL. `/tmp` is a symlink to `/private/tmp` on macOS and this kit's own suites
+  // run under /tmp-rooted TMPDIRs, so a root registered through the link and a target reported
+  // through the real path produced a `..` relative and BOTH sensors silently skipped the edit — on
+  // a layout the kit explicitly supports, not a hostile one. Modelled with an explicit symlink so
+  // the test proves the property anywhere, not just where /tmp happens to be linked.
+  {
+    const base = scratch();
+    try {
+      const real = path.join(base, "realrepo");
+      const link = path.join(base, "linkrepo");
+      mkdirSync(path.join(real, "core"), { recursive: true });
+      writeFileSync(path.join(real, "core", "WORKFLOW.md"), "x");
+      symlinkSync(real, link);
+      assert.equal(toRepoRelative(path.join(real, "core", "WORKFLOW.md"), link, link), "core/WORKFLOW.md",
+        "a root reached through a symlink still recognises its own file");
+      // A file that does not exist YET (the create case) must still resolve — realpath throws on it,
+      // and swallowing that would drop every new file.
+      assert.equal(toRepoRelative(path.join(real, "core", "NEW.md"), link, link), "core/NEW.md");
+      // …and genuinely-outside still returns null. The fix must not widen the sensor's reach.
+      assert.equal(toRepoRelative(path.join(base, "elsewhere.md"), link, link), null);
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  }
+
   // END TO END through the scope rule: the canonical spelling and the `./` spelling agree.
   const governed = ["core/WORKFLOW.md"];
   const readDoc = () => "> **CLASS: BINDING**";
@@ -302,35 +328,76 @@ test("a target is CANONICALISED before it is matched — `./core/X.md` is not a 
   assert.equal(viaDot?.reason, "binding-doc", "the `./` spelling now reaches the rule it always should have");
 });
 
+test("END TO END through main(): a `./`-spelled target still reaches the reminder", () => {
+  // The round-1 path fix was proven only through the pure helpers, so REVERTING the call sites in
+  // main() left those tests green — decorative for the integration point, as the round-2 seat said.
+  // This drives the real stdin handler and asserts on what the hook actually WRITES.
+  const dir = scratch();
+  try {
+    mkdirSync(path.join(dir, "core"), { recursive: true });
+    writeFileSync(path.join(dir, "core", "WORKFLOW.md"), "> **CLASS: BINDING**\n\nrules");
+    const ev = JSON.stringify({
+      tool_name: "apply_patch",
+      cwd: dir,
+      tool_input: { command: "*** Begin Patch\n*** Update File: ./core/WORKFLOW.md\n+edited\n*** End Patch" },
+    });
+    const r = spawnSync(process.execPath,
+      [path.join(ROOT_DIR, "hooks", "sensor-sweep-owed.mjs"), "--project-dir", dir],
+      { input: ev, encoding: "utf8" });
+    assert.equal(r.status, 0, "a SENSOR never denies — exit 0 even when it emits");
+    assert.match(r.stderr, /SWEEP OWED/, "the `./` spelling reaches the reminder through the real wiring");
+    assert.match(r.stderr, /core\/WORKFLOW\.md/, "…naming the canonicalised path, not the raw one");
+
+    // CLEAN SIDE through the same wiring: ordinary ungoverned work stays silent.
+    const quiet = JSON.stringify({
+      tool_name: "apply_patch", cwd: dir,
+      tool_input: { command: "*** Begin Patch\n*** Update File: ./src/app.mjs\n+code\n*** End Patch" },
+    });
+    const q = spawnSync(process.execPath,
+      [path.join(ROOT_DIR, "hooks", "sensor-sweep-owed.mjs"), "--project-dir", dir],
+      { input: quiet, encoding: "utf8" });
+    assert.equal(q.status, 0);
+    assert.doesNotMatch(q.stderr, /SWEEP OWED/, "ungoverned code owes nothing — noise here kills the control");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("a DELETED or quoted marker does not promote, and one envelope target cannot speak for another", () => {
   // Both halves found by the cross-family seat. The design's premise is that a sensor firing on
   // ordinary work gets switched off, so a false FIRE here is a real defect, not harmless noise.
   const envDeletes = { tool_input: { command: '*** Update File: core/GATES.md\n-> **CLASS: BINDING** was here\n+plain text\n' } };
   const one = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
-  assert.doesNotMatch(incomingText(envDeletes, one), /CLASS: BINDING/,
+  assert.doesNotMatch(incomingText(envDeletes, one, "core/GATES.md"), /CLASS: BINDING/,
     "a REMOVED line is not an addition — reading it as one inverts the meaning");
 
   // …so a REFERENCE doc whose hunk merely deletes the marker stays silent.
   const governed = ["core/GATES.md"];
   const readDoc = () => "> **CLASS: REFERENCE**";
-  assert.equal(sweepOwed("core/GATES.md", incomingText(envDeletes, one), { governed, readDoc }), null);
+  assert.equal(sweepOwed("core/GATES.md", incomingText(envDeletes, one, "core/GATES.md"), { governed, readDoc }), null);
 
-  // MULTI-target: no per-target split exists, so no fragment is attributed at all — the disk class
-  // decides. Anything else lets one file's marker fire on a sibling that owes nothing.
+  // MULTI-target: each file gets ITS OWN section, so the promotion fires on the file being promoted
+  // and the sibling stays silent. Getting this wrong failed in BOTH directions one review round
+  // apart — first the whole envelope went to every target (false FIRE on siblings), then a
+  // multi-target envelope went to nobody (false SILENCE on the load-bearing promotion, since the
+  // pre-write disk class still reads REFERENCE and the obligation is PRE-fold). Both are asserted
+  // here so neither can come back.
   const multi = { shape: "apply_patch", targets: ["core/GATES.md", "core/WORKFLOW.md"], ok: true };
-  const envAdds = { tool_input: { command: '*** Update File: core/WORKFLOW.md\n+> **CLASS: BINDING**\n' } };
-  assert.equal(incomingText(envAdds, multi), "", "a multi-target envelope contributes NO fragment");
-  assert.equal(sweepOwed("core/GATES.md", incomingText(envAdds, multi), { governed, readDoc }), null,
-    "the REFERENCE sibling stays silent instead of inheriting the other file's marker");
+  const envMulti = { tool_input: { command:
+    "*** Begin Patch\n*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n*** Update File: core/WORKFLOW.md\n+unrelated edit\n*** End Patch" } };
+  assert.equal(sweepOwed("core/GATES.md", incomingText(envMulti, multi, "core/GATES.md"), { governed, readDoc })?.reason,
+    "binding-doc", "the file BEING PROMOTED fires, even though a second file is in the same patch");
+  assert.equal(sweepOwed("core/WORKFLOW.md", incomingText(envMulti, multi, "core/WORKFLOW.md"), { governed, readDoc }), null,
+    "…and the sibling does NOT inherit the other file's marker");
+  // Envelope grammar is nobody's content — a section must not carry the closing marker.
+  assert.doesNotMatch(incomingText(envMulti, multi, "core/WORKFLOW.md"), /\*\*\* End Patch/);
 
   // CLEAN SIDE — the promotion case this fragment exists for still fires on a single-target add.
   const single = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
   const promote = { tool_input: { command: '*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n' } };
-  assert.equal(sweepOwed("core/GATES.md", incomingText(promote, single), { governed, readDoc })?.reason,
+  assert.equal(sweepOwed("core/GATES.md", incomingText(promote, single, "core/GATES.md"), { governed, readDoc })?.reason,
     "binding-doc", "a real single-target promotion must STILL fire — the fix must not silence it");
 
   // …and the Claude lane is untouched by any of this.
-  assert.equal(incomingText({ tool_input: { new_string: "> **CLASS: BINDING**" } }, { shape: "claude", targets: ["a"] }),
+  assert.equal(incomingText({ tool_input: { new_string: "> **CLASS: BINDING**" } }, { shape: "claude", targets: ["a"] }, "a"),
     "> **CLASS: BINDING**");
 });
 

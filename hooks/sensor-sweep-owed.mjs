@@ -38,7 +38,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classify, governedDocs, CLASS_RE, loadKitConfig } from "../scripts/check-doc-size.mjs";
-import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative } from "./payload-targets.mjs";
+import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative, envelopeSections } from "./payload-targets.mjs";
 
 
 // The two skill trees an ADOPTER carries (`bin/init.mjs`): `.agents/skills/` holds the canonical
@@ -101,28 +101,30 @@ export function sweepOwed(rel, fragment, { governed = [], readDoc = () => "" } =
 }
 
 /**
- * The incoming text a promotion could hide in — pure, so tests bite directly.
+ * The incoming text a promotion could hide in, FOR ONE TARGET — pure, so tests bite directly.
  *
  * This exists for ONE job: catching a write that PROMOTES a document to BINDING before the file on
- * disk says so. My first cut handed the whole apply_patch envelope to every target and called
- * over-attribution "the direction this sensor is allowed to be wrong in". It is not — the
- * cross-family seat produced two ordinary writes that fire on work owing nothing, and this design's
- * own premise is that a sensor firing on ordinary work gets switched off.
+ * disk says so. Getting the scope of "the incoming text" wrong has now failed in BOTH directions,
+ * one review round apart, and the second failure was my own fix for the first:
  *
- *   (a) A hunk that DELETES or merely quotes `CLASS: BINDING` promotes nothing. Reading a removed
- *       line as an addition inverts the meaning, so deletion lines are stripped first.
- *   (b) In a MULTI-target envelope one file's marker cannot be attributed to another, and this
- *       parser does not split an envelope per target. Rather than guess, a multi-target write falls
- *       back to each file's class ON DISK — the honest answer. It costs only a
- *       promotion-inside-a-multi-target-patch, which the disk class catches on the next edit.
+ *   · Handing every target the WHOLE envelope fired on siblings that owed nothing — and a hunk
+ *     that DELETED or quoted `CLASS: BINDING` read as a promotion. False FIRE; a sensor that cries
+ *     wolf on ordinary work gets switched off.
+ *   · Handing a MULTI-target envelope to nobody then silenced the real promotion case: one patch
+ *     that promotes `core/GATES.md` and touches any second file produced no obligation at all,
+ *     while the pre-write disk class still said REFERENCE. False SILENCE on the load-bearing case,
+ *     and "the next edit will catch it" is no answer when the obligation is PRE-fold.
+ *
+ * The fix is neither fallback: ask the envelope grammar for THIS target's own section. Deletion
+ * lines are still stripped — a removed marker promotes nothing — and a `+`-prefixed markdown list
+ * item survives, because in a patch it reads as `+- item`, not `- item`.
  */
-export function incomingText(ev, extracted) {
-  if (extracted?.shape === "apply_patch") {
-    if ((extracted.targets?.length ?? 0) !== 1) return "";
-    return String(ev?.tool_input?.command ?? "")
-      .split("\n").filter((l) => !l.startsWith("-")).join("\n");
+export function incomingText(ev, extracted, target) {
+  if (extracted?.shape !== "apply_patch") {
+    return ev?.tool_input?.new_string ?? ev?.tool_input?.content ?? "";
   }
-  return ev?.tool_input?.new_string ?? ev?.tool_input?.content ?? "";
+  const section = envelopeSections(ev?.tool_input?.command ?? "").get(target) ?? "";
+  return section.split("\n").filter((l) => !l.startsWith("-")).join("\n");
 }
 
 const REMINDER = (hits) =>
@@ -169,13 +171,11 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
       governed = [];
     }
 
-    const fragment = incomingText(ev, extracted);
-
     const hits = [];
     for (const target of extracted.targets) {
       const rel = toRepoRelative(target, root, patchBase);
       if (rel === null) continue;
-      const hit = sweepOwed(rel, fragment, {
+      const hit = sweepOwed(rel, incomingText(ev, extracted, target), {
         governed,
         readDoc: (r) => { try { return readFileSync(path.join(root, r), "utf8"); } catch { return ""; } },
       });
