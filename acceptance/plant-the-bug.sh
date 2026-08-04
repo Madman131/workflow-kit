@@ -114,13 +114,37 @@ SK_CODEX_ALIAS="$CODEX_PROMPTS/humanize-bullet.md"
 [ -f "$SK_ALIAS" ]       && ok "ALIAS shim (humanize-bullet, no body of its own) lands too"   || bad "alias shim missing at $SK_ALIAS"
 [ -f "$SK_CODEX" ]       && ok "Codex skill prompt lands in the (overridable) prompts dir"    || bad "Codex skill prompt missing at $SK_CODEX"
 [ -f "$SK_CODEX_ALIAS" ] && ok "Codex ALIAS prompt lands in the prompts dir"                  || bad "Codex alias prompt missing at $SK_CODEX_ALIAS"
+# v1.6: the frontier-review consult skill rides the SAME mechanism (a second body proves the
+# discovery-from-disk claim — two files dropped in, no init edit).
+FR_BODY="$ADOPTER/.agents/skills/frontier-review/SKILL.md"
+FR_INVOKE="$ADOPTER/.agents/skills/frontier-review/INVOKE.md"
+FR_CLAUDE="$ADOPTER/.claude/skills/frontier-review/SKILL.md"
+FR_CODEX="$CODEX_PROMPTS/frontier-review.md"
+[ -f "$FR_BODY" ]   && ok "shared body lands at .agents/skills/frontier-review/SKILL.md (v1.6)" || bad "frontier-review body missing at $FR_BODY"
+[ -f "$FR_INVOKE" ] && ok "its reference-layer sibling (INVOKE.md) lands with it"               || bad "INVOKE.md missing at $FR_INVOKE"
+[ -f "$FR_CLAUDE" ] && ok "Claude shim lands at .claude/skills/frontier-review/SKILL.md"        || bad "frontier-review Claude shim missing at $FR_CLAUDE"
+[ -f "$FR_CODEX" ]  && ok "Codex frontier-review prompt lands in the prompts dir"               || bad "frontier-review Codex prompt missing at $FR_CODEX"
+# The body is budget-capped, so on-demand mechanics live in the sibling. A pointer to a file that
+# is NOT installed dead-ends exactly like a shim naming a missing body.
+BODY_REFS_OK=1
+for ref in $(grep -oE '\.agents/skills/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.md' "$FR_BODY" | sort -u); do
+  [ -f "$ADOPTER/$ref" ] || { bad "the frontier-review body points at $ref, which is NOT installed"; BODY_REFS_OK=0; }
+done
+[ "$BODY_REFS_OK" = 1 ] && ok "every reference-layer pointer in the body resolves on disk"
+# The five honesty corrections must stay in the BODY — a correction of a false claim must never sit
+# in a layer the executor may not load.
+CORRECTIONS_OK=1
+for probe in 'nothing counts it' 'does not execute the enforcement' 'never substitutes' 'NOT packet-only' 'the doctrine excerpts it is judged against'; do
+  grep -q "$probe" "$FR_BODY" || { bad "an honesty correction left the executor-loaded body: '$probe'"; CORRECTIONS_OK=0; }
+done
+[ "$CORRECTIONS_OK" = 1 ] && ok "all 5 honesty corrections are in the BODY, not the reference layer"
 # syntactically valid per harness, same convention as the commands.
 head -1 "$SK_CLAUDE" | grep -q '^---$' && ok "Claude skill shim opens with YAML frontmatter" || bad "Claude skill shim missing YAML frontmatter"
 head -1 "$SK_CODEX"  | grep -q '^# '   && ok "Codex skill prompt opens with a markdown H1"    || bad "Codex skill prompt missing an H1"
 # THE LOAD-BEARING ONE: every shim points at a body that EXISTS. A shim naming a moved or renamed body
 # is a menu entry that dead-ends — the failure this mechanism must not be able to ship silently.
 SHIM_REFS_OK=1
-for shim in "$SK_CLAUDE" "$SK_ALIAS" "$SK_CODEX" "$SK_CODEX_ALIAS"; do
+for shim in "$SK_CLAUDE" "$SK_ALIAS" "$SK_CODEX" "$SK_CODEX_ALIAS" "$FR_CLAUDE" "$FR_CODEX"; do
   REFS="$(grep -oE '\.agents/skills/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.md' "$shim" | sort -u)"
   # A shim that names NO body is a FAILURE, not a pass. Without this, the loop below runs zero times
   # and the whole check reports success for precisely the broken artifact it exists to catch — and
@@ -144,11 +168,104 @@ else
 fi
 printf '%s' "$SHIM_RERUN" | grep -q "all resolve on disk" && bad "init printed a clean bill of health alongside a dangling shim" || ok "init does NOT also claim every reference resolves"
 # and the shims carry NO rules of their own — the whole point of one shared body.
-if grep -q "Word budget" "$SK_CLAUDE" || grep -q "Word budget" "$SK_CODEX"; then
+if grep -q "Word budget" "$SK_CLAUDE" || grep -q "Word budget" "$SK_CODEX" || grep -q "Word budget" "$FR_CLAUDE" || grep -q "Word budget" "$FR_CODEX"; then
   bad "a shim duplicates the body's rules — the shared-body invariant is broken"
 else
   ok "shims hold no rules of their own (the body is the only copy)"
 fi
+
+echo
+echo "(agents) reviewer seat definitions — Claude-lane [P] assets; the tools: [] cage survives verbatim"
+AG_COLD="$ADOPTER/.claude/agents/cold-reviewer.md"
+AG_CONSULT="$ADOPTER/.claude/agents/frontier-consult.md"
+[ -f "$AG_COLD" ]    && ok "cold-reviewer lands at .claude/agents/cold-reviewer.md"       || bad "cold-reviewer missing at $AG_COLD"
+[ -f "$AG_CONSULT" ] && ok "frontier-consult lands at .claude/agents/frontier-consult.md" || bad "frontier-consult missing at $AG_CONSULT"
+# THE load-bearing line, as the LITERAL string the harness parses: `tools: []` is what makes the
+# consult seat's packet-only limit mechanical rather than a promise.
+grep -q '^tools: \[\]$' "$AG_CONSULT" && ok "frontier-consult carries the LITERAL 'tools: []' line (the packet cage is mechanical)" || bad "frontier-consult lost its tools: [] line — the cage is gone"
+grep -q '^tools: \[\]$' "$AG_COLD" && bad "cold-reviewer must NOT be tool-less (it verifies claims against the code)" || ok "cold-reviewer is NOT caged (keeps its read tools; the cage is only the consult seat's)"
+# init verifies the INSTALLED seat (it must not certify a file it never looked at), probed at
+# SEVERAL points. A check proven against ONE broken shape is proven against that shape only: a
+# relaxed anchor and a whole-file scope both survived a single-mutation suite (cold-seat battery).
+# Every run asserts EXIT STATUS too — a crashed init prints no warning, which would otherwise read
+# as the healthy direction passing.
+cp "$AG_CONSULT" "$WORK/consult.orig"
+init_out() { # -> stdout+stderr of a plain re-run; fails loudly if init did not exit 0
+  local out rc
+  out="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)"
+  rc=$?
+  [ "$rc" -eq 0 ] || bad "init exited $rc during the cage probe (a crash is not a clean result)"
+  printf '%s' "$out"
+}
+fm_swap() { # replace the frontmatter cage line with $1
+  node -e '
+    const fs=require("fs"), p=process.argv[1];
+    fs.writeFileSync(p, fs.readFileSync(process.argv[3],"utf8").replace(/^tools: \[\]$/m, process.argv[2]));
+  ' "$AG_CONSULT" "$1" "$WORK/consult.orig"
+}
+CAGE_OK=1
+for LINE in "tools: '*'" "tools: [Read]" "tools: Read, Bash, Write" "# tools: []"; do
+  fm_swap "$LINE"
+  init_out | grep -q 'packet-only cage is NOT confirmed' || { bad "init must warn when the frontmatter reads: $LINE"; CAGE_OK=0; }
+done
+[ "$CAGE_OK" = 1 ] && ok "init WARNS on every uncaged frontmatter shape probed (4), reading the INSTALLED file"
+# THE false pass a whole-file grep allows: frontmatter GRANTS tools while a body line spells the
+# cage. The harness parses only the frontmatter; so must the check.
+node -e '
+  const fs=require("fs"), p=process.argv[1];
+  fs.writeFileSync(p, fs.readFileSync(process.argv[2],"utf8").replace(/^tools: \[\]$/m, "tools: Read, Bash, Write")
+    + "\nMaintainer note — the kit default for this seat is:\ntools: []\n");
+' "$AG_CONSULT" "$WORK/consult.orig"
+init_out | grep -q 'packet-only cage is NOT confirmed' && ok "a BODY line spelling 'tools: []' does NOT certify a frontmatter that grants tools (frontmatter-scoped)" || bad "whole-file scope: init certified an uncaged seat because the body mentioned the cage"
+# …and the converse — spellings YAML reads as an empty list must NOT warn (a cry-wolf check is one
+# adopters learn to ignore).
+NOFALSE=1
+for LINE in "tools: []  " "tools: [] # none at all" "tools: [ ]"; do
+  fm_swap "$LINE"
+  init_out | grep -q 'cage is NOT confirmed' && { bad "false warning against a genuinely empty list: $LINE"; NOFALSE=0; }
+done
+[ "$NOFALSE" = 1 ] && ok "no FALSE cage warning for the empty-list spellings YAML accepts (3 probed)"
+# ABSENCE IS NOT A PASS: the skill names a subagent_type, so a seat that is not installed dead-ends
+# the consult. Produced the way it really happens — the installed body names a seat that does not
+# exist (a renamed / half-updated skill). Deleting the installed agent does NOT produce this state:
+# init just reinstalls it, which is why the check keys on the NAME rather than a fixed filename.
+cp "$WORK/consult.orig" "$AG_CONSULT"
+cp "$FR_BODY" "$WORK/frbody.orig"
+sed -i.bak 's/subagent_type: "frontier-consult"/subagent_type: "frontier-consult-v2"/' "$FR_BODY" && rm -f "$FR_BODY.bak"
+ABSENT_OUT="$(init_out)"
+printf '%s' "$ABSENT_OUT" | grep -q 'frontier-consult-v2' && printf '%s' "$ABSENT_OUT" | grep -q 'is NOT installed' \
+  && ok "a named seat that is NOT installed is REPORTED (zero checks must not read as zero failures)" \
+  || bad "init stayed silent about a subagent_type the skill names but the adopter does not have"
+printf '%s' "$ABSENT_OUT" | grep -q 'cage ("tools: \[\]") is present' && bad "init certified a cage on a seat it never checked" || ok "…and it does not also certify a cage it never saw"
+cp "$WORK/frbody.orig" "$FR_BODY"
+CAGE_CLEAN="$(init_out)"
+printf '%s' "$CAGE_CLEAN" | grep -q 'cage is NOT confirmed' && bad "init warns about a healthy caged seat (cry-wolf)" || ok "no cage warning against a healthy installed seat (discriminates)"
+printf '%s' "$CAGE_CLEAN" | grep -q 'cage ("tools: \[\]") is present' && ok "…and init states the cage POSITIVELY (silence is never the only evidence)" || bad "init should affirm a healthy cage, not merely stay quiet"
+
+echo
+echo "(agents failure-isolation) a failed agents install must NOT abort the HOOK REGISTRATION that follows"
+# § 4e is a nudge; § 5 (merging the guard registrations) is a CONTROL. An exception escaping the
+# agents block would leave hook files on disk with ZERO registrations — the silent fail-open
+# mergeSettings' read-back exists to stop. Same proof shape as the blocked-Codex-write case above.
+AGFAIL="$WORK/agentfail"; git init -q "$AGFAIL"; git -C "$AGFAIL" config user.email a@a; git -C "$AGFAIL" config user.name a
+mkdir -p "$AGFAIL/.claude"; printf 'not a directory\n' > "$AGFAIL/.claude/agents"   # a FILE where the dir must be
+if node "$KIT/bin/init.mjs" --target "$AGFAIL" --repo-name agentfail --skip-codex-prompt >/dev/null 2>&1; then
+  ok "failed agents install: init still exits 0 (the adopt is not aborted)"
+else
+  bad "a failed agents install ABORTED init — failure isolation regressed"
+fi
+assert_eq "3" "$(node -e '
+  const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  let n = 0;
+  for (const g of ((s.hooks && s.hooks.PreToolUse) || [])) for (const h of (g.hooks || [])) if (/guard-(cross-repo-writes|lane-authoring|gate-ladder)\.mjs/.test(String(h.command))) n++;
+  console.log(n);
+' "$AGFAIL/.claude/settings.json" 2>/dev/null || echo MISSING)" "the 3 PreToolUse guards are STILL registered after the agents block failed"
+assert_eq "1" "$(node -e '
+  const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  let n = 0;
+  for (const g of ((s.hooks && s.hooks.Stop) || [])) for (const h of (g.hooks || [])) if (String(h.command).includes("guard-owner-comms.mjs")) n++;
+  console.log(n);
+' "$AGFAIL/.claude/settings.json" 2>/dev/null || echo MISSING)" "…and so is the Stop sensor"
 
 echo
 echo "(commands + skills idempotency) a second init KEEPS user edits — no clobber, no duplicate pointer"
@@ -160,11 +277,15 @@ printf '\n<!-- user edit: keep me -->\n' >> "$CMD_CODEX"
 printf '\n<!-- user edit: keep me -->\n' >> "$SK_BODY"
 printf '\n<!-- user edit: keep me -->\n' >> "$SK_CLAUDE"
 printf '\n<!-- user edit: keep me -->\n' >> "$SK_CODEX"
+printf '\n<!-- user edit: keep me -->\n' >> "$FR_BODY"
+printf '\n<!-- user edit: keep me -->\n' >> "$AG_CONSULT"
 CLAUDE_EDIT_SHA="$(shasum "$CMD_CLAUDE" | awk '{print $1}')"
 CODEX_EDIT_SHA="$(shasum "$CMD_CODEX" | awk '{print $1}')"
 SK_BODY_SHA="$(shasum "$SK_BODY" | awk '{print $1}')"
 SK_CLAUDE_SHA="$(shasum "$SK_CLAUDE" | awk '{print $1}')"
 SK_CODEX_SHA="$(shasum "$SK_CODEX" | awk '{print $1}')"
+FR_BODY_SHA="$(shasum "$FR_BODY" | awk '{print $1}')"
+AG_CONSULT_SHA="$(shasum "$AG_CONSULT" | awk '{print $1}')"
 AGENTS_SHA1="$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')"
 node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
@@ -176,6 +297,8 @@ assert_eq "$CODEX_EDIT_SHA"  "$(shasum "$CMD_CODEX" | awk '{print $1}')" "re-run
 assert_eq "$SK_BODY_SHA"   "$(shasum "$SK_BODY" | awk '{print $1}')"   "re-run KEEPS a user-edited shared skill BODY (no clobber without --force)"
 assert_eq "$SK_CLAUDE_SHA" "$(shasum "$SK_CLAUDE" | awk '{print $1}')" "re-run KEEPS a user-edited Claude skill shim (no clobber without --force)"
 assert_eq "$SK_CODEX_SHA"  "$(shasum "$SK_CODEX" | awk '{print $1}')"  "re-run KEEPS a user-edited Codex skill prompt (no clobber without --force)"
+assert_eq "$FR_BODY_SHA"   "$(shasum "$FR_BODY" | awk '{print $1}')"   "re-run KEEPS a user-edited frontier-review body (no clobber without --force)"
+assert_eq "$AG_CONSULT_SHA" "$(shasum "$AG_CONSULT" | awk '{print $1}')" "re-run KEEPS a user-edited agent definition (no clobber without --force)"
 assert_eq "$AGENTS_SHA1" "$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')" "AGENTS.md unchanged on re-run"
 
 echo
