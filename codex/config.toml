@@ -7,10 +7,13 @@
 # `inherit = "core"` keeps the shell environment minimal-but-usable rather than passing the operator's
 # whole environment to model-generated commands.
 #
-# DELIBERATELY NO `hooks` KEY HERE. Codex accepts hook registrations in EITHER this file or
-# <repo>/.codex/hooks.json, and warns when both carry them ("prefer a single representation for this
-# layer"). The kit generates hooks.json, so this file must stay out of that business; `init` warns
-# rather than double-registering if it finds hooks already declared here.
+# DELIBERATELY NO `hooks` KEY HERE, and that is not an oversight. Codex accepts hook registrations in
+# EITHER this file or <repo>/.codex/hooks.json, and warns when both carry them ("prefer a single
+# representation for this layer"). **As of v2.0 the kit registers NO Codex hooks at all** — see
+# PORTABILITY.md § The enforcement asymmetry for the executed reasons, and note that installing this
+# file buys you NO write-time enforcement in the Codex lane. A kit-built Codex guard is in flight as
+# its own gated changeset; when it lands it will own the hooks.json representation, so if you add
+# your own hooks here, expect to reconcile them then.
 
 [shell_environment_policy]
 inherit = "core"

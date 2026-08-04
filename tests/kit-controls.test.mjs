@@ -1244,3 +1244,45 @@ test("FM1: init sets core.hooksPath; the portable FM1 test goes RED when it is u
     assert.notEqual(red.status, 0, "FM1 test must FAIL when core.hooksPath is unset (else the mitigation is fiction)");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("v2.0 Codex lane: the assets install, the model is [G], and --skip-codex-lane leaves no residue", () => {
+  // These are CONVENIENCES, not controls — v2.0 registers no Codex hooks (PORTABILITY.md § Why the
+  // Codex lane is unguarded). What is gated here is the WIRING, the same way the /thread-restart
+  // nudge is gated: the files land, the [G] placeholder behaves, and the opt-out is total.
+  const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-codex-")); execFileSync("git", ["init", "-q", d]); return d; };
+  const run = (d, extra) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
+    "--repo-name", "demo", "--skip-codex-prompt", ...extra], { encoding: "utf8" });
+
+  const filled = mk(), unfilled = mk(), skipped = mk();
+  try {
+    // 1. WITH the flag: the seat's model is bound.
+    assert.equal(run(filled, ["--codex-cold-model", "some-model-v1"]).status, 0);
+    assert.ok(existsSync(path.join(filled, ".codex", "config.toml")), "config.toml installs");
+    const seat = readFileSync(path.join(filled, ".codex", "agents", "cold-reviewer.toml"), "utf8");
+    assert.match(seat, /^model = "some-model-v1"$/m, "--codex-cold-model fills the seat");
+    assert.doesNotMatch(seat, /\{\{CODEX_COLD_MODEL\}\}/, "no placeholder survives once filled");
+    // The shipped config must not register hooks: Codex warns when both it and hooks.json declare
+    // them, and v2.0 deliberately registers none at all.
+    assert.doesNotMatch(readFileSync(path.join(filled, ".codex", "config.toml"), "utf8"),
+      /^\s*\[{1,2}\s*hooks[.\]]/m, "the shipped config.toml declares NO hooks");
+
+    // 2. WITHOUT it: the placeholder SURVIVES and init reports the file as incomplete. An unfilled
+    // model must be visible, never silently substituted with someone else's.
+    const r2 = run(unfilled, []);
+    assert.equal(r2.status, 0);
+    assert.match(readFileSync(path.join(unfilled, ".codex", "agents", "cold-reviewer.toml"), "utf8"),
+      /\{\{CODEX_COLD_MODEL\}\}/, "the placeholder survives when unfilled");
+    assert.match(r2.stdout, /Complete the placeholders in:.*cold-reviewer\.toml/,
+      "…and init's checklist NAMES the incomplete file (an unusable seat must not look finished)");
+
+    // 3. Opt-out is TOTAL — not a partial tree the adopter has to clean up by hand.
+    assert.equal(run(skipped, ["--skip-codex-lane"]).status, 0);
+    assert.equal(existsSync(path.join(skipped, ".codex")), false, "--skip-codex-lane writes no .codex at all");
+
+    // 4. Idempotent: a re-run keeps a hand-edited seat rather than clobbering the adopter's binding.
+    writeFileSync(path.join(filled, ".codex", "agents", "cold-reviewer.toml"), "# hand-edited\n");
+    assert.equal(run(filled, ["--codex-cold-model", "some-model-v1"]).status, 0);
+    assert.equal(readFileSync(path.join(filled, ".codex", "agents", "cold-reviewer.toml"), "utf8"),
+      "# hand-edited\n", "a re-run without --force keeps the adopter's edit");
+  } finally { for (const d of [filled, unfilled, skipped]) rmSync(d, { recursive: true, force: true }); }
+});
