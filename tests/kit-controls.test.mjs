@@ -739,6 +739,28 @@ test("init generates core/OWNER_COMMS.md as [G]; --owner-name fills only the nam
   } finally { named.cleanup(); }
 });
 
+test("rule 8 ships in the GENERATED Owner contract and in the INSTALLED /humanize body", () => {
+  // Read what an ADOPTER gets, never the template: a rule that survives in templates/ and dies in
+  // generation is the failure this whole [G] path can have, and grepping the source would miss it.
+  const named = adopt(["--owner-name", "Alex"]);
+  try {
+    const doc = readFileSync(path.join(named.dir, "core", "OWNER_COMMS.md"), "utf8");
+    const rule8 = /^8\. \*\*Questions and recommendations never blend in\.\*\*([\s\S]*?)(?=\n\n)/m.exec(doc);
+    assert.ok(rule8, "the generated contract carries rule 8");
+    for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**"]) {
+      assert.ok(rule8[0].includes(lead), `rule 8 names the ${lead} lead verbatim — the label IS the rule`);
+    }
+    assert.ok(rule8[0].includes("Alex"), "the Owner's real name reached rule 8; a rule addressed to {{OWNER_NAME}} names nobody");
+    assert.doesNotMatch(doc, /^9\. /m, "the rules stop at 8 — a duplicate would renumber silently");
+
+    // The skill that repairs a message against these rules must know about the new one, or /humanize
+    // certifies as clean a message rule 8 rejects.
+    const skill = readFileSync(path.join(named.dir, ".agents", "skills", "humanize", "SKILL.md"), "utf8");
+    assert.match(skill, /buried ask/, "the /humanize miss list checks for a buried ask");
+    assert.match(skill, /\(rule 8\)/, "…and points at the rule it comes from");
+  } finally { named.cleanup(); }
+});
+
 test("the Stop registration merges into settings.json exactly once, confirmed by read-back", () => {
   const { dir, run, cleanup } = adopt();
   try {

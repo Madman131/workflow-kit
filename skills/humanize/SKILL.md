@@ -36,6 +36,8 @@ then follow `.agents/skills/humanize/BULLET.md`. The rest of the line is a focus
 - **Missing consequence** — what it costs or protects for THEM (rule 4).
 - **A decision with no recommendation** (rule 5).
 - **Jargon, long sentences, bloat** (rule 6).
+- **A buried ask** — a question, recommendation, or decision left mid-paragraph, unbolded (rule 8):
+  pull it out, bold it, label it.
 
 ## Then check
 Could they reasonably reply "give me the short version", re-read a sentence, or look up a word? If

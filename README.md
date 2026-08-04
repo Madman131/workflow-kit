@@ -1,8 +1,72 @@
-# workflow-kit — v2.1.0
+# workflow-kit — v2.1.1
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v2.1.1
+
+**An ask stops hiding in a paragraph.** `core/OWNER_COMMS.md` gains an **eighth rule**: any question
+for the Owner, any recommendation, and any decision they have to make appears **bolded, on its own
+bulleted line, with a labeled lead** — `**QUESTION:**`, `**RECOMMENDATION:**`, `**DECISION NEEDED:**`.
+Prose may still explain; the ask itself has to be findable by skimming alone. The failure it names is
+specific and common: a well-written report that answers first, defines its terms and gives the
+background, and then buries the one sentence the Owner has to act on in the middle of paragraph four.
+Skim-findable or it is not formatted.
+
+`/humanize` gains the matching miss — **a buried ask** — so the repair pass looks for it alongside the
+seven it already checked. Nothing else changes: no new machinery, no control, no flag. The sensor
+`guard-owner-comms.mjs` does **not** check rule 8, and `PORTABILITY.md` now says so in the same breath
+as the rules it cannot check, with the distinction kept honest — five of those rules are out of a
+sensor's reach, this one is merely unbuilt.
+
+### Upgrading to v2.1.1
+
+**`--force` is REQUIRED this release.** Derived, as always, from what the diff edits rather than from
+habit: v2.1.1 changes two files you already have — the `[G]` `core/OWNER_COMMS.md` and the `[P]`
+`.agents/skills/humanize/SKILL.md` — and `init` never overwrites a file it did not write in that run.
+Executed both ways against a real v2.1.0 adopter: a plain re-run **exits 0 having shipped nothing** —
+no rule 8, no `/humanize` line, and the doc still stamped `v2.1.0` — while `--force` lands both.
+
+**What `--force` costs here, and why you may prefer the hand edit.** It regenerates
+`core/OWNER_COMMS.md` from the template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and
+shorthand rows are replaced by placeholders again. The previous file is saved to
+`core/OWNER_COMMS.md.bak`, `init` prints that path, and it separately warns that the doc is ARMED with
+unfilled placeholders — but the sensor's shorthand coverage is gone until you re-apply from the `.bak`,
+and a sensor that fails open reports nothing when it does. The `[P]` `/humanize` body is overwritten
+with **no** `.bak`, which is intended: it is the kit's file, not yours.
+
+So there are two honest paths, and for a repo whose Owner doc is heavily hand-written the second is
+smaller:
+
+1. **`--force`** — re-run `init` with your original flags plus `--force`, then re-apply your profile,
+   irreversible asset and shorthand rows from `core/OWNER_COMMS.md.bak`. Diff the `.bak` against the
+   new file rather than trusting the exit code.
+2. **Hand-add rule 8** — paste the rule below into your `core/OWNER_COMMS.md` after rule 7, replacing
+   `<Owner>` with your Owner's name, and add the `/humanize` bullet to
+   `.agents/skills/humanize/SKILL.md` (or take that one file with `--force`; it holds nothing of
+   yours). Nothing mechanical reads the rule count, so a hand-added rule 8 is not second-class.
+
+```markdown
+8. **Questions and recommendations never blend in.** Any question for <Owner>, any recommendation,
+   and any decision they must make appears **bolded, on its own bulleted line, with a labeled lead** —
+   `**QUESTION:**`, `**RECOMMENDATION:**`, or `**DECISION NEEDED:**` — never buried mid-paragraph.
+   Prose may explain; the ask itself must be findable by skimming alone. If <Owner> could scroll past
+   it without seeing it, it is not formatted.
+```
+
+**Verify it landed — a green `init` exit is not evidence:**
+
+```bash
+test -f core/OWNER_COMMS.md || { echo "FAIL no Owner contract"; exit 1; }
+grep -q 'DECISION NEEDED' core/OWNER_COMMS.md || { echo "FAIL rule 8 not in the Owner contract"; exit 1; }
+test -f .agents/skills/humanize/SKILL.md || { echo "FAIL humanize body missing"; exit 1; }
+grep -q 'buried ask' .agents/skills/humanize/SKILL.md || { echo "FAIL /humanize still checks seven misses"; exit 1; }
+echo "v2.1.1 verified — if you used --force, now diff core/OWNER_COMMS.md.bak and restore your own paragraphs"
+```
+
+Existence is tested **before** content: `grep` against a missing file exits non-zero for the wrong
+reason, and a `!`-negated check would read that as clean.
 
 ## What's new in v2.1
 
@@ -612,8 +676,9 @@ who does not write code was getting five hundred words of inventory in answer to
 question. v1.3 adds the missing half: a generated contract, a skill that repairs a message against it,
 and a sensor that notices the most common miss.
 
-- **`core/OWNER_COMMS.md`** — seven rules for writing to a decision-maker rather than a fellow
-  engineer: answer first in one sentence · define every term on first use · give the background · say
+- **`core/OWNER_COMMS.md`** — seven rules (v2.1.1 adds an eighth) for writing to a decision-maker
+  rather than a fellow engineer: answer first in one sentence · define every term on first use ·
+  give the background · say
   why it matters to *them* · a decision means the choice, each option's cost, and a recommendation ·
   plain language · and `/humanize` to repair a message that missed. It is **`[G]` (generated per
   repo, never copied)** — it names a person, and copying one repo's Owner into another re-creates the
