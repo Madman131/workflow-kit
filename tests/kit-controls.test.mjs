@@ -752,6 +752,21 @@ test("rule 8 ships in the GENERATED Owner contract and in the INSTALLED /humaniz
     }
     assert.ok(rule8[0].includes("Alex"), "the Owner's real name reached rule 8; a rule addressed to {{OWNER_NAME}} names nobody");
     assert.doesNotMatch(doc, /^9\. /m, "the rules stop at 8 — a duplicate would renumber silently");
+    // The labels alone are not the rule: a version that kept the three strings and dropped the SHAPE
+    // requirement would satisfy every assertion above while permitting exactly what rule 8 forbids.
+    assert.match(rule8[0], /bolded, on its own bulleted line, with\s+a labeled lead/,
+      "rule 8 still states the SHAPE it requires, not only the labels");
+
+    // The count sweep, made mechanical on the GENERATED side: the claim in the release note is that
+    // no artifact an adopter receives states a rule TOTAL, so a later edit that reintroduces one
+    // (in the contract or in the skill that repairs against it) must go red here, not in review.
+    const COUNT_CLAIM = /\b(six|seven|eight|nine|\d+)\s+rules\b|\brules\s*1\s*[-–]\s*\d/i;
+    for (const rel of [["core", "OWNER_COMMS.md"], [".agents", "skills", "humanize", "SKILL.md"],
+      [".agents", "skills", "humanize", "BULLET.md"]]) {
+      const generated = readFileSync(path.join(named.dir, ...rel), "utf8");
+      assert.doesNotMatch(generated, COUNT_CLAIM,
+        `${path.join(...rel)} states no rule TOTAL — a count is what goes stale when a rule is added`);
+    }
 
     // The skill that repairs a message against these rules must know about the new one, or /humanize
     // certifies as clean a message rule 8 rejects.

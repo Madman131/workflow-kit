@@ -28,24 +28,36 @@ habit: v2.1.1 changes two files you already have — the `[G]` `core/OWNER_COMMS
 Executed both ways against a real v2.1.0 adopter: a plain re-run **exits 0 having shipped nothing** —
 no rule 8, no `/humanize` line, and the doc still stamped `v2.1.0` — while `--force` lands both.
 
-**What `--force` costs here, and why you may prefer the hand edit.** It regenerates
-`core/OWNER_COMMS.md` from the template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and
-shorthand rows are replaced by placeholders again. The previous file is saved to
-`core/OWNER_COMMS.md.bak`, `init` prints that path, and it separately warns that the doc is ARMED with
-unfilled placeholders — but the sensor's shorthand coverage is gone until you re-apply from the `.bak`,
-and a sensor that fails open reports nothing when it does. The `[P]` `/humanize` body is overwritten
-with **no** `.bak`, which is intended: it is the kit's file, not yours.
+**`--force` is GLOBAL. It is not scoped to this release's two files.** It overwrites **every `[P]`
+file you already have** — all the `core/*.md` method docs, the hooks, `scripts/`, `commands/`,
+`skills/`, the shims, `agents/`, and the user-global Codex prompts — **with no `.bak` at all**, so any
+local edit to those is recoverable only from git. It also rewrites `.claude/kit.config.json` from the
+flags you pass **this** run: omit the `--source-dirs` (or other family) flags you originally adopted
+with and `executedPathDirs` resets to `{}`, which **widens** the write guard until you restore it. All
+of this is executed, not inferred — a `--force` re-run on an adopter carrying three hand-edited `[P]`
+files destroyed all three with no backup and reset a configured `executedPathDirs: ["app"]` to `{}`.
+(`kit.config.json` and the `[G]` files do get a `.bak`; the `[P]` files do not.) **Commit before you
+run it.**
+
+**What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the
+template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and shorthand rows are replaced by
+placeholders again. The previous file is saved to `core/OWNER_COMMS.md.bak`, `init` prints that path,
+and it separately warns that the doc is ARMED with unfilled placeholders — but the sensor's shorthand
+coverage is gone until you re-apply from the `.bak`, and a sensor that fails open reports nothing when
+it does. The `[P]` `/humanize` body is overwritten with **no** `.bak`, which is intended: it is the
+kit's file, not yours.
 
 So there are two honest paths, and for a repo whose Owner doc is heavily hand-written the second is
 smaller:
 
-1. **`--force`** — re-run `init` with your original flags plus `--force`, then re-apply your profile,
-   irreversible asset and shorthand rows from `core/OWNER_COMMS.md.bak`. Diff the `.bak` against the
-   new file rather than trusting the exit code.
+1. **`--force`** — re-run `init` with **every** flag you originally adopted with, the family flags
+   included, plus `--force`. Then re-apply your profile, irreversible asset and shorthand rows from
+   `core/OWNER_COMMS.md.bak`, and diff your `[P]` files against git rather than trusting the exit code.
 2. **Hand-add rule 8** — paste the rule below into your `core/OWNER_COMMS.md` after rule 7, replacing
-   `<Owner>` with your Owner's name, and add the `/humanize` bullet to
-   `.agents/skills/humanize/SKILL.md` (or take that one file with `--force`; it holds nothing of
-   yours). Nothing mechanical reads the rule count, so a hand-added rule 8 is not second-class.
+   `<Owner>` with your Owner's name, and paste the `/humanize` bullet into
+   `.agents/skills/humanize/SKILL.md`. There is no way to take one file with `--force` — it is
+   all-or-nothing — so for a customized adopter this is the smaller operation, and it is not
+   second-class: nothing mechanical reads the rule count.
 
 ```markdown
 8. **Questions and recommendations never blend in.** Any question for <Owner>, any recommendation,
@@ -53,6 +65,13 @@ smaller:
    `**QUESTION:**`, `**RECOMMENDATION:**`, or `**DECISION NEEDED:**` — never buried mid-paragraph.
    Prose may explain; the ask itself must be findable by skimming alone. If <Owner> could scroll past
    it without seeing it, it is not formatted.
+```
+
+…and, in `.agents/skills/humanize/SKILL.md`, after the "Jargon, long sentences, bloat" bullet:
+
+```markdown
+- **A buried ask** — a question, recommendation, or decision left mid-paragraph, unbolded (rule 8):
+  pull it out, bold it, label it.
 ```
 
 **Verify it landed — a green `init` exit is not evidence:**
