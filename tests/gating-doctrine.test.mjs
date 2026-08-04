@@ -207,6 +207,28 @@ test("the retired commit-time adjudication control is recorded as DO NOT REBUILD
   assert.match(read("core/WORKFLOW.md"), /No hook counts it/);
 });
 
+test("the shipped gate runner's DEFAULT effort agrees with the matrix it serves", () => {
+  // A runner whose default contradicts the doctrine it serves is the sharpest form of a doc lie:
+  // an adopter who simply runs it gates at the RARE-cell effort believing they are at the norm.
+  // This shipped `xhigh` while the matrix names `high` as standing effort — caught by being bitten
+  // (this kit's own release gate was launched on the default and had to be relaunched).
+  //
+  // Scoped to the ASSIGNMENT, not to the file: `xhigh` legitimately appears in this script's own
+  // documentation of the rare cell, so a whole-file grep would prove a spelling, not the default.
+  const sh = raw("scripts/codex-gate.sh");
+  const assign = /^MODEL="[^"]+"; EFFORT="([a-z]+)"/m.exec(sh);
+  assert.ok(assign, "the runner still declares its seat default in one place");
+  assert.equal(assign[1], "high", "standing effort per core/GATES.md § Model · effort matrix");
+
+  // …and inheriting a seat must be VISIBLE, because the same matrix says to bind -m/-e explicitly.
+  assert.match(sh, /MODEL_SET=1/);
+  assert.match(sh, /EFFORT_SET=1/);
+  assert.match(sh, /seat NOT fully bound on the command line/);
+  // Behavioural proof was executed by hand BOTH ways (unbound ⇒ effort=high + the NOTE; bound ⇒ no
+  // NOTE) and is recorded in the PR. It is not re-run here because reaching that line spends a real
+  // model call — stating the limit rather than implying this test covers it.
+});
+
 // ---------------------------------------------------------------- coverage honesty, the kit's own shape
 
 test("CHARACTERIZATION: the kit's governed-file census reads the FILESYSTEM, so it sees untracked files", () => {
