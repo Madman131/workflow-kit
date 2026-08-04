@@ -14,7 +14,7 @@ never loads that hook system.
 | `guard-cross-repo-writes` (writes outside repo blocked) | **enforced** | not enforced | not enforced |
 | `guard-lane-authoring` (declaration before a code write) | **enforced** | not enforced | not enforced |
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | not enforced | not enforced |
-| `.githooks/pre-commit` (declaration + scope, at commit) | **enforced** | **enforced** | **enforced** |
+| `.githooks/pre-commit` (declaration, at commit) | **enforced** | **enforced** | **enforced** |
 | `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | not present | not present |
 
 **What binds every lane** is (1) **prose** — `AGENTS.md` + `core/*` + the required PM-disposition
@@ -213,14 +213,14 @@ These were surfaced by the v1.0 gate and consciously left as-is; they are record
 hidden. The stated threat model is **cooperative-but-fallible agents, not intrusion detection**
 (`core/FOUNDATIONS.md` § Principles, Threat-model calibration) — hostile-evasion hardening needs explicit scope.
 
-- **Symlink hardening in the working-tree guards is incomplete (hostile-evasion).** The `pre-commit`
-  hook `lstat`-rejects a symlinked declaration and a symlinked `kit.config.json` (fail-closed), and the
-  loaders reject a symlinked config. But `guard-cross-repo-writes.mjs` uses a **lexical** root check, so
-  a symlinked *in-repo directory* pointing outside the repo is not caught at write time, and
-  `guard-lane-authoring.mjs` does not reject a symlinked *declaration* (the commit-time `pre-commit`
-  does). Deliberately following a symlink to escape a boundary is hostile-evasion, out of the stated
-  model; the every-lane commit floor is the backstop. Characterized (not fixed) in
-  `acceptance/plant-the-bug.sh` § F12 so a future hardening flips the assertion visibly.
+- **Symlink hardening in the working-tree guards is incomplete (hostile-evasion).** Both the
+  `pre-commit` hook and `guard-lane-authoring.mjs` `lstat`-reject a symlinked declaration and a
+  symlinked `kit.config.json` (fail-closed; both asserted in `acceptance/plant-the-bug.sh` § round-3).
+  But `guard-cross-repo-writes.mjs` uses a **lexical** root check, so a symlinked *in-repo directory*
+  pointing outside the repo is not caught at write time. Deliberately following a symlink to escape a
+  boundary is hostile-evasion, out of the stated model; the every-lane commit floor is the backstop.
+  Characterized (not fixed) in `acceptance/plant-the-bug.sh` § F12 so a future hardening flips the
+  assertion visibly.
 - **The cross-repo guard ships scratch roots.** `guard-cross-repo-writes.mjs` allows writes to the
   project dir, `~/.claude`, and `/tmp` / `/private/tmp` (the last two so Claude worktrees under `/tmp`
   work). An adopter inherits those exemptions — if your workflow never uses `/tmp` worktrees you may

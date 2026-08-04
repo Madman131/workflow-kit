@@ -28,8 +28,10 @@ Do **not** "read everything in `core/`" — the read is staged.
 The three `.claude/hooks/*.mjs` PreToolUse guards (cross-repo writes, lane-authoring, gate-ladder) are
 **Claude Code harness registrations. They do NOT bind a Codex / non-Claude lane** — you never load
 them. **What binds you is THIS prose + the `.githooks/pre-commit` hook** (`core.hooksPath=.githooks`),
-which runs at commit time regardless of harness and blocks a commit that has no valid lane declaration
-or stages out-of-scope paths. Treat these rules as binding on your honor AND enforced at the commit.
+which runs at commit time regardless of harness and blocks a commit that has no valid lane declaration.
+It checks the DECLARATION, not your task scope — since kit v1.5.0 no control carries a per-file
+allowlist, so staying inside your task's scope binds you on your honor alone (§ Multi-writer checkout).
+Treat these rules as binding on your honor AND enforced at the commit.
 Full model: `PORTABILITY.md`.
 
 ## Multi-writer checkout — surgical staging only
@@ -55,9 +57,9 @@ violating one is unrecoverable, but that section governs.
 
 ## Before the first code write
 Declare the task lane in `.claude/task-lane.json` (session id + kebab task id + exactly one route).
-**Use `in-thread` (with the tier), or `exempt` (with a ledgered reason)** — those are the two
-documented routes. A third, `lane`, is still accepted by the controls but its doctrine was RETIRED at
-kit v1.4.0; do not start new work on it. For the Claude lane the PreToolUse hook blocks an undeclared
+**Use `in-thread` (with the tier), or `exempt` (with a ledgered reason AND the tier)** — those are
+the two routes. The retired `lane` route is REFUSED by both controls (kit v1.5.0): declaring it
+BLOCKS, with a message naming the retirement. For the Claude lane the PreToolUse hook blocks an undeclared
 write; **for you, the `pre-commit` hook blocks an undeclared code COMMIT** (fail-closed) — and it is
 your ONLY control, so this binds you on your honour plus that hook. Details:
 `core/MULTI_AGENT.md` § Task-lane declaration, `core/BINDINGS.md` § Tool bindings.

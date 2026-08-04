@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Lane-agnostic commit tripwire. It enforces the current declaration and staged scope;
-// it never decides whether the declared tier is semantically correct.
+// Harness-agnostic commit tripwire. It enforces the current declaration; it never decides whether
+// the declared tier is semantically correct. The retired `lane` route is REFUSED with an explicit
+// `lane-retired` state, never a fall-through to "malformed".
 
 import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, statSync } from "node:fs";
@@ -15,49 +16,43 @@ const TASK_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/;
 // silently weaken enforcement.
 const DOCS_EXTENSION_RE = /\.(?:md|mdx|rst|txt)$/i;
 const DOCS_BASENAME_RE = /^(?:CHANGELOG|CODE_OF_CONDUCT|CONTRIBUTING|COPYING|LICENSE|NOTICE|README)$/i;
-const LANE_CODE_EXT_RE = /\.(?:cjs|js|jsx|mjs|ts|tsx)$/i;
 const EXEMPT_REASONS = new Set(["codex-down", "codex-quota", "trivial-edit"]);
 
-// [P] KIT PARAMETERIZATION — the lane risk tokens are the ONLY repo-shaped data in this hook. They
-// come from .claude/kit.config.json (a [G] binding `init` writes), UNIONed onto portable defaults.
-// This is the SAME seam as .claude/hooks/guard-lane-authoring.mjs, so both controls share one config.
-// A MALFORMED config FAILS CLOSED (blocks a code-bearing commit). LANE_DENY_RE is built in the main
-// flow below once the commit is known code-bearing.
+// [P] KIT PARAMETERIZATION — since the `lane` route (and its risk-token deny-set) was retired, this
+// hook reads NO family from .claude/kit.config.json: its gate — every non-docs staged path needs a
+// current declaration — is config-independent. It still checks the file's STRUCTURAL integrity and
+// FAILS CLOSED on a present-but-corrupt config (not valid JSON, not an object, symlinked, or
+// unreadable): that file parameterizes the SIBLING controls (guard-lane-authoring, check-doc-size),
+// and a code-bearing commit must not proceed while the shared control config is unreadable as a
+// whole. HONEST LIMIT: this is WHOLE-FILE integrity only. A sibling's FIELD being malformed (say
+// `executedPathDirs: "src"`) is caught by that sibling — the write guard denies, `doc:size` exits 1 —
+// but not here; adding per-field checks would mean re-reading families this hook does not use. A
+// legacy `laneRiskTokens` entry left by a pre-v1.5 adopt is IGNORED whatever its shape — a field no
+// control reads cannot make a control fail open.
 const KIT_CONFIG = path.posix.join(".claude", "kit.config.json");
-const DEFAULT_LANE_RISK_TOKENS = ["auth", "credential", "deploy", "gate", "migrat", "money", "schema", "security"];
-let LANE_DENY_RE;
 
-function escapeRe(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function isSegmentArray(v) {
-  return Array.isArray(v) && v.every((s) => typeof s === "string" && s.length > 0 && !s.includes("/"));
-}
-// Absent config ⇒ defaults-only (legitimate). Present-but-corrupt ⇒ { ok:false } ⇒ the main flow fails closed.
+// Absent config ⇒ fine (defaults-only is legitimate). Present-but-corrupt ⇒ { ok:false } ⇒ the main
+// flow fails closed.
 function loadKitConfig() {
   let st;
   try { st = lstatSync(KIT_CONFIG); }
   catch (e) {
-    // Only ENOENT (truly absent) ⇒ defaults. A permission/IO error means the config exists but is
-    // unreadable ⇒ FAIL CLOSED (never silently drop the repo-specific deny tokens).
-    if (e && e.code === "ENOENT") return { ok: true, laneRiskTokens: [] };
+    // Only ENOENT (truly absent) ⇒ ok. A permission/IO error means the config exists but is
+    // unreadable ⇒ FAIL CLOSED (the sibling controls cannot read their families either).
+    if (e && e.code === "ENOENT") return { ok: true };
     return { ok: false };
   }
   // A SYMLINKED/non-regular config is FAIL-CLOSED, not treated as absent (a dangling symlink would
-  // otherwise silently drop the repo-specific deny tokens). Matches readDeclaration's symlink handling.
+  // otherwise read as "absent ⇒ fine" while the sibling controls fail closed on it). Matches
+  // readDeclaration's symlink handling.
   if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
   let parsed;
   try { parsed = JSON.parse(readFileSync(KIT_CONFIG, "utf8")); } catch { return { ok: false }; }
   if (!isPlainObject(parsed)) return { ok: false };
-  const tokens = parsed.laneRiskTokens === undefined ? [] : parsed.laneRiskTokens;
-  if (!isSegmentArray(tokens)) return { ok: false };
-  return { ok: true, laneRiskTokens: tokens };
-}
-function buildLaneDenyRe(tokens) {
-  return new RegExp("(?:^|/)(?:[^/]*(?:" + tokens.map(escapeRe).join("|") + ")[^/]*)", "i");
+  return { ok: true };
 }
 
-function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as one of the two DOCUMENTED routes: mode \"in-thread\" with sessionId, taskId, and tier; or mode \"exempt\" with sessionId, taskId, and a documented reason. (Mode \"lane\" is still accepted here, but its doctrine was RETIRED with the cost-inversion build lane at kit v1.4.0 — see core/README.md, Provenance; authoring is in-thread.) For hook installation run: git config core.hooksPath .githooks`) {
+function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as one of the two DOCUMENTED routes: mode \"in-thread\" with sessionId, taskId, and tier; or mode \"exempt\" with sessionId, taskId, a documented reason, and a tier. Rules: core/MULTI_AGENT.md, Task-lane declaration. For hook installation run: git config core.hooksPath .githooks`) {
   process.stderr.write(
     `pre-commit BLOCKED: ${reason}\n` +
     `${remediation}\n`,
@@ -73,15 +68,6 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
 }
 
-function normalizeRepoPath(value) {
-  if (typeof value !== "string" || !value.trim() || /[\x00-\x1f\x7f]/.test(value) || value.includes("\\")) return null;
-  const normalized = value.replace(/^\.\//, "");
-  if (path.posix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) return null;
-  const collapsed = path.posix.normalize(normalized);
-  if (collapsed === "." || collapsed === ".." || collapsed.startsWith("../")) return null;
-  return collapsed;
-}
-
 function stagedPaths() {
   // --no-renames expands a rename into its delete/add endpoints, so scope cannot hide either path.
   const raw = git(["diff", "--cached", "--name-only", "-z", "--no-renames"]);
@@ -91,15 +77,6 @@ function stagedPaths() {
 function isCodeBearing(rel) {
   return !DOCS_EXTENSION_RE.test(rel) &&
     !DOCS_BASENAME_RE.test(path.posix.basename(rel));
-}
-
-function isLaneIneligible(rel) {
-  // Lane scope includes co-staged documentation. Only code-bearing paths are subject to the
-  // lane's scripts/tests + extension + live/stateful eligibility boundary.
-  if (!isCodeBearing(rel)) return false;
-  const folded = rel.toLowerCase();
-  if (!folded.startsWith("scripts/") && !folded.startsWith("tests/")) return true;
-  return !LANE_CODE_EXT_RE.test(rel) || LANE_DENY_RE.test(rel);
 }
 
 function headHasHook() {
@@ -149,18 +126,15 @@ function readDeclaration() {
     // presence/freshness, but it must not invent a path scope the route does not carry.
     return { state: "in-thread", taskId: declaration.taskId };
   }
-  if (declaration.mode === "lane") {
-    if (!Array.isArray(declaration.allowedFiles) || declaration.allowedFiles.length === 0) {
-      return { state: "malformed" };
-    }
-    const allowedFiles = declaration.allowedFiles.map(normalizeRepoPath);
-    if (allowedFiles.some((rel) => rel === null) || new Set(allowedFiles).size !== allowedFiles.length) {
-      return { state: "malformed" };
-    }
-    return { state: "lane", allowedFiles: new Set(allowedFiles), taskId: declaration.taskId };
-  }
+  // RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0). An
+  // explicit state, not a silent fall-through to "malformed", so the block names the real cause.
+  if (declaration.mode === "lane") return { state: "lane-retired" };
+  // Since v1.5.0 an exemption declares a tier exactly as `in-thread` does: the reason names the
+  // unavailable SEAT, which says nothing about how risky the work is. A pre-v1.5 tier-less exemption
+  // is NOT grandfathered — it gets its own explicit state so the block can name the missing field.
   if (declaration.mode === "exempt") {
     if (!EXEMPT_REASONS.has(declaration.reason)) return { state: "malformed" };
+    if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) return { state: "exempt-tier-missing" };
     return { state: "exempt", taskId: declaration.taskId };
   }
   return { state: "malformed" };
@@ -174,9 +148,8 @@ try {
 }
 
 if (paths.length === 0 || paths.every((rel) => !isCodeBearing(rel))) process.exit(0);
-// The commit is code-bearing. Build the parameterized lane deny-set (portable defaults ∪ config).
+// The commit is code-bearing.
 const kitConfig = loadKitConfig();
-LANE_DENY_RE = buildLaneDenyRe(DEFAULT_LANE_RISK_TOKENS.concat(kitConfig.ok ? kitConfig.laneRiskTokens : []));
 const bootstrap = !headHasHook();
 if (bootstrap) {
   if (!paths.includes(SELF)) {
@@ -184,29 +157,29 @@ if (bootstrap) {
       `Remediate by staging ${SELF} for its one-time bootstrap, or use a branch that already contains it.`);
   }
   // The hook-only introduction may commit without a declaration. Any co-staged code path
-  // still falls through to the normal current-declaration and exact-scope checks below.
+  // still falls through to the normal current-declaration check below.
   if (paths.length === 1) process.exit(0);
 }
 
-// FAIL CLOSED on a corrupt config: a code-bearing commit cannot proceed while the repo-specific
-// deny-set is unreadable — the "mis-parameterized guard fails open" case. Docs-only commits already
+// FAIL CLOSED on a corrupt config: a code-bearing commit cannot proceed while the shared control
+// config is structurally unreadable — the sibling controls' families live in it, and a corrupt file
+// must be loud at the every-lane floor, not just in the Claude lane. Docs-only commits already
 // exited above; a pure hook-bootstrap commit exited above too, so this only blocks real code commits.
 if (!kitConfig.ok) {
-  fail(`${KIT_CONFIG} is present but MALFORMED (not valid JSON, not an object, or laneRiskTokens is not an array of non-empty path segments)`,
-    `Remediate by fixing ${KIT_CONFIG} to shape {"laneRiskTokens":["<token>"]} (optional), deleting it to fall back to the kit's portable defaults, or re-running: node bin/init.mjs`);
+  fail(`${KIT_CONFIG} is present but MALFORMED (not valid JSON, not a plain object, symlinked, or unreadable)`,
+    `Remediate by fixing ${KIT_CONFIG} to a plain JSON object, deleting it to fall back to the kit's portable defaults, or re-running: node bin/init.mjs`);
 }
 
 const declaration = readDeclaration();
-if (!["in-thread", "lane", "exempt"].includes(declaration.state)) fail(`${DECLARATION} is ${declaration.state}`);
-
-if (declaration.state === "lane") {
-  for (const raw of paths) {
-    const rel = normalizeRepoPath(raw);
-    if (!rel || !declaration.allowedFiles.has(rel)) {
-      fail(`staged path ${JSON.stringify(raw)} is outside lane task ${JSON.stringify(declaration.taskId)} allowedFiles`);
-    }
-    if (isLaneIneligible(rel) && !(bootstrap && rel === SELF)) {
-      fail(`staged path ${JSON.stringify(raw)} is lane-ineligible for task ${JSON.stringify(declaration.taskId)}`);
-    }
-  }
+if (declaration.state === "lane-retired") {
+  fail(`${DECLARATION} declares the retired \`lane\` route`,
+    "The `lane` route was RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0) — it is not an available route. "
+    + "Declare `in-thread` with the tier. Rules: core/MULTI_AGENT.md, Task-lane declaration.");
 }
+if (declaration.state === "exempt-tier-missing") {
+  fail(`${DECLARATION} declares mode "exempt" without a tier`,
+    'Since kit v1.5.0 an exemption declares a tier exactly as "in-thread" does — the reason names the unavailable SEAT, '
+    + 'which says nothing about how risky the work is. Add "tier": "T0"|"T1"|"T2"|"T3". A pre-v1.5 tier-less exemption '
+    + 'is not grandfathered. Rules: core/MULTI_AGENT.md, Task-lane declaration.');
+}
+if (!["in-thread", "exempt"].includes(declaration.state)) fail(`${DECLARATION} is ${declaration.state}`);
