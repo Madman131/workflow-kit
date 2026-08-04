@@ -174,6 +174,76 @@ else
   ok "shims hold no rules of their own (the body is the only copy)"
 fi
 
+# v1.7: the three RITUAL skills ride the same mechanism (a third, fourth and fifth body — the
+# discovery-from-disk claim now has five instances and still no init edit). Every shim in BOTH
+# lanes is checked, not a sample: the "no rules of their own" probe above covered 4 of 12.
+RITUAL_OK=1
+for name in boot closeout lane-declare; do
+  [ -f "$ADOPTER/.agents/skills/$name/SKILL.md" ] || { bad "ritual body missing: .agents/skills/$name/SKILL.md"; RITUAL_OK=0; }
+  [ -f "$ADOPTER/.claude/skills/$name/SKILL.md" ] || { bad "ritual Claude shim missing: .claude/skills/$name/SKILL.md"; RITUAL_OK=0; }
+  [ -f "$CODEX_PROMPTS/$name.md" ]                || { bad "ritual Codex prompt missing: $CODEX_PROMPTS/$name.md"; RITUAL_OK=0; }
+  grep -q '^Word budget: [0-9]' "$ADOPTER/.agents/skills/$name/SKILL.md" \
+    || { bad "the INSTALLED $name body declares no word budget"; RITUAL_OK=0; }
+done
+[ "$RITUAL_OK" = 1 ] && ok "all three ritual skills install (body + both lanes) and declare their budgets"
+SHIMS_CLEAN=1
+for shim in "$ADOPTER"/.claude/skills/*/SKILL.md "$CODEX_PROMPTS"/*.md; do
+  [ -f "$shim" ] || continue
+  grep -q "Word budget" "$shim" && { bad "shim carries rules of its own: $shim"; SHIMS_CLEAN=0; }
+done
+[ "$SHIMS_CLEAN" = 1 ] && ok "EVERY installed shim in both lanes holds no rules of its own (not a sample)"
+# The /lane-declare body must not repeat the false universal this release corrected: the every-lane
+# commit floor does NOT bind the session, and saying it does is the claim the gate caught.
+LD_BODY="$ADOPTER/.agents/skills/lane-declare/SKILL.md"
+if grep -q "no ledger row" "$LD_BODY" && grep -q "binding the SESSION" "$LD_BODY"; then
+  ok "the installed /lane-declare carries the per-reader correction (session + no-ledger-row)"
+else
+  bad "the installed /lane-declare lost the per-reader session-binding correction"
+fi
+
+echo
+echo "(budget gate) check-skill-budgets — observed BOTH ways against planted trees"
+# A checker only ever seen green is a checker never observed working. Both directions run against a
+# PLANTED tree via SKILL_BUDGETS_ROOT, never against the kit itself.
+BUD="$WORK/budget-tree"
+mkdir -p "$BUD/skills/x" "$BUD/skill-shims/claude" "$BUD/agents" "$BUD/commands"
+printf 'Word budget: 50\n%s\n' "$(head -c 40 < /dev/zero | tr '\0' 'w')" > "$BUD/skills/x/SKILL.md"
+printf 'pointer only\n' > "$BUD/skill-shims/claude/x.md"
+printf 'a seat\n' > "$BUD/agents/s.md"
+printf 'a command\n' > "$BUD/commands/c.md"
+if SKILL_BUDGETS_ROOT="$BUD" node "$KIT/scripts/check-skill-budgets.mjs" >/dev/null 2>&1; then
+  ok "a clean planted tree PASSES the budget gate (exit 0)"
+else
+  bad "the budget gate failed a clean planted tree — it would be unusable"
+fi
+# PLANT THE BUG: blow the skill past its own declared budget.
+{ printf 'Word budget: 10\n'; for i in $(seq 1 60); do printf 'word '; done; printf '\n'; } > "$BUD/skills/x/SKILL.md"
+if SKILL_BUDGETS_ROOT="$BUD" node "$KIT/scripts/check-skill-budgets.mjs" >/dev/null 2>&1; then
+  bad "an OVER-BUDGET skill did not fail the budget gate (fail-open)"
+else
+  ok "an over-budget skill FAILS the budget gate (exit 1)"
+fi
+# PLANT THE BUG: a skill carrying no budget marker at all is ungoverned by omission -> RED.
+printf 'no marker anywhere in this file\n' > "$BUD/skills/x/SKILL.md"
+# NOTE: capture, then match. Under `set -o pipefail` (line 1) a pipeline reports the FIRST
+# non-zero status, so `failing-checker | grep -q X` returns the CHECKER's 1 even when grep
+# matched — reading a correctly-RED control as a missing string. Bit this block once.
+BUD_OUT="$(SKILL_BUDGETS_ROOT="$BUD" node "$KIT/scripts/check-skill-budgets.mjs" 2>&1 || true)"
+if printf '%s' "$BUD_OUT" | grep -q UNDECLARED; then
+  ok "a marker-less skill is UNDECLARED and RED (absence is not a pass)"
+else
+  bad "a marker-less skill was silently skipped — ungoverned by omission"
+fi
+# PLANT THE BUG: an entire governed class emptied must be RED, not vacuously green.
+printf 'Word budget: 50\nshort body\n' > "$BUD/skills/x/SKILL.md"
+rm -rf "$BUD/agents"
+BUD_OUT="$(SKILL_BUDGETS_ROOT="$BUD" node "$KIT/scripts/check-skill-budgets.mjs" 2>&1 || true)"
+if printf '%s' "$BUD_OUT" | grep -q EMPTY-CLASS; then
+  ok "an emptied governed class is EMPTY-CLASS and RED (governing nothing is never a pass)"
+else
+  bad "an emptied governed class passed — the gate governed nothing and said OK"
+fi
+
 echo
 echo "(agents) reviewer seat definitions — Claude-lane [P] assets; the tools: [] cage survives verbatim"
 AG_COLD="$ADOPTER/.claude/agents/cold-reviewer.md"

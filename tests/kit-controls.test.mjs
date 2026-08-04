@@ -1,6 +1,8 @@
-// workflow-kit — the kit's own control gate (`npm test`). It (1) runs the full plant-the-bug
-// acceptance harness and asserts it passes, (2) unit-tests the fail-closed config loader, and (3)
-// proves the portable FM1 test itself discriminates (goes RED when core.hooksPath is unset).
+// workflow-kit — the kit's CONTROL suite: one of the two rungs `npm test` runs (the other is the
+// budget gate; `scripts/run-checks.mjs` runs both and combines their exit codes). It (1) runs the
+// full plant-the-bug acceptance harness and asserts it passes, (2) unit-tests the fail-closed
+// config loader, and (3) proves the portable FM1 test itself discriminates (goes RED when
+// core.hooksPath is unset).
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";

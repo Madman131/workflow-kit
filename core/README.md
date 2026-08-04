@@ -53,7 +53,7 @@ current-state doc.** Every overflow is a violation of one of those three.
 | `BINDINGS.md` | BINDING | `[G]` | roles→models · Codex-as-Builder · compute-weather · tool bindings · read-order · gates/deploy/data · access · known gaps |
 | `OWNER_COMMS.md` | BINDING | `[G]` | how to write to the Owner — it **names a person**, so it is never copied to another repo |
 | `INVARIANTS.md` | BINDING | `[P]` | epistemic rules + portable invariants + failure classes. **MACHINE PAYLOAD** |
-| `REPO_INVARIANTS.md` | BINDING | `[G]` | this repo's concrete invariants + word budgets. **MACHINE PAYLOAD** |
+| `REPO_INVARIANTS.md` | BINDING | `[G]` | this repo's concrete invariants. **MACHINE PAYLOAD** |
 | `GATES.md` | REFERENCE | `[P]` | gate contract · routing · model·effort matrix · Codex + Gemini tool manuals |
 | `SYSTEM_MAP.md` | BINDING | `[G]` | the bounded, `as-of`-dated **architecture snapshot** — the boot-set map over `docs/PIL_ARCHITECTURE.md` (REFERENCE, deep). Regenerated on architectural change; **snapshot** role (8 KiB). |
 

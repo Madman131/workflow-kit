@@ -229,6 +229,43 @@ durable. Never remove `frontier-consult`'s `tools: []` line when you re-bind it.
 The skill is deliberately de-model-named: `/frontier-review` names the ROLE; alias it to your
 model's name if your team prefers.
 
+## The ritual skills (v1.7) — `[P]` procedures over facts your `[G]` files supply
+
+`/boot`, `/closeout`, and `/lane-declare` ship verbatim through the shared-body mechanism and
+contain no repo-specific text — they lean on the `[G]` files for every concrete fact, the same
+one-way dependency `/humanize` has on `core/OWNER_COMMS.md`:
+
+- **`/boot`** checks identity against **the fingerprint table in your generated entry stub** and
+  walks the boot set. On a repo whose `CLAUDE.md`/`AGENTS.md` placeholders were never completed,
+  step 1 has nothing to compare against — the skill is a checklist over a contract you still owe.
+- **`/closeout`** takes its push-authorization semantics from `core/OPERATE.md` (`[P]`), but the
+  *effect* of pushing — "the deploy branch does X" — is whatever your entry stub names. It never
+  claims your repo auto-deploys; it tells the agent to read what you wrote there.
+- **`/lane-declare` documents the kit's own two controls** — the Claude-lane PreToolUse guard and
+  the every-lane `pre-commit` — including the enforcement asymmetry (the guard binds only the
+  Claude lane; the commit floor binds everyone). If you have replaced or locally edited those
+  controls, the skill's description of their behavior no longer matches your repo: it describes
+  the kit's shipped versions, not whatever sits at those paths.
+
+**A second asymmetry, inside the declaration itself (v1.7, newly documented — the behavior is
+unchanged since v1.0).** The two readers do not fail closed on the same things. Both block an
+undeclared, malformed or stale declaration. **Only the PreToolUse guard binds the SESSION:** it
+compares the declared `sessionId` to the live session and blocks a mismatch. The `pre-commit`
+floor requires the field to be present and well-formed but has no live session to compare
+against, so **a declaration left over from another thread still permits a commit** — verified by
+executing a real commit against an adopted repo, not by reading the code. Re-declaring at every
+task boundary is what actually closes that, and no control checks that you did. Closing it
+mechanically would need a binding the floor does not have (file mtime, branch, or similar); that
+is unbuilt design, not a shipped control, and it is recorded here rather than implied away.
+
+**The budget checker is kit-repo governance, not an installed control.** `scripts/check-skill-budgets.mjs`
+gates the KIT's own tree (`skills/`, `skill-shims/`, `agents/`, `commands/`) as the first rung of
+the kit's `npm test`; `init` does **not** copy it into adopters, and nothing in an adopted repo
+runs it. The installed skill
+bodies still carry their `Word budget:` lines — in your repo those are declared numbers with no
+mechanical enforcement unless you wire your own (copying the checker and re-pointing its class
+roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
+
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
 The Codex/Gemini gate runners are copied **verbatim** and are functionally repo-agnostic (the repo is
@@ -282,7 +319,8 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 - `[P]` (verbatim): `core/*` method docs, the three PreToolUse hooks, the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
-  `/frontier-review`), and the `agents/*` reviewer seat definitions (→ `.claude/agents/`).
+  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`), and the `agents/*` reviewer seat
+  definitions (→ `.claude/agents/`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
   `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `core/OWNER_COMMS.md`, `.claude/kit.config.json`.
 

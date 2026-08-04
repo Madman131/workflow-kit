@@ -1,5 +1,7 @@
 # Invocation mechanics — reference layer
 
+Word budget: 350 (its own number — a reference layer is never summed with its body).
+
 On-demand detail for `.agents/skills/frontier-review/SKILL.md` § 3. Load it when you are actually
 seating a lane; the rules that bind every firing live in the body, not here.
 
