@@ -35,6 +35,7 @@
 // extra steps: the dropped target is exactly the one an attacker puts last.
 
 import path from "node:path";
+import { realpathSync } from "node:fs";
 
 // WHICH TREE AM I GUARDING? The Claude harness sets CLAUDE_PROJECT_DIR; Codex does not set it or
 // anything like it. Getting this wrong is not a cosmetic error — a root that does not match the tree
@@ -75,6 +76,125 @@ export function resolveProjectRoot(input, argv = process.argv.slice(2)) {
 export function resolvePatchBase(input, projectRoot) {
   const cwd = input?.cwd;
   return typeof cwd === "string" && cwd ? path.resolve(cwd) : projectRoot;
+}
+
+/**
+ * A write target as a repo-relative POSIX path, or null when it lands outside the repo.
+ *
+ * WHY THIS IS SHARED RATHER THAN WRITTEN PER CONSUMER. Any rule that compares a target against
+ * canonical paths (`core/WORKFLOW.md`, `.agents/skills/…`, `githooks/pre-commit`) must canonicalise
+ * it first, and skipping that fails SILENTLY: a perfectly ordinary `./core/WORKFLOW.md` matches no
+ * canonical entry, so a sensor exits 0 having said nothing — a miss that looks exactly like "nothing
+ * was owed". Found by a cross-family seat against the v2.2.0 sensors, reproduced in one call.
+ * It lives here, beside the extractor that produces those targets, so the two sensors cannot drift.
+ */
+export function toRepoRelative(target, root, base) {
+  if (typeof target !== "string" || !target) return null;
+  // PHYSICAL, not lexical. `/tmp` is a symlink to `/private/tmp` on macOS, and this kit's own test
+  // suites run under /tmp-rooted TMPDIRs — so an install registering `--project-dir /tmp/repo`
+  // against a payload reporting `/private/tmp/repo/...` produced a `..` relative path and BOTH
+  // sensors silently skipped the edit. Resolving only the lexical form is the same class of defect
+  // as comparing raw targets: it fails silently, on an ordinary supported layout, not a hostile one.
+  // `realOrSelf` degrades to the lexical path when a component does not exist yet — which is the
+  // normal case for a file being CREATED, and must not be turned into a miss.
+  const realOrSelf = (p) => { try { return realpathSync(p); } catch { return p; } };
+  const rootReal = realOrSelf(path.resolve(root));
+  const baseReal = realOrSelf(path.resolve(base));
+  const abs = path.isAbsolute(target) ? target : path.resolve(baseReal, target);
+  // Resolve the deepest EXISTING ancestor, then re-attach the remainder: realpath on the whole path
+  // throws for a not-yet-created file, and swallowing that would silently drop every new file.
+  let head = abs, tail = "";
+  for (;;) {
+    const resolved = (() => { try { return realpathSync(head); } catch { return null; } })();
+    if (resolved !== null) { head = resolved; break; }
+    const parent = path.dirname(head);
+    if (parent === head) break;
+    tail = tail ? path.join(path.basename(head), tail) : path.basename(head);
+    head = parent;
+  }
+  const absReal = tail ? path.join(head, tail) : head;
+  const rel = path.relative(rootReal, absReal);
+  if (!rel || rel.startsWith("..")) return null;
+  return rel.split(path.sep).join("/");
+}
+
+/**
+ * Split ONE apply_patch envelope into its PER-TARGET sections: Map(target path -> that target's
+ * own lines). A directive opens a section that runs until the next directive.
+ *
+ * WHY THIS EXISTS. A consumer that needs "what text is this write adding to THIS file" previously
+ * had two bad options: hand every target the whole envelope (one file's marker fires on a sibling
+ * that owes nothing) or hand a multi-target envelope to nobody (a real change to one file goes
+ * unseen). The cross-family seat found BOTH, one round apart — the second was my own fix for the
+ * first. The envelope is already parsed here for targets; sectioning it is the same walk, so the
+ * grammar stays in ONE place rather than being re-derived by each sensor.
+ *
+ * `Move to` maps BOTH endpoints to the same section, matching how the target list treats them.
+ */
+/**
+ * The text ONE target is having ADDED by this envelope: its own section, with deletion lines
+ * removed. This is the shape a consumer actually wants, and it lives HERE for a reason.
+ *
+ * THE DESIGN INVARIANT (round-3 escalation adjudication): a sensor IMPORTS patch structure, it never
+ * PARSES it. Both scoping defects in this changeset's ladder were bespoke envelope logic invented
+ * beside the parser rather than inside it, one round apart, in opposite directions. The first cut of
+ * this function left `-`-line stripping in the sensor — one `startsWith("-")`, which is precisely
+ * "this consumer knows what a deletion looks like". Small, and exactly the seam the recurrence came
+ * through. With the last of it moved here, that class of drift has nowhere left to live.
+ *
+ * `-` marks a deletion in a patch hunk, so a removed `CLASS: BINDING` is not an addition. A markdown
+ * list item is unaffected: in a hunk it reads `+- item`, not `- item`.
+ */
+export function envelopeAddedText(command, target) {
+  const section = envelopeSections(command).get(target) ?? "";
+  return section.split("\n").filter((l) => !l.startsWith("-")).join("\n");
+}
+
+export function envelopeSections(command) {
+  const sections = new Map();
+  if (typeof command !== "string" || !command) return sections;
+  const lines = command.split(/\r?\n/);
+  let current = [];
+  let owners = [];
+  // ACCUMULATE, never overwrite. One envelope may name the SAME target more than once — the target
+  // list already dedupes it, so a `set()` here silently kept only the LAST section and dropped every
+  // earlier one. That reproduces the exact silent-promotion defect this sectioning was written to
+  // fix: promote a file in the first section, touch it again later, and the promotion disappears.
+  // "Per target" has to mean EVERY section belonging to that target, not the most recent.
+  const flush = () => {
+    if (!current.length) return;
+    const text = current.join("\n");
+    for (const o of owners) sections.set(o, sections.has(o) ? `${sections.get(o)}\n${text}` : text);
+  };
+  let lastSource = null;
+  for (const raw of lines) {
+    const line = raw.trimStart();
+    const isDirective = line.startsWith("*** ") && !NON_TARGET_DIRECTIVE_RE.test(line.trimEnd());
+    const m = isDirective ? DIRECTIVE_RE.exec(line) : null;
+    if (m) {
+      flush();
+      const [, kind, rawPath] = m;
+      const target = rawPath.trim();
+      if (kind === "Move to") {
+        // The rename's destination joins the section its SOURCE opened — both endpoints are one edit.
+        owners = lastSource ? [lastSource, target] : [target];
+        current = current.length ? current : [];
+        continue;
+      }
+      lastSource = target;
+      owners = [target];
+      current = [];
+      continue;
+    }
+    // Envelope GRAMMAR (`*** Begin Patch`, `*** End Patch`, …) is not any target's content. Letting
+    // it fall through would put the closing marker inside the last section — harmless for today's
+    // reader, but a section that carries text the target never contained is a small lie that the
+    // next consumer inherits.
+    if (line.startsWith("*** ")) continue;
+    if (owners.length) current.push(raw);
+  }
+  flush();
+  return sections;
 }
 
 // Directives that NAME A TARGET.

@@ -5,7 +5,8 @@
 // repo-specific families into .claude/kit.config.json (a [G] binding), GENERATES the [G] files
 // (entry stubs, BINDINGS, REPO_INVARIANTS, SYSTEM_MAP, OWNER_COMMS) from templates with placeholders,
 // installs the dual-lane SKILLS (one shared body under .agents/skills/, a thin shim per harness),
-// MERGES the Claude Code hook registrations into .claude/settings.json — three PreToolUse guards plus
+// MERGES the Claude Code hook registrations into .claude/settings.json — three PreToolUse guards, two
+// PreToolUse sensors (they print and never deny), plus
 // the Stop-event Owner-comms SENSOR, which fails OPEN — and, crucially, installs the HARNESS-AGNOSTIC
 // pre-commit hook and sets core.hooksPath, so a non-Claude lane still gets the strongest enforcement
 // floor the kit can give it (see PORTABILITY.md).
@@ -278,7 +279,7 @@ function fillTemplate(tmplPath, vars) {
   return text;
 }
 
-// Merge our three PreToolUse registrations into an existing settings.json, or create it.
+// Merge our PreToolUse registrations (3 guards + 2 sensors) into an existing settings.json, or create it.
 function mergeSettings(targetSettings, kitSettings, force) {
   let existing = {};
   if (existsSync(targetSettings)) {
@@ -415,6 +416,7 @@ function main() {
   log(`  core/ method docs: ${core.filter(([, s]) => s === "written").length} written, ${core.filter(([, s]) => s === "skipped").length} kept`);
 
   // 2. [P] Claude-lane hooks (verbatim mechanism): the three PreToolUse guards, which fail CLOSED,
+  // the two PreToolUse sensors, which never deny,
   // plus the Stop-event Owner-comms SENSOR, which fails OPEN and is a nudge, not enforcement (see
   // PORTABILITY.md § the Owner-comms sensor). Report kept-vs-written honestly: a KEPT (existing) hook
   // may be STALE, so "installed" would over-claim (a control believed current but actually old).
@@ -437,7 +439,7 @@ function main() {
   const claudeHooks = installHooks(path.join(T, ".claude", "hooks"));
   log(claudeHooks.kept
     ? `  .claude/hooks/: ${claudeHooks.installed} installed, ${claudeHooks.kept} EXISTING kept — may be STALE; re-run with --force to update`
-    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the guard-owner-comms Stop sensor (fails OPEN), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
+    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the sweep-owed and mutation-owed PreToolUse sensors (print, never deny), the guard-owner-comms Stop sensor (fails OPEN), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
 
   // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
   const pc = path.join(T, ".githooks", "pre-commit");
@@ -823,6 +825,13 @@ function main() {
                 hooks: [
                   entry("guard-cross-repo-writes.mjs", "Checking every patch target stays inside this repo…"),
                   entry("guard-lane-authoring.mjs", "Checking the task's lane declaration…"),
+                  // The two SENSORS run alongside the guards on the same matcher. They never deny —
+                  // registering them here is what stops them being installed-but-inert, which is the
+                  // failure mode this kit has already shipped once (files on disk, zero
+                  // registrations, exit 0). Order matters only for readability: a sensor cannot
+                  // change a guard's decision.
+                  entry("sensor-sweep-owed.mjs", "Checking whether this edit owes a pre-fold dependency sweep…"),
+                  entry("sensor-mutation-owed.mjs", "Checking whether this edit owes a two-sided mutation record…"),
                 ],
               },
               {
@@ -838,7 +847,7 @@ function main() {
         // watched. The file installs (the two trees stay byte-identical); only the registration is
         // withheld, and PORTABILITY.md says so.
         if (writeWithBackup(hooksJson, JSON.stringify(registration, null, 2) + "\n")) {
-          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 2 write guards (fail CLOSED) · Bash ⇒ the gate-ladder sensor (never denies)`);
+          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 2 write guards (fail CLOSED) + 2 sensors (never deny) · Bash ⇒ the gate-ladder sensor (never denies)`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
           }
@@ -859,8 +868,8 @@ function main() {
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
   const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
-  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse + Stop registrations merged (verified by read-back)`);
-  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 3 PreToolUse guards and the Stop sensor are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
+  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse (3 guards + 2 sensors) + Stop registrations merged (verified by read-back)`);
+  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 3 PreToolUse guards, the 2 PreToolUse sensors and the Stop sensor are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
   else warn(`.claude/settings.json: post-write verification FAILED — the registrations are NOT confirmed on disk. Inspect ${path.join(T, ".claude", "settings.json")} before trusting the Claude-lane controls.`);
 
   // 6. .claude/kit.config.json — the [G] repo-specific families (the ONLY parameterized DATA).

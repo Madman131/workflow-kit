@@ -25,9 +25,10 @@ On demand: `core/GATES.md` (running a gate) · `core/README.md` (index).
 Do **not** "read everything in `core/`" — the read is staged.
 
 ## ⚠ Enforcement asymmetry — which guards bind you, and when
-The three PreToolUse guards (cross-repo writes, lane-authoring, gate-ladder) are registered in BOTH
-lanes since kit v2.1 — `.claude/hooks/` for Claude Code, `.codex/hooks/` + `.codex/hooks.json` for
-Codex. **In the Codex lane they are INERT until a human grants Codex hook trust in an interactive
+Three PreToolUse GUARDS (cross-repo writes, lane-authoring, gate-ladder) have been registered in BOTH
+lanes since kit v2.1; **kit v2.2 adds two PreToolUse SENSORS** (sweep-owed, mutation-owed — they
+print and never deny) alongside them — `.claude/hooks/` for Claude Code, `.codex/hooks/` +
+`.codex/hooks.json` for Codex. **In the Codex lane they are INERT until a human grants Codex hook trust in an interactive
 session, and an untrusted hook is skipped SILENTLY** (no prompt, no warning, no exit-code change), so
 never assume they are live: `node scripts/check-codex-hooks-armed.mjs` is the only thing that answers
 it. They also bind write TOOLS — a file you change with a plain SHELL command is invisible to them,

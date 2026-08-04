@@ -71,7 +71,18 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GUARD_DIR="$SCRIPT_DIR/codex-gate-guard"
 
-MODEL="gpt-5.6-terra"; EFFORT="xhigh"; OUT=""; REPO="$(pwd)"; PROMPT_FILE=""; PROMPT=""; PROMPT_SET=0
+# DEFAULT EFFORT IS THE STANDING GATE EFFORT, NOT THE CEILING (kit v2.2).
+# This shipped `xhigh` while core/GATES.md § Model · effort matrix names `high` as the standing
+# effort and `xhigh` as the rare irreversible/money/auth cell. A runner whose default contradicts
+# the doctrine it serves means an adopter who simply runs it gates at the exception tier believing
+# they are at the norm — and the same matrix says to pass -m/-e EXPLICITLY rather than inherit a
+# default, precisely so this cannot happen quietly. Found by being bitten: this kit's own release
+# gate was launched on the inherited default and had to be relaunched.
+# The MODEL default is deliberately left as a concrete id: it is what the guarded runner has always
+# invoked, and silently changing which model an adopter's gate seats is a bigger break than the one
+# being fixed. Both are echoed in the banner line below, and a run that did not pass them says so.
+MODEL="gpt-5.6-terra"; EFFORT="high"; MODEL_SET=0; EFFORT_SET=0
+OUT=""; REPO="$(pwd)"; PROMPT_FILE=""; PROMPT=""; PROMPT_SET=0
 RESUME_ID=""; RESUME_SET=0; SELFTEST=0
 VERDICT_VALUE=""; INSPECTED_SCOPE=""; VERDICT_CONTRACT_ERROR=""
 TIMEOUT="${CODEX_GATE_TIMEOUT:-1800}"   # hard self-timeout (s); fail-closed if codex never finishes
@@ -80,7 +91,7 @@ while [ $# -gt 0 ]; do
     -o|-m|-e|-C|-f|-t|--resume)
       [ $# -ge 2 ] || { echo "codex-gate: $1 requires an argument" >&2; exit 2; }
       case "$1" in
-        -o) OUT="$2" ;; -m) MODEL="$2" ;; -e) EFFORT="$2" ;; -C) REPO="$2" ;; -f) PROMPT_FILE="$2" ;;
+        -o) OUT="$2" ;; -m) MODEL="$2"; MODEL_SET=1 ;; -e) EFFORT="$2"; EFFORT_SET=1 ;; -C) REPO="$2" ;; -f) PROMPT_FILE="$2" ;;
         -t) TIMEOUT="$2" ;;
         --resume) RESUME_ID="$2"; RESUME_SET=1 ;;
       esac
@@ -223,6 +234,12 @@ rm -f "$OUT.thread"
 
 MODE_LABEL="FULL(cold)"; [ -n "$RESUME_ID" ] && MODE_LABEL="WARM(resume=$RESUME_ID)"
 echo "codex-gate: mode=$MODE_LABEL model=$MODEL effort=$EFFORT repo=$REPO out=$OUT guard=ON (PIL_BLOCK_CLAUDE_COMPANION=1; shim=$GUARD_DIR/claude; anthropic keys emptied)" >&2
+# INHERITING A SEAT IS A CHOICE — make it a VISIBLE one. core/GATES.md § Model · effort matrix says
+# to pass both explicitly; this line is what stops "I did not pass -m/-e" from being invisible in
+# the receipt, so a spot-check can tell a bound seat from an inherited one.
+if [ "$MODEL_SET" -eq 0 ] || [ "$EFFORT_SET" -eq 0 ]; then
+  echo "codex-gate: NOTE — seat NOT fully bound on the command line ($([ "$MODEL_SET" -eq 0 ] && printf -- '-m ')$([ "$EFFORT_SET" -eq 0 ] && printf -- '-e ')defaulted). core/GATES.md § Model · effort matrix: pass -m AND -e explicitly; a default is not a binding, and the verdict record should name the seat it actually ran." >&2
+fi
 
 # Codex runs in the BACKGROUND so an independent watchdog can enforce a hard self-timeout: a stalled
 # init (20-27 min silent hangs were seen on some CLI/host states) becomes a BOUNDED, LOUD, fail-closed

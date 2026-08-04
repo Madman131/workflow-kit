@@ -126,7 +126,10 @@ export function roleFor(relPath) {
 }
 // The marker must appear in the head of the file, where a reader actually meets it.
 const MARKER_SCAN_LINES = 12;
-const CLASS_RE = /\bCLASS:\s*(BINDING|REFERENCE|STATE)\b/;
+// EXPORTED so there is ONE home for the class-marker pattern. `hooks/sensor-sweep-owed.mjs` reads
+// the same marker out of an edit FRAGMENT (a different window — see its classifyFragment), and a
+// second transcription of this regex is exactly the drift shape this kit has been burned by.
+export const CLASS_RE = /\bCLASS:\s*(BINDING|REFERENCE|STATE)\b/;
 // A REFERENCE doc is only safe to leave uncapped if it is genuinely navigable.
 const TOC_RE = /^#{2,3}\s+(contents|table of contents)\b/im;
 

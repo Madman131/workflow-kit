@@ -14,15 +14,71 @@
 > banner and the model·effort matrix each existed in four places and are now stated once.
 
 ## Contents
+- [Pre-flight — run BEFORE the contract is written](#pre-flight--run-before-the-contract-is-written) — the cheap checks that remove rounds
 - [Non-negotiable gate contract](#non-negotiable-gate-contract) — do NOT weaken
 - [PM disposition — riders on a DEFER](#pm-disposition--riders-on-a-defer) — self-contradiction escalates · behavioral defers get a labeled test
 - [Routing — which family gates what](#routing--which-family-gates-what) — pick by WHO BUILT
 - [Model · effort matrix](#model--effort-matrix) — change class → model · effort
 - [Codex gate](#codex-gate) — what it does · how to run · rounds & receipts · retired mechanisms · traps
+- [Retired before shipping: commit-time gate-adjudication records](#retired-before-shipping-commit-time-gate-adjudication-records) —
+  why a commit hook cannot count verdicts · do not rebuild
 - [Gemini cross-family gate](#gemini-cross-family-gate) — purpose · commands · delivery vs ingestion ·
   transport tiers · finite runtime · durable records · bounded slicing · exit codes & traps
 
-*Every subsection below sits under one of those two `##` headings; grep the heading text to jump.*
+*Every subsection below sits under one of those `##` headings; grep the heading text to jump.*
+
+## Pre-flight — run BEFORE the contract is written
+
+*Steps 1–2 are ordered before any contract is drafted, packet assembled, or seat spawned; steps 3–4
+each name the input they wait for. Rounds, not seats, are the expensive unit. Advisory: findings are
+fixed, or named in the contract. None of this is wired into `npm test` or CI.*
+
+*Commands and order only. **Every RULE this procedure serves lives in `core/REVIEW.md` § Cold review**
+— what the packet carries, what it excludes, how a pass-type is recorded. Nothing here is binding, by
+this file's own promise; if a step below looks like a rule, `core/REVIEW.md` is the text that governs.*
+
+> **⚠ ONE EXCEPTION: the RUNG ORDER is binding, and it is stated in `core/WORKFLOW.md` § Steer —
+> read it there, not here.** The *commands* below stay advisory; *when each rung fires* does not.
+> This banner deliberately does not restate the rules: a second copy drifts from the first, and
+> there is no reader who benefits from two.
+
+1. **Check the `§` references you touched — by hand.** ⚠ **This kit ships NO deterministic
+   reference checker**, so *both* within-document and cross-file `§` rot are unchecked by any
+   mechanism here: a renamed or deleted heading leaves every pointer to it silently wrong. Two
+   traps make the manual check less obvious than it sounds. **(a) This corpus marks subsections as
+   line-start bold lead-ins (`**Name — tagline**`) as well as `##` headings, and cites both with
+   `§`** — verify a pointer against *both* anchor forms or correct citations report as broken.
+   **(b)** On a changeset that deletes or renames a heading, the sweep sensor (`node
+   scripts/sweep.mjs`, or `/sweep`) may run the enumeration over every clause that depends on the
+   edited rule — vocabulary AND premise-sharers. Its findings are candidates for your judgment, not
+   a substitute for it; **a zero-finding sweep is not a clear.** *(A cross-file checker of this
+   shape was built and CUT in the repo this method came from — four defects in four rounds, one of
+   them a false CLEAR. A checker that clears a broken pointer is worse than no checker: it
+   manufactures assurance. If you build one, the matcher needs a third state — `unresolved` — not a
+   patch.)*
+2. **Run `node scripts/check-doc-size.mjs` early** — a cap overflow discovered at gate time costs a round.
+
+### Then — two steps whose inputs do NOT exist yet at pre-flight time
+
+*Named here because they belong to the same procedure and the same ordering rule, but each states the
+input it waits for. Running either earlier is not possible; skipping either because "pre-flight is
+done" is the failure this heading exists to prevent.*
+
+3. **Once the CONTRACT exists and before the panel is spawned — run the cross-family lens on it.**
+   It is metered separately from the build seats, so it is the cheapest seat available; running it
+   before the panel keeps its findings out of a blind seat's payload; and running it before the
+   BUILD is what kills a wrong premise while it is still one paragraph instead of a changeset.
+   Design mode is its documented strength, and a contract is exactly a design. How many firings this
+   is, and how it relates to the code-stage lens, is rung-order rule 1 — `core/WORKFLOW.md` § Steer,
+   not restated here.
+4. **Once the DIFF exists — a recurring-defect sweep.** The shapes this method pays for more than
+   once — prose naming a mechanism nothing reads · a field recorded with a value no source reported ·
+   a canary that exercises the backstop instead of the risk's own path · a fixture that structurally
+   cannot reproduce the target's conditions. **All four recurred inside one changeset** with three of
+   them already written down as lessons, so reading the list is demonstrably not enough: check the
+   diff against each. *No deterministic checker exists for any of these shapes; `node
+   scripts/sweep.mjs` (or `/sweep`) may run the enumeration. Calling either a control would be
+   exactly the first shape.*
 
 ## Non-negotiable gate contract
 
@@ -59,13 +115,86 @@ material* failure at all; these two fire on a `DEFER` that is individually legit
 
 ## Routing — which family gates what
 
-### ⚠ CODE MODE IS RESERVED — pick by WHO BUILT the change (owner decision, 2026-07-15; corrected same day)
-**Design gate → Gemini** (any Builder). **Code gate, CLAUDE-as-Builder → Codex** (`scripts/codex-gate.sh`).
-**Code gate, CODEX-as-Builder → Gemini IS the cross-family lens** (Codex cannot gate itself —
-`core/BINDINGS.md` § When Codex is the Builder); run it with `GEMINI_ALLOW_CODE_MODE=1`. That is **sanctioned**.
-`scripts/cold-review-gemini.sh` refuses an unqualified code-mode run (rc2) so the choice is deliberate.
+### ⚠ GEMINI REVIEWS DESIGNS, NOT DIFFS — pick by WHO BUILT the change (Owner ruling 2026-07-28; supersedes the 2026-07-15 routing)
 
-**CORRECTION (same day, from evidence):** the first framing said code mode was *retired* because `agy` drifts.
+| Builder | Design gate | Code gate |
+|---|---|---|
+| **Claude** | **Gemini** (`--design`) | **Codex** (`scripts/codex-gate.sh`) |
+| **Codex** | **Gemini** (`--design`) | **Claude Code** (`core/BINDINGS.md` § When Codex is the Builder names the seat) |
+
+*A frontier design-gate firing is **additive to** the Gemini lens, never a substitute — a same-family
+frontier pass replacing it would record a decorrelated gate that never happened.*
+
+**Both lanes now use Gemini the same way: on the DESIGN doc, never on a code changeset.** For a
+Codex-built change Gemini is still the cross-family lens — it just runs in **design mode** on the
+design-as-contract. Codex still cannot gate itself; the seat it cannot fill is the *code* gate, and
+**the Claude lane fills it**. (`core/WORKFLOW.md` § Steer requires a design doc for all T2/T3 work,
+so design mode always has an artifact to run on.)
+
+> **⚠ THIS IS A REDUCTION IN CROSS-FAMILY COVERAGE OF THE CODE — say so, do not call it equivalent.**
+> In the Codex lane the **code** was nominally seen by two non-Codex families (Gemini code-mode +
+> Claude); it is now seen by **one** (Claude). At T3 the *letter* of `core/WORKFLOW.md`'s "both
+> cross-family families" still holds — Gemini and Claude are both seated — but the second family now
+> sees only the design. **Accepted because an unreliable seat is not coverage:** the seat being
+> removed did not complete at changeset size (below). Design mode is a *different* lens, not a
+> replacement one — it cannot catch an implementation defect with no design-level shadow (a
+> truthiness read of a `"false"` flag, a fixture column typo, a wrong-key join). Those now rest on
+> the code gate alone.
+
+> **⚠ PRECONDITION — the Codex COLD PANEL must be hijack-proofed, or this route collapses to one family.**
+> Making the Claude lane the standing code gate means a Claude-companion Codex plugin is effectively
+> always installed, and § Gotchas / traps below explains that such a plugin hijacks review-shaped
+> prompts in a pure-Codex run into a real Claude review — non-empty and on-topic, so an output check
+> passes it. A Codex cold panel launched as a bare `codex exec` can therefore silently become a
+> Claude panel; combined with a Claude code gate that is **one family on the code with every box
+> ticked.** So: **the Codex cold panel MUST run through a guarded site (the `claude`-shim wrapper,
+> `scripts/codex-gate.sh`) or a hermetic `CODEX_HOME`** — see `core/BINDINGS.md` § When Codex is the
+> Builder. This is a precondition of the route, not a nicety.
+
+**Why the change — two independent reasons, both measured.** *(Provenance: both measurements were
+taken in the repo this method came from, on its runner and its host. They are **not** checkable from
+inside this kit — treat them as the recorded basis for the ruling, not as a claim you can re-derive
+here. The mechanism each describes is inspectable in `scripts/cold-review-gemini.sh`.)*
+1. **Reliability is a function of PAYLOAD SIZE, and code gates are always large.** Transport is chosen
+   per invocation by one size branch: `combined ≤ 80 KiB → INLINE`, else `FILE`. INLINE is the
+   reliable envelope (the cap sits just under the observed-good ~83 KB run); **FILE under-reads at
+   code-changeset sizes.** Measured on a 461 KB code-mode run: 15 of 16 distributed canaries echoed
+   in order, the final canary and the EOF receipt **absent** — a tail under-read, and the model still
+   emitted a confident, specific, on-topic `NO-GO` from the partial read. The canary contract caught
+   it; nothing else would have. A design doc fits INLINE, so this failure mode never fires in design
+   mode.
+2. **Yield.** This file's own § Evidence records design mode's starred breakthrough (5 real issues an
+   Opus panel missed) against code mode's *"the diff run found nothing useful"*. Code mode was both
+   the unreliable transport and the low-yield lens.
+
+**Division of labour, sharper than before:** Gemini asks *is the contract itself sound?*; the code gate
+asks *does the code violate the contract?*
+
+**`GEMINI_ALLOW_CODE_MODE=1` is DEMOTED to a documented escape — no longer the standing route.** Use it
+only when the code gate for this lane is genuinely unavailable (e.g. the Claude seat is exhausted), and
+then **only within the INLINE envelope**: if the payload exceeds 80 KiB you must take the bounded
+slice route (§ Gemini → Bounded slicing), because a single oversized FILE run is the failure above.
+`scripts/cold-review-gemini.sh` still refuses an unqualified code-mode run (rc2), so the choice stays
+deliberate.
+
+> **Residual, stated: this concentrates the Codex code gate on Claude — both its AVAILABILITY and its
+> FAMILY INTEGRITY.** Availability: when Claude is exhausted *and* the payload is large, the route is
+> a PM-approved bounded slice plan; if no viable slice set can be approved, record the seat
+> UNAVAILABLE + substitution + decorrelation level and escalate to the Owner rather than shipping
+> single-family. Family integrity: see the hijack precondition above — with only one non-Codex family
+> on the code, a compromised same-family panel is no longer caught by a second family. Removing code
+> mode as the default does not remove the fallback; it stops it being the everyday path.
+
+> **⚠ SUPERSEDED 2026-07-28 — read the ruling above first.** The next two blocks (CORRECTION, and
+> "the failure is AGENTIC DRIFT") argued AGAINST retiring code mode and are overridden; the third
+> ("Why design mode survives") argues FOR the ruling and its yield evidence still stands. All three
+> are retained for the agentic-drift evidence, which is still true and still the reason the
+> receipt/canary contract exists. In particular *"Delivery was never the problem"* was written before
+> the payload-size measurement above: it is correct that delivery (bytes reaching the transport) was
+> never the issue, and it says nothing about **ingestion**, which is what fails at changeset size. Do
+> not read it as licence to run a code-mode gate.
+
+**CORRECTION (2026-07-15, superseded — see above):** the first framing said code mode was *retired* because `agy` drifts.
 That over-generalised from ONE drift instance and ignored the Codex ladder. The log's own tally that day was
 **10 PASS / 6 FAIL**, and the dominant failure was **the verifier rejecting proofs that had SUCCEEDED** — it
 demanded one exact `CANARIES:` line and a bare receipt while the payload itself presents `RECEIPT: <token>`.
@@ -103,7 +232,19 @@ global write lock · silent dedupe data-loss · validate-vs-stamp timing break �
 ## Model · effort matrix
 *Change class → model · effort. The cell names a **capability tier**; the concrete model IDs are a binding (`core/BINDINGS.md`) and drift — confirm against the runtime config.*
 
-*Lineup (GPT-5.6): **sol** (`gpt-5.6-sol`, frontier) · **terra** (`gpt-5.6-terra`, balanced workhorse) · **luna** (`gpt-5.6-luna`, fast/cheap). Effort dial `low→medium→high→xhigh→max→ultra` (`ultra` = max reasoning + auto-delegation; sol only). Claude lineup maps by role: **opus** = frontier (≈sol) · **sonnet** = workhorse (≈terra) · **haiku** = fast/cheap (≈luna). **The gate floor is the workhorse** (`terra` / `sonnet`): the fast/cheap tier never gates.*
+*Vocabulary — three **capability tiers**, named here and bound to concrete ids in `core/BINDINGS.md`
+§ Roles → models: **frontier** (most capable, most expensive) · **workhorse** (balanced; the standing
+gate seat) · **fast-cheap**. Each family supplies its own three. Effort dial
+`low→medium→high→xhigh→max→ultra` (`ultra` = max reasoning + auto-delegation; frontier only).
+**The gate floor is the workhorse: the fast-cheap tier never gates.***
+
+> **⚠ MAP THE TIERS BY CAPABILITY, NOT BY ROLE NAME.** A lineup's *names* outlive its *shape*: when a
+> family adds a tier above its old top model, a mapping written as "our biggest = their biggest"
+> silently promotes the former top model into the frontier cell and the gate starts spending frontier
+> budget on a workhorse question — or, worse, seats a workhorse where the rare cell demanded the
+> frontier. **Re-derive the mapping from measured capability whenever either lineup changes**, and
+> record the result in `core/BINDINGS.md` rather than here; this file names tiers precisely so that a
+> re-binding never requires editing it.
 
 **POLICY — DEFAULT LOW, ESCALATE ON EVIDENCE (Owner ruling 2026-07-21).** A gate that is *unavailable*
 because it burned the quota is worse than an adequate gate that is *present*. Gate strength across the
@@ -111,23 +252,37 @@ whole ladder — cold panel + PM dispositions + the independent cross-family sea
 reasoning-effort alone; high effort is a rare pressure-relief valve, not the standing posture.
 
 **SCOPE: this governs the DEV / build-review gate ladder** (gates reviewing changes to *this* repo).
-**Autonomous *runtime* gates on live money — e.g. the Trader IC (`docs/claude_trader/`) — are OUT OF
-SCOPE** and governed by their own subsystem design; an autonomous + irreversible + money seat is the
-one place `max` reasoning can earn its cost, so it may keep a higher floor. If such a gate should also
-be lowered, that is a separate reconciliation with that lane, not this amendment. So, for dev gates:
+**Autonomous *runtime* gates on live money — an automated investment-committee seat, a payments
+approver — are OUT OF SCOPE** and governed by their own subsystem design; an autonomous + irreversible
++ money seat is the one place `max` reasoning can earn its cost, so it may keep a higher floor. If such
+a gate should also be lowered, that is a separate reconciliation with that lane, not this amendment.
+So, for dev gates:
 
 | Change class | Codex gate | Claude gate (when Codex builds) |
 |---|---|---|
-| **Any T2, or routine T3** (incl. reversible prod, chain/stateful) | **terra · xhigh** | **sonnet · xhigh** |
-| **Irreversible prod write · money-ledger · auth/credential** (rare, catastrophic-if-wrong) | **sol · xhigh** | **opus · xhigh** |
+| **Any T2, or routine T3** (incl. reversible prod, chain/stateful) | **workhorse · high** | **workhorse · high** |
+| **Irreversible prod write · money-ledger · auth/credential** (rare, catastrophic-if-wrong) | **frontier · xhigh** | **frontier · xhigh** |
+
+*Both columns are capability-equal per the vocabulary above. **Standing effort is `high`**, completing
+the DEFAULT-LOW ruling whose prose an all-`xhigh` matrix would contradict. A compute-weather mode that
+leans on one family gets no reduced seat in the other — it uses these same cells, so that mode costs
+more of the leaned-on family than it did; the verdict records the active binding.*
 
 - **`max` and `ultra` are NOT standing defaults for any dev gate.** They are **escalation-only**, and
   the trigger is concrete but is a **JUDGMENT control, not mechanical** (the round-counter hook was
   retired — round count is a conversation fact, not a tree fact): **after 2 NO-GO rounds that touch the
   same finding-class** — counted by the *recurrence of the finding*, not by whether the PM labels the
   round "contested" — the PM MUST either (a) request escalation (Owner-approved) or (b) stop-and-escalate
-  the scope call. On the **Codex** side escalation raises effort to `max`; on the **Claude** side, whose
-  effort is already capped at `xhigh`, it raises the *model* (`sonnet`→`opus`). Never silently grind at
+  the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high`, on round 3,
+  inside the soft stop.** That firing is **EXEMPT from the one-per-changeset cap** below and needs no
+  Owner GO — the cap's default consumer, the fold-check, has already spent the changeset's
+  discretionary firing on the round-1 delta, so without the exemption this rung could never fire. The
+  trigger is mechanical, not discretionary, which is what bounds it: **worst case two firings, and only
+  where one finding-class has failed twice.** ⚠ **Read that bound honestly: the trigger is mechanical
+  in FORM and self-reported in FACT.** Its input is the round count, and § Retired before shipping
+  below records why nothing observes that — round count is a conversation fact, not a tree fact. So
+  the worst case above is what the rule *authorises*, not what any mechanism *enforces*; what actually
+  bounds it is the recorded firing count and the Owner's spot-check of it. Never silently grind at
   the floor — and the WORKFLOW soft-stop (round 4+) is the backstop when the judgment control is dodged.
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
@@ -137,14 +292,61 @@ be lowered, that is a separate reconciliation with that lane, not this amendment
   Owner ratification), so the strong-gate cell cannot be dodged by re-labelling at the gate; a
   mis-set tier is caught upstream where it is already governed.
 - **This policy sets the CROSS-FAMILY GATE seat's model·effort, not the same-family cold panel.** The
-  blind cold panel (`core/BINDINGS.md` § Roles — currently a blind Opus 4.8 panel) is the same-family
-  spine, a distinct seat; whether *it* also drops to the workhorse (`sonnet`) to conserve budget is a
-  separate Owner call, not folded in here.
-- **The rare cell keeps the stronger MODEL at the capped effort** (`sol`/`opus` · xhigh), never higher
+  blind cold panel (`core/BINDINGS.md` § Roles) is the same-family spine, a distinct seat; whether *it*
+  also drops to the workhorse to conserve budget is a separate Owner call, not folded in here.
+- **THE FRONTIER TIER IS CAPPED AT ONE FIRING PER CHANGESET.** The frontier seat is reserved on
+  **cost**, and a cap is what makes the reservation operational rather than aspirational: one firing
+  per changeset is not "regularly". **"Changeset" is as `core/WORKFLOW.md` § Gate defines it — the
+  task, not the file version**, so re-freezing after a fix, splitting findings, or swapping reviewers
+  does not mint a second allowance. **Default consumer: the fold-check on a remediation delta**, before
+  the cross-family bookend. **A second DISCRETIONARY firing requires an Owner GO; any agent MAY request
+  one with a reason — requesting is not authorizing.** Discretionary consumers **compete for that one
+  budget and are never additive**: a design gate spends the allowance *instead of* the fold-check; on an
+  irreversible/money/auth change the rare-cell gate seat **is** the firing. **Outside the cap:** the
+  round-3 escalation above (mechanical trigger), an Owner-initiated frontier review (`/frontier-review`),
+  and **the pinned DECIDER seat — the cap governs REVIEW and CONSULT firings, and a decider is neither**
+  (`core/FOUNDATIONS.md` § Principles P3 pins the decider). **The verdict record stamps each firing**,
+  which is what makes the cap a spot-checkable number rather than a claim. ⚠ **A cap with no recorded
+  count is not a control** — if the firings are not stamped, nothing distinguishes one from four.
+  ⚠ **AND THE CAP IS PER-CHANGESET, SO SUBDIVIDING THE WORK MULTIPLIES IT.** `core/WORKFLOW.md`
+  § Steer actively tells you to split a change bundling separable tiers into separately-gated
+  commits — and each resulting changeset carries its own allowance, with every box still ticked. That
+  is a legitimate consequence of splitting; it is never **a reason** to split. Splitting to buy
+  frontier firings is this cap's compliant-yet-defeating path, it is invisible to any per-changeset
+  count, and the only thing that sees it is an Owner spot-check across the **task**. So when one task
+  ships as several changesets, say so in the record.
+- **⚠ AN ENTITLEMENT ERROR IS NOT A REVIEWER VERDICT. WHETHER IT IS A HOLD DEPENDS ON WHICH ID FAILED.**
+  A CLI or companion plugin that accepts **friendly aliases** (`opus`, `sonnet`) may expand them to
+  ids you did not ask for — a **superseded generation**, or a large-context variant gated behind
+  credits your account lacks. Invoked by alias, the gate then dies **before reading the artifact** with
+  an entitlement error. That is an **entitlement failure — not a verdict and not a finding against the
+  change.** The alias is doubly wrong when it pins an old generation: wrong model *and* credit-gated.
+  Bind the **concrete current-generation id** in `core/BINDINGS.md`, which passes through such a mapping
+  unchanged, and never "fix" a binding back to the friendly alias.
+  - **⚠ WHICH ID FAILED DECIDES WHETHER YOU RETRY AT ALL. THERE IS NO BLANKET RETRY.** An operator
+    following a concrete-id binding is *already* on the concrete id — so "retry with the concrete id"
+    would be a no-op re-run, not a fix. Branch on the failing invocation:
+    - **The failing invocation used an ALIAS** → the alias expansion *is* the bug. Re-invoke **exactly
+      once** with the **full bound invocation — concrete id AND an explicit effort flag**, never a bare
+      model flag. A retry that drops the effort flag still returns a verdict, but at the CLI's own
+      default tier instead of the bound depth. Then fix the caller so it stops using the alias.
+    - **The failing invocation already used the CONCRETE id** → this is a **genuine entitlement
+      failure** on that account. **Do NOT retry** — an identical re-run cannot discriminate and only
+      manufactures the appearance of a second data point. Go **straight to the substitution/HOLD path**
+      (`core/REVIEW.md` § External gate).
+    - **⚠ IT IS NEVER A PASS.** "Not a HOLD" means *this error is not itself the HOLD trigger*; it does
+      **not** license proceeding ungated. Whichever branch you took, if no verdict was produced the
+      gate **HOLDs**: **no verdict still means no pass** (`core/INVARIANTS.md`, fail closed). There is
+      no third attempt and no retry loop.
+  - **Always pass the effort flag explicitly.** A CLI's default-effort table is keyed to the ids its
+    authors knew about, so it may have **no entry for a newer id** — an invocation that omits the flag
+    then silently falls back to the CLI's own default instead of the gate's bound depth. The flag is
+    load-bearing, not decorative.
+- **The rare cell keeps the stronger MODEL at the capped effort** (frontier · xhigh), never higher
   effort — so the strongest gate stays on the one irrecoverable category without any `max`/`ultra`
   spend. That cell fires rarely, so it barely touches aggregate burn.
 - **Escalation is a FOLDED ADJUDICATION, not a blind re-review.** The escalated pass is handed the
-  contested finding PLUS the original artifact: *"`terra` rejected this for X; here is the change — is
+  contested finding PLUS the original artifact: *"the workhorse seat rejected this for X; here is the change — is
   it right?"* Never a finding-only vacuum (it can't adjudicate a technical claim without the code), and
   never a clean-slate pass (a blind re-gate lets the stronger model silently *erase* a valid finding —
   approval-shopping).
@@ -152,7 +354,7 @@ be lowered, that is a separate reconciliation with that lane, not this amendment
   **auth/credential boundary** (any diff size — a 5-line scope change can be catastrophic), **moving
   money / a ledger**, or an **irreversible prod write** — never by effort-vibes (P1: gate ∝ blast-radius).
 - **Always pass `-m` AND `-e` explicitly** — never inherit the config default (`~/.codex/config.toml`
-  ships `terra`/`xhigh`, so an un-pinned *build* silently runs the gate ceiling; see the builder policy
+  may ship a workhorse/`xhigh` default, so an un-pinned *build* silently runs the gate ceiling; see the builder policy
   in `core/BINDINGS.md`). The verdict record stamps `{model · effort · tier · contributing-families}`,
   each family **runtime-stamped from the model actually invoked** (`-m`/API key), not self-reported.
   The Owner spot-check covers **tier-appropriate model** AND **gate-family ∉ contributing-families**.
@@ -257,6 +459,40 @@ about: the frontier-thin / cost-inversion lanes lose their *mechanical* release 
 the standard ladder + push-GO. *(Both build lanes were themselves retired later — authoring is
 in-thread; see `core/README.md` § Provenance. This paragraph is kept as the manifest's history.)* `docs/journal/gate_manifests/` is kept as a historical artifact.
 **Do not rebuild it** without first wiring it to the path work actually ships on (a pre-push hook).
+
+### Retired before shipping: commit-time gate-adjudication records
+
+**Built, gated, NO-GO twice, and discarded. Do not rebuild it at the commit boundary.** *(Provenance:
+built and measured in the repo this method came from; the reasoning below is checkable here, the
+counts are not.)* The intent was to stop a repeat of a ladder that ran ~18 remediation cycles because
+the PM treated each NO-GO finding as an automatic work order instead of recording the
+REAL?/SCOPE?/BOUNDED?/WORTH IT? disposition with a concrete `TRIGGER:` before editing. The mechanism: a
+gated code commit would require an adjudication permit committed in the PARENT commit, with the round
+number DERIVED from committed permits rather than self-reported.
+
+**Why it cannot work — the ruling that already existed.** *Round counting is a **conversation** fact,
+not a **tree** fact — a commit cannot observe how many reviewer verdicts preceded it.* Two blind cold
+panels then **demonstrated** it. The decisive result: one permit of an `initial` kind — which the
+schema forces to carry no findings — followed by **8 consecutive code commits, all accepted, 1 permit
+in history, zero dispositions recorded.** The originating incident reproduced **unchanged**. Counting
+permits counts *records the agent chose to write*, not verdicts, so no commit-boundary control closes
+it. **This is why `core/WORKFLOW.md` § Gate says no hook counts rounds** — that clause is a conclusion
+from evidence, not a preference.
+
+**Two further lessons worth more than the code.**
+1. **Each patch round opened a new hole.** Unblocking a false-block on `git commit --amend` exempted
+   the latest permit from the append-only rule *and* skipped its validation — letting the derived
+   count be frozen indefinitely and an already-used authorisation be widened after the fact.
+2. **Git does not funnel landings through `pre-commit`.** `cherry-pick`, `revert`,
+   `rebase --continue` (detached HEAD) and clean merges never run it at all. **`--amend` DOES run
+   it — and that is its own trap.** `git diff --cached` compares the index against the commit being
+   *replaced*, so a record already committed there is **invisible in the staged set** while still
+   landing in the amended commit, and the amended commit's parent holds neither record nor code. The
+   two-stage "authorisation was committed first" invariant is structurally gone. It first surfaced as
+   a false BLOCK — and unblocking *that* is the hole in lesson 1. **A commit-time hook is a tripwire
+   for *forgetting*, never a boundary.** *(This bounds what `.githooks/pre-commit` can promise: it is
+   this kit's only every-lane control, and it is still a tripwire — see `core/BINDINGS.md`
+   § Enforcement asymmetry.)*
 
 ### Gotchas / traps
 - **MCP tool's short per-call cap (~2 min observed) kills deep passes** — use `codex exec` via Bash for anything real; MCP only for a fast, diff-scoped lens.
