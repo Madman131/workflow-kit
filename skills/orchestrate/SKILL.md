@@ -41,20 +41,21 @@ into a private worktree.
 
 ## The chip cycle
 1. **Startup gate** — the sole-writer check, the version confirmed against the repo's real head,
-   scope acknowledged back to the orchestrator.
+   scope acknowledged to the orchestrator.
 2. **Budget-free rungs first.** Every deterministic check runs and is fixed BEFORE a review seat is
    spawned. A clean free pass never lightens the panel.
 3. **FREEZE, then seat.** Each seat verifies the frozen SHA itself; editing while seats are live is
    its own NO-GO. Freeze compliance is checked by the panel, never promised by the author.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT (why each:
-   `PROTOCOLS.md`). Cold seats default to the workhorse tier at standard effort.
+   `PROTOCOLS.md`). Cold seats default to the workhorse tier at standard effort; **evidence
+   escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's **fold-check** on
    the remediation delta (`/frontier-review`). Repeated NO-GO rounds on ONE class escalate rather
    than repeat.
 6. **PR, then independent diligence.** The orchestrator re-runs the evidence on the final head, not
-   the worker's summary of it.
+   the worker's summary.
 7. **GO ask → merge → verify on merged main BY EXECUTION** → fast-forward the primary clone →
-   report residue: branches, worktrees, processes.
+   report residue.
 
 *What every brief must carry: `.agents/skills/orchestrate/CHIP_BRIEF.md`. The incident behind each
 rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing a brief.*

@@ -14,7 +14,8 @@ correctly on its first turn is in the brief or in the shared program record it p
    that trusts it ships a wrong stamp.
 2. **The program record** — the one file holding the program's state and rulings, marked READ THIS
    FIRST AND WHOLE. It is the source material, not background reading.
-3. **Startup gate** — the sole-writer proof (lane declarations, main checkout and every worktree),
+3. **Startup gate** — the sole-writer CHECK, never called a proof (lane declarations, main checkout
+   and every worktree; it finds writers who DECLARED, and the body states what it misses),
    and a startup confirmation back to the orchestrator naming the base SHA, the version, and the
    scope as the worker understood it. **An unacknowledged brief is unconfirmed, not undelivered** —
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
@@ -22,9 +23,8 @@ correctly on its first turn is in the brief or in the shared program record it p
 4. **Scope** — what ships, and explicitly what does NOT. Name the artifacts.
 5. **Process** — the rungs in order (§ The chip cycle in the body), and which of them this chip's
    gate may skip, decided in advance rather than at the moment the worker is tired.
-6. **Standing rules** — the ones that bind every chip in the program: surgical staging, no
-   blanket-staging, the identity ritual, generalization rules (no Owner name, no model names, no
-   absolute paths) and the repo's own read-only sources.
+6. **Standing rules** — the ones binding every chip: surgical staging, the identity ritual,
+   generalization rules (no Owner name, no model names, no absolute paths), read-only sources.
 7. **Consult protocol** — route questions to the orchestrator with stage, question, options with
    costs, and a recommendation; keep working while waiting. Name the exception that is the Owner's
    alone: the merge/push GO and risk acceptance.
@@ -43,7 +43,6 @@ correctly on its first turn is in the brief or in the shared program record it p
   doctrine, not merely for leaked names. Likewise, when a claim's provenance receipt is stripped
   because it does not belong in the target, DOWNGRADE the claim with it — a stripped receipt
   silently converts a proven claim into an asserted one.
-- **Adapt the remedy to the target's defect surface.** A source fix ported whole can carry
-  machinery the target does not need; the target may already be immune for its own reasons. Port
-  the half that applies, and pin the accidental immunity with a characterization test so a future
-  change reddens it.
+- **Adapt the remedy to the target's defect surface.** A source fix ported whole can carry machinery
+  the target does not need; the target may already be immune for its own reasons. Port the half that
+  applies, and pin the accidental immunity so a future change reddens it.

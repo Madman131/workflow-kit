@@ -115,6 +115,15 @@ test("the freeze rule is stated as panel-enforced, not as an intention", () => {
     "freeze is panel-enforced");
 });
 
+test("the escalation rule stays in the body — it is a rule, not rationale that may be displaced", () => {
+  // This clause was DELETED, not moved, during a budget-driven cut, and the commit message for that
+  // cut described it as a displacement to the reference layer. It bounds when a seat may be run
+  // hotter than the default, so it is an anti-arbitrary-escalation RULE: the reference-layer rule
+  // forbids moving it to a layer the executor might not load, and deleting it is worse than moving.
+  const body = readFileSync(BODY, "utf8");
+  pin(body, "**evidence\n   escalates them, appetite does not.**", "evidence not appetite");
+});
+
 // ── (2) the reference layers, and the enumerations that must agree with the tree ────────────────
 
 test("both reference layers are named by the body and declare their own budgets", () => {
@@ -132,6 +141,18 @@ test("both reference layers are named by the body and declare their own budgets"
   }
 });
 
+test("the corrections inside CHIP_BRIEF are pinned too — a reference layer can carry the old lie", () => {
+  // The failure this exists to stop, and it happened here: the sole-writer over-claim was fixed in
+  // the body and in the README while CHIP_BRIEF.md went on saying "the sole-writer proof". Fixing a
+  // claim in one place and leaving its twin standing is the recurring shape; the layer that briefs
+  // every worker is the worst place to leave it.
+  const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
+  pin(brief, "the sole-writer CHECK, never called a proof", "brief calls it a check");
+  pin(brief, "**An unacknowledged brief is unconfirmed, not undelivered**", "unacknowledged ≠ undelivered");
+  assert.doesNotMatch(brief, /sole-writer proof/,
+    "CHIP_BRIEF must not call the sole-writer check a PROOF — the body says it is not one");
+});
+
 test("PORTABILITY's [P] enumeration names EVERY shipped skill — a doc that omits one lies about the tree", () => {
   // The failure this exists to stop, executed on this release: `/sweep` shipped in v2.2.0 and the
   // `[P]` list was never updated, so the adopter-facing inventory of what gets copied verbatim was
@@ -142,8 +163,14 @@ test("PORTABILITY's [P] enumeration names EVERY shipped skill — a doc that omi
   // so a reshaped or emptied skill list stayed green as long as the names appeared ANYWHERE in
   // between (the guards, sensors and runners are enumerated in that same range). Anchor on the
   // parenthesised list that follows the `skill-shims/*` mention and read only its `/name` tokens.
-  const listed = /`skill-shims\/\*`\s*\(([^)]*)\)/.exec(portability.replace(/\s+/g, " "));
-  assert.ok(listed, "the skills enumeration must be findable — its shape changed, re-point this test");
+  // Anchor inside the [P] BULLET, not on the first `skill-shims/*` text anywhere in the file: an
+  // unanchored match could bind to a decoy list elsewhere and stay green after the real inventory
+  // was reshaped or removed. Bound the search to the [P] item, then find the list within it.
+  const flatText = portability.replace(/\s+/g, " ");
+  const pBullet = /`\[P\]` \(verbatim\):(.*?)- `\[G\]`/.exec(flatText);
+  assert.ok(pBullet, "the [P] bullet must be findable — its shape changed, re-point this test");
+  const listed = /`skill-shims\/\*`\s*\(([^)]*)\)/.exec(pBullet[1]);
+  assert.ok(listed, "the skills enumeration must sit INSIDE the [P] bullet — re-point this test");
   const named = new Set([...listed[1].matchAll(/`\/([A-Za-z0-9._-]+)`/g)].map((m) => m[1]));
   assert.ok(named.size >= 7, `the parsed list must be non-empty and plural — parsed ${named.size}`);
   const shipped = execFileSync("ls", [path.join(KIT, "skills")], { encoding: "utf8" }).trim().split("\n");
