@@ -1,8 +1,36 @@
-# workflow-kit — v1.5.0
+# workflow-kit — v1.5.1
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.5.1
+
+**Two executed-verified fixes to the Owner-comms Stop sensor (`hooks/guard-owner-comms.mjs`), both
+exposed by a real adopter's back-port evidence.** Both move the sensor toward allowing or warning —
+neither adds a new way to block.
+
+- **An inline `<system-reminder>…</system-reminder>` pair in the Owner's own sentence is no longer
+  stripped.** The closed-tag strip rule is now line-start anchored, like the unclosed rule always
+  was (the kit's own principle: an injected block begins its own line). Unanchored, it erased the
+  Owner's words from around a mid-sentence pair — shrinking a long question below the short-question
+  ceiling and **falsely blocking** a correct answer. Genuine own-line injected blocks (leading,
+  trailing, indented) are stripped exactly as before. Known residual, deferred and pinned by a
+  labeled characterization test: a *nested* block of the same tag still defeats the lazy matcher and
+  the size check skips (fails open; the harness has never been observed to nest these).
+- **The question-shorthand harvest no longer requires one row per line — and an empty harvest warns
+  instead of silently disarming.** The line-anchored harvest read ZERO tokens from a doc whose
+  `` `TOKEN` = gloss `` definitions sit inline in prose (a real adopter format), so question
+  coverage was off with no sign anywhere. The harvest is now unanchored (a gloss runs to the next
+  definition or a blank line); the template's fenced format examples are still never mistaken for
+  the Owner's vocabulary, and its prose format mention is stripped too. When a named-Owner doc
+  carries definition-shaped rows but NONE parse outside the fence, the hook emits a **non-blocking
+  stderr warning** — the kit has no fallback vocabulary to fail toward, so it says it is uncovered
+  rather than pretending otherwise. A doc with no shorthand section at all stays silent (that is a
+  legitimate state), as does an all-instruction vocabulary.
+
+No control tightens; no adopter action required. Re-run `init --force` (see the v1.3 `--force`
+notes) or hand-copy `hooks/guard-owner-comms.mjs` into `.claude/hooks/` to pick up the fixed sensor.
 
 ## What's new in v1.5
 

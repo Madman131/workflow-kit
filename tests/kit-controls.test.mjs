@@ -509,6 +509,23 @@ test("guard-owner-comms is a FAIL-OPEN sensor: dormant until named, then it disc
     // question, drop its "?", and silently disable the size check on a genuine short question.
     write("Is `<system-reminder>` supported?", LONG);
     assert.equal(decide(), "block", "an inline tag MENTION is Owner text, not an injected block");
+    // A CLOSED tag pair inline in the Owner's sentence is their text too (v1.5.1). The unanchored
+    // strip this pins against erased the Owner's words from around the pair, shrinking a long
+    // question below the short-question ceiling and arming the size check where it must stay
+    // silent — a FALSE BLOCK, the direction that costs the Owner most.
+    const w30 = Array.from({ length: 30 }, (_, i) => `w${i}`).join(" ");
+    write(`Is <system-reminder>${w30}</system-reminder> fine?`, LONG);
+    assert.equal(decide(), "allow", "a long question stays long — an inline CLOSED pair is not stripped");
+    // When such a question IS short the size check fires fairly — and quotes the Owner's words
+    // intact, which the unanchored strip erased from the echo.
+    write("Is <system-reminder>this component</system-reminder> supported?", LONG);
+    assert.equal(decide(), "block", "a SHORT question with a short inline closed pair is still sized");
+    assert.match(JSON.parse(run().stdout).reason, /this component/,
+      "the Owner's inline words survive into the echoed question");
+    // The line anchor tolerates the harness's own indentation: a genuine own-line block still strips
+    // (the leading/trailing rows above pin the unindented shape).
+    write("  <system-reminder>project context blob</system-reminder>\nAR", LONG);
+    assert.equal(decide(), "block", "an INDENTED own-line injected block is still stripped");
 
     // --- a subagent's prompt must not be mistaken for the Owner's message ---
     writeEntries([
@@ -590,6 +607,103 @@ test("the template's EXAMPLE shorthand is never harvested as the Owner's own voc
       "`LE` = loose ends pending? — what is still open.\n`CMPD` = commit, merge, push, deploy."));
     const tokens = ownerContract(dir).questionTokens;
     assert.deepEqual(tokens, ["LE"], "real rows outside the fence ARE harvested, and only the ones that ask");
+  } finally { cleanup(); }
+});
+
+test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an empty harvest WARNS instead of silently disarming", async () => {
+  const { ownerContract } = await import(path.join(KIT, "hooks", "guard-owner-comms.mjs"));
+  const { dir, cleanup } = adopt(["--owner-name", "Alex", "--skip-codex-prompt"]);
+  try {
+    const doc = path.join(dir, "core", "OWNER_COMMS.md");
+    const original = readFileSync(doc, "utf8");
+    const transcript = path.join(dir, "transcript.jsonl");
+    const LONG = "word ".repeat(400);
+    const write = (user, assistantText) => writeFileSync(transcript, [
+      { type: "user", message: { role: "user", content: user } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: assistantText }] } },
+    ].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    // Crash-aware, and it returns stderr too — the WARN channel is part of the contract under test.
+    const run = () => {
+      const r = spawnSync("node", [path.join(dir, ".claude", "hooks", "guard-owner-comms.mjs")], {
+        cwd: dir, encoding: "utf8", input: JSON.stringify({ transcript_path: transcript }),
+        env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+      });
+      assert.equal(r.status, 0, `hook must exit 0, got ${r.status}: ${r.stderr}`);
+      return { decision: r.stdout.includes('"decision":"block"') ? "block" : "allow", stderr: r.stderr };
+    };
+
+    // (1) INLINE-PROSE rows — a real adopter format (the executed downstream failure: a doc in this
+    // shape harvested ZERO tokens under the line-anchored rule, and "AR" + a 430-word inventory
+    // sailed through). The harvest must not require one-row-per-line, and the LIVE hook must act on
+    // what it harvested.
+    writeFileSync(doc, original.replace("{{OWNER_SHORTHAND}}",
+      "Alex types `RD` = report done? — is the report finished. Alex also types `MIS` = make it so — proceed on the agreed scope."));
+    assert.deepEqual(ownerContract(dir).questionTokens, ["RD"], "inline-prose rows are harvested, and only the one that asks");
+    assert.equal(ownerContract(dir).shorthandUnharvested, false, "a working harvest raises no warning flag");
+    write("RD", LONG);
+    let r = run();
+    assert.equal(r.decision, "block", "the LIVE hook enforces a question token harvested from inline prose");
+    assert.doesNotMatch(r.stderr, /WARN/, "no coverage warning while coverage exists");
+    write("MIS", LONG);
+    assert.equal(run().decision, "allow", "an inline-prose INSTRUCTION (no '?' in its gloss) still earns a work report");
+
+    // (2) FENCED-EXAMPLES-ONLY — the pristine generated doc, armed by name but {{OWNER_SHORTHAND}}
+    // never filled. Definition-shaped rows exist (the template's fenced examples) yet NONE parse
+    // outside the fence: question coverage is OFF and the kit has no fallback vocabulary to fail
+    // toward, so the hook must SAY so — stderr, non-blocking — instead of running silently uncovered.
+    writeFileSync(doc, original.replace("{{OWNER_SHORTHAND}}", ""));
+    assert.equal(ownerContract(dir).shorthandUnharvested, true, "fenced-examples-only sets the warning flag");
+    write("AR", LONG);
+    r = run();
+    assert.equal(r.decision, "allow", "the warning never blocks — the sensor still fails open");
+    assert.match(r.stderr, /guard-owner-comms WARN/, "the empty harvest is announced on stderr");
+    assert.match(r.stderr, /coverage is OFF/, "…and the warning says what is actually off");
+
+    // (3) An ALL-INSTRUCTION vocabulary parsed fine — question coverage is legitimately empty, not
+    // lost, so warning here would be a perpetual false alarm for that adopter.
+    writeFileSync(doc, original.replace("{{OWNER_SHORTHAND}}", "`CMPD` = commit, merge, push, deploy."));
+    assert.equal(ownerContract(dir).shorthandUnharvested, false, "a parsed instruction-only vocabulary is not a failed harvest");
+    write("AR", LONG);
+    assert.doesNotMatch(run().stderr, /WARN/, "no warning when the harvest worked and the Owner just has no question shorthand");
+
+    // (4) NO shorthand section at all (the template says to delete it when the Owner has none):
+    // nothing definition-shaped anywhere, so silence is the truthful report.
+    const cut = original.slice(0, original.indexOf("**Alex's shorthand"));
+    assert.notEqual(cut, original, "the generated doc carries the shorthand section marker this case removes");
+    writeFileSync(doc, cut);
+    assert.equal(ownerContract(dir).shorthandUnharvested, false, "no shorthand section, no warning flag");
+    write("AR", LONG);
+    r = run();
+    assert.equal(r.decision, "allow", "no section means no question tokens — AR is not shorthand here");
+    assert.doesNotMatch(r.stderr, /WARN/, "an Owner with no shorthand section is a legitimate state, not a warning");
+  } finally { cleanup(); }
+});
+
+test("DEFERRED — not desired; delete when fixed: nested injected blocks hide the question token", () => {
+  // A block nested INSIDE another block of the same tag defeats the lazy matcher: the strip ends at
+  // the inner closer, the residue keeps `AR` from standing alone, and the size check skips. This
+  // asserts the CURRENT behavior (allow — a missed advisory nudge, failing OPEN), which is identical
+  // in this hook, its pre-v1.5.1 version, and the downstream adopter's merged baseline. It is NOT
+  // the desired behavior; a fix needs a balanced scanner, deferred as new surface for a harness
+  // shape never observed in the wild (same ruling as the downstream port's ratified DEFER).
+  const { dir, cleanup } = adopt(["--owner-name", "Alex", "--skip-codex-prompt"]);
+  try {
+    const doc = path.join(dir, "core", "OWNER_COMMS.md");
+    writeFileSync(doc, readFileSync(doc, "utf8").replace("{{OWNER_SHORTHAND}}",
+      "`AR` = archive ready? — is this thread closed out on the remote."));
+    const transcript = path.join(dir, "transcript.jsonl");
+    const nested = "<system-reminder>outer\n<system-reminder>inner</system-reminder>\nouter</system-reminder>\nAR";
+    writeFileSync(transcript, [
+      { type: "user", message: { role: "user", content: nested } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "word ".repeat(400) }] } },
+    ].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    const r = spawnSync("node", [path.join(dir, ".claude", "hooks", "guard-owner-comms.mjs")], {
+      cwd: dir, encoding: "utf8", input: JSON.stringify({ transcript_path: transcript }),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+    });
+    assert.equal(r.status, 0, `hook must exit 0, got ${r.status}: ${r.stderr}`);
+    assert.ok(!r.stdout.includes('"decision":"block"'),
+      "characterization: the nested-block residue hides AR and the size check skips (fails open)");
   } finally { cleanup(); }
 });
 
