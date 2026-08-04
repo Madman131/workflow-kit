@@ -566,13 +566,82 @@ printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"trivial-ed
 TIERLESS_OUT="$(guard_output "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")"
 printf '%s' "$TIERLESS_OUT" | grep -q '"permissionDecision":"deny"' && ok "write-time: a pre-v1.5 TIER-LESS exemption is BLOCKED (not grandfathered)" || bad "a tier-less exemption must be blocked"
 printf '%s' "$TIERLESS_OUT" | grep -q 'exempt-tier-missing' && ok "…via an EXPLICIT exempt-tier-missing state (not a generic malformed)" || bad "the deny must name the exempt-tier-missing state"
-printf '%s' "$TIERLESS_OUT" | grep -q 'MISSING its' && ok "…and the remediation names the field that is missing" || bad "the deny must name the missing tier field"
+printf '%s' "$TIERLESS_OUT" | grep -q 'MISSING OR INVALID' && ok "…and the remediation admits BOTH polarities (absent AND invalid)" || bad "the deny must admit both tier polarities"
 for T in T0 T1 T2 T3; do
   printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"%s"}\n' "$SID" "$T" > "$DECL"
   assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "write-time: exempt + tier $T is PERMITTED (no over-block)"
 done
 printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T9"}\n' "$SID" > "$DECL"
-assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "write-time: an INVALID exempt tier (T9) is BLOCKED"
+INVALID_OUT="$(guard_output "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")"
+printf '%s' "$INVALID_OUT" | grep -q '"permissionDecision":"deny"' && ok "write-time: an INVALID exempt tier (T9) is BLOCKED" || bad "an invalid exempt tier must be blocked"
+# THE HONESTY HALF. The block text used to assert the tier was "MISSING its \`tier\`" against a file
+# visibly carrying tier:"T9" — a control that misdescribes the input it just read trains its reader
+# to discount it. One state, both polarities, one honest string.
+printf '%s' "$INVALID_OUT" | grep -q 'MISSING OR INVALID' && ok "…and the block does NOT claim the tier is MISSING from a file carrying T9" || bad "the invalid-tier block must not claim the field is missing"
+
+echo
+echo "(exempt ledger) the ledger's named consumer is the OWNER'S SPOT-CHECK — who cannot read a hash"
+LEDGER="$ADOPTER/.claude/lane-ledger.jsonl"
+: > "$LEDGER"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T2"}\n' "$SID" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+tail -1 "$LEDGER" | grep -q '"tier":"T2"' && ok "an exempt ALLOW row records the tier in CLEAR TEXT (not only inside declarationHash)" || bad "the exempt allow row must carry a clear-text tier"
+# Absent THEN invalid: same state, decision, task, session and path, and no hash on either — so
+# without declaredTier IN THE DEDUPE KEY the second row is silently swallowed as a repeat, and the
+# trail loses the only field that distinguishes a tier-less deny from a T9 deny.
+: > "$LEDGER"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down"}\n' "$SID" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T9"}\n' "$SID" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+DENY_ROWS="$(grep -c 'exempt-tier-missing' "$LEDGER" || true)"
+assert_eq 2 "$DENY_ROWS" "an ABSENT-tier deny and an INVALID-tier deny are TWO rows (dedupe does not swallow the second)"
+head -1 "$LEDGER" | grep -q 'declaredTier' && bad "the ABSENT-tier deny must record NO declaredTier" || ok "the ABSENT-tier deny records no declaredTier (absent stays distinguishable)"
+tail -1 "$LEDGER" | grep -q '"declaredTier":"T9"' && ok "the INVALID-tier deny records the value it REJECTED" || bad "the invalid-tier deny must record declaredTier"
+# A NON-STRING tier was PRESENT and rejected: recording nothing makes it indistinguishable from a
+# tier-less declaration, and it is then deduped away against one — the same swallow, one TYPE over.
+: > "$LEDGER"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down"}\n' "$SID" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":7}\n' "$SID" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+assert_eq 2 "$(grep -c 'exempt-tier-missing' "$LEDGER" || true)" "an absent-tier deny and a NUMERIC-tier deny are TWO rows (a present non-string tier is not dropped as absent)"
+tail -1 "$LEDGER" | grep -q '"declaredTier":"7 (number)"' && ok "…and the numeric tier is RECORDED with its TYPE (so it cannot be read as the string \"7\")" || bad "a present non-string tier must be recorded with its type"
+# …and the STRING "7" is a different declaration, so it must not dedupe against the number 7.
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"7"}\n' "$SID" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+assert_eq 3 "$(grep -c 'exempt-tier-missing' "$LEDGER" || true)" "the number 7 and the string \"7\" are DIFFERENT rejected values (three rows)"
+# Two DIFFERENT over-long values must not collide into one row through truncation — the same
+# swallow, one LENGTH over.
+: > "$LEDGER"
+LONG="$(printf 'a%.0s' $(seq 40))"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"%sX"}\n' "$SID" "$LONG" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"%sY"}\n' "$SID" "$LONG" > "$DECL"
+guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER" >/dev/null
+assert_eq 2 "$(grep -c 'exempt-tier-missing' "$LEDGER" || true)" "two DISTINCT over-long tiers are TWO rows (truncation must not collide)"
+if [ "$(head -1 "$LEDGER")" != "$(tail -1 "$LEDGER")" ] && head -1 "$LEDGER" | grep -q 'truncated'; then
+  ok "…recorded as DIFFERENT values, with truncation MARKED (bounded, not silent)"
+else
+  bad "over-long tiers must be recorded distinctly with truncation marked"
+fi
+
+echo
+echo "(gate-ladder cause) a tiered exemption still fails closed to T3 — but the reported CAUSE is TRUE"
+# The sensor deliberately does NOT honour the exempt tier (honouring it routes to a LIGHTER ladder
+# exactly when a review seat is already down). That resolution is UNCHANGED; only the false cause
+# `no valid tier declaration` — asserted against a file visibly carrying one — is corrected.
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T1"}\n' "$SID" > "$DECL"
+CTX_EXEMPT="$(gate_ladder_ctx "$H_GATE" '{"session_id":"'"$SID"'","tool_input":{"command":"bash scripts/codex-gate.sh -m x -e xhigh"}}' "$ADOPTER")"
+printf '%s' "$CTX_EXEMPT" | grep -q 'FAIL-CLOSED to T3' && ok "a TIERED exemption still FAILS CLOSED to T3 (the tier is not honoured — resolution unchanged)" || bad "a tiered exemption must still fail closed to T3"
+printf '%s' "$CTX_EXEMPT" | grep -q 'exempt-tier-not-honoured' && ok "…under its OWN cause code (exempt-tier-not-honoured)" || bad "the sensor must report the exempt-tier-not-honoured cause"
+printf '%s' "$CTX_EXEMPT" | grep -q 'no tier this sensor can use' && bad "the sensor must NOT fall back to the generic cause — the file carries T1" || ok "…and it does NOT fall back to the generic cause for a file carrying T1"
+# The mirror: a valid tier does not make an unsanctioned reason an exemption. Both enforcement
+# controls reject it as malformed, so claiming a not-honoured exemption would be the same
+# false-cause defect one branch over.
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"because-I-said-so","tier":"T1"}\n' "$SID" > "$DECL"
+CTX_BADREASON="$(gate_ladder_ctx "$H_GATE" '{"session_id":"'"$SID"'","tool_input":{"command":"bash scripts/codex-gate.sh -m x -e xhigh"}}' "$ADOPTER")"
+printf '%s' "$CTX_BADREASON" | grep -q 'exempt-tier-not-honoured' && bad "an UNSANCTIONED reason must not be reported as a valid not-honoured exemption" || ok "an UNSANCTIONED reason falls through to the generic cause (no false 'valid exemption')"
 
 echo
 echo "(fail-closed) a MALFORMED config blocks a code write (never silently permits)"
@@ -634,7 +703,16 @@ if TIERLESS_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "tier-less exempt" 2>&1
 else
   ok "commit floor: a pre-v1.5 TIER-LESS exemption is BLOCKED (not grandfathered)"
 fi
-printf '%s' "$TIERLESS_COMMIT_ERR" | grep -q 'without a tier' && ok "the block names the missing tier explicitly (not a generic malformed)" || bad "the commit block must name the missing tier"
+printf '%s' "$TIERLESS_COMMIT_ERR" | grep -q 'without a valid tier' && ok "the block names the tier explicitly (not a generic malformed)" || bad "the commit block must name the tier"
+# The commit floor told the SAME lie as the write-time guard: "without a tier" against a declaration
+# carrying tier:"T9". Both layers now admit both polarities.
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T9"}\n' "$SID" > "$DECL"
+if INVALID_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "invalid-tier exempt" 2>&1)"; then
+  bad "commit floor: an INVALID exempt tier must BLOCK a code commit"
+else
+  ok "commit floor: an INVALID exempt tier (T9) is BLOCKED"
+fi
+printf '%s' "$INVALID_COMMIT_ERR" | grep -q 'MISSING OR INVALID' && ok "…and the block does NOT claim the tier is missing from a file carrying T9" || bad "the commit block must admit both tier polarities"
 printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T1"}\n' "$SID" > "$DECL"
 if git -C "$ADOPTER" commit -q -m "exempt with tier"; then ok "commit floor: the SAME commit passes once the tier is declared (no over-block)"; else bad "exempt+tier commit should pass"; fi
 

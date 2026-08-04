@@ -1,8 +1,95 @@
-# workflow-kit — v1.6.0
+# workflow-kit — v1.6.1
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v1.6.1
+
+**Three honesty fixes to the enforcement surfaces: the controls stop misdescribing the declaration
+they just read, and the audit ledger records the tier its named reader can actually see.** No
+enforcement decision changes — every allow stays an allow, every block stays a block, and the
+gate-ladder sensor still fails closed to T3 on an exemption. What changes is what the controls
+*say*, and what the ledger *records*. Found by an adopter back-porting the v1.5.0 exempt-tier work,
+then reproduced against live hooks here before any edit.
+
+- **`hooks/guard-lane-authoring.mjs` — the block text admits both polarities.** One state,
+  `exempt-tier-missing`, covers an **absent** tier and a **present-but-invalid** one (`"tier":"T9"`),
+  but the text asserted only that the tier was *MISSING* — false against a file visibly carrying
+  one. It now reads **MISSING OR INVALID**. A control that misdescribes its own input trains the
+  reader to discount it.
+- **`hooks/guard-gate-ladder.mjs` — a true cause for a tiered exemption.** The sensor deliberately
+  does **not** honour an exemption's tier (honouring it would route to a *lighter* ladder exactly
+  when a review seat is already down) — **that resolution is unchanged: still T3, still fail-closed.**
+  But it reported the cause `no-tier` and printed *"no valid tier declaration"* about a declaration
+  that carries one. A tiered, sanctioned-reason exemption now gets its own cause,
+  **`exempt-tier-not-honoured`**, whose text states the tier was read and deliberately not honoured.
+  An **unsanctioned** reason still falls through to the generic cause — both enforcement controls
+  reject it as malformed, so calling it a valid exemption would be the same false-cause defect one
+  branch over.
+- **The exempt ledger row carries the tier in clear text.** In-thread rows already recorded
+  `state:"in-thread:T2"`; exempt rows recorded a bare `state:"exempt"` with the tier only inside
+  `declarationHash` — and the ledger's named consumer is the **Owner's spot-check**, who cannot read
+  a hash. An exempt ALLOW row now carries `tier`; a tier-rejecting DENY row carries `declaredTier`
+  (the value rejected), which is **also in the dedupe key** — it is the only field distinguishing a
+  tier-less deny from a `T9` deny, so without it the second was silently swallowed as a repeat.
+  `declarationHash` is unchanged and still covers the tier.
+
+The same *MISSING*-only wording was live at the **commit floor** (`githooks/pre-commit`) and is fixed
+there too — fixing one layer and leaving its twin lying is the failure mode this release is about.
+`writeLedger` now takes **one named object** instead of a widened positional list, the mechanism that
+corrupted a real audit row in the adopter repo.
+
+Two neighbours of the same defect are fixed with it, because leaving them is the thing this release
+argues against. The **generic** sensor head said *"no valid tier declaration"* — false of a retired
+`lane` route or an unsanctioned reason that carries a perfectly good `tier`, and self-contradicting on
+`bad-task-id`, which named its real cause in the parenthetical; it now says *no tier this sensor can
+use*. And `core/MULTI_AGENT.md`, the page that tells the Owner **what a ledger row contains**, now
+documents `tier` and `declaredTier` — a release note is not the row contract.
+
+**The gate caught this fix committing its own defect three times.** The first cut of `declaredTier`
+took only *string* tiers and truncated them bluntly, so `tier: 7` — present and rejected — was
+recorded as though absent and then deduped away against a genuinely tier-less row, and two over-long
+values collapsed onto one: the same swallow the field exists to prevent, one *type* and one *length*
+over. Rejected values now carry their type (`7 (number)`) and truncation is marked and digest-backed.
+Worse, the new exempt head closed with *"Declare `in-thread` with the tier"* — one sentence after
+*"it does not lower the ladder"*, and that edit **is** the lowering, T3 to the exemption's own tier,
+on the mode chosen when a review seat is already down. A sensor must not print the bypass of the
+fail-closed it just applied; the line is gone and the reviewer-protective *"do NOT write
+`.claude/task-lane.json`"* it had dropped is back.
+
+**Known divergence, deliberately not fixed here:** the gate-ladder sensor still honours a *symlinked*
+declaration that both enforcement controls reject as malformed, so on that one input it describes a
+declaration the controls refuse. It is pre-existing, already listed among the quirks the hook's own
+header defers to a joint changeset, and the resolution is still T3 either way — but the alignment
+this release buys is **per-field, not total**, and a characterization test pins the gap so it stays
+visible rather than implied-absent. Also unchanged and pre-existing: three input-shaped deny states
+(`malformed-hook-input`, `malformed-hook-path`, `missing-hook-path`) write no ledger row while the
+deny text says every state change is appended. Nothing proceeds unlogged; the string over-promises.
+
+Both suites extended; every new assertion mutation-proven — **twenty-two** reverts, each turning its
+test red, restored green — including one pinning the fail-closed resolution itself. Two of those
+mutations initially *survived*: a first draft of the field-scoping negative control asserted "every
+row satisfies X" over a ledger holding only one row shape, so it was vacuously true. It now builds a
+ledger containing all four shapes before asserting.
+
+**Upgrading — `--force` is REQUIRED here, and a plain re-run silently gives you nothing.** Every file
+this release changes (`hooks/guard-lane-authoring.mjs`, `hooks/guard-gate-ladder.mjs`,
+`githooks/pre-commit`) is a **`[P]`** file, and `init` never overwrites a file it did not write this
+run: a plain re-run prints `exists, kept`, **exits 0, and leaves you running the exact controls that
+misdescribe their input** — the ones this release exists to fix. So:
+
+1. **Commit first**, then re-run `init` with your original flags **plus `--force`**.
+2. `--force` is global — read the `--force` warning in the v1.4/v1.3 notes below: it also rewrites a
+   hand-authored `core/OWNER_COMMS.md` and resets `.claude/kit.config.json`. **`[P]` files get no
+   `.bak`**; the `.bak` is written only for the generated `[G]` files. Your commit is the backup.
+3. Verify the fixes actually landed — a green exit is not evidence:
+   `grep -c 'MISSING OR INVALID' .claude/hooks/guard-lane-authoring.mjs .githooks/pre-commit` and
+   `grep -c 'exempt-tier-not-honoured' .claude/hooks/guard-gate-ladder.mjs` must all be non-zero.
+
+Existing ledger rows are never rewritten. One wrinkle worth knowing if you upgrade mid-task: a row
+already written by v1.6.0 for the same task, session and path no longer suppresses the v1.6.1 row —
+`tier` is part of the dedupe key, so the first write after upgrading appends a row carrying it.
 
 ## What's new in v1.6
 

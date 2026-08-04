@@ -178,13 +178,20 @@ function declarationState(projectRoot, sessionId) {
   // Before v1.5.0 `exempt` was the one route that carried no tier, so the reason set (all about review-seat
   // availability) silently selected the mode that skipped tier declaration — a category error. The tier is
   // now required exactly as `in-thread` requires it. An OLD tier-less exemption is NOT grandfathered: it
-  // gets its own explicit state so the remediation can name the field that is missing.
+  // gets its own explicit state so the remediation can name the offending field. That ONE state covers
+  // BOTH polarities — absent, and present-but-invalid — so its deny text and its ledger row must both
+  // say so rather than assert "missing" (see the deny string and `declaredTier` below).
   if (declaration.mode === "exempt") {
     if (!EXEMPT_REASONS.has(declaration.reason)) return { state: "malformed" };
-    if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) return { state: "exempt-tier-missing" };
+    if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) {
+      // Carry the REJECTED value through so the ledger can name it. Absent stays `undefined`, which
+      // is what keeps "no tier at all" and "tier: T9" distinguishable in the audit trail.
+      return { state: "exempt-tier-missing", tier: declaration.tier, taskId: declaration.taskId, sessionId };
+    }
     return {
       state: "exempt",
       reason: declaration.reason,
+      tier: declaration.tier,
       taskId: declaration.taskId,
       sessionId,
       declarationHash: declarationHash({
@@ -200,7 +207,12 @@ function declarationState(projectRoot, sessionId) {
   return { state: "malformed" };
 }
 
-function writeLedger(projectRoot, decision, state, reason, rel, taskId, sessionId, hash) {
+// ONE NAMED OBJECT, NOT A POSITIONAL LIST. This gained a `tier` beside an existing optional
+// `reason`, and a widened positional list is a known failure class (core/INVARIANTS.md): a stale
+// call into the widened signature shifts every later field, and because a PreToolUse hook binds the
+// instant it is saved, the shifted row lands in a real append-only audit file. Named fields cannot
+// shift, and a missing one is `undefined` rather than the value of its neighbour.
+function writeLedger(projectRoot, { decision, state, reason, tier, rel, taskId, sessionId, hash }) {
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
@@ -225,15 +237,53 @@ function writeLedger(projectRoot, decision, state, reason, rel, taskId, sessionI
       }
       previous = parsed.at(-1); // Dedupe deliberately examines only the last valid row.
     }
+    // A DENY carries the REJECTED tier, or the trail says "missing" about a file that visibly
+    // carried `tier:"T9"` — the audit-trail twin of the deny string's honesty rule. This is
+    // unvalidated declaration input landing in an append-only audit file, so it is BOUNDED; but the
+    // bound must not resurrect the very defect this field exists to fix, in two ways a first cut
+    // got wrong (both found by the cross-family gate seat, both reproduced):
+    //   · TYPE — `tier: 7` is a value that was PRESENT and rejected. A `typeof === "string"` test
+    //     dropped it, so the row was indistinguishable from a genuinely tier-less one and then
+    //     deduped away against it. Any non-undefined value is rendered via JSON, which keeps
+    //     `7` / `null` / `{}` distinct from absent (only an ABSENT key yields `undefined`).
+    //   · COLLISION — a bare truncation mapped two DIFFERENT rejected values sharing a prefix onto
+    //     one string, so the second deny was swallowed as a repeat. Truncation is therefore marked
+    //     and carries a digest of the FULL value, so distinct inputs stay distinct in the key.
+    // A non-string carries a TYPE MARKER so `7` and `"7"` stay distinct rows. Residual, accepted and
+    // bounded: a string crafted to equal a marker form (`7 (number)`) collides with that value. It
+    // costs one swallowed DENY row on a declaration written to do exactly that, and the alternative
+    // — JSON-quoting every value — makes the field the Owner reads noisier for a hostile case that
+    // gains nothing (the write is denied either way).
+    let declaredTier;
+    if (state === "exempt-tier-missing" && tier !== undefined) {
+      const text = typeof tier === "string"
+        ? tier
+        : `${JSON.stringify(tier)} (${tier === null ? "null" : Array.isArray(tier) ? "array" : typeof tier})`;
+      declaredTier = text.length <= 32
+        ? text
+        : `${text.slice(0, 32)}…truncated,sha256:${createHash("sha256").update(text).digest("hex").slice(0, 16)}`;
+    }
+    // `declaredTier` MUST be in the dedupe key. It is the only field distinguishing a tier-less deny
+    // from a `T9` deny — same state, decision, task, session and path, and no hash on either — so
+    // without it the second row is silently swallowed as a repeat and the trail loses the value it
+    // exists to record.
+    // `tier` is in the key for a DIFFERENT reason: the UPGRADE case. A row written by the previous
+    // version carries no `tier` but an identical hash, so on the hash alone it would satisfy this
+    // key forever and suppress the first row that would have carried the clear-text tier — leaving
+    // the Owner's spot-check looking at a tier-less exempt row precisely after upgrading to get one.
     if (previous?.state === state && previous?.decision === decision && previous?.reason === reason &&
       previous?.taskId === taskId && previous?.sessionId === sessionId && previous?.path === rel &&
-      previous?.declarationHash === hash) {
+      previous?.declarationHash === hash && previous?.declaredTier === declaredTier &&
+      previous?.tier === (state === "exempt" ? tier : undefined)) {
       return true;
     }
 
     const row = { ts: new Date().toISOString(), decision, state, taskId, sessionId, path: rel };
     if (hash) row.declarationHash = hash;
-    if (state === "exempt") row.reason = reason;
+    // Clear-text tier as well as the hash: the Owner spot-checks the ledger, and an opaque hash is
+    // not a tier of record. The hash already covers it, so an ALLOW adds no dedupe field.
+    if (state === "exempt") { row.reason = reason; row.tier = tier; }
+    if (declaredTier !== undefined) row.declaredTier = declaredTier;
     // One O_APPEND write prevents concurrent hook processes from replacing one another's rows.
     // fsync makes an allowed exemption fail closed unless its local audit row reaches disk.
     fd = openSync(ledger, "a", 0o600);
@@ -277,8 +327,11 @@ function deny(projectRoot, rel, state, sessionId) {
     'optional `"maxAgeHours"` defaults to 24. ' +
     'The declaration is session/task-bound and gitignored; each state change is appended and synced to ' +
     `${path.join(projectRoot, LEDGER)} for Owner spot-check.` +
+    // BOTH POLARITIES. This state covers an ABSENT tier and a PRESENT-but-invalid one, and the
+    // earlier text asserted only "MISSING" — false against a file visibly carrying `tier:"T9"`. A
+    // control that misdescribes the input it just read teaches its reader to discount it.
     (state === "exempt-tier-missing"
-      ? ' This exemption is MISSING its `"tier"`. Since kit v1.5.0 `exempt` declares a tier exactly as `in-thread` does: the reason names the unavailable SEAT, which says nothing about how risky the work is. Add `"tier":"T0"|"T1"|"T2"|"T3"`. A pre-v1.5 tier-less exemption is not grandfathered.'
+      ? ' This exemption\'s `"tier"` is MISSING OR INVALID. Set `"tier":"T0"|"T1"|"T2"|"T3"` — since kit v1.5.0 `exempt` declares one exactly as `in-thread` does: the reason names the unavailable SEAT, which says nothing about how risky the work is. A pre-v1.5 tier-less exemption is not grandfathered.'
       : "") +
     (state === "lane-retired"
       ? " The `lane` route was RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0) — it is not an available route. Declare `in-thread` with the tier."
@@ -340,7 +393,9 @@ process.stdin.on("end", () => {
   // fail closed until the config is fixed. Fail-CLOSED is the correct direction; the deny message
   // points remediation at Bash / re-running init (the Write tool itself is blocked while corrupt).
   if (!kitConfig.ok && !isStaticallySafe(rel)) {
-    const logged = writeLedger(projectRoot, "deny", "kit-config-malformed", undefined, rel, undefined, input?.session_id, undefined);
+    const logged = writeLedger(projectRoot, {
+      decision: "deny", state: "kit-config-malformed", rel, sessionId: input?.session_id,
+    });
     if (!logged) deny(projectRoot, rel, "ledger-error", input?.session_id);
     else deny(projectRoot, rel, "kit-config-malformed", input?.session_id);
     process.exit(0);
@@ -358,16 +413,16 @@ process.stdin.on("end", () => {
     state = "symlink-path";
     decision = "deny";
   }
-  const logged = writeLedger(
-    projectRoot,
+  const logged = writeLedger(projectRoot, {
     decision,
     state,
-    result.reason,
+    reason: result.reason,
+    tier: result.tier,
     rel,
-    result.taskId,
-    result.sessionId ?? sessionId,
-    result.declarationHash,
-  );
+    taskId: result.taskId,
+    sessionId: result.sessionId ?? sessionId,
+    hash: result.declarationHash,
+  });
   if (!logged) {
     deny(projectRoot, rel, "ledger-error", sessionId);
     process.exit(0);

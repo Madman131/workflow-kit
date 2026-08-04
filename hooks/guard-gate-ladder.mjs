@@ -80,6 +80,17 @@ import { join } from "node:path";
 const DECLARATION = join(".claude", "task-lane.json");
 const TASK_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/;
 const TIERS = ["T0", "T1", "T2", "T3"];
+// Mirrors the enum both ENFORCEMENT controls validate. This sensor still enforces nothing — it needs
+// the set only so it does not call a declaration an exemption on a REASON the two controls that
+// actually block would reject as malformed. Reporting a false cause is the defect corrected below;
+// claiming `exempt` on an unsanctioned reason would reintroduce it one branch over.
+// THE ALIGNMENT IS PER-FIELD, NOT TOTAL, and must not be read as more: this sensor still HONOURS a
+// SYMLINKED declaration that both enforcement controls reject as malformed (see the header's list of
+// known shared quirks, deferred to a joint changeset), so on that one input it will still describe a
+// declaration the controls refuse. Narrowed rather than fixed here: making the sensor reject symlinks
+// is a behaviour change to a live control, outside this changeset, and it is pinned by a
+// characterization test so the divergence is visible rather than implied-absent.
+const EXEMPT_REASONS = ["codex-down", "codex-quota", "trivial-edit"];
 const STRICTEST = "T3";
 
 // A gate INVOCATION — never a mere mention. `git diff -- scripts/codex-gate.sh`, `grep`, `cat`, `rg`
@@ -152,6 +163,19 @@ function resolveTier(projectRoot, sessionId) {
   // SENSOR whose whole value is that it cannot under-gate; the cost is a noisier ladder on an
   // exemption, which is the safe direction. Because nothing is persisted, this stays corrigible:
   // declaring a real tier next call simply supersedes it.
+  //
+  // A well-formed TIERED exemption gets its OWN cause code. The resolution is unchanged — still T3,
+  // still fail-closed — but the generic cause asserts "no valid tier declaration", which is FALSE of
+  // a file visibly carrying one, and a sensor that misdescribes the input it just read teaches its
+  // reader to discount it. The REASON is checked too, or this branch would describe a declaration as
+  // a valid exemption while both enforcement controls reject it as malformed — the same false-cause
+  // defect, one branch over. An unsanctioned reason falls through to the generic `no-tier`, which is
+  // the honest answer there: this is not a usable declaration, whatever its tier says. (The reason
+  // and tier are what this branch checks; a symlinked declaration is a known un-checked divergence —
+  // see the EXEMPT_REASONS note above.)
+  if (decl.mode === "exempt" && TIERS.includes(decl.tier) && EXEMPT_REASONS.includes(decl.reason)) {
+    return { tier: STRICTEST, failClosed: "exempt-tier-not-honoured", taskId: decl.taskId };
+  }
   if (decl.mode !== "in-thread") return { tier: STRICTEST, failClosed: "no-tier", taskId: decl.taskId };
   if (!TIERS.includes(decl.tier)) return { tier: STRICTEST, failClosed: "no-tier", taskId: decl.taskId };
 
@@ -217,11 +241,29 @@ process.stdin.on("end", () => {
   // reviewer?" — the PM is the only seat we can positively identify, so it is the only one served.
   const isDeclaredPM = !failClosed;
 
+  // The fail-closed head must name the REAL cause. A tiered `exempt` declaration is valid, current
+  // and session-bound — saying "no valid tier declaration" of it is simply false, and a sensor that
+  // misdescribes the file it just read teaches its reader to discount it.
   const head = isDeclaredPM
     ? `GATE LADDER — declared tier ${tier} · task ${taskId}\n`
-    : `GATE LADDER — FAIL-CLOSED to ${tier}: no valid tier declaration for THIS session (${failClosed}).\n` +
-      `If you are a reviewer seat, no action is required — do NOT write ${DECLARATION}.\n` +
-      `The declaring PM re-declares per core/MULTI_AGENT.md § Task-lane declaration.\n`;
+    : failClosed === "exempt-tier-not-honoured"
+      ? `GATE LADDER — FAIL-CLOSED to ${tier}: this task is declared \`exempt\`, whose tier is deliberately NOT honoured here (${failClosed}).\n` +
+        `The exemption excuses a review seat; it does not lower the ladder.\n` +
+        // NO "declare `in-thread` instead" HERE. An earlier draft closed this branch with exactly
+        // that, one sentence after "it does not lower the ladder" — and it IS the lowering: one word
+        // in the declaration takes the surfaced ladder from T3 to the exemption's own tier, with no
+        // seat consulted, on the mode chosen when a review seat is already down. A sensor must not
+        // print the bypass of the fail-closed it just applied. The reviewer-protective line below is
+        // kept for the same reason it exists on the generic branch (header guard (b)).
+        `If you are a reviewer seat, no action is required — do NOT write ${DECLARATION}.\n`
+      // "no valid tier declaration" is FALSE of several causes that reach this branch — a retired
+      // `lane` route or an unsanctioned reason can carry a perfectly valid `tier`, and `bad-task-id`
+      // names its true cause in the parenthetical while the sentence contradicts it. "No tier this
+      // sensor can use" is true of every one of them, and stops the generic branch asserting a
+      // specific falsehood about a file it just read.
+      : `GATE LADDER — FAIL-CLOSED to ${tier}: no tier this sensor can use for THIS session (${failClosed}).\n` +
+        `If you are a reviewer seat, no action is required — do NOT write ${DECLARATION}.\n` +
+        `The declaring PM re-declares per core/MULTI_AGENT.md § Task-lane declaration.\n`;
 
   const body = `REQUIRED LADDER for ${tier} (families bound in core/BINDINGS.md):\n` +
     `  ${LADDER[tier]}\n` +
@@ -234,7 +276,7 @@ process.stdin.on("end", () => {
     },
   }));
   console.error(failClosed
-    ? `GATE LADDER: no valid tier declaration (${failClosed}) — FAIL-CLOSED to ${tier}; required ladder surfaced.`
+    ? `GATE LADDER: ${failClosed === "exempt-tier-not-honoured" ? "exempt tier not honoured" : "no usable tier declaration"} (${failClosed}) — FAIL-CLOSED to ${tier}; required ladder surfaced.`
     : `GATE LADDER: declared tier ${tier} · task ${taskId} — required ladder surfaced.`);
   process.exit(0);                                                     // continue normal permission flow
 });
