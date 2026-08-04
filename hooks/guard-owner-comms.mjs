@@ -34,10 +34,11 @@
 // PARAMETERIZATION — the sensor is repo-agnostic; everything Owner-specific is READ FROM the
 // generated `core/OWNER_COMMS.md` (a `[G]` doc), never baked in:
 //   · the Owner's NAME, from the `## How to talk to <name> — Owner, not a developer` heading;
-//   · the Owner's QUESTION SHORTHAND, from the `` `TOKEN` = gloss `` rows — a token whose gloss
-//     contains "?" is one of the Owner's questions (e.g. "AR = archive ready?"), so it counts as a
-//     short question even though it carries no "?" and no opener word. A gloss without "?" is an
-//     INSTRUCTION (e.g. "MIS = make it so"), and an instruction fairly earns a work report.
+//   · the Owner's QUESTION SHORTHAND, from the `` `TOKEN` = gloss `` definitions — one per line or
+//     inline in prose, both are real adopter formats. A token whose gloss contains "?" is one of the
+//     Owner's questions (e.g. "AR = archive ready?"), so it counts as a short question even though
+//     it carries no "?" and no opener word. A gloss without "?" is an INSTRUCTION (e.g. "MIS = make
+//     it so"), and an instruction fairly earns a work report.
 // DORMANT UNTIL NAMED: if `core/OWNER_COMMS.md` is absent, has no such heading, or still carries an
 // unfilled `{{OWNER_NAME}}`, the sensor ALLOWS unconditionally. Run `init --owner-name <name>`, or
 // fill the placeholder by hand, to arm it.
@@ -124,8 +125,25 @@ const OVER_ANSWER_WORDS = 350;
 // The `[G]` contract doc. Heading shape is fixed by templates/OWNER_COMMS.md.tmpl; the name is not.
 const OWNER_COMMS_REL = path.join("core", "OWNER_COMMS.md");
 const OWNER_HEADING_RE = /^##\s+How to talk to\s+(.+?)\s+—\s+Owner, not a developer\s*$/m;
-// `TOKEN` = gloss   — token is short + ALL-CAPS (the shorthand convention), gloss runs to end of line.
-const SHORTHAND_ROW_RE = /^`([A-Z][A-Z0-9]{0,7})`\s*=\s*(.+)$/gm;
+// `TOKEN` = gloss — token is short + ALL-CAPS (the shorthand convention). UNANCHORED: adopters write
+// their definitions one per line OR inline in prose ("Alex types `AR` = archive ready? when …"), and
+// the line-anchored rule this replaces harvested ZERO tokens from an inline-prose doc — question
+// coverage silently off (executed against a real adopter doc downstream). The gloss is therefore not
+// captured here: it runs to the NEXT definition or blank line (see ownerContract).
+const SHORTHAND_DEF_RE = /`([A-Z][A-Z0-9]{0,7})`\s*=\s*/g;
+// The template QUOTES the row format in its prose as `` `TOKEN` = gloss `` — a double-backtick code
+// span, OUTSIDE the fence. That is a format MENTION, not a definition: left in place, the unanchored
+// harvest would read TOKEN as a real definition, which both defeats the empty-harvest warning below
+// (the mention would count as a successfully parsed row) and plants a phantom token one prose edit
+// away from gaining a "?". Same principle as stripFences: quoted format is not vocabulary.
+const FORMAT_MENTION_RE = /``[^\n]*?``/g;
+// The WARN's "does this doc even TRY to define shorthand?" detector — deliberately LOOSER than the
+// harvester. It also matches a double-backtick row (a shape a human plainly wrote as a definition
+// but the parser cannot read; single backticks are the documented format) and it runs on the RAW
+// text, so the fenced format examples and a kept intro-paragraph mention count as section
+// apparatus. Anything this shape with zero PARSED definitions means the sensor is blind to
+// vocabulary the doc visibly carries — that state warns, it never runs silently.
+const DEF_SHAPED_RE = /`{1,2}[A-Z][A-Z0-9]{0,7}`{1,2}\s*=\s*/;
 
 // Fenced blocks are not prose. Used for BOTH the shorthand harvest (the template's EXAMPLE rows live
 // in a fence, so an adopter who never replaced them does not get someone else's vocabulary treated as
@@ -153,11 +171,33 @@ export function ownerContract(projectRoot) {
   if (!m) return null;
   const ownerName = m[1].trim();
   if (!ownerName || ownerName.includes("{{")) return null; // generated but never completed
-  const questionTokens = [];
-  for (const row of stripFences(text).matchAll(SHORTHAND_ROW_RE)) {
-    if (row[2].includes("?")) questionTokens.push(row[1]); // a gloss that asks ⇒ a question token
+  // Harvest from the FENCE-STRIPPED doc: the template's EXAMPLE rows live in a fence, so an adopter
+  // who never replaced them does not get someone else's vocabulary treated as their own. A
+  // definition's gloss runs to the next definition or blank line; a gloss that asks ("?") marks a
+  // question token, one that doesn't is an instruction.
+  const src = stripFences(text).replace(FORMAT_MENTION_RE, " ");
+  const defs = [...src.matchAll(SHORTHAND_DEF_RE)];
+  const tokens = new Set();
+  for (let i = 0; i < defs.length; i++) {
+    const start = defs[i].index + defs[i][0].length;
+    let gloss = src.slice(start, i + 1 < defs.length ? defs[i + 1].index : src.length);
+    // A gloss never crosses a blank line — including a CRLF one. Without \r in the class, a doc
+    // saved with Windows line endings never terminates a gloss ("\r\n\r\n" has \r between the two
+    // \n), a "?" in unrelated later prose bleeds into an instruction's gloss, and the instruction
+    // becomes a question token — a false block (cross-family review, executed both ways).
+    const para = gloss.search(/\n[ \t\r]*\n/);
+    if (para !== -1) gloss = gloss.slice(0, para);
+    if (gloss.includes("?")) tokens.add(defs[i][1]);
   }
-  return { ownerName, questionTokens };
+  // ZERO definitions parsed while the doc visibly CARRIES definition-shaped rows (per the LOOSE
+  // detector above — fenced examples, a double-backtick row, a kept format mention all count):
+  // question coverage is off, and this kit has no fallback vocabulary to fail toward — it knows no
+  // Owner. main() surfaces that as a NON-BLOCKING stderr warning instead of running silently
+  // uncovered. Zero definition-shaped text ANYWHERE is a legitimate no-shorthand doc: stay silent.
+  // This keys on parsed DEFINITIONS, not question tokens — an all-instruction vocabulary (no "?"
+  // in any gloss) parsed fine and warns about nothing.
+  const shorthandUnharvested = defs.length === 0 && DEF_SHAPED_RE.test(text);
+  return { ownerName, questionTokens: [...tokens], shorthandUnharvested };
 }
 
 // Narration detection, segment by segment. Returns the offending segment, or null.
@@ -209,7 +249,19 @@ function proseWordCount(s) {
 // right posture for an ERROR; it is not an acceptable answer to a shape the harness produces on
 // purpose. Returns "" when nothing the Owner typed remains, and the caller treats that as no question.
 const HARNESS_TAGS = String.raw`system-reminder|task-notification|command-name|command-message|command-args|local-command-stdout`;
-const HARNESS_BLOCK_RE = new RegExp(String.raw`<(${HARNESS_TAGS})\b[\s\S]*?<\/\1>`, "gi");
+// BOTH strip rules are anchored to a LINE START (with /m): the harness injects its blocks as their
+// own lines, so an opening tag mid-sentence is the Owner QUOTING the mechanism, not an injection.
+// An earlier version anchored only the UNCLOSED rule below; this one, unanchored, erased Owner-typed
+// words from "Is <system-reminder>…</system-reminder> fine?" — shrinking a long question below the
+// short-question ceiling and arming the size check on an input it must ignore. A false BLOCK, the
+// direction that costs the Owner most (executed downstream against a real adopter of this hook).
+// KNOWN RESIDUAL (deferred): a NESTED block — a tag pair inside another block of the same tag — is
+// beyond the lazy matcher; the strip ends at the inner closer, the residue keeps the Owner's text
+// from standing alone, and the size check then skips (allows). The harness is not observed to nest
+// these blocks, the miss fails OPEN, and a balanced scanner is new surface a fail-open sensor should
+// not grow speculatively. Characterization test pins today's behavior:
+// tests/kit-controls.test.mjs "DEFERRED … nested injected blocks".
+const HARNESS_BLOCK_RE = new RegExp(String.raw`^[ \t]*<(${HARNESS_TAGS})\b[\s\S]*?<\/\1>`, "gim");
 // An UNCLOSED block — a truncated tail, or a self-closing shape — drops from its opening tag to the
 // end of the turn, WHEREVER it appears. Anchoring this to the start of the string (an earlier
 // attempt) left a truncated TRAILING block in place, where it inflated the word count past the
@@ -223,7 +275,15 @@ const HARNESS_BLOCK_RE = new RegExp(String.raw`<(${HARNESS_TAGS})\b[\s\S]*?<\/\1
 const HARNESS_OPEN_TAIL_RE = new RegExp(String.raw`^[ \t]*<(?:${HARNESS_TAGS})\b[\s\S]*$`, "mi");
 function ownerTypedText(s) {
   if (typeof s !== "string") return "";
-  return s.replace(HARNESS_BLOCK_RE, " ").replace(HARNESS_OPEN_TAIL_RE, " ").trim();
+  // FIXPOINT, not a single pass: stripping one own-line closed block leaves a space where it stood,
+  // and a SECOND closed block glued on the same line then sits at a (whitespace-led) line start. A
+  // single pass left that second block for the unclosed rule below, whose to-end-of-turn sweep
+  // erased the Owner's REAL text after it (executed: two glued blocks + a genuine question → "" —
+  // the size check silently off, the exact class this hook exists to keep). Each pass removes at
+  // least one block or changes nothing, so the loop terminates.
+  let prev;
+  do { prev = s; s = s.replace(HARNESS_BLOCK_RE, " "); } while (s !== prev);
+  return s.replace(HARNESS_OPEN_TAIL_RE, " ").trim();
 }
 
 function main(raw) {
@@ -237,6 +297,22 @@ function main(raw) {
   const projectRoot = path.resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
   const contract = ownerContract(projectRoot);
   if (!contract) return ALLOW();                             // dormant: no completed Owner contract
+  // A coverage warning, not a decision: the sensor still runs and still fails open. A sensor that
+  // cannot say "I am blind here" reads as clean when a whole check is off — the exact false
+  // statement about a control's state this kit exists to prevent.
+  if (contract.shorthandUnharvested) {
+    // Best-effort by construction: a closed or broken stderr must never turn a WARNING into a crash
+    // (observed: Node exits 0 here with stderr closed; the guard pins that posture against the
+    // async-pipe-error case too).
+    try {
+      process.stderr.on("error", () => {});
+      process.stderr.write(
+        "guard-owner-comms WARN: core/OWNER_COMMS.md carries `TOKEN` = gloss rows, but NONE parsed outside " +
+        "the fenced format examples — the Owner's question-shorthand coverage is OFF. Write real rows " +
+        "outside the fence (`TOKEN` = gloss, with \"?\" in the gloss marking a question), or delete the " +
+        "shorthand section if this Owner has none. Non-blocking: every other check still runs.\n");
+    } catch { /* fail open */ }
+  }
 
   let entries;
   try {

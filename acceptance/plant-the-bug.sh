@@ -243,6 +243,12 @@ comms_decision() { # $1=extra json fields (may be empty)  $2=env assignments (ma
   if [ "$rc" -ne 0 ]; then echo "CRASH(rc=$rc)"; return; fi
   if printf '%s' "$out" | grep -q '"decision":"block"'; then echo block; else echo allow; fi
 }
+# stderr only, stdout discarded — the non-blocking coverage WARN (v1.5.1) travels on stderr, and the
+# decision helpers above deliberately throw stderr away.
+comms_stderr() {
+  printf '{"transcript_path":"%s"}' "$TRANSCRIPT" \
+    | (cd "$ADOPTER" && CLAUDE_PROJECT_DIR="$ADOPTER" node "$H_COMMS") 2>&1 >/dev/null
+}
 LONG_ANSWER="$(node -e 'console.log("word ".repeat(400))')"
 mk_transcript "AR" "$LONG_ANSWER"
 # WITHOUT an armed contract: {{OWNER_NAME}} is still unfilled, so the sensor is DORMANT and the
@@ -254,12 +260,24 @@ assert_eq allow "$(comms_decision "" "")" "WITHOUT a named Owner: sensor DORMANT
 # Owner's shorthand is never silently attributed to another, so real rows go outside the fence.
 sed -i.bak 's/{{OWNER_NAME}}/Alex/g' "$ADOPTER/core/OWNER_COMMS.md" && rm -f "$ADOPTER/core/OWNER_COMMS.md.bak"
 assert_eq allow "$(comms_decision "" "")" "armed but shorthand UNDECLARED: 'AR' is not yet one of Alex's tokens (fenced examples are not their vocabulary)"
+# (v1.5.1) …and that state must not be SILENT: definition-shaped rows exist (the fenced examples)
+# yet none parsed outside the fence, so question coverage is OFF and the kit has no fallback
+# vocabulary to fail toward. The hook says so on stderr — non-blocking (the allow above already
+# proved the decision channel is untouched).
+if comms_stderr | grep -q 'guard-owner-comms WARN'; then
+  ok "armed with only the fenced examples: the hook WARNS on stderr that question coverage is OFF (never silently uncovered)"
+else
+  bad "an empty shorthand harvest against a doc that carries example rows must WARN on stderr"
+fi
 node -e '
   const fs = require("fs"), p = process.argv[1];
   fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace("{{OWNER_SHORTHAND}}",
     "`AR` = archive ready? — is this thread closed out on the remote.\n`MIS` = make it so — proceed on the agreed scope."));
 ' "$ADOPTER/core/OWNER_COMMS.md"
 assert_eq block "$(comms_decision "" "")" "shorthand DECLARED: the SAME transcript is now flagged (SIZE MISMATCH on Alex's own question token)"
+comms_stderr | grep -q 'guard-owner-comms WARN' \
+  && bad "coverage is declared but the hook still warns (cry-wolf would train adopters to ignore it)" \
+  || ok "shorthand declared: the coverage warning goes quiet (warns only while genuinely uncovered)"
 # --- each decision, both directions ---
 mk_transcript "AR" "Yes — closed out and verified on the remote."
 assert_eq allow "$(comms_decision "" "")" "armed: a SHORT answer to the same question passes (no over-block)"
@@ -298,6 +316,27 @@ mk_transcript "AR
 assert_eq block "$(comms_decision "" "")" "armed: a TRAILING system-reminder is stripped (it must not inflate the word count)"
 mk_transcript "<system-reminder>nothing was typed</system-reminder>" "$LONG_ANSWER"
 assert_eq allow "$(comms_decision "" "")" "armed: a turn with NO Owner-typed text has no question to size against"
+# (v1.5.1) …but an inline CLOSED tag pair is the Owner's OWN text. The unanchored strip erased their
+# words from around it, shrank a long question below the 12-word ceiling, and FALSE-BLOCKED — the
+# direction that costs the Owner most. (The leading/trailing rows above pin the other polarity: a
+# genuine own-line injected block is still stripped.)
+W30="$(node -e 'console.log(Array.from({length:30},(_,i)=>"w"+i).join(" "))')"
+mk_transcript "Is <system-reminder>$W30</system-reminder> fine?" "$LONG_ANSWER"
+assert_eq allow "$(comms_decision "" "")" "armed: an inline CLOSED tag pair stays the Owner's words — a long question is not shrunk into a false block"
+# (v1.5.1) the shorthand harvest is UNANCHORED: an adopter whose rows sit inline in prose (a real
+# downstream format) gets the same coverage as one-row-per-line — previously ZERO tokens, silently.
+cp "$ADOPTER/core/OWNER_COMMS.md" "$WORK/OWNER_COMMS.linerows"
+node -e '
+  const fs = require("fs"), p = process.argv[1];
+  fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(
+    "`AR` = archive ready? — is this thread closed out on the remote.\n`MIS` = make it so — proceed on the agreed scope.",
+    "Alex types `AR` = archive ready? — is this thread closed out on the remote. Alex also types `MIS` = make it so — proceed on the agreed scope."));
+' "$ADOPTER/core/OWNER_COMMS.md"
+mk_transcript "AR" "$LONG_ANSWER"
+assert_eq block "$(comms_decision "" "")" "armed: INLINE-prose shorthand rows are harvested too (same AR coverage in either row format)"
+mk_transcript "MIS" "$LONG_ANSWER"
+assert_eq allow "$(comms_decision "" "")" "armed: an inline-prose INSTRUCTION still earns its work report (no over-harvest)"
+cp "$WORK/OWNER_COMMS.linerows" "$ADOPTER/core/OWNER_COMMS.md"
 # --- fail-open paths: every one of these must allow, or the sensor could wedge a session ---
 mk_transcript "AR" "$LONG_ANSWER"
 assert_eq allow "$(comms_decision ',"stop_hook_active":true' "")" "loop safety: stop_hook_active always allows (one block per turn, max)"
