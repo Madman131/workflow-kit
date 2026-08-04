@@ -569,7 +569,8 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 ## What is portable verbatim vs generated
 
-- `[P]` (verbatim): `core/*` method docs, the three PreToolUse hooks, the `guard-owner-comms` Stop
+- `[P]` (verbatim): `core/*` method docs, the three PreToolUse guards, the two PreToolUse sensors
+  (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
   `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`), the `agents/*` reviewer seat

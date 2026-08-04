@@ -56,7 +56,8 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    on reboot and only commits survive it.
 
 ## Enforcement is asymmetric — say it plainly
-The three PreToolUse guards register in **both** lanes since kit v2.1 (`.claude/settings.json` for
+The three PreToolUse guards — and the two PreToolUse sensors, which print and never deny — register
+in **both** lanes since kit v2.1 (`.claude/settings.json` for
 Claude Code, a generated `.codex/hooks.json` for Codex). **In the Codex lane they are INERT until a
 human grants hook trust interactively, and an untrusted hook is skipped SILENTLY** — so "installed"
 is not "armed", and only `node scripts/check-codex-hooks-armed.mjs` tells you which. They bind write

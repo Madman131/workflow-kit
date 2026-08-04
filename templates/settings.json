@@ -15,6 +15,18 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-lane-authoring.mjs\"",
             "timeout": 10,
             "statusMessage": "Checking the task's lane declaration…"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-sweep-owed.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking whether this edit owes a pre-fold dependency sweep…"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-mutation-owed.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking whether this edit owes a two-sided mutation record…"
           }
         ]
       },

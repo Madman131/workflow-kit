@@ -560,7 +560,11 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     // plain re-run leaves the doc reading v2.1.0, which is the symptom they would notice.
     writeFileSync(doc, readFileSync(doc, "utf8")
       .replace(/^8\. \*\*Questions and recommendations never blend in\.\*\*[\s\S]*?(?=\n\n)/m, "")
-      .replace("workflow-kit v2.1.1", "workflow-kit v2.1.0")
+      // Version-AGNOSTIC rollback. This once named the then-current stamp literally, so the very
+      // next release turned the replace into a no-op — and the guard below caught it, which is the
+      // only reason this rewrite is a fix rather than a discovery. Match whatever stamp init just
+      // wrote, so the rollback keeps working release after release.
+      .replace(/workflow-kit v\d+\.\d+\.\d+/, "workflow-kit v2.1.0")
       .replace("{{OWNER_PROFILE}}", PROFILE));
     assert.match(readFileSync(doc, "utf8"), /workflow-kit v2\.1\.0/,
       "the rollback actually produced a v2.1.0-stamped doc (a no-op here would make the next check vacuous)");
@@ -588,7 +592,13 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     run(["--owner-name", "Alex", "--skip-codex-prompt", "--force"]);
     assert.match(readFileSync(doc, "utf8"), /DECISION NEEDED/, "--force is what actually installs rule 8");
     assert.match(readFileSync(body, "utf8"), /buried ask/, "…and the /humanize miss with it");
-    assert.match(readFileSync(doc, "utf8"), /workflow-kit v2\.1\.1/, "…and the stamp finally moves");
+    // The property is "the stamp MOVED to this kit's version", not "the stamp says 2.1.1" — the
+    // literal form rotted at the next release (see the version-agnostic rollback above). Read the
+    // version the kit actually ships so this keeps testing the behaviour rather than a constant.
+    const KIT_VERSION = readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
+    assert.notEqual(KIT_VERSION, "2.1.0", "the rollback stamp must differ from the current one, or the next check is vacuous");
+    assert.match(readFileSync(doc, "utf8"), new RegExp(`workflow-kit v${KIT_VERSION.replace(/\./g, "\\.")}`),
+      "…and the stamp finally moves");
 
     // What it costs, per class — the asymmetry the note has to state, not merely imply.
     assert.doesNotMatch(readFileSync(doc, "utf8"), new RegExp(PROFILE),

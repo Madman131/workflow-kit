@@ -781,12 +781,21 @@ test("init generates .codex/hooks.json with the REAL Codex matcher names and an 
         assert.equal(h.type, "command");
         assert.ok(h.command.includes(`--project-dir`), "the project root is passed EXPLICITLY (a wrong root is a fail-open)");
         assert.ok(h.command.includes(A.dir), "…and it is this repo's absolute path, which is why the file is [G]");
-        const file = /hooks\/(guard-[a-z-]+\.mjs)/.exec(h.command)[1];
+        // guard- OR sensor-: since v2.2 the apply_patch group carries both, and a regex matching
+        // only `guard-` would throw on a sensor rather than check it — which is how a registered
+        // file stops being proven installed.
+        const file = /hooks\/((?:guard|sensor)-[a-z-]+\.mjs)/.exec(h.command)[1];
         assert.ok(existsSync(path.join(A.dir, ".codex", "hooks", file)), `${file} is registered AND installed`);
       }
     }
-    // apply_patch gets BOTH write guards; Bash gets the sensor only.
-    assert.equal(reg.hooks.PreToolUse[0].hooks.length, 2);
+    // apply_patch gets BOTH write guards AND both sensors; Bash gets the gate-ladder sensor only.
+    const applyPatch = reg.hooks.PreToolUse[0].hooks.map((h) => /hooks\/([\w.-]+\.mjs)/.exec(h.command)[1]);
+    assert.deepEqual(applyPatch, [
+      "guard-cross-repo-writes.mjs",
+      "guard-lane-authoring.mjs",
+      "sensor-sweep-owed.mjs",
+      "sensor-mutation-owed.mjs",
+    ], "an INSTALLED-but-UNREGISTERED sensor is inert — this list is what makes registration provable");
     assert.equal(reg.hooks.PreToolUse[1].hooks.length, 1);
     // The probe the checklist tells the adopter to run must be a file init actually wrote.
     assert.ok(existsSync(path.join(A.dir, "scripts", "check-codex-hooks-armed.mjs")));

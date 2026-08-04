@@ -1,8 +1,111 @@
-# workflow-kit — v2.1.1
+# workflow-kit — v2.2.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v2.2.0
+
+**The gating doctrine catches up with what months of running it actually taught — and the two habits
+that kept failing get an external trigger instead of a rule.**
+
+- **Gemini reviews DESIGNS, not diffs.** The routing table is now keyed on who BUILT the change, and
+  both lanes point the cross-family lens at the design-as-contract. Two measured reasons: transport
+  reliability is a function of payload size and code gates are always large (a 461 KB code-mode run
+  echoed 15 of 16 canaries — the tail and the receipt absent — and still emitted a confident,
+  specific `NO-GO` from a partial read), and code mode was the lower-yield lens besides. Code mode
+  survives as a **documented escape** inside the inline envelope, not as the standing route.
+  **The release says plainly that this REDUCES cross-family coverage of the code** rather than
+  calling the new shape equivalent, and names what a design lens cannot catch: an implementation
+  defect with no design-level shadow. It also carries the **precondition** — the Codex cold panel
+  must run through a guarded site, or the route quietly collapses to one family with every box ticked.
+- **The frontier tier is capped at ONE firing per changeset**, "changeset" meaning the task rather
+  than the file version, so re-freezing after a fix does not mint a second allowance. Default
+  consumer is the fold-check on a remediation delta; discretionary consumers **compete for that one
+  budget and are never additive**; the round-3 escalation, an Owner-initiated review, and the pinned
+  decider seat sit outside it. Round-3 escalation is now **one rung, folded, on a mechanical
+  trigger** — worst case two firings, and only where one finding-class has failed twice.
+- **Rung ORDER binds** (`core/WORKFLOW.md` § Steer): the budget-free rungs run first, including one
+  cross-family firing on the contract **before any code exists**, and the discovery rung runs `free`.
+  The clause says which of its two rules is mechanically checkable and which is self-report only,
+  rather than implying both are covered.
+- **The alias-entitlement trap.** An entitlement error is not a reviewer verdict — and whether you
+  retry at all depends on *which* id failed. There is no blanket retry, and it is never a pass.
+- **`/sweep` — enumeration becomes a sensor's job.** `scripts/sweep.mjs` asks ONE mechanical question
+  over an EXPLICIT file list at a cheap read-only seat, with a **wrapper-verified denominator**: the
+  wrapper proves each file readable itself and fails the run unless every readable file comes back
+  `scanned`. The per-file status is still the model's attestation, and the docs say so — **a
+  zero-finding sweep is not a clear.** The kit hardcodes no model id; bind the seat with `--seat` or
+  `sweepSeat` in `.claude/kit.config.json`, and a run with no seat fails closed.
+- **Two PreToolUse sensors, because self-keyed triggers fail and externally-forced ones work.**
+  `sensor-sweep-owed` fires when you are about to edit a `CLASS: BINDING` document or a skill body
+  and reminds you the pre-fold dependency sweep is owed. `sensor-mutation-owed` fires when you are
+  about to edit a check, a gate hook, or a control's test, and demands **both** polarities — a
+  planted case that reddens AND a clean case that stays green, because fixing a false CLEAR is how a
+  false FAIL gets minted. Both **print and never deny**, keep no state, and say outright that they
+  cannot tell whether you ran anything.
+- **A retired control, recorded so it is not rebuilt.** Commit-time gate-adjudication records were
+  built, NO-GO'd twice and discarded: round counting is a *conversation* fact, not a *tree* fact, and
+  the measured refutation was one permit followed by 8 accepted commits with zero dispositions. It is
+  why `core/WORKFLOW.md` says no hook counts rounds, and it bounds what `pre-commit` may claim: **a
+  commit-time hook is a tripwire for forgetting, never a boundary.**
+- **Two stale claims corrected while in the neighbourhood.** `core/WORKFLOW.md` said the gate-ladder
+  sensor was "Claude lane only" — it has registered in **both** lanes since v2.1 — and described the
+  `exempt` tier as honoured when the hook deliberately does not honour it (honouring it would route
+  to a *lower* tier, i.e. fail-open in a sensor).
+
+**What this release deliberately does NOT ship.** The originating repo's census fix, which taught a
+checker to count untracked files. Its census enumerated with `git ls-files`, so a file being ADDED
+was invisible during its own build. **This kit never had that defect** — its checkers walk the
+filesystem — so porting the fix would have been porting a remedy for a defect that is not here. What
+ships instead is a **characterization test** pinning the filesystem enumeration, so a future refactor
+to `git ls-files` reddens rather than silently reintroducing it.
+
+### Upgrading to v2.2.0
+
+**`--force` is REQUIRED for the doctrine, and this one is unusually easy to half-do.** Derived from
+what the diff edits, and **executed both ways against a real v2.1.1 adopter** rather than assumed:
+
+| Re-run | New sensors + `/sweep` installed and REGISTERED | Edited `[P]` core docs (`GATES` · `WORKFLOW` · `REVIEW`) |
+|---|---|---|
+| plain `init` | **yes** (new files; `settings.json` registrations merge) | **NO — exits 0 having shipped none of the doctrine** |
+| `init --force` | yes | yes |
+
+**That split is the hazard.** A plain re-run leaves you with sensors that fire correctly and cite
+`core/WORKFLOW.md` § Gate and `/sweep` — while the WORKFLOW clause they point at is still the v2.1.1
+text that does not contain it. The machinery arrives without the doctrine that explains it. Use
+`--force`, or expect a reminder that references a rule your tree does not have.
+
+**`--force` is GLOBAL, and its costs are unchanged from v2.1.1** — re-read that section below before
+running it. In short: every `[P]` file that run installs is overwritten with **no `.bak`**;
+`.claude/kit.config.json` is rewritten from the flags you pass **this** run, so omitting a family flag
+you originally adopted with resets `executedPathDirs` to `{}` and **widens** the write guard; the
+`[G]` files (`AGENTS.md`, `CLAUDE.md`, `core/OWNER_COMMS.md`) are regenerated with a `.bak` and your
+hand-written paragraphs go back to placeholders. **Commit before you run it.**
+
+**⚠ `--force` DISARMS the Codex lane until you re-grant trust.** This release edits the hook set, and
+Codex re-arms its review prompt whenever a hook's contents change — an upgraded hook is skipped
+**silently** until a human approves it in an interactive session. Migration order is therefore:
+**upgrade → re-grant hook trust interactively → run the arming probe.**
+
+**Verify it landed — a green `init` exit is not evidence:**
+
+```bash
+test -f core/GATES.md || { echo "FAIL no GATES doc"; exit 1; }
+grep -q 'GEMINI REVIEWS DESIGNS, NOT DIFFS' core/GATES.md || { echo "FAIL routing reversal absent — did you use --force?"; exit 1; }
+grep -q 'CAPPED AT ONE FIRING PER CHANGESET' core/GATES.md || { echo "FAIL frontier cap absent"; exit 1; }
+test -f core/WORKFLOW.md || { echo "FAIL no WORKFLOW doc"; exit 1; }
+grep -q 'Rung ORDER binds' core/WORKFLOW.md || { echo "FAIL rung-order rule absent"; exit 1; }
+test -f .agents/skills/sweep/SKILL.md || { echo "FAIL /sweep body missing"; exit 1; }
+test -f .claude/hooks/sensor-sweep-owed.mjs || { echo "FAIL sweep sensor missing"; exit 1; }
+grep -q 'sensor-sweep-owed' .claude/settings.json || { echo "FAIL sensor INSTALLED but NOT REGISTERED — inert"; exit 1; }
+grep -q 'sensor-mutation-owed' .claude/settings.json || { echo "FAIL mutation sensor not registered"; exit 1; }
+echo "v2.2.0 verified — if you use the Codex lane, re-grant hook trust and re-run the arming probe"
+```
+
+Existence is tested **before** content, and the registration is checked separately from the file: an
+installed-but-unregistered hook is on disk and inert, which is the failure this kit has shipped once
+already.
 
 ## What's new in v2.1.1
 
@@ -873,7 +976,8 @@ node /path/to/workflow-kit/bin/init.mjs \
 ```
 
 `init` copies the `[P]` files in, generates the `[G]` files from templates, installs the shared skill
-bodies and their per-harness shims, **merges** the three PreToolUse registrations *and* the Stop-event
+bodies and their per-harness shims, **merges** the five PreToolUse registrations (three fail-closed
+guards + two never-denying sensors) *and* the Stop-event
 sensor into `.claude/settings.json`, installs the `pre-commit` hook and sets `core.hooksPath=.githooks`,
 writes `.claude/kit.config.json` from your flags, and prints a checklist. Then: complete the
 `{{PLACEHOLDER}}`s in the generated `[G]` files, and wire `doc:size` + `test:kit-controls` into your CI
