@@ -5,7 +5,7 @@ description: Close a working thread — inventory, gate ladder, staging, worktre
 
 # /closeout — "finish" means landed, verified on the remote, and receipted
 
-Word budget: 550. The PROCEDURE over `core/OPERATE.md` § End-of-work closeout and
+Word budget: 600 (Owner-ratified 2026-08-04). The PROCEDURE over `core/OPERATE.md` § End-of-work closeout and
 `core/MULTI_AGENT.md` § Multi-writer checkout — where they differ from this file, they win.
 
 ## 0. Preconditions

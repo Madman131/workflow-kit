@@ -105,7 +105,8 @@ const WARN_MARGIN_WORDS = 15;
 // body was cut back under 350, so its entry was DELETED rather than left as a standing excuse —
 // which is also what the STALE-EXEMPTION state would have forced.
 export const KNOWN_OVER = new Map([
-  ["skills/closeout/SKILL.md", { declared: 550, measured: 573, since: "2026-08-04" }],
+  // skills/closeout debt (550 declared / 573 measured) DISCHARGED 2026-08-04: the Owner ratified 600
+  // ("raise to 600", orchestrator session ruling of record) — entry deleted per the STALE-EXEMPTION cure.
 ]);
 
 /** `wc -w` semantics: whitespace-delimited tokens over the entire file. */
