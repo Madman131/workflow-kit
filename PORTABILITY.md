@@ -519,6 +519,32 @@ bodies still carry their `Word budget:` lines — in your repo those are declare
 mechanical enforcement unless you wire your own (copying the checker and re-pointing its class
 roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 
+## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
+
+`/orchestrate` describes how a program too large for one thread is run as sequential **chips**: one
+orchestrator session, one worker per changeset, and an Owner who holds intent, risk and the
+merge-GO. It is `[P]` and names no repo, model or person.
+
+**Read the split it states about itself.** The METHOD — the role boundaries, the one-writer rule,
+the freeze, the GO discipline, the chip cycle — is portable and is what the skill is for. The
+**PLUMBING it was extracted from is not shipped and is not assumed**: clickable task chips and
+cross-session messaging are harness features, not kit features. The body therefore names a
+**degraded mode** — a shared append-only program record, briefs as files, consults as entries in
+that record — and states plainly that what degrades is latency, not the role split.
+
+**It has the same one-way `[G]` dependency `/humanize` has.** The body cites `core/OWNER_COMMS.md`
+for how an ask to the Owner is formatted, and that file is generated per repo — on an adopter whose
+`OWNER_COMMS.md` is missing or still carries its placeholders, that pointer resolves to nothing and
+the skill's Owner-facing half is a procedure over a contract you still owe. The dependency runs one
+way only: nothing in `core/OWNER_COMMS.md` depends on `/orchestrate`.
+
+**Nothing in it is enforced, and it says so.** No control counts gate rounds, reads a freeze, or
+checks who gave a GO; the controls the kit does ship are the task-lane declaration and the commit
+floor, each with the limits recorded above (§ The enforcement asymmetry, § FM1). Treat the skill as doctrine your agents follow because you told them to, exactly like the
+gate ladder in `core/WORKFLOW.md` — not as a mechanism. Its two reference layers (`CHIP_BRIEF.md`,
+`PROTOCOLS.md`) are loaded on demand from the body; `PROTOCOLS.md` is a **bank of incidents**, so it
+is expected to grow, and its word budget is author-set rather than Owner-ratified.
+
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
 The Codex/Gemini gate runners are copied **verbatim** and are functionally repo-agnostic (the repo is
@@ -573,7 +599,8 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
-  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`), the `agents/*` reviewer seat
+  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`), the
+  `agents/*` reviewer seat
   definitions (→ `.claude/agents/`), and `codex/config.toml` (→ `.codex/config.toml`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
   `core/REPO_INVARIANTS.md`, `core/SYSTEM_MAP.md`, `core/OWNER_COMMS.md`, `.claude/kit.config.json`,

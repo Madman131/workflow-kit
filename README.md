@@ -1,3 +1,71 @@
+# workflow-kit — v2.3.0
+
+## What's new in v2.3.0 — `/orchestrate`, the method for work too big for one thread
+
+**The kit could gate a changeset but said nothing about running a PROGRAM.** Everything shipped so
+far assumes one thread building one thing. The method that produced the last seven releases is
+different: an Owner who holds intent and the merge-GO, an orchestrator session that briefs and
+fold-checks and never merges, and one worker per changeset that owns its own gate ladder. That
+split was carried in a private note and re-derived by hand for every chip. `/orchestrate` is it,
+written down.
+
+**What it says, in one line each.** One chip = one changeset = one version, in its own session, run
+in a stated order — one way only, since a session can ship a second version when post-merge
+execution finds a defect. The GO belongs to the Owner alone — and it may come straight to a worker, which
+outranks any routing preference. **A GO ratifies a specific artifact**: if the changeset gains a
+commit afterwards it is void until re-confirmed, and heads are pinned by SHA because a chip's branch
+can fork mid-life. Before writing, a chip looks for competing writers in the repo's **lane
+declarations** — not a list of sessions, which reports liveness and not intent, and which called a
+repo single-writer while two lanes were committing to it. That check finds writers who **declared**;
+an undeclared lane is invisible to it, so it is a check and not a proof, and the unclear case fails
+closed into a private worktree.
+
+**Two reference layers.** `CHIP_BRIEF.md` is what a worker is handed — nine sections, and the three
+failures worth designing against (a re-presented brief carries stale facts; verbatim is not safe by
+default; adapt the remedy to the target's defect surface). `PROTOCOLS.md` is a **bank**: every rule
+with the incident that bought it, anonymised — the freeze that took three violations to stick, the
+probe that certified a mechanism it never observed, the waiter that matched its own shell, the
+merge proof that is permanently false for squash merges.
+
+**Read the limit it states about itself.** The METHOD is portable; the PLUMBING is not. Clickable
+task chips and cross-session messaging are harness features this kit does not ship and does not
+assume, so the body names a degraded mode — a shared append-only record, briefs as files, consults
+as entries in it — and says plainly that what degrades is latency, not the role split. **Nothing in
+the skill is enforced**, and it says so: no control counts rounds, reads a freeze, or checks who
+gave a GO. The kit still ships controls for the task-lane declaration and the commit floor — with
+the lane, trust, fresh-clone and `--no-verify` limits PORTABILITY has always named.
+
+**Also fixed, and it is the same class the last release shipped:** `PORTABILITY.md`'s `[P]`
+inventory — the adopter-facing list of what gets copied verbatim — never gained `/sweep` when
+v2.2.0 shipped it, so for a whole release the document was wrong about the tree it describes.
+Adding a skill is precisely when nobody re-reads that line, so `tests/orchestrate-skill.test.mjs`
+now derives the list from disk and reddens if any shipped skill is missing from it.
+
+**The tests are doc pins, and the sentence pins are self-canaried.** A pinning assertion is
+decoration when its spelling occurs innocently elsewhere in scope, so every pin routed through the
+`pin()` helper strikes its exact phrase and fails unless the strike turns it red — a phrase
+occurring twice is reported as a DEAD PIN rather than passed. **The structural assertions (the
+reference-layer pointers, the `[P]` enumeration) do not carry that canary**; they are covered by the
+mutation battery instead, which is a build-time rig and not part of `npm test`. Mutations against
+the shipped text all killed, against a green positive control. Three gaps were found that way and
+fixed: a pointer assertion a bare filename satisfied after the loadable path was deleted; an
+enumeration check that searched a broad slice rather than parsing the list, so a reshaped inventory
+could stay green; and the helper's own canary, which in its first draft stripped every occurrence
+and so could never fire.
+
+**Upgrading: a plain `init` re-run — do NOT pass `--force`.** This release adds files and edits
+nothing an adopter already has, so a plain re-run ships the repo-local half in full: the body, both
+reference layers and the Claude shim all land, and a hand-edited `[P]` file is preserved (executed
+on an adopter created from v2.2.1). `--force` would buy nothing here and **destroys hand-edited
+`[P]` content with no `.bak`** — also executed.
+
+**One qualification, found by the review seat and then reproduced.** The Codex prompt installs into
+a **user-global, flat** prompts directory shared by every repo, and `init` never overwrites a file
+it did not write that run. So if a file named `orchestrate.md` already sits there, the plain re-run
+**keeps yours and the Codex prompt does not land** — `init` says so on stderr (`! exists, kept`),
+and it is the one asset whose delivery a plain re-run cannot promise. Read that line, and if it
+names `orchestrate.md`, rename your file or pass `--codex-prompts-dir` at a directory you control.
+
 # workflow-kit — v2.2.1
 
 ## What's new in v2.2.1 — a hotfix, and the check that should have caught it
