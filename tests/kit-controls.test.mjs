@@ -268,14 +268,34 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
   const { dir, codexDir, run, cleanup } = adopt();
   try {
     const body = path.join(dir, ".agents", "skills", "frontier-review", "SKILL.md");
+    const invoke = path.join(dir, ".agents", "skills", "frontier-review", "INVOKE.md");
     const claudeShim = path.join(dir, ".claude", "skills", "frontier-review", "SKILL.md");
     const codexShim = path.join(codexDir, "frontier-review.md");
     const cold = path.join(dir, ".claude", "agents", "cold-reviewer.md");
     const consult = path.join(dir, ".claude", "agents", "frontier-consult.md");
-    for (const [label, p] of [["shared body", body], ["Claude shim", claudeShim], ["Codex shim", codexShim],
+    for (const [label, p] of [["shared body", body], ["reference-layer sibling INVOKE.md", invoke],
+      ["Claude shim", claudeShim], ["Codex shim", codexShim],
       ["cold-reviewer agent", cold], ["frontier-consult agent", consult]]) {
       assert.ok(existsSync(p), `${label} installed at ${p}`);
     }
+    // The body is budget-capped, so on-demand mechanics live in the sibling — but a pointer to a
+    // file that is not installed is a dead end, the same class as a shim naming a missing body.
+    const bodyRefs = [...readFileSync(body, "utf8").matchAll(/\.agents\/skills\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+\.md)/g)];
+    assert.ok(bodyRefs.length > 0, "the body points at its reference layer");
+    for (const [, skill, file] of bodyRefs) {
+      assert.ok(existsSync(path.join(dir, ".agents", "skills", skill, file)),
+        `the body points at .agents/skills/${skill}/${file}, which must be installed`);
+    }
+    // The five honesty corrections stay in the BODY — a correction of a false claim must never sit
+    // in a layer the executor may not load. Pinned so a future fold cannot quietly relocate one.
+    const honestyText = readFileSync(body, "utf8");
+    for (const [claim, probe] of [
+      ["the cap is not mechanical", /nothing counts it/],
+      ["the kit does not execute the cage enforcement", /does not execute the enforcement/],
+      ["the consult never substitutes for a gate seat", /never substitutes/],
+      ["the Codex lane is not packet-only", /NOT packet-only/],
+      ["the packet carries the doctrine the caged seat cannot read", /the doctrine excerpts it is judged against/],
+    ]) assert.match(honestyText, probe, `the body itself states: ${claim}`);
     // the shims point at a body that exists and carry no rules of their own (the shared-body invariant)
     for (const shim of [claudeShim, codexShim]) {
       assert.match(readFileSync(shim, "utf8"), /\.agents\/skills\/frontier-review\/SKILL\.md/, `${shim} names the shared body`);

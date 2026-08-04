@@ -117,11 +117,27 @@ SK_CODEX_ALIAS="$CODEX_PROMPTS/humanize-bullet.md"
 # v1.6: the frontier-review consult skill rides the SAME mechanism (a second body proves the
 # discovery-from-disk claim — two files dropped in, no init edit).
 FR_BODY="$ADOPTER/.agents/skills/frontier-review/SKILL.md"
+FR_INVOKE="$ADOPTER/.agents/skills/frontier-review/INVOKE.md"
 FR_CLAUDE="$ADOPTER/.claude/skills/frontier-review/SKILL.md"
 FR_CODEX="$CODEX_PROMPTS/frontier-review.md"
 [ -f "$FR_BODY" ]   && ok "shared body lands at .agents/skills/frontier-review/SKILL.md (v1.6)" || bad "frontier-review body missing at $FR_BODY"
+[ -f "$FR_INVOKE" ] && ok "its reference-layer sibling (INVOKE.md) lands with it"               || bad "INVOKE.md missing at $FR_INVOKE"
 [ -f "$FR_CLAUDE" ] && ok "Claude shim lands at .claude/skills/frontier-review/SKILL.md"        || bad "frontier-review Claude shim missing at $FR_CLAUDE"
 [ -f "$FR_CODEX" ]  && ok "Codex frontier-review prompt lands in the prompts dir"               || bad "frontier-review Codex prompt missing at $FR_CODEX"
+# The body is budget-capped, so on-demand mechanics live in the sibling. A pointer to a file that
+# is NOT installed dead-ends exactly like a shim naming a missing body.
+BODY_REFS_OK=1
+for ref in $(grep -oE '\.agents/skills/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.md' "$FR_BODY" | sort -u); do
+  [ -f "$ADOPTER/$ref" ] || { bad "the frontier-review body points at $ref, which is NOT installed"; BODY_REFS_OK=0; }
+done
+[ "$BODY_REFS_OK" = 1 ] && ok "every reference-layer pointer in the body resolves on disk"
+# The five honesty corrections must stay in the BODY — a correction of a false claim must never sit
+# in a layer the executor may not load.
+CORRECTIONS_OK=1
+for probe in 'nothing counts it' 'does not execute the enforcement' 'never substitutes' 'NOT packet-only' 'the doctrine excerpts it is judged against'; do
+  grep -q "$probe" "$FR_BODY" || { bad "an honesty correction left the executor-loaded body: '$probe'"; CORRECTIONS_OK=0; }
+done
+[ "$CORRECTIONS_OK" = 1 ] && ok "all 5 honesty corrections are in the BODY, not the reference layer"
 # syntactically valid per harness, same convention as the commands.
 head -1 "$SK_CLAUDE" | grep -q '^---$' && ok "Claude skill shim opens with YAML frontmatter" || bad "Claude skill shim missing YAML frontmatter"
 head -1 "$SK_CODEX"  | grep -q '^# '   && ok "Codex skill prompt opens with a markdown H1"    || bad "Codex skill prompt missing an H1"
