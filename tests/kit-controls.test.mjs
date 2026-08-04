@@ -1319,11 +1319,18 @@ test("--codex-cold-model is validated: it lands inside a TOML string, so it cann
 });
 
 test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cannot take the guards down", () => {
-  // The Codex assets are conveniences and init SAYS the adopt continues if they fail. That sentence
-  // was false: the cold-review seat is generated in the shared [G] template loop, which is
-  // deliberately NOT failure-isolated, so a regular file sitting at `.codex` threw ENOTDIR and killed
-  // the run with a raw stack trace — AFTER the guards were registered. Not the zero-registration
-  // fail-open, but a partial adopt contradicting its own contract. Found by the cross-family seat.
+  // init SAYS the adopt continues if the Codex lane fails. That sentence was false: the cold-review
+  // seat is generated in the shared [G] template loop, which is deliberately NOT failure-isolated,
+  // so a regular file sitting at `.codex` threw ENOTDIR and killed the run with a raw stack trace —
+  // AFTER the guards were registered. Not the zero-registration fail-open, but a partial adopt
+  // contradicting its own contract. Found by the cross-family seat.
+  //
+  // v2.1 CHANGED WHAT THIS COSTS, so the assertion changed with it. Through v2.0 the `.codex/`
+  // assets were CONVENIENCES and the warning said so. They now carry the lane's write ENFORCEMENT,
+  // so the same failure means the Codex lane is UNGUARDED — and a warning that still called it a
+  // lost convenience would be the understatement this suite exists to catch. What must NOT change is
+  // the isolation itself: a broken Codex lane may never take the Claude guards or the commit floor
+  // down with it.
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-codexbroken-"));
   try {
     execFileSync("git", ["init", "-q", dir]);
@@ -1332,8 +1339,10 @@ test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cann
       "--repo-name", "x", "--skip-codex-prompt"], { encoding: "utf8" });
 
     assert.equal(r.status, 0, `the adopt completes despite an unusable .codex: ${r.stderr}`);
-    assert.match(r.stderr, /\.codex\/ lane assets could not be installed/, "…and says so plainly");
-    assert.match(r.stderr, /cold-review seat is SKIPPED/, "…naming the seat it therefore skipped");
+    assert.match(r.stderr, /\.codex\/ lane could not be installed/, "…and says so plainly");
+    assert.match(r.stderr, /CODEX LANE IS UNGUARDED/,
+      "…naming the real cost now that this lane carries enforcement, not a lost convenience");
+    assert.match(r.stderr, /no write guards, no registration, no cold-review seat/, "…and what is missing");
 
     // The load-bearing half: everything that actually enforces must still be in place. A warning is
     // worth nothing if the run stopped before the controls landed.

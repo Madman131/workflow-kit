@@ -24,10 +24,16 @@ Full fingerprint table: `CLAUDE.md`.
 On demand: `core/GATES.md` (running a gate) · `core/README.md` (index).
 Do **not** "read everything in `core/`" — the read is staged.
 
-## ⚠ Enforcement asymmetry — the guards that DON'T bind you
-The three `.claude/hooks/*.mjs` PreToolUse guards (cross-repo writes, lane-authoring, gate-ladder) are
-**Claude Code harness registrations. They do NOT bind a Codex / non-Claude lane** — you never load
-them. **What binds you is THIS prose + the `.githooks/pre-commit` hook** (`core.hooksPath=.githooks`),
+## ⚠ Enforcement asymmetry — which guards bind you, and when
+The three PreToolUse guards (cross-repo writes, lane-authoring, gate-ladder) are registered in BOTH
+lanes since kit v2.1 — `.claude/hooks/` for Claude Code, `.codex/hooks/` + `.codex/hooks.json` for
+Codex. **In the Codex lane they are INERT until a human grants Codex hook trust in an interactive
+session, and an untrusted hook is skipped SILENTLY** (no prompt, no warning, no exit-code change), so
+never assume they are live: `node scripts/check-codex-hooks-armed.mjs` is the only thing that answers
+it. They also bind write TOOLS — a file you change with a plain SHELL command is invisible to them,
+which in the Codex lane is a main road, not a corner case. A human with an editor loads none of them.
+**So what binds you unconditionally is THIS prose + the `.githooks/pre-commit` hook**
+(`core.hooksPath=.githooks`),
 which runs at commit time regardless of harness and blocks a commit that has no valid lane declaration.
 It checks the DECLARATION, not your task scope — since kit v1.5.0 no control carries a per-file
 allowlist, so staying inside your task's scope binds you on your honor alone (§ Multi-writer checkout).

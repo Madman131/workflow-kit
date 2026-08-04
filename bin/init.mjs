@@ -182,6 +182,37 @@ function warn(msg) { console.warn(`  ! ${msg}`); }
 function isPlainObject(v) {
   return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
 }
+
+// Does this `.codex/config.toml` REGISTER HOOKS? Codex accepts registrations in either that file or
+// `.codex/hooks.json` and warns when both carry them, so this decides whether the kit writes its
+// registration at all — which makes a false POSITIVE here a silent fail-open: guards installed,
+// nothing registered, `init` exits 0 saying the adopter's own hooks are in charge when they have
+// none.
+//
+// THE TABLE CONTEXT IS THE WHOLE POINT, and a line-shaped regex cannot see it. A bare
+// `/^\s*hooks\s*[.=]/m` matches `hooks = true` under `[features]` — an ordinary Codex feature flag
+// that registers nothing, and one that appears in real config files. (Found by the cross-family
+// review seat, against a config that actually carries it.) So the current TABLE is tracked, and only
+// two things count: a `[hooks…]`/`[[hooks…]]` table header, or a `hooks` key at TOP LEVEL — the
+// scalar `hooks = "./hooks.json"` form Codex's own schema uses.
+export function tomlDeclaresHooks(text) {
+  let table = "";                       // "" = top level
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.replace(/^\s+/, "");
+    if (!line || line.startsWith("#")) continue;
+    const header = /^\[\[?\s*([^\]]*?)\s*\]\]?/.exec(line);
+    if (header) {
+      table = header[1];
+      // `[hooks]`, `[hooks.PreToolUse]`, `[[hooks.PreToolUse]]` — the table form of a registration.
+      if (table === "hooks" || table.startsWith("hooks.")) return true;
+      continue;
+    }
+    // A `hooks` KEY only registers anything at top level. Under any other table it is that table's
+    // field — `[features] hooks = true` being the case that matters.
+    if (table === "" && /^hooks\s*(?:=|\.)/.test(line)) return true;
+  }
+  return false;
+}
 // Single non-empty path segment (no separators) — the shape the loaders' isSegmentArray requires.
 function isSegment(s) { return typeof s === "string" && s.length > 0 && !s.includes("/") && !s.includes("\\"); }
 
@@ -387,15 +418,26 @@ function main() {
   // plus the Stop-event Owner-comms SENSOR, which fails OPEN and is a nudge, not enforcement (see
   // PORTABILITY.md § the Owner-comms sensor). Report kept-vs-written honestly: a KEPT (existing) hook
   // may be STALE, so "installed" would over-claim (a control believed current but actually old).
+  //
+  // ONE SOURCE, TWO INSTALL TARGETS (v2.1). The same files go to `.claude/hooks/` and, when the
+  // Codex lane is enabled, to `.codex/hooks/` — byte-identically, pinned by a mutation-proven
+  // equality test. The guards branch on PAYLOAD SHAPE at runtime (hooks/payload-targets.mjs), so
+  // there is no per-lane variant to keep in step. This is deliberate history: the origin repo's
+  // `.codex` hooks were stale COPIES of its `.claude` hooks, 48 hours adrift in the dangerous
+  // direction, and nothing compared them because nothing could.
   const hookFiles = readdirSync(path.join(KIT_ROOT, "hooks")).sort();
-  let hooksKept = 0;
-  for (const h of hookFiles) {
-    const d = path.join(T, ".claude", "hooks", h);
-    if (copyGuarded(path.join(KIT_ROOT, "hooks", h), d, force) === "written") chmodX(d); else hooksKept++;
-  }
-  log(hooksKept
-    ? `  .claude/hooks/: ${hookFiles.length - hooksKept} installed, ${hooksKept} EXISTING kept — may be STALE; re-run with --force to update`
-    : `  .claude/hooks/: ${hookFiles.length} hooks installed — PreToolUse guards (fail CLOSED) + the guard-owner-comms Stop sensor (fails OPEN)`);
+  const installHooks = (destDir) => {
+    let kept = 0;
+    for (const h of hookFiles) {
+      const d = path.join(destDir, h);
+      if (copyGuarded(path.join(KIT_ROOT, "hooks", h), d, force) === "written") chmodX(d); else kept++;
+    }
+    return { installed: hookFiles.length - kept, kept };
+  };
+  const claudeHooks = installHooks(path.join(T, ".claude", "hooks"));
+  log(claudeHooks.kept
+    ? `  .claude/hooks/: ${claudeHooks.installed} installed, ${claudeHooks.kept} EXISTING kept — may be STALE; re-run with --force to update`
+    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the guard-owner-comms Stop sensor (fails OPEN), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
 
   // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
   const pc = path.join(T, ".githooks", "pre-commit");
@@ -691,22 +733,126 @@ function main() {
       // A KEPT config.toml may already declare `hooks`. Codex accepts registrations in either that
       // file or `.codex/hooks.json` and warns when both do, so an adopter carrying their own is
       // fine — but they must know the kit did NOT touch it, rather than assume the kit's version won.
+      let declaresHooks = false;
       if (codexCfg === "written") {
-        log(`  .codex/config.toml: installed (Codex-lane convenience — NO enforcement; see PORTABILITY.md)`);
+        log(`  .codex/config.toml: installed (pager + shell-env policy; the ENFORCEMENT is the hooks below)`);
       } else {
-        let declaresHooks = false;
         // Every TOML spelling of a hooks registration, not just the table header. The scalar form
         // `hooks = "./hooks.json"` is the one Codex's own schema strings use, so matching only
         // `[hooks]` left the most likely spelling undetected — a fail-open in a DETECTOR, which is
         // how an adopter ends up assuming the kit reconciled hooks it never saw. (Found by a cold seat.)
-        try { declaresHooks = /^\s*(?:\[{1,2}\s*hooks[.\]]|hooks\s*[.=])/m.test(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
+        try { declaresHooks = tomlDeclaresHooks(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
         warn(`.codex/config.toml: EXISTING kept (--force to update)${declaresHooks
-          ? " — and it DECLARES HOOKS. The kit registers none and did not change them; those are yours, and you are responsible for whether they are armed."
+          ? " — and it DECLARES HOOKS."
           : ""}`);
+      }
+
+      // The arming-verification probe ships WITH the lane it verifies. The post-run checklist tells
+      // the adopter to run `node scripts/check-codex-hooks-armed.mjs`, and an instruction naming a
+      // file the installer never wrote is the same dead-end the shim check exists to catch.
+      copyGuarded(path.join(KIT_ROOT, "scripts", "check-codex-hooks-armed.mjs"), path.join(T, "scripts", "check-codex-hooks-armed.mjs"), force);
+
+      // The Codex-lane guards + their registration (v2.1).
+      const codexHooks = installHooks(path.join(T, ".codex", "hooks"));
+      log(codexHooks.kept
+        ? `  .codex/hooks/: ${codexHooks.installed} installed, ${codexHooks.kept} EXISTING kept — may be STALE; --force to update. The two lanes are meant to hold BYTE-IDENTICAL files; a kept one may have drifted.`
+        : `  .codex/hooks/: ${hookFiles.length} files installed — the SAME files as .claude/hooks/, byte for byte`);
+
+      // VERIFY BY COMPARING WHAT IS ON DISK, not by trusting that two copies of one source must
+      // match. They can diverge through the documented upgrade path itself, and this is not
+      // hypothetical — it is what a plain (no --force) re-run of THIS release does to a v2.0
+      // adopter: `.claude/hooks/` already exists so every guard there is KEPT at the old version,
+      // while `.codex/hooks/` is brand new so every guard there is WRITTEN at the new one. The run
+      // exits 0, and the adopter is left with one lane upgraded and one not, silently. The equality
+      // test in the kit's own suite would never see it — it runs against a FRESH adopt.
+      const drifted = [];
+      for (const h of hookFiles) {
+        try {
+          if (readFileSync(path.join(T, ".claude", "hooks", h), "utf8") !== readFileSync(path.join(T, ".codex", "hooks", h), "utf8")) drifted.push(h);
+        } catch { drifted.push(`${h} (unreadable in one lane)`); }
+      }
+      if (drifted.length) {
+        warn(`the two lanes' hooks are NOT identical: ${drifted.join(", ")} differ between .claude/hooks/ and .codex/hooks/. The guards are ONE source installed twice, so this means one lane is running an older or edited copy — the most likely cause is a re-run without --force, which KEEPS existing files. Re-run with --force to bring both lanes to this kit version, then re-grant Codex hook trust (an upgraded hook is DISARMED until you do).`);
+      }
+
+      // ONE REPRESENTATION ONLY. Codex accepts hook registrations in EITHER `.codex/config.toml` or
+      // `.codex/hooks.json` and warns when both carry them. If the adopter's kept config already
+      // declares hooks — in either spelling — the kit does NOT add a second representation. Their
+      // registration wins and they are told exactly what that costs them.
+      const hooksJson = path.join(T, ".codex", "hooks.json");
+      if (declaresHooks) {
+        warn(`.codex/hooks.json: NOT written — your kept .codex/config.toml already declares hooks, and Codex wants a SINGLE representation for this layer. Those registrations are YOURS: the kit did not change them and cannot vouch for them. To adopt the kit's guards instead, remove the hooks declaration from config.toml and re-run init.`);
+      } else if (existsSync(hooksJson) && !force) {
+        warn(`exists, kept (use --force to overwrite): ${hooksJson} — the Codex guards may be registered from a STALE file`);
+      } else {
+        // `[G]`, and for a reason that is not stylistic: Codex runs a hook command from a working
+        // directory this kit does not control, and NOTHING in the payload can be trusted to name the
+        // repo (a wrong project root makes in-repo paths look out-of-repo, which is a fail-OPEN — see
+        // hooks/payload-targets.mjs § resolveProjectRoot). So the absolute path of THIS repo is
+        // baked in at generation time and passed explicitly.
+        //
+        // THE MATCHERS ARE THE REAL CODEX TOOL NAMES. The Claude-lane spelling
+        // `Write|Edit|MultiEdit|NotebookEdit` matches NOTHING in Codex: writes arrive as
+        // `apply_patch` and commands as `Bash`. That mismatch is one of the two independent reasons
+        // the origin repo's Codex hooks could never have fired.
+        // SHELL QUOTING, because Codex runs a hook `command` through a SHELL. (The shipped CLI's hook
+        // command runner sits directly beside its `SHELL` / `-lc` strings; a cross-family review seat
+        // independently reported the same from Codex's source. An earlier draft here said the
+        // execution model was unknown and hedged by staying unquoted where possible — the hedge was
+        // harmless, the reasoning was wrong, and the QUOTING it fell back to was unsafe.)
+        //
+        // SINGLE quotes, not `JSON.stringify`. JSON gives DOUBLE quotes, inside which a shell still
+        // expands `$VAR`, `` `cmd` `` and `$(cmd)` — so a repo path containing any of those would be
+        // mangled or would execute something. And a hook that fails to start does not block the tool:
+        // Codex only blocks on a well-formed deny, so a broken command string is a FAIL-OPEN. POSIX
+        // single quotes suppress all expansion; the `'\''` dance is the only escape they need.
+        //
+        // An ordinary path still comes out UNQUOTED, which keeps the common case identical under any
+        // executor and keeps the generated file readable.
+        const SHELL_SAFE = /^[A-Za-z0-9._\/@+=-]+$/;
+        const arg = (s) => (SHELL_SAFE.test(s) ? s : `'${String(s).split("'").join(`'\\''`)}'`);
+        const needsQuoting = !SHELL_SAFE.test(T);
+        const nodeCmd = (file) => `node ${arg(path.join(T, ".codex", "hooks", file))} --project-dir ${arg(T)}`;
+        const entry = (file, statusMessage) => ({ type: "command", command: nodeCmd(file), timeout: 10, statusMessage });
+        const registration = {
+          description: `workflow-kit v${KIT_VERSION} — Codex-lane PreToolUse guards. These do NOT run until you approve them in an INTERACTIVE codex session; codex exec skips untrusted hooks silently. Verify with: node scripts/check-codex-hooks-armed.mjs`,
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "apply_patch",
+                hooks: [
+                  entry("guard-cross-repo-writes.mjs", "Checking every patch target stays inside this repo…"),
+                  entry("guard-lane-authoring.mjs", "Checking the task's lane declaration…"),
+                ],
+              },
+              {
+                matcher: "Bash",
+                hooks: [entry("guard-gate-ladder.mjs", "Resolving the declared tier; surfacing the ladder it owes…")],
+              },
+            ],
+          },
+        };
+        // The Stop-event Owner-comms SENSOR is deliberately NOT registered here. Codex does list a
+        // `Stop` hook event, but this kit has not observed that payload, and registering a sensor
+        // against an unverified payload shape would ship a control whose behaviour nobody has
+        // watched. The file installs (the two trees stay byte-identical); only the registration is
+        // withheld, and PORTABILITY.md says so.
+        if (writeWithBackup(hooksJson, JSON.stringify(registration, null, 2) + "\n")) {
+          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 2 write guards (fail CLOSED) · Bash ⇒ the gate-ladder sensor (never denies)`);
+          if (needsQuoting) {
+            warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
+          }
+        } else {
+          warn(`.codex/hooks.json: REFUSED — the existing file could not be backed up, so it was left UNCHANGED. The Codex guards are registered from whatever that file says, which is not what this run wrote.`);
+        }
       }
     } catch (e) {
       codexLaneOk = false;
-      warn(`the .codex/ lane assets could not be installed (${e && (e.code || e.message) || "error"}) — they carry no enforcement, so the guards, the pre-commit floor and the method docs are unaffected and the adopt continues. The Codex cold-review seat is SKIPPED for the same reason.`);
+      // v2.1 changed what this costs, so the wording had to change with it: this block now installs
+      // real ENFORCEMENT, and a failure here means the Codex lane is UNGUARDED. It still must not
+      // abort the adopt — the Claude guards and the every-lane pre-commit floor are registered
+      // around it and are unaffected — but reporting it as a lost convenience would be false.
+      warn(`the .codex/ lane could not be installed (${e && (e.code || e.message) || "error"}) — YOUR CODEX LANE IS UNGUARDED: no write guards, no registration, no cold-review seat. The Claude-lane guards, the every-lane pre-commit floor and the method docs are unaffected, so the adopt continues. Fix the path and re-run to arm the Codex lane.`);
     }
   }
 
@@ -754,6 +900,13 @@ function main() {
     // unfilled-placeholder scan below reports it and the post-run checklist names it — the seat is
     // visibly incomplete rather than silently mis-modelled.
     CODEX_COLD_MODEL: args.codexColdModel || "{{CODEX_COLD_MODEL}}",
+    // The non-Claude lane the asymmetry table names. It shipped as an UNFILLED placeholder in every
+    // generated core/BINDINGS.md — no flag, no fill logic, so the "canonical statement of the
+    // PM-portability caveat" had a literal `{{OTHER_LANE}}` in its column header. It is not a
+    // judgment call the adopter has to make: the lane this kit ships hooks and a review seat for is
+    // Codex, so it is filled, not asked for. (Found by a cold seat; pre-existing since the template
+    // was written.)
+    OTHER_LANE: "Codex",
     KIT_VERSION,
   };
   const gen = [
@@ -857,14 +1010,64 @@ function main() {
   for (const tok of remainingTokens.get("core/OWNER_COMMS.md") || []) {
     log(`     · core/OWNER_COMMS.md {{${tok}}} — ${OWNER_TOKEN_HELP[tok] || "complete it"}`);
   }
-  log(`  2. Add these scripts to package.json:  node bin/init.mjs --print-package-scripts`);
-  log(`  3. Wire "doc:size" + "test:kit-controls" into your CI / npm test.`);
-  log(`  4. READ PORTABILITY.md — the three PreToolUse hooks bind ONLY the Claude Code lane. A`);
-  log(`     Codex / non-Claude lane is bound by AGENTS.md prose + the pre-commit hook you just`);
-  log(`     installed — NOT by the PreToolUse guards. Do not imply otherwise to your team.`);
-  log(`  5. The Stop hook guard-owner-comms.mjs is a SENSOR that fails OPEN — it nudges a`);
-  log(`     rule-1 miss AFTER the message is already sent, and a clean run proves nothing.`);
-  log(`     Never describe it to your team as enforcement. Off switch: WORKFLOW_KIT_COMMS_GUARD=false.`);
+  // SELF-NUMBERING. One item is conditional (the Codex lane can be skipped), and a hand-numbered
+  // list either repeats a number or leaves a hole the moment that happens — both of which read as
+  // "an item is missing" in the one output an adopter follows step by step.
+  let step = 1;
+  const item = (first, ...rest) => { log(`  ${++step}. ${first}`); for (const line of rest) log(`     ${line}`); };
+  item(`Add these scripts to package.json:  node bin/init.mjs --print-package-scripts`);
+  item(`Wire "doc:size" + "test:kit-controls" into your CI / npm test.`);
+  // THE TRUST HEADLINE, IN THE SAME BREATH AS "INSTALLED". This is the single most load-bearing
+  // sentence init prints, because the failure it prevents is silent on BOTH sides: Codex does not
+  // run a repo's hooks until a human approves them in an interactive session, and in `codex exec`
+  // it skips unapproved hooks with no prompt, no warning and no exit-code change. An adopter who
+  // reads "installed" above and stops reading has an INERT control and no way to notice. So the
+  // caveat ships beside the claim, never in a doc they may not open — and it ends with the one
+  // command that answers the question rather than asserting an answer.
+  if (codexLaneOk) {
+    item(
+      `ARM THE CODEX LANE — the guards are INSTALLED but INERT until you grant hook trust.`,
+      `Codex runs a repo's hooks only after a human approves them in an INTERACTIVE session:`,
+      `run \`codex\` in this repo once, and answer "Hooks need review" with "Trust all and`,
+      `continue". \`codex exec\` NEVER prompts and NEVER warns — it skips untrusted hooks`,
+      `SILENTLY, so a clean run proves nothing. Then VERIFY, do not assume:`,
+      `    node scripts/check-codex-hooks-armed.mjs`,
+      `Upgrading a hook (\`init --force\`) marks it CHANGED and DISARMS it until you approve`,
+      `again. Migration order is: upgrade → re-trust interactively → re-run that check.`,
+      `The kit will never grant this for you: it does not write Codex's trust store and it`,
+      `does not use --dangerously-bypass-hook-trust. Automating another tool's consent is`,
+      `forging consent, and it would arm every hook from every source, not just ours.`,
+    );
+  }
+  item(
+    `READ PORTABILITY.md — what these guards do NOT cover. They bind write TOOLS. A write`,
+    `issued through a plain SHELL command is invisible to them, and in the Codex lane that`,
+    `is a main road, not a corner case. The pre-commit hook you just installed is the only`,
+    `mechanical floor that binds every lane. Do not imply otherwise to your team.`,
+  );
+  item(
+    `The Stop hook guard-owner-comms.mjs is a SENSOR that fails OPEN — it nudges a`,
+    `rule-1 miss AFTER the message is already sent, and a clean run proves nothing.`,
+    `Never describe it to your team as enforcement. Off switch: WORKFLOW_KIT_COMMS_GUARD=false.`,
+  );
 }
 
-main();
+// RUN ONLY AS A CLI. This file exports `tomlDeclaresHooks` so the suite can pin it against the
+// probe's forced copy — and an unguarded `main()` turns that import into a full ADOPT of whatever
+// directory the importer happens to be running in. It did exactly that once here: a test imported
+// this module and init adopted the KIT'S OWN WORKING TREE, writing entry stubs, a `.codex/` lane and
+// `.claude/` registrations into it, and setting `core.hooksPath` in the SHARED git config, which a
+// worktree layout propagates to the primary clone. Nothing was lost (every write is refuse-by-
+// default without `--force`), but a module whose import has side effects that large has no business
+// being importable without this guard.
+//
+// realpathSync, NOT path.resolve — the trap check-doc-size.mjs documents: resolve() does not follow
+// symlinks while fileURLToPath() yields a realpath, so under a symlinked invocation path (macOS
+// /tmp -> /private/tmp, where worktrees live) they differ and the CLI would exit 0 doing nothing.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+
+if (isMain()) main();

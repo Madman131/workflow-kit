@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, statSync, writeSync } from "node:fs";
 import path from "node:path";
+import { extractTargets, resolvePatchBase, resolveProjectRoot } from "./payload-targets.mjs";
 
 const DECLARATION = path.join(".claude", "task-lane.json");
 const LEDGER = path.join(".claude", "lane-ledger.jsonl");
@@ -300,7 +301,7 @@ function writeLedger(projectRoot, { decision, state, reason, tier, rel, taskId, 
   }
 }
 
-function deny(projectRoot, rel, state, sessionId) {
+function deny(projectRoot, rel, state, sessionId, envelopeNote = "") {
   const session = typeof sessionId === "string" && sessionId ? sessionId : "<hook-session-id>";
   if (state === "kit-config-malformed") {
     process.stdout.write(JSON.stringify({
@@ -313,7 +314,26 @@ function deny(projectRoot, rel, state, sessionId) {
           `path segments). This code write is BLOCKED (fail-closed) — a corrupt repo-specific deny-set ` +
           `must never silently permit writes. Remediate by fixing that file to shape ` +
           `\`{"executedPathDirs":["<dir>"]}\` (optional), by deleting it to fall back to the kit's ` +
-          `portable defaults, or by re-running \`node bin/init.mjs\`.`,
+          `portable defaults, or by re-running \`node bin/init.mjs\`.` + envelopeNote,
+      },
+    }));
+    return;
+  }
+  // A write whose TARGET could not be read at all (v2.1). Distinct from every declaration state
+  // below: nothing about the task's declaration is wrong here — the payload is. Its remediation is
+  // therefore about the PATCH, not about `task-lane.json`, and printing the declaration routes
+  // would send the reader to fix a file that is already correct.
+  if (state === "malformed-patch-envelope") {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason:
+          `guard-lane-authoring.mjs blocked this write: it is a WRITE whose target paths could not ` +
+          `be determined${envelopeNote ? ` — ${envelopeNote.trim()}` : ""}. This guard fails CLOSED on a write it cannot read: gating ` +
+          `the targets it happened to parse and permitting the rest is a fail-open, and the dropped ` +
+          `target is the one that matters. Re-issue the change as a patch envelope this guard can ` +
+          `account for, or make the edit through a tool whose payload names its path.`,
       },
     }));
     return;
@@ -338,7 +358,8 @@ function deny(projectRoot, rel, state, sessionId) {
       : "") +
     (state === "stale"
       ? " A stale declaration is treated as absent — re-declare for the CURRENT task (the file's mtime is the staleness clock; rewriting it refreshes it)."
-      : "");
+      : "") +
+    envelopeNote;
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
@@ -351,82 +372,125 @@ function deny(projectRoot, rel, state, sessionId) {
 let raw = "";
 process.stdin.on("data", (chunk) => { raw += chunk; });
 process.stdin.on("end", () => {
-  const projectRoot = path.resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+  // PARSE FIRST, then resolve the root. The Codex lane sets no CLAUDE_PROJECT_DIR, and one of the
+  // fallbacks resolveProjectRoot consults is the payload's own `cwd` (see its precedence note), so
+  // the root cannot be settled before the payload is read. A payload that will not parse still needs
+  // a root for its deny message, which is why that branch resolves with no input rather than
+  // skipping the step.
+  let input;
+  try { input = JSON.parse(raw); } catch {
+    deny(resolveProjectRoot(null), "<unknown-path>", "malformed-hook-input");
+    process.exit(0);
+  }
+  const projectRoot = resolveProjectRoot(input);
   // Build the parameterized regex: portable defaults UNION the (valid) config family. On a
   // MALFORMED config we build from defaults only (so code paths are still IDENTIFIED as gated) and
   // block any gated write below — never silently trust a corrupt deny-set.
   const kitConfig = loadKitConfig(projectRoot);
   EXECUTED_PATH_RE = buildExecutedPathRe(DEFAULT_EXECUTED_PATH_DIRS.concat(kitConfig.ok ? kitConfig.executedPathDirs : []));
-  let input;
-  try { input = JSON.parse(raw); } catch {
-    deny(projectRoot, "<unknown-path>", "malformed-hook-input");
-    process.exit(0);
-  }
-  const rawFilePath = input?.tool_input?.file_path;
-  const rawNotebookPath = input?.tool_input?.notebook_path;
-  const target = typeof rawFilePath === "string" && rawFilePath
-    ? rawFilePath
-    : typeof rawNotebookPath === "string" && rawNotebookPath
-      ? rawNotebookPath
-      : null;
-  if (!target) {
-    const malformedPath = rawFilePath !== undefined || rawNotebookPath !== undefined;
-    deny(projectRoot, "<unknown-path>", malformedPath ? "malformed-hook-path" : "missing-hook-path", input?.session_id);
-    process.exit(0);
-  }
-
-  const abs = path.resolve(projectRoot, target);
-  let rel = path.relative(projectRoot, abs);
-  // Outside-repo test must not swallow an in-repo file whose NAME starts with ".." (e.g. root
-  // "..x.mjs") — a bare startsWith("..") would let it bypass the gate, failing open.
-  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) process.exit(0);
-  rel = rel.split(path.sep).join("/");
-
-  const symlinkPath = hasSymlinkTraversal(projectRoot, abs);
-
-  // FAIL CLOSED on a corrupt config BEFORE the not-gated early-exit. On a malformed config
-  // EXECUTED_PATH_RE falls back to defaults, so a path gated ONLY by a config-added source dir is not
-  // identified as gated and would slip through the early-allow below (a fail-open). When the config is
-  // unreadable we cannot trust that identification, so we block everything NOT statically safe
-  // (only the docs/ and memory/ SUBTREES + the declaration + the ledger — config-independent). Note
-  // this is broader than "docs proceed": a ROOT-level doc (README.md, LICENSE) and every code path
-  // fail closed until the config is fixed. Fail-CLOSED is the correct direction; the deny message
-  // points remediation at Bash / re-running init (the Write tool itself is blocked while corrupt).
-  if (!kitConfig.ok && !isStaticallySafe(rel)) {
-    const logged = writeLedger(projectRoot, {
-      decision: "deny", state: "kit-config-malformed", rel, sessionId: input?.session_id,
-    });
-    if (!logged) deny(projectRoot, rel, "ledger-error", input?.session_id);
-    else deny(projectRoot, rel, "kit-config-malformed", input?.session_id);
-    process.exit(0);
-  }
-
-  if (!symlinkPath && !isGatedPath(rel)) process.exit(0);
-
+  // EVERY target this payload writes — one for a Claude `file_path`, possibly several for a Codex
+  // `apply_patch` envelope (payload-targets.mjs). The three classes are kept DISTINCT here because
+  // this hook's two pre-existing no-target states have different remediations and both must survive
+  // byte-identically: `missing-hook-path` (no path keys at all) and `malformed-hook-path` (a key
+  // present but unusable). The envelope failure is a THIRD thing — the declaration is fine and the
+  // patch is not — so it gets its own state rather than being folded into "malformed".
   const sessionId = input?.session_id;
-  const result = declarationState(projectRoot, sessionId);
-  let state = result.state;
-  let decision = ["in-thread:T0", "in-thread:T1", "in-thread:T2", "in-thread:T3", "exempt"].includes(state)
-    ? "allow"
-    : "deny";
-  if (symlinkPath) {
-    state = "symlink-path";
-    decision = "deny";
-  }
-  const logged = writeLedger(projectRoot, {
-    decision,
-    state,
-    reason: result.reason,
-    tier: result.tier,
-    rel,
-    taskId: result.taskId,
-    sessionId: result.sessionId ?? sessionId,
-    hash: result.declarationHash,
-  });
-  if (!logged) {
-    deny(projectRoot, rel, "ledger-error", sessionId);
+  const extraction = extractTargets(input);
+  if (!extraction.ok) {
+    deny(
+      projectRoot, "<unknown-path>",
+      extraction.shape === "apply_patch" ? "malformed-patch-envelope" : "malformed-hook-path",
+      sessionId, extraction.shape === "apply_patch" ? ` ${extraction.reason}.` : "",
+    );
     process.exit(0);
   }
-  if (decision === "deny") deny(projectRoot, rel, state, sessionId);
+  if (extraction.shape === "none") {
+    deny(projectRoot, "<unknown-path>", "missing-hook-path", sessionId);
+    process.exit(0);
+  }
+
+  const declaration = declarationState(projectRoot, sessionId);
+  const ALLOW_STATES = ["in-thread:T0", "in-thread:T1", "in-thread:T2", "in-thread:T3", "exempt"];
+
+  // Classify EVERY target before deciding anything. A patch envelope is applied as a unit, so a
+  // per-target early exit would decide the whole call on whichever path happened to come first —
+  // the fail-open a multi-target envelope is built to exploit.
+  // A RELATIVE target resolves against the APPLIER's working directory, not the repo root — they
+  // differ whenever the session runs in a subdirectory, so resolving against the wrong base gates a
+  // path that will never be written while the real one goes unchecked.
+  const patchBase = resolvePatchBase(input, projectRoot);
+  const gated = [];
+  for (const target of extraction.targets) {
+    const abs = path.resolve(patchBase, String(target));
+    let rel = path.relative(projectRoot, abs);
+    // Outside-repo test must not swallow an in-repo file whose NAME starts with ".." (e.g. root
+    // "..x.mjs") — a bare startsWith("..") would let it bypass the gate, failing open. An
+    // out-of-repo target is not this control's business (guard-cross-repo-writes owns it), so it is
+    // SKIPPED — not returned as an allow for the whole call, which is what a bare exit would do to
+    // an envelope whose other targets are gated code.
+    if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) continue;
+    rel = rel.split(path.sep).join("/");
+
+    // FAIL CLOSED on a corrupt config BEFORE the not-gated skip. On a malformed config
+    // EXECUTED_PATH_RE falls back to defaults, so a path gated ONLY by a config-added source dir is
+    // not identified as gated and would slip through the skip below (a fail-open). When the config
+    // is unreadable we cannot trust that identification, so we block everything NOT statically safe
+    // (only the docs/ and memory/ SUBTREES + the declaration + the ledger — config-independent).
+    // Note this is broader than "docs proceed": a ROOT-level doc (README.md, LICENSE) and every code
+    // path fail closed until the config is fixed.
+    if (!kitConfig.ok && !isStaticallySafe(rel)) {
+      // Ledger args exactly as the pre-v2.1 single-path branch wrote them: no taskId, no hash — the
+      // declaration was never consulted, and inventing those fields would put a task's identity on a
+      // row that says nothing about that task.
+      gated.push({ rel, state: "kit-config-malformed", decision: "deny", ledger: { rel, sessionId } });
+      continue;
+    }
+
+    const symlinkPath = hasSymlinkTraversal(projectRoot, abs);
+    if (!symlinkPath && !isGatedPath(rel)) continue;
+
+    let state = declaration.state;
+    let decision = ALLOW_STATES.includes(state) ? "allow" : "deny";
+    if (symlinkPath) {
+      state = "symlink-path";
+      decision = "deny";
+    }
+    gated.push({
+      rel, state, decision,
+      ledger: {
+        rel,
+        reason: declaration.reason,
+        tier: declaration.tier,
+        taskId: declaration.taskId,
+        sessionId: declaration.sessionId ?? sessionId,
+        hash: declaration.declarationHash,
+      },
+    });
+  }
+
+  if (!gated.length) process.exit(0);
+
+  // ONE LEDGER ROW PER TARGET, carrying the CALL's effective decision and that TARGET's own state.
+  // The decision is the call's because the write is atomic: if any target denies, NOTHING is
+  // written, so an `allow` row for a sibling path would record a permission that was never
+  // exercised — the ledger's named consumer is the Owner's spot-check, and it must not read as
+  // "this file was allowed through" when the file was never touched. The STATE stays per-target so
+  // a symlinked path in an otherwise clean envelope is still identifiable as the cause.
+  const callDecision = gated.some((g) => g.decision === "deny") ? "deny" : "allow";
+  for (const g of gated) {
+    const logged = writeLedger(projectRoot, { decision: callDecision, state: g.state, ...g.ledger });
+    if (!logged) {
+      deny(projectRoot, g.rel, "ledger-error", sessionId);
+      process.exit(0);
+    }
+  }
+  if (callDecision === "deny") {
+    const first = gated.find((g) => g.decision === "deny");
+    const others = gated.filter((g) => g !== first);
+    deny(projectRoot, first.rel, first.state, sessionId,
+      others.length
+        ? ` This write names ${gated.length} gated targets in ONE patch (${gated.map((g) => g.rel).join(", ")}); a patch applies as a unit, so the whole call is blocked. Each target has its own ledger row.`
+        : "");
+  }
   process.exit(0);
 });

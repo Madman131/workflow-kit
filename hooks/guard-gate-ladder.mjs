@@ -76,6 +76,11 @@
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+// ONE answer to "which tree am I looking at", shared with the two write guards rather than a third
+// hand-kept copy. This sensor registers in BOTH lanes (Codex normalizes its shell tool to the name
+// `Bash` and passes `tool_input.command`, so its matcher and its command read work unchanged), and
+// the Codex lane sets no CLAUDE_PROJECT_DIR.
+import { resolveProjectRoot } from "./payload-targets.mjs";
 
 const DECLARATION = join(".claude", "task-lane.json");
 const TASK_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/;
@@ -228,7 +233,7 @@ process.stdin.on("end", () => {
   // is checked too, so either marker alone suppresses.
   if (ev !== null && typeof ev === "object" && ("agent_id" in ev || "agent_type" in ev)) process.exit(0);
 
-  const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const projectRoot = resolveProjectRoot(ev);
   const { tier, failClosed, taskId } = resolveTier(projectRoot, ev?.session_id);
 
   // Guard (b): PM material goes ONLY to a confirmed PM — a declaration that is valid, current, and
