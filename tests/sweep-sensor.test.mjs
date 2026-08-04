@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -22,6 +22,12 @@ import { parseBanner, bannerBlock } from "../scripts/codex-banner.mjs";
 import { sweepOwed, classifyFragment, isSkillFile, SKILL_ROOTS, incomingText } from "../hooks/sensor-sweep-owed.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
 import { owesMutationRecord, emissionText } from "../hooks/sensor-mutation-owed.mjs";
+// The REAL implementations, from the one module that owns them — injected into the pure functions
+// exactly as the hook injects them at runtime, so these tests exercise the shipped behaviour and
+// not a stand-in. (The sensor loads them from the project root; a test in the kit tree can import
+// them directly, and both paths reach the same file.)
+import { CLASS_RE, classify } from "../scripts/check-doc-size.mjs";
+const DEPS = { classify, classRe: CLASS_RE };
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scratch = () => mkdtempSync(path.join(os.tmpdir(), "kit-sweep-"));
@@ -235,16 +241,16 @@ test("classifyFragment scans the WHOLE fragment and prefers BINDING — the prom
   // classify() windows to the first 12 lines, which is right for a DOCUMENT and wrong for a
   // FRAGMENT. A replacement that flips the head marker below line 12 is a real promotion.
   const deep = Array(20).fill("filler").join("\n") + "\n> **CLASS: BINDING** — read it whole";
-  assert.equal(classifyFragment(deep), "BINDING", "a marker below line 12 must still be seen");
+  assert.equal(classifyFragment(deep, CLASS_RE), "BINDING", "a marker below line 12 must still be seen");
 
   // Prefer BINDING even when a non-BINDING marker appears FIRST: the question for a fragment is
   // "does this write introduce BINDING text?", not "what does its head say".
-  assert.equal(classifyFragment("CLASS: REFERENCE\nlater CLASS: BINDING"), "BINDING");
+  assert.equal(classifyFragment("CLASS: REFERENCE\nlater CLASS: BINDING", CLASS_RE), "BINDING");
 
   // CLEAN SIDE — no marker, and a non-BINDING marker, are both correctly not-BINDING.
-  assert.equal(classifyFragment("ordinary prose"), null);
-  assert.equal(classifyFragment(""), null);
-  assert.equal(classifyFragment("CLASS: REFERENCE only"), "REFERENCE");
+  assert.equal(classifyFragment("ordinary prose", CLASS_RE), null);
+  assert.equal(classifyFragment("", CLASS_RE), null);
+  assert.equal(classifyFragment("CLASS: REFERENCE only", CLASS_RE), "REFERENCE");
 });
 
 test("AC-SKILL-TREES: the skill roots are the adopter's, matched case-insensitively on .md", () => {
@@ -265,19 +271,19 @@ test("sweepOwed fires on a BINDING doc and a skill body — and stays SILENT on 
   const readDoc = (r) => (r === "core/WORKFLOW.md" ? "> **CLASS: BINDING**" : "> **CLASS: REFERENCE**");
 
   // FIRES: editing a rule in a controlling document.
-  assert.equal(sweepOwed("core/WORKFLOW.md", "some edit", { governed, readDoc }).reason, "binding-doc");
+  assert.equal(sweepOwed("core/WORKFLOW.md", "some edit", { governed, readDoc, ...DEPS }).reason, "binding-doc");
   // FIRES: a skill body, which other work depends on by name.
-  assert.equal(sweepOwed(".agents/skills/sweep/SKILL.md", "x", { governed, readDoc }).reason, "skill-body");
+  assert.equal(sweepOwed(".agents/skills/sweep/SKILL.md", "x", { governed, readDoc, ...DEPS }).reason, "skill-body");
   // FIRES: a fragment PROMOTING a governed doc to BINDING even though disk still says REFERENCE.
-  assert.equal(sweepOwed("core/GATES.md", "> **CLASS: BINDING**", { governed, readDoc }).reason, "binding-doc");
+  assert.equal(sweepOwed("core/GATES.md", "> **CLASS: BINDING**", { governed, readDoc, ...DEPS }).reason, "binding-doc");
 
   // SILENT — the scope gate. Without these the hook fires on nearly every file, which trains the
   // reader to switch it off; that is how controls actually die.
-  assert.equal(sweepOwed("core/GATES.md", "ordinary edit", { governed, readDoc }), null,
+  assert.equal(sweepOwed("core/GATES.md", "ordinary edit", { governed, readDoc, ...DEPS }), null,
     "a REFERENCE doc does not owe the pre-fold sweep");
-  assert.equal(sweepOwed("src/index.mjs", "code", { governed, readDoc }), null, "ungoverned code is out of scope");
-  assert.equal(sweepOwed("README.md", "docs", { governed, readDoc }), null, "an ungoverned doc is out of scope");
-  assert.equal(sweepOwed("", "x", { governed, readDoc }), null);
+  assert.equal(sweepOwed("src/index.mjs", "code", { governed, readDoc, ...DEPS }), null, "ungoverned code is out of scope");
+  assert.equal(sweepOwed("README.md", "docs", { governed, readDoc, ...DEPS }), null, "an ungoverned doc is out of scope");
+  assert.equal(sweepOwed("", "x", { governed, readDoc, ...DEPS }), null);
 });
 
 test("a target is CANONICALISED before it is matched — `./core/X.md` is not a silent miss", () => {
@@ -324,7 +330,7 @@ test("a target is CANONICALISED before it is matched — `./core/X.md` is not a 
   // END TO END through the scope rule: the canonical spelling and the `./` spelling agree.
   const governed = ["core/WORKFLOW.md"];
   const readDoc = () => "> **CLASS: BINDING**";
-  const viaDot = sweepOwed(toRepoRelative("./core/WORKFLOW.md", root, base), "edit", { governed, readDoc });
+  const viaDot = sweepOwed(toRepoRelative("./core/WORKFLOW.md", root, base), "edit", { governed, readDoc, ...DEPS });
   assert.equal(viaDot?.reason, "binding-doc", "the `./` spelling now reaches the rule it always should have");
 });
 
@@ -372,7 +378,7 @@ test("a DELETED or quoted marker does not promote, and one envelope target canno
   // …so a REFERENCE doc whose hunk merely deletes the marker stays silent.
   const governed = ["core/GATES.md"];
   const readDoc = () => "> **CLASS: REFERENCE**";
-  assert.equal(sweepOwed("core/GATES.md", incomingText(envDeletes, one, "core/GATES.md"), { governed, readDoc }), null);
+  assert.equal(sweepOwed("core/GATES.md", incomingText(envDeletes, one, "core/GATES.md"), { governed, readDoc, ...DEPS }), null);
 
   // MULTI-target: each file gets ITS OWN section, so the promotion fires on the file being promoted
   // and the sibling stays silent. Getting this wrong failed in BOTH directions one review round
@@ -383,9 +389,9 @@ test("a DELETED or quoted marker does not promote, and one envelope target canno
   const multi = { shape: "apply_patch", targets: ["core/GATES.md", "core/WORKFLOW.md"], ok: true };
   const envMulti = { tool_input: { command:
     "*** Begin Patch\n*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n*** Update File: core/WORKFLOW.md\n+unrelated edit\n*** End Patch" } };
-  assert.equal(sweepOwed("core/GATES.md", incomingText(envMulti, multi, "core/GATES.md"), { governed, readDoc })?.reason,
+  assert.equal(sweepOwed("core/GATES.md", incomingText(envMulti, multi, "core/GATES.md"), { governed, readDoc, ...DEPS })?.reason,
     "binding-doc", "the file BEING PROMOTED fires, even though a second file is in the same patch");
-  assert.equal(sweepOwed("core/WORKFLOW.md", incomingText(envMulti, multi, "core/WORKFLOW.md"), { governed, readDoc }), null,
+  assert.equal(sweepOwed("core/WORKFLOW.md", incomingText(envMulti, multi, "core/WORKFLOW.md"), { governed, readDoc, ...DEPS }), null,
     "…and the sibling does NOT inherit the other file's marker");
   // Envelope grammar is nobody's content — a section must not carry the closing marker.
   assert.doesNotMatch(incomingText(envMulti, multi, "core/WORKFLOW.md"), /\*\*\* End Patch/);
@@ -401,14 +407,14 @@ test("a DELETED or quoted marker does not promote, and one envelope target canno
   const repText = incomingText(repeated, repTargets, "core/GATES.md");
   assert.match(repText, /CLASS: BINDING/, "the EARLIER section survives a later one for the same file");
   assert.match(repText, /later text/, "…and so does the later section — accumulate, never replace");
-  assert.equal(sweepOwed("core/GATES.md", repText, { governed, readDoc })?.reason, "binding-doc");
+  assert.equal(sweepOwed("core/GATES.md", repText, { governed, readDoc, ...DEPS })?.reason, "binding-doc");
   // …and accumulating must not leak one file's text into its sibling.
   assert.doesNotMatch(incomingText(repeated, repTargets, "core/WORKFLOW.md"), /CLASS: BINDING/);
 
   // CLEAN SIDE — the promotion case this fragment exists for still fires on a single-target add.
   const single = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
   const promote = { tool_input: { command: '*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n' } };
-  assert.equal(sweepOwed("core/GATES.md", incomingText(promote, single, "core/GATES.md"), { governed, readDoc })?.reason,
+  assert.equal(sweepOwed("core/GATES.md", incomingText(promote, single, "core/GATES.md"), { governed, readDoc, ...DEPS })?.reason,
     "binding-doc", "a real single-target promotion must STILL fire — the fix must not silence it");
 
   // …and the Claude lane is untouched by any of this.
@@ -442,12 +448,19 @@ test("DESIGN INVARIANT: a sensor IMPORTS patch structure, it never PARSES it", (
 });
 
 test("the sweep sensor holds NO class regex of its own — one home for the marker pattern", () => {
-  // Two transcriptions of one mechanical fact silently differ. The hook imports CLASS_RE; a second
-  // copy here is the drift shape, so this asserts the SENTENCE of the design, not a word.
+  // Two transcriptions of one mechanical fact silently differ, so the sensor must hold none of its
+  // own. What changed in v2.2.1 is only WHERE the one copy comes from: a static sibling import
+  // (`../scripts/…`) resolved in the kit tree and resolved to NOTHING in an adopter, so it is now
+  // loaded at RUNTIME from the project root — where `scripts/` sits in both layouts.
   const src = readFileSync(new URL("../hooks/sensor-sweep-owed.mjs", import.meta.url), "utf8");
   const body = src.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-  assert.doesNotMatch(body, /\/\\bCLASS:/, "no inlined CLASS: regex — import it from check-doc-size.mjs");
-  assert.match(body, /import \{[^}]*CLASS_RE[^}]*\} from "\.\.\/scripts\/check-doc-size\.mjs"/);
+  assert.doesNotMatch(body, /\/\\bCLASS:/, "no inlined CLASS: regex — the pattern has one home");
+  // The sibling-relative STATIC import must never come back: it is the shipped defect.
+  assert.doesNotMatch(body, /^import .*from "\.\.\/scripts\//m,
+    "a static sibling import of scripts/ resolves in the kit tree and NOWHERE in an adopter");
+  // …and the runtime load must resolve from the PROJECT ROOT, which is the property that fixes it.
+  assert.match(body, /path\.join\(root, "scripts", "check-doc-size\.mjs"\)/);
+  assert.match(body, /await import\(/, "loaded lazily, so a missing module degrades instead of crashing");
 });
 
 // ---------------------------------------------------------------- sensor-mutation-owed
@@ -489,4 +502,53 @@ test("the mutation emission demands BOTH polarities and claims no enforcement", 
   // It must never imply it verified anything.
   assert.match(t, /CANNOT tell whether you ran anything/);
   assert.match(t, /it never blocks/);
+});
+
+// ---------------------------------------------------------------- the check that was missing
+
+test("THE INSTALLED HOOKS RUN IN A REAL ADOPTER TREE — presence and registration are not enough", () => {
+  // WHY THIS EXISTS. v2.2.0 shipped `sensor-sweep-owed.mjs` importing `"../scripts/check-doc-size.mjs"`.
+  // In the KIT tree `hooks/` and `scripts/` are siblings so it resolves; in an ADOPTER the hook
+  // installs to `.claude/hooks/`, where `../scripts/` means `.claude/scripts/` — which does not
+  // exist. Every governed write in every adopted repo hit ERR_MODULE_NOT_FOUND: installed,
+  // REGISTERED, and inert, emitting a stack trace instead of a reminder.
+  //
+  // Four review rounds missed it because every observer stood in the KIT tree — the cross-family
+  // seat, the unit tests above, and a generated-tree check that verified PRESENCE and REGISTRATION
+  // and never RAN the thing. This test is that missing step: adopt, then EXECUTE the installed
+  // hook from its installed location, both sensors, both directions.
+  const dir = scratch();
+  try {
+    execFileSync("git", ["init", "-q", "."], { cwd: dir });
+    execFileSync("git", ["remote", "add", "origin", "https://example.com/a.git"], { cwd: dir });
+    execFileSync(process.execPath, [path.join(ROOT_DIR, "bin", "init.mjs"), "--owner-name", "T"],
+      { cwd: dir, stdio: "pipe" });
+
+    const payload = (target) => JSON.stringify({
+      tool_name: "apply_patch", cwd: dir,
+      tool_input: { command: `*** Begin Patch\n*** Update File: ${target}\n+edit\n*** End Patch` },
+    });
+    const runHook = (hook, target) => spawnSync(
+      process.execPath, [path.join(dir, ".claude", "hooks", hook), "--project-dir", dir],
+      { input: payload(target), encoding: "utf8" });
+
+    for (const hook of ["sensor-sweep-owed.mjs", "sensor-mutation-owed.mjs"]) {
+      const r = runHook(hook, "./core/WORKFLOW.md");
+      // The load-bearing assertions: a module that fails to RESOLVE exits nonzero and prints a
+      // stack trace. Both are checked, because either alone would have passed v2.2.0's broken hook
+      // in some form — and "no stack trace" is what distinguishes a working control from a crashing one.
+      assert.equal(r.status, 0, `${hook} must exit 0 from its INSTALLED location — a sensor never denies`);
+      assert.doesNotMatch(r.stderr, /ERR_MODULE_NOT_FOUND|Cannot find module/,
+        `${hook} must resolve its dependencies from an ADOPTER layout, not only the kit's`);
+      assert.doesNotMatch(r.stderr, /DEGRADED/,
+        `${hook} must find what it needs in a normal adopt — degradation is the fallback, not the norm`);
+    }
+
+    // …and the sweep sensor must actually EMIT on a governed BINDING doc, or "it runs" would only
+    // mean "it does not crash". core/WORKFLOW.md ships CLASS: BINDING.
+    assert.match(runHook("sensor-sweep-owed.mjs", "./core/WORKFLOW.md").stderr, /SWEEP OWED/,
+      "the installed sweep sensor emits its reminder in a real adopter tree");
+    // CLEAN SIDE: ordinary ungoverned work stays quiet through the same installed path.
+    assert.doesNotMatch(runHook("sensor-sweep-owed.mjs", "./src/app.mjs").stderr, /SWEEP OWED/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
