@@ -70,8 +70,14 @@ export const BASH_CALL = {
 // Shell commands Codex reached for UNPROMPTED while asked only to create or inspect a file. They are
 // recorded because they are the evidence for the shell-write residual: each of these mutates or reads
 // a file WITHOUT going through apply_patch, so no PreToolUse write guard sees the write at all.
+// NOTE the scope: only the FIRST entry mutates. `sed -n` / `od` were also run freely but only READ,
+// and citing a read as write evidence would be the over-claim the docs here exist to correct.
 export const OBSERVED_SHELL_WRITES = [
-  "truncate -s 5 hello.txt && wc -c hello.txt && od -An -tx1 hello.txt",
+  // Captured verbatim, including the shell wrapper Codex chose:
+  "/bin/zsh -lc 'truncate -s 5 hello.txt && wc -c hello.txt && od -An -tx1 hello.txt'",
+];
+export const OBSERVED_SHELL_READS_ONLY = [
+  "sed -n '1,40p' tochange.txt; sed -n '1,40p' old.txt",
 ];
 
 // The refusal Codex emits when its OWN sandbox rejects a path — NOT a hook decision. Recorded because

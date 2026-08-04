@@ -82,20 +82,29 @@ apply when the kit does ship a Codex guard:
 
 **The shell-write road — a main road in this lane, not a footnote.** In the Claude lane
 "Bash redirection is not covered" is a small accepted class. In the Codex lane it is routine: while
-being asked only to create a file, Codex reached for `/bin/zsh -lc 'truncate …'`, `sed`, and `od`
-unprompted. A PreToolUse write guard sees `apply_patch`; it does not see a shell command that
-rewrites a file. So even a correct, armed Codex write guard is a **tripwire materially leakier than
-its Claude twin**, and it must never be described as parity.
+being asked only to create a file, Codex reached unprompted for a shell command that MUTATED it:
+`truncate -s 5 hello.txt && wc -c hello.txt && od -An -tx1 hello.txt` (retained verbatim in
+`acceptance/fixtures/codex-payload-samples.mjs`). A PreToolUse write guard sees `apply_patch`; it does
+not see a shell command that rewrites a file. So even a correct, armed Codex write guard is a
+**tripwire materially leakier than its Claude twin**, and it must never be described as parity.
+(Scoped to what the retained receipt actually shows: one mutating command. Codex also ran `sed -n`
+and `od` freely, but those only READ — citing them as write evidence would be the same over-claim
+this section exists to correct.)
 
 **What this means for you today.** The Codex lane has **no write-time enforcement**, and v2.0 does not
 add any. What it adds is the honest, dated account above, so the gap is a known quantity rather than
-an unexamined caveat. The `.githooks/pre-commit` floor remains the **only** every-lane guarantee —
+an unexamined caveat. The `.githooks/pre-commit` floor remains the only **harness-agnostic mechanical
+floor** — deliberately not called a *guarantee*, because it is not one: it is silently absent on a
+fresh clone until `core.hooksPath` is configured (§ FM1 below) and it is bypassable with
+`--no-verify`. It is the strongest every-lane mechanism available, once configured and verified,
 which is exactly why `init` installs it and sets `core.hooksPath` whatever else you skip. A kit-built
 Codex-lane guard, designed around the payload shape measured here, is in flight as its own gated
 changeset; when it lands, every limit in this section still applies to it.
 
 **The `.codex/` files v2.0 *does* install are conveniences, not controls.** `init` writes
-`.codex/config.toml` (a pager pin, so `git` output cannot deadlock a non-interactive run) and
+`.codex/config.toml` (a pager pin, which removes the DEFAULT pager as a hang risk in a
+non-interactive run — nothing here verifies Codex loaded the file, and a command can still set its
+own `GIT_PAGER`) and
 generates `.codex/agents/cold-reviewer.toml` (a review seat, whose model is yours to bind). Neither
 enforces anything. `--skip-codex-lane` omits both.
 

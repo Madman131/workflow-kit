@@ -658,11 +658,22 @@ function main() {
   // gap between the lanes, and the log line below must never suggest it does. Failure-ISOLATED like
   // the skills and agents blocks: step 5 registers the Claude guards (a CONTROL), and an ENOTDIR
   // from a `.codex` that happens to be a regular file must not abort the run before that merge.
+  // Set false if `.codex/` is unusable, so the seat's `[G]` generation below is SKIPPED rather than
+  // throwing. That generation runs in the shared template loop, which is deliberately NOT
+  // failure-isolated — a `[G]` write that dies must stop the run — but this entry is the one member
+  // of that table which is a convenience, not part of the method. Without this flag a regular file
+  // sitting at `.codex` killed the whole adopt with a raw ENOTDIR stack trace AFTER the guards were
+  // registered: not the zero-registration fail-open, but a partial adopt that flatly contradicts the
+  // "carries no enforcement, the adopt continues" contract stated three lines above (found by the
+  // cross-family gate seat).
+  let codexLaneOk = !args.skipCodexLane;
   if (args.skipCodexLane) {
     log(`  .codex/: SKIPPED (--skip-codex-lane)`);
   } else {
     try {
       const cfgDst = path.join(T, ".codex", "config.toml");
+      // Fail HERE, inside the catch, rather than later in the template loop.
+      ensureDir(path.join(T, ".codex", "agents"));
       const codexCfg = copyGuarded(path.join(KIT_ROOT, "codex", "config.toml"), cfgDst, force);
       // A KEPT config.toml may already declare `hooks`. Codex accepts registrations in either that
       // file or `.codex/hooks.json` and warns when both do, so an adopter carrying their own is
@@ -677,7 +688,8 @@ function main() {
           : ""}`);
       }
     } catch (e) {
-      warn(`the .codex/ lane assets could not be installed (${e && (e.code || e.message) || "error"}) — they carry no enforcement, so the guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
+      codexLaneOk = false;
+      warn(`the .codex/ lane assets could not be installed (${e && (e.code || e.message) || "error"}) — they carry no enforcement, so the guards, the pre-commit floor and the method docs are unaffected and the adopt continues. The Codex cold-review seat is SKIPPED for the same reason.`);
     }
   }
 
@@ -737,7 +749,7 @@ function main() {
     // Generated through the SAME path as every other `[G]` file, deliberately: it inherits the
     // .bak-before-overwrite protection, the refused-write accounting, and the placeholder scan
     // rather than needing its own hand-kept copies of all three.
-    ...(args.skipCodexLane ? [] : [["codex-cold-reviewer.toml.tmpl", ".codex/agents/cold-reviewer.toml"]]),
+    ...(codexLaneOk ? [["codex-cold-reviewer.toml.tmpl", ".codex/agents/cold-reviewer.toml"]] : []),
   ];
   let genWritten = 0, genKept = 0, genRefused = 0;
   for (const [tmpl, dst] of gen) {

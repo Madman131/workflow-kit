@@ -1317,3 +1317,30 @@ test("--codex-cold-model is validated: it lands inside a TOML string, so it cann
     } finally { rmSync(ok, { recursive: true, force: true }); }
   }
 });
+
+test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cannot take the guards down", () => {
+  // The Codex assets are conveniences and init SAYS the adopt continues if they fail. That sentence
+  // was false: the cold-review seat is generated in the shared [G] template loop, which is
+  // deliberately NOT failure-isolated, so a regular file sitting at `.codex` threw ENOTDIR and killed
+  // the run with a raw stack trace — AFTER the guards were registered. Not the zero-registration
+  // fail-open, but a partial adopt contradicting its own contract. Found by the cross-family seat.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-codexbroken-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    writeFileSync(path.join(dir, ".codex"), "a regular file, not a directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "x", "--skip-codex-prompt"], { encoding: "utf8" });
+
+    assert.equal(r.status, 0, `the adopt completes despite an unusable .codex: ${r.stderr}`);
+    assert.match(r.stderr, /\.codex\/ lane assets could not be installed/, "…and says so plainly");
+    assert.match(r.stderr, /cold-review seat is SKIPPED/, "…naming the seat it therefore skipped");
+
+    // The load-bearing half: everything that actually enforces must still be in place. A warning is
+    // worth nothing if the run stopped before the controls landed.
+    const settings = readFileSync(path.join(dir, ".claude", "settings.json"), "utf8");
+    assert.match(settings, /guard-lane-authoring/, "the Claude guards are still registered");
+    assert.ok(existsSync(path.join(dir, ".githooks", "pre-commit")), "the every-lane commit floor still installed");
+    assert.ok(existsSync(path.join(dir, "core", "BINDINGS.md")), "the other [G] docs were still generated");
+    assert.ok(existsSync(path.join(dir, "core", "GATES.md")), "the [P] method docs still landed");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

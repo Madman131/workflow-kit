@@ -1,8 +1,9 @@
 # workflow-kit — [P] portable Codex lane config, installed verbatim to <repo>/.codex/config.toml.
 #
-# WHY THIS EXISTS: a pager that waits for a keypress is a deadlock in a non-interactive agent run.
-# `git log`/`git diff` invoke $GIT_PAGER, and the default pager blocks forever when nothing is
-# attached to read it. Pinning it to `cat` makes git output stream and return.
+# WHY THIS EXISTS: a pager that waits for a keypress hangs a non-interactive agent run. `git log` /
+# `git diff` invoke $GIT_PAGER, and the default pager blocks when nothing is attached to read it.
+# Pinning it to `cat` removes that DEFAULT as a hang risk. It is not a guarantee: nothing here
+# verifies Codex loaded this file, and a command may still set its own GIT_PAGER.
 #
 # `inherit = "core"` keeps the shell environment minimal-but-usable rather than passing the operator's
 # whole environment to model-generated commands.

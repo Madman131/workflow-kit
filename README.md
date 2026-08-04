@@ -28,10 +28,13 @@ describe your Codex lane to anyone.** The headlines:
   This is a platform property: it will apply to *any* Codex hook you install, ours or yours. Never
   reach for `--dangerously-bypass-hook-trust`; assume unarmed until you have watched one fire.
 - **Shell writes are a main road in the Codex lane**, not the footnote they are in the Claude lane.
-  Asked only to create a file, Codex reached for `truncate` and `sed` unprompted. No PreToolUse write
-  guard sees those.
-- **The `.githooks/pre-commit` floor remains the only every-lane guarantee.** Unchanged, and now
-  load-bearing for a documented reason rather than by default.
+  Asked only to create a file, Codex reached unprompted for a shell command that MUTATED it
+  (`truncate …`, receipt retained in `acceptance/fixtures/codex-payload-samples.mjs`). No PreToolUse
+  write guard sees that.
+- **The `.githooks/pre-commit` floor remains the only harness-agnostic mechanical floor.**
+  Unchanged, and now load-bearing for a documented reason rather than by default. It is deliberately
+  not called a *guarantee*: it is silently absent on a fresh clone until `core.hooksPath` is
+  configured, and `--no-verify` bypasses it.
 
 A kit-built Codex-lane guard, designed around the payload shape measured here, is **in flight as its
 own gated changeset**. It is not in v2.0, and nothing in v2.0 depends on it.
@@ -44,7 +47,8 @@ key already in your `.claude/kit.config.json` stays **tolerated** by every contr
 fatal — so you do not need to edit that file.
 
 **New Codex-lane files — conveniences, NOT controls.** `init` now installs `.codex/config.toml` (pins
-`GIT_PAGER=cat`, so `git` output cannot deadlock a non-interactive agent run) and generates
+`GIT_PAGER=cat`, removing the default pager as a hang risk in a non-interactive run — nothing
+verifies Codex loaded it, and a command can still set its own) and generates
 `.codex/agents/cold-reviewer.toml`, a cold-review seat whose model is `[G]` — fill it with
 `--codex-cold-model <name>`, or the `{{CODEX_COLD_MODEL}}` placeholder survives and `init`'s checklist
 names it. **Neither enforces anything.** `--skip-codex-lane` omits both.
