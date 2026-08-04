@@ -179,8 +179,8 @@ otherwise-valid declaration NAMING the retired route gets `lane-retired` rather 
 checks every route shares (freshness, session binding, `taskId` shape) reports THAT failure first,
 exactly as it would for `in-thread` or `exempt`. A legacy `laneRiskTokens` entry in an older adopter's
 config is ignored whatever its shape — no control reads it, so it cannot make one fail open; the file's
-structural integrity is still enforced. `init --risk-tokens` is deprecated (parse-warn-ignore) until
-its v2.0 removal.
+structural integrity is still enforced. `init --risk-tokens` was DEPRECATED at v1.5.0
+(parse-warn-ignore) and REMOVED at v2.0: it now exits 2 with a migration message naming the fix.
 
 **Also at v1.5.0: `exempt` declares a tier.** It was the one route carrying none, so a reason set
 entirely about review-seat availability (`codex-down` / `codex-quota` / `trivial-edit`) selected the

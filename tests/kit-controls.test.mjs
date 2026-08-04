@@ -496,21 +496,52 @@ test("the gate-ladder sensor reports a TRUE cause for a tiered exemption (still 
   } finally { cleanup(); }
 });
 
-test("--risk-tokens is DEPRECATED (v1.5.0): parses, warns loudly, and the dead family is not written", () => {
-  // The lane route this flag parameterized was retired; removal of the flag itself is a breaking CLI
-  // change reserved for v2.0. Until then the contract is parse-warn-ignore: a saved init invocation
-  // keeps working, the warning is loud, and laneRiskTokens never reaches kit.config.json.
-  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-dep-"));
+test("--risk-tokens is REMOVED (v2.0): the flag fails LOUDLY and names the migration", () => {
+  // v1.5.0 deprecated it (parse-warn-ignore) and printed a removal horizon of v2.0; this is that
+  // removal. A breaking CLI change must BREAK — a silently-ignored flag would let an adopter keep a
+  // saved invocation forever believing it configured something. exit 2, not 0.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-rm-"));
   try {
     execFileSync("git", ["init", "-q", dir]);
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name",
       "adopter", "--risk-tokens", "billing", "--source-dirs", "app", "--skip-codex-prompt"], { encoding: "utf8" });
-    assert.equal(r.status, 0, `a saved init invocation with --risk-tokens must keep working: ${r.stderr}`);
-    assert.match(r.stderr, /--risk-tokens is DEPRECATED/, "the warning is loud (stderr, not buried in the log)");
-    assert.match(r.stderr, /removed at v2\.0/, "and it states the removal horizon");
-    const cfg = JSON.parse(readFileSync(path.join(dir, ".claude", "kit.config.json"), "utf8"));
-    assert.equal(cfg.laneRiskTokens, undefined, "the dead family is NOT written");
-    assert.deepEqual(cfg.executedPathDirs, ["app"], "…while the live family still is");
+    assert.equal(r.status, 2, "a removed flag is a clean exit 2, never a silent ignore");
+    assert.match(r.stderr, /--risk-tokens was REMOVED at v2\.0/, "the failure names the flag and the version");
+    // The message must carry the FIX, not just the refusal — this is the error an adopter meets while
+    // already frustrated, and every other refusal in this kit names its remediation.
+    assert.match(r.stderr, /Drop the flag/, "…and tells them what to do instead");
+    assert.match(r.stderr, /TOLERATED/, "…and says an existing laneRiskTokens key needs no edit");
+    // It must not have adopted a half-tree on the way out: the parser rejects BEFORE any write.
+    assert.equal(existsSync(path.join(dir, ".claude", "kit.config.json")), false,
+      "the run aborts in argument parsing, so nothing was written");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("…while a legacy laneRiskTokens KEY in an adopter's config stays TOLERATED (the flag died, the key did not)", () => {
+  // The two are separate contracts and only one changed. An older adopter's kit.config.json still
+  // carries laneRiskTokens; every control ignores it rather than treating it as corrupt. Removing the
+  // flag must not turn those existing configs into fail-closed bricks — that would be a silent,
+  // repo-wide outage delivered by an upgrade.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-legacy-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name",
+      "adopter", "--source-dirs", "app", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(r.status, 0, `a clean invocation still adopts: ${r.stderr}`);
+    // Hand-write the legacy shape an older adopt would have left behind, then prove the write guard
+    // still ALLOWS a declared write rather than reading the stale key as config corruption.
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"),
+      '{"executedPathDirs":["app"],"laneRiskTokens":["billing"]}\n');
+    const sid = "legacy-session-id";
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"),
+      JSON.stringify({ mode: "in-thread", sessionId: sid, taskId: "legacy-key-check", tier: "T1" }));
+    const g = spawnSync("node", [path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs")], {
+      input: JSON.stringify({ session_id: sid, tool_input: { file_path: "app/x.mjs" } }),
+      cwd: dir, encoding: "utf8",
+    });
+    assert.equal(g.status, 0, "the guard exits cleanly");
+    assert.doesNotMatch(g.stdout, /"permissionDecision":"deny"/,
+      "a legacy laneRiskTokens key is IGNORED, never read as a malformed config");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -1212,4 +1243,147 @@ test("FM1: init sets core.hooksPath; the portable FM1 test goes RED when it is u
     const red = spawnSync("node", ["--test", "tests/kit-precommit.test.mjs"], { cwd: dir, encoding: "utf8", env });
     assert.notEqual(red.status, 0, "FM1 test must FAIL when core.hooksPath is unset (else the mitigation is fiction)");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("v2.0 Codex lane: the assets install, the model is [G], and --skip-codex-lane leaves no residue", () => {
+  // These are CONVENIENCES, not controls — v2.0 registers no Codex hooks (PORTABILITY.md § Why the
+  // Codex lane is unguarded). What is gated here is the WIRING, the same way the /thread-restart
+  // nudge is gated: the files land, the [G] placeholder behaves, and the opt-out is total.
+  const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-codex-")); execFileSync("git", ["init", "-q", d]); return d; };
+  const run = (d, extra) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
+    "--repo-name", "demo", "--skip-codex-prompt", ...extra], { encoding: "utf8" });
+
+  const filled = mk(), unfilled = mk(), skipped = mk();
+  try {
+    // 1. WITH the flag: the seat's model is bound.
+    assert.equal(run(filled, ["--codex-cold-model", "some-model-v1"]).status, 0);
+    assert.ok(existsSync(path.join(filled, ".codex", "config.toml")), "config.toml installs");
+    const seat = readFileSync(path.join(filled, ".codex", "agents", "cold-reviewer.toml"), "utf8");
+    assert.match(seat, /^model = "some-model-v1"$/m, "--codex-cold-model fills the seat");
+    assert.doesNotMatch(seat, /\{\{CODEX_COLD_MODEL\}\}/, "no placeholder survives once filled");
+    // The shipped config must not register hooks: Codex warns when both it and hooks.json declare
+    // them, and v2.0 deliberately registers none at all.
+    assert.doesNotMatch(readFileSync(path.join(filled, ".codex", "config.toml"), "utf8"),
+      /^\s*\[{1,2}\s*hooks[.\]]/m, "the shipped config.toml declares NO hooks");
+
+    // 2. WITHOUT it: the placeholder SURVIVES and init reports the file as incomplete. An unfilled
+    // model must be visible, never silently substituted with someone else's.
+    const r2 = run(unfilled, []);
+    assert.equal(r2.status, 0);
+    assert.match(readFileSync(path.join(unfilled, ".codex", "agents", "cold-reviewer.toml"), "utf8"),
+      /\{\{CODEX_COLD_MODEL\}\}/, "the placeholder survives when unfilled");
+    assert.match(r2.stdout, /Complete the placeholders in:.*cold-reviewer\.toml/,
+      "…and init's checklist NAMES the incomplete file (an unusable seat must not look finished)");
+
+    // 3. Opt-out is TOTAL — not a partial tree the adopter has to clean up by hand.
+    assert.equal(run(skipped, ["--skip-codex-lane"]).status, 0);
+    assert.equal(existsSync(path.join(skipped, ".codex")), false, "--skip-codex-lane writes no .codex at all");
+
+    // 4. Idempotent: a re-run keeps a hand-edited seat rather than clobbering the adopter's binding.
+    writeFileSync(path.join(filled, ".codex", "agents", "cold-reviewer.toml"), "# hand-edited\n");
+    assert.equal(run(filled, ["--codex-cold-model", "some-model-v1"]).status, 0);
+    assert.equal(readFileSync(path.join(filled, ".codex", "agents", "cold-reviewer.toml"), "utf8"),
+      "# hand-edited\n", "a re-run without --force keeps the adopter's edit");
+  } finally { for (const d of [filled, unfilled, skipped]) rmSync(d, { recursive: true, force: true }); }
+});
+
+test("--codex-cold-model is validated: it lands inside a TOML string, so it cannot be allowed to escape one", () => {
+  // The value is interpolated as `model = "<value>"` into a file that ALSO carries
+  // `sandbox_mode = "read-only"`. An unvalidated value containing a quote and a newline closes the
+  // string and the remainder becomes TOML — so a mistyped or pasted flag could silently re-cage the
+  // review seat. Refused in argument parsing, before anything is written.
+  const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-ccm-")); execFileSync("git", ["init", "-q", d]); return d; };
+  const run = (d, model) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
+    "--repo-name", "x", "--skip-codex-prompt", "--codex-cold-model", model], { encoding: "utf8" });
+
+  const bad = mk();
+  try {
+    const r = run(bad, 'm"\nsandbox_mode = "danger-full-access');
+    assert.equal(r.status, 2, "a value that escapes the TOML string is refused");
+    assert.match(r.stderr, /--codex-cold-model must be a plain model name/, "and the refusal names the rule");
+    assert.equal(existsSync(path.join(bad, ".codex", "agents", "cold-reviewer.toml")), false,
+      "…having written NO seat: the refusal happens in parsing, before any file is created");
+  } finally { rmSync(bad, { recursive: true, force: true }); }
+
+  // The other direction, and it matters as much: an over-strict rule that rejected real model names
+  // would push adopters to hand-edit the seat, which is how the validation gets routed around.
+  for (const model of ["gpt-5.6-terra", "claude-opus-5", "some.model_v2-x", "openai/gpt-x"]) {
+    const ok = mk();
+    try {
+      assert.equal(run(ok, model).status, 0, `a legitimate model name is accepted: ${model}`);
+      const seat = readFileSync(path.join(ok, ".codex", "agents", "cold-reviewer.toml"), "utf8");
+      assert.match(seat, new RegExp(`^model = "${model.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}"$`, "m"), "…and lands verbatim");
+      assert.match(seat, /^sandbox_mode = "read-only"$/m, "…with the seat's own cage intact");
+    } finally { rmSync(ok, { recursive: true, force: true }); }
+  }
+});
+
+test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cannot take the guards down", () => {
+  // The Codex assets are conveniences and init SAYS the adopt continues if they fail. That sentence
+  // was false: the cold-review seat is generated in the shared [G] template loop, which is
+  // deliberately NOT failure-isolated, so a regular file sitting at `.codex` threw ENOTDIR and killed
+  // the run with a raw stack trace — AFTER the guards were registered. Not the zero-registration
+  // fail-open, but a partial adopt contradicting its own contract. Found by the cross-family seat.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-codexbroken-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    writeFileSync(path.join(dir, ".codex"), "a regular file, not a directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "x", "--skip-codex-prompt"], { encoding: "utf8" });
+
+    assert.equal(r.status, 0, `the adopt completes despite an unusable .codex: ${r.stderr}`);
+    assert.match(r.stderr, /\.codex\/ lane assets could not be installed/, "…and says so plainly");
+    assert.match(r.stderr, /cold-review seat is SKIPPED/, "…naming the seat it therefore skipped");
+
+    // The load-bearing half: everything that actually enforces must still be in place. A warning is
+    // worth nothing if the run stopped before the controls landed.
+    const settings = readFileSync(path.join(dir, ".claude", "settings.json"), "utf8");
+    assert.match(settings, /guard-lane-authoring/, "the Claude guards are still registered");
+    assert.ok(existsSync(path.join(dir, ".githooks", "pre-commit")), "the every-lane commit floor still installed");
+    assert.ok(existsSync(path.join(dir, "core", "BINDINGS.md")), "the other [G] docs were still generated");
+    assert.ok(existsSync(path.join(dir, "core", "GATES.md")), "the [P] method docs still landed");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("round-2 seat findings: removed-flag `=` spelling, the hooks DETECTOR, and an honest skip message", () => {
+  const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-r2-")); execFileSync("git", ["init", "-q", d]); return d; };
+  const init = (d, ...extra) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
+    "--repo-name", "x", "--skip-codex-prompt", ...extra], { encoding: "utf8" });
+
+  // 1. `--flag=value` fell through to the generic "unknown argument", so the adopter most likely to
+  // have SCRIPTED the flag was the one who got no migration sentence.
+  const eq = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--risk-tokens=billing"], { encoding: "utf8" });
+  assert.equal(eq.status, 2, "the `=` spelling still exits 2");
+  assert.match(eq.stderr, /--risk-tokens was REMOVED at v2\.0/, "…and now gets the migration message, not 'unknown argument'");
+
+  // 2. The "your config declares hooks" warning is a DETECTOR, and it only matched a TOML table
+  // header. `hooks = "./hooks.json"` is the spelling Codex's own schema uses, so the likeliest one
+  // went undetected — a fail-open in the thing whose job is to notice.
+  for (const spelling of ['hooks = "./hooks.json"\n', "[hooks]\n", "hooks.pre_tool_use = [{}]\n"]) {
+    const d = mk();
+    try {
+      mkdirSync(path.join(d, ".codex"), { recursive: true });
+      writeFileSync(path.join(d, ".codex", "config.toml"), spelling);
+      assert.match(init(d).stderr, /DECLARES HOOKS/,
+        `an adopter config using ${JSON.stringify(spelling.trim())} is detected`);
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  }
+  // …and it must not cry wolf on the kit's own shipped config, or the warning trains adopters to ignore it.
+  const clean = mk();
+  try {
+    assert.equal(init(clean).status, 0);
+    assert.doesNotMatch(init(clean).stderr, /DECLARES HOOKS/, "the kit's own config.toml does NOT trip the detector");
+  } finally { rmSync(clean, { recursive: true, force: true }); }
+
+  // 3. `--skip-codex-lane` printed "SKIPPED" unconditionally — including over a .codex/ that a
+  // previous adopt had already written and that this run left sitting there.
+  const reran = mk();
+  try {
+    assert.equal(init(reran, "--codex-cold-model", "m-1").status, 0);
+    assert.ok(existsSync(path.join(reran, ".codex", "config.toml")), "first adopt wrote .codex/");
+    const second = init(reran, "--skip-codex-lane");
+    assert.match(second.stdout, /ALREADY EXISTS here and was left untouched/,
+      "a re-run with the skip flag says the .codex/ is still there rather than implying it is absent");
+    assert.ok(existsSync(path.join(reran, ".codex", "config.toml")), "…and it genuinely is still there");
+  } finally { rmSync(reran, { recursive: true, force: true }); }
 });

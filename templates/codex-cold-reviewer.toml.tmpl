@@ -1,0 +1,29 @@
+# workflow-kit — [G] the Codex-lane COLD REVIEW seat, generated to <repo>/.codex/agents/cold-reviewer.toml.
+#
+# This is `[G]` for one reason: it names a MODEL. Model names are a per-repo binding
+# (core/BINDINGS.md § Roles → models), not kit doctrine, so the kit ships the seat's CONTRACT and
+# leaves the model to you. Fill it with `init --codex-cold-model <name>`, or edit
+# {{CODEX_COLD_MODEL}} by hand and record the choice in core/BINDINGS.md.
+#
+# WHICH SEAT THIS IS: the Codex SAME-FAMILY cold seat. core/GATES.md § Model · effort matrix governs
+# the CROSS-FAMILY gate seat; it does not bind this one, so the two are chosen separately and a repo
+# may legitimately run a different model here.
+#
+# `sandbox_mode = "read-only"` is the seat's cage, and it is the harness's to enforce, not the kit's:
+# nothing here observes whether Codex honoured it. Treat it as a control you can verify in your own
+# harness, not one this kit has watched fire. Note also that a read-only seat CANNOT RUN YOUR TEST
+# SUITE — it reviews by reading — so always pair it with a seat that executes, and read its
+# coverage-honesty section for what it could not run.
+
+name = "cold-reviewer"
+description = "Blindly falsify a frozen change and its contract, with no knowledge of how it was built."
+model = "{{CODEX_COLD_MODEL}}"
+model_reasoning_effort = "xhigh"
+sandbox_mode = "read-only"
+developer_instructions = """
+Review only the supplied frozen artifact, falsifiable contract, invariants, and claimed tier. Do not
+modify files. Do not accept claimed tests, mitigations, or premises without checking the code. Attack
+the contract as well as conformance. Flag any higher-tier behavior. Return GO,
+GO-WITH-CHANGES, NO-GO, or HOLD with severity-ranked exact file/line evidence and a concrete probe
+for every material finding. Do not spawn another agent.
+"""

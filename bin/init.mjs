@@ -39,8 +39,24 @@ const KIT_VERSION = readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim();
 // Every flag this parser accepts. Used to reject a flag that appears where a VALUE was expected.
 const KNOWN_FLAGS = new Set([
   "--help", "-h", "--target", "--repo-name", "--owner-name", "--remote-url", "--deploy-branch",
-  "--source-dirs", "--risk-tokens", "--state-docs", "--memory-dir", "--with-gate-runners",
-  "--codex-prompts-dir", "--skip-codex-prompt", "--force", "--print-package-scripts",
+  "--source-dirs", "--state-docs", "--memory-dir", "--with-gate-runners",
+  "--codex-prompts-dir", "--skip-codex-prompt", "--codex-cold-model", "--skip-codex-lane",
+  "--force", "--print-package-scripts",
+]);
+
+// Flags REMOVED in a major version, kept here only to fail HELPFULLY. A removed flag is still an
+// exit(2) — a breaking change must break loudly, never be silently swallowed — but the generic
+// "unknown argument" would leave an adopter with a saved invocation guessing at a one-word failure.
+// Every other refusal in this kit names the offending field AND the fix; a migration error is the
+// one an adopter meets while already frustrated, so it owes that most (FM5: the frustrated adopter
+// is how a control gets disabled). The value is the remediation sentence.
+const REMOVED_FLAGS = new Map([
+  ["--risk-tokens",
+    "REMOVED at v2.0. It was deprecated at v1.5.0 when the cost-inversion `lane` route was retired: " +
+    "the `laneRiskTokens` family it configured gates nothing, and init stopped writing it then. " +
+    "Drop the flag (and its value) from your invocation — nothing replaces it. A legacy " +
+    "`laneRiskTokens` key already sitting in your .claude/kit.config.json stays TOLERATED by every " +
+    "control (ignored, never fatal), so you do not need to edit that file."],
 ]);
 
 function parseArgs(argv) {
@@ -85,14 +101,38 @@ function parseArgs(argv) {
     else if (a === "--remote-url") out.remoteUrl = next();
     else if (a === "--deploy-branch") out.deployBranch = next();
     else if (a === "--source-dirs") out.sourceDirs = listVal(next());
-    else if (a === "--risk-tokens") out.riskTokens = listVal(next());
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
     else if (a === "--with-gate-runners") out.withGateRunners = true;
     else if (a === "--codex-prompts-dir") out.codexPromptsDir = path.resolve(next());
     else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
+    else if (a === "--codex-cold-model") {
+      // Shape rules for the same reason --owner-name has them: this value is interpolated into a
+      // TOML STRING (`model = "<value>"`). A `"`, a backslash, or a line terminator does not merely
+      // look wrong — it CLOSES the string and lets the rest of the value become TOML, which in a
+      // file that also carries `sandbox_mode` means a mistyped flag could silently re-cage the
+      // review seat. A "{{" would read as a still-unfilled placeholder to init's own scan.
+      const v = next();
+      // An ALLOWLIST, not a deny-list: a deny-list must enumerate every character that can escape a
+      // TOML string, and missing one is the whole bug. Model names are a small, well-behaved
+      // alphabet, so anything outside it is refused rather than guessed at.
+      if (!/^[A-Za-z0-9._:\/-]+$/.test(v) || v.includes("{{")) {
+        console.error(`init: --codex-cold-model must be a plain model name matching [A-Za-z0-9._:/-]+ (got ${JSON.stringify(v)}). It is interpolated into a TOML string, so quotes, backslashes and line breaks are refused rather than escaped.`);
+        process.exit(2);
+      }
+      out.codexColdModel = v;
+    }
+    else if (a === "--skip-codex-lane") out.skipCodexLane = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
+    // Match BOTH spellings. An adopter who wrote `--risk-tokens=billing` fell through to the generic
+    // "unknown argument" and got no migration sentence — defeating the whole point of this table for
+    // exactly the people most likely to have scripted the flag.
+    else if (REMOVED_FLAGS.has(a) || REMOVED_FLAGS.has(a.split("=")[0])) {
+      const name = REMOVED_FLAGS.has(a) ? a : a.split("=")[0];
+      console.error(`init: ${name} was ${REMOVED_FLAGS.get(name)}`);
+      process.exit(2);
+    }
     else { console.error(`init: unknown argument ${JSON.stringify(a)} (try --help)`); process.exit(2); }
   }
   return out;
@@ -110,9 +150,6 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --remote-url <url>      fills {{REMOTE_URL}} (the identity fingerprint)
   --deploy-branch <b>     fills {{DEPLOY_BRANCH}} (default: main)
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
-  --risk-tokens a,b       DEPRECATED, accepted but IGNORED: the lane route was retired (v1.5.0), so
-                          laneRiskTokens gates nothing and is no longer written; the flag will be
-                          removed at v2.0
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
@@ -121,6 +158,11 @@ Usage: node bin/init.mjs [--target <dir>] [options]
                           parameterize it for a hermetic run)
   --skip-codex-prompt     do not install any Codex prompt (the Claude command, the Claude skill
                           shims, the shared skill bodies and the AGENTS.md pointer still install)
+  --codex-cold-model <m>  fills the Codex cold-review seat's {{CODEX_COLD_MODEL}}. Omitted ⇒ the
+                          placeholder stays and that seat is UNUSABLE until you fill it by hand
+  --skip-codex-lane       do not write <repo>/.codex/ at all (config.toml + the cold-review seat).
+                          These are Codex-lane CONVENIENCES — they carry NO enforcement (see
+                          PORTABILITY.md § The enforcement asymmetry)
   --force                 overwrite existing generated files (settings.json is always merged)
   --print-package-scripts print the npm scripts to add to your package.json, then exit
   -h, --help              this help
@@ -328,13 +370,6 @@ function main() {
   {
     const bad = (args.sourceDirs || []).filter((s) => !isSegment(s));
     if (bad.length) { console.error(`init: --source-dirs values must be single path segments (no "/"); got ${JSON.stringify(bad)}. The controls match top-level dirs — pass e.g. "app", not "app/server".`); process.exit(2); }
-  }
-  // DEPRECATED, not removed (removal is a breaking CLI change reserved for v2.0): the flag still
-  // parses so an adopter's saved init invocation keeps working, but it configures nothing — the
-  // `lane` route it parameterized was retired, so the family is no longer written. Loud, so nobody
-  // believes a deny-set is armed when it gates nothing.
-  if (args.riskTokens) {
-    warn(`--risk-tokens is DEPRECATED and was IGNORED: the lane route was retired (kit v1.5.0), laneRiskTokens gates nothing and is no longer written to kit.config.json. This flag will be removed at v2.0.`);
   }
   const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || s.includes("\\") || n === ".." || n.startsWith("../"); });
   if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }
@@ -622,6 +657,59 @@ function main() {
     warn(`the review-seat agents install failed (${e && (e.code || e.message) || "error"}) — .claude/agents/ may be missing or partial. The guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
   }
 
+  // 4f. The CODEX LANE assets (v2.0) — `.codex/config.toml` (`[P]`) and the cold-review seat
+  // (`[G]`, generated below with the other templates because it carries a placeholder).
+  //
+  // READ THE ADJECTIVE: these are CONVENIENCES, not controls. v2.0 registers NO Codex hooks — see
+  // PORTABILITY.md § The enforcement asymmetry for the executed reasons. Nothing here narrows the
+  // gap between the lanes, and the log line below must never suggest it does. Failure-ISOLATED like
+  // the skills and agents blocks: step 5 registers the Claude guards (a CONTROL), and an ENOTDIR
+  // from a `.codex` that happens to be a regular file must not abort the run before that merge.
+  // Set false if `.codex/` is unusable, so the seat's `[G]` generation below is SKIPPED rather than
+  // throwing. That generation runs in the shared template loop, which is deliberately NOT
+  // failure-isolated — a `[G]` write that dies must stop the run — but this entry is the one member
+  // of that table which is a convenience, not part of the method. Without this flag a regular file
+  // sitting at `.codex` killed the whole adopt with a raw ENOTDIR stack trace AFTER the guards were
+  // registered: not the zero-registration fail-open, but a partial adopt that flatly contradicts the
+  // "carries no enforcement, the adopt continues" contract stated three lines above (found by the
+  // cross-family gate seat).
+  let codexLaneOk = !args.skipCodexLane;
+  if (args.skipCodexLane) {
+    // Say what is TRUE of the tree, not merely what this run did. On a re-run over a repo adopted
+    // WITHOUT the flag, a bare "SKIPPED" reads as "there is no .codex here" while both files sit on
+    // disk. Every other kept-file path in this installer reports honestly; this one did not.
+    const existing = existsSync(path.join(T, ".codex"));
+    log(existing
+      ? `  .codex/: SKIPPED (--skip-codex-lane) — but a .codex/ ALREADY EXISTS here and was left untouched; this run neither wrote nor removed it`
+      : `  .codex/: SKIPPED (--skip-codex-lane)`);
+  } else {
+    try {
+      const cfgDst = path.join(T, ".codex", "config.toml");
+      // Fail HERE, inside the catch, rather than later in the template loop.
+      ensureDir(path.join(T, ".codex", "agents"));
+      const codexCfg = copyGuarded(path.join(KIT_ROOT, "codex", "config.toml"), cfgDst, force);
+      // A KEPT config.toml may already declare `hooks`. Codex accepts registrations in either that
+      // file or `.codex/hooks.json` and warns when both do, so an adopter carrying their own is
+      // fine — but they must know the kit did NOT touch it, rather than assume the kit's version won.
+      if (codexCfg === "written") {
+        log(`  .codex/config.toml: installed (Codex-lane convenience — NO enforcement; see PORTABILITY.md)`);
+      } else {
+        let declaresHooks = false;
+        // Every TOML spelling of a hooks registration, not just the table header. The scalar form
+        // `hooks = "./hooks.json"` is the one Codex's own schema strings use, so matching only
+        // `[hooks]` left the most likely spelling undetected — a fail-open in a DETECTOR, which is
+        // how an adopter ends up assuming the kit reconciled hooks it never saw. (Found by a cold seat.)
+        try { declaresHooks = /^\s*(?:\[{1,2}\s*hooks[.\]]|hooks\s*[.=])/m.test(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
+        warn(`.codex/config.toml: EXISTING kept (--force to update)${declaresHooks
+          ? " — and it DECLARES HOOKS. The kit registers none and did not change them; those are yours, and you are responsible for whether they are armed."
+          : ""}`);
+      }
+    } catch (e) {
+      codexLaneOk = false;
+      warn(`the .codex/ lane assets could not be installed (${e && (e.code || e.message) || "error"}) — they carry no enforcement, so the guards, the pre-commit floor and the method docs are unaffected and the adopt continues. The Codex cold-review seat is SKIPPED for the same reason.`);
+    }
+  }
+
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
   const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
@@ -661,6 +749,11 @@ function main() {
     // the name is fillable from a flag; {{OWNER_PROFILE}}, {{IRREVERSIBLE_ASSET}} and
     // {{OWNER_SHORTHAND}} are judgment calls the adopter completes by hand (listed in the checklist).
     OWNER_NAME: args.ownerName || "{{OWNER_NAME}}",
+    // `[G]` for the same reason BINDINGS is: it names a MODEL, which is a per-repo binding, not kit
+    // doctrine. Left unfilled the placeholder SURVIVES into the generated file, so the existing
+    // unfilled-placeholder scan below reports it and the post-run checklist names it — the seat is
+    // visibly incomplete rather than silently mis-modelled.
+    CODEX_COLD_MODEL: args.codexColdModel || "{{CODEX_COLD_MODEL}}",
     KIT_VERSION,
   };
   const gen = [
@@ -670,6 +763,10 @@ function main() {
     ["REPO_INVARIANTS.md.tmpl", "core/REPO_INVARIANTS.md"],
     ["SYSTEM_MAP.md.tmpl", "core/SYSTEM_MAP.md"],
     ["OWNER_COMMS.md.tmpl", "core/OWNER_COMMS.md"],
+    // Generated through the SAME path as every other `[G]` file, deliberately: it inherits the
+    // .bak-before-overwrite protection, the refused-write accounting, and the placeholder scan
+    // rather than needing its own hand-kept copies of all three.
+    ...(codexLaneOk ? [["codex-cold-reviewer.toml.tmpl", ".codex/agents/cold-reviewer.toml"]] : []),
   ];
   let genWritten = 0, genKept = 0, genRefused = 0;
   for (const [tmpl, dst] of gen) {
@@ -685,9 +782,13 @@ function main() {
   if (genRefused) {
     warn(`[G] generation is INCOMPLETE: ${genWritten} regenerated, ${genRefused} REFUSED (see above). The tree now MIXES kit-current and older [G] files. Resolve the refused file(s), then re-run --force.`);
   }
+  // Name the files from the `gen` table rather than a hand-kept prose list: the list drifted the
+  // moment a seventh entry was added, and a summary that omits a file it just wrote is the same
+  // class of quiet inaccuracy this kit spends its warnings on.
+  const genNames = gen.map(([, dst]) => dst).join(", ");
   log(genKept || genRefused
-    ? `  [G] CLAUDE + AGENTS + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP + OWNER_COMMS: ${genWritten} generated, ${genKept} EXISTING kept${genKept ? " (--force to regenerate; your version is backed up first)" : ""}${genRefused ? `, ${genRefused} REFUSED (NOT backed up, NOT overwritten)` : ""}`
-    : `  [G] entry stubs + BINDINGS + REPO_INVARIANTS + SYSTEM_MAP + OWNER_COMMS generated`);
+    ? `  [G] ${genNames}: ${genWritten} generated, ${genKept} EXISTING kept${genKept ? " (--force to regenerate; your version is backed up first)" : ""}${genRefused ? `, ${genRefused} REFUSED (NOT backed up, NOT overwritten)` : ""}`
+    : `  [G] ${genNames}: all generated`);
 
   // Scan the files ON DISK for unfilled placeholders — NOT the text this run happened to write.
   // A kept file contributed nothing to that text, so a re-run (the documented upgrade path) reported

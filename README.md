@@ -1,8 +1,92 @@
-# workflow-kit — v1.7.0
+# workflow-kit — v2.0.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v2.0
+
+**The enforcement asymmetry is now MEASURED, not assumed — and it is worse than the caveat said.**
+Every version through v1.7 told you the PreToolUse guards bind only the Claude lane. That was an
+inference from how the guards are registered. v2.0 replaces it with executed findings against a real
+`codex-cli` (0.146.0-alpha.9.2, measured 2026-08-04). The conclusion held; the reasons did not survive
+contact. **The full account is `PORTABILITY.md` § Why the Codex lane is unguarded — read it before you
+describe your Codex lane to anyone.** The headlines:
+
+- **The origin repo's Codex hooks never ran — not once.** Two independent reasons, either sufficient:
+  their matchers (`Write|Edit|MultiEdit|NotebookEdit`) name tools **Codex does not have** (it writes
+  via `apply_patch` and runs commands via `Bash`), and hook **trust was never granted**. Those files
+  were also gitignored, so they were never committed, reviewed, or run in CI.
+- **A Codex write carries no `file_path`.** It is a patch envelope that can add, update, delete and
+  rename several files at once. Ported unchanged, `guard-cross-repo-writes` would take its no-target
+  branch and **allow everything** — an installed control that silently permits — while
+  `guard-lane-authoring` would deny *every* write including docs. So v2.0 ships **no Codex hooks at
+  all** rather than a port that manufactures assurance.
+- **Codex hooks are trust-gated, and the skip is SILENT.** Codex will not run a repo's hooks until a
+  human approves them in an **interactive** session. In `codex exec` — the mode the kit's own gate
+  runners use — an unapproved hook is skipped with no prompt, no warning, and no exit-code change.
+  This is a platform property: it will apply to *any* Codex hook you install, ours or yours. Never
+  reach for `--dangerously-bypass-hook-trust`; assume unarmed until you have watched one fire.
+- **Shell writes are a main road in the Codex lane**, not the footnote they are in the Claude lane.
+  Asked only to create a file, Codex reached unprompted for a shell command that MUTATED it
+  (`truncate …`, receipt retained in `acceptance/fixtures/codex-payload-samples.mjs`). No PreToolUse
+  write guard sees that.
+- **The `.githooks/pre-commit` floor remains the only harness-agnostic mechanical floor.**
+  Unchanged, and now load-bearing for a documented reason rather than by default. It is deliberately
+  not called a *guarantee*: it is silently absent on a fresh clone until `core.hooksPath` is
+  configured, and `--no-verify` bypasses it.
+
+A kit-built Codex-lane guard, designed around the payload shape measured here, is **in flight as its
+own gated changeset**. It is not in v2.0, and nothing in v2.0 depends on it.
+
+**BREAKING — `init --risk-tokens` is REMOVED.** Deprecated at v1.5.0 when the cost-inversion `lane`
+route was retired, with a stated removal horizon of v2.0; this is that removal. It now **exits 2**
+instead of being silently swallowed, and the message names the flag, the version and the fix. **The
+flag and the config key are separate contracts and only the flag changed:** a legacy `laneRiskTokens`
+key already in your `.claude/kit.config.json` stays **tolerated** — ignored, never fatal — so you do
+not need to edit that file. (Executed against the write guard, the control that reads that config
+most closely; the commit floor and the other guards never read the key at all.)
+
+**New Codex-lane files — conveniences, NOT controls.** `init` now installs `.codex/config.toml` (pins
+`GIT_PAGER=cat`, removing the default pager as a hang risk in a non-interactive run — nothing
+verifies Codex loaded it, and a command can still set its own) and generates
+`.codex/agents/cold-reviewer.toml`, a cold-review seat whose model is `[G]` — fill it with
+`--codex-cold-model <name>`, or the `{{CODEX_COLD_MODEL}}` placeholder survives and `init`'s checklist
+names it. **Neither enforces anything.** `--skip-codex-lane` omits both.
+
+### Upgrading to v2.0
+
+1. **Drop `--risk-tokens` from your saved `init` invocation.** This is no longer optional — the run
+   now fails with exit 2. Nothing replaces it; leave your `kit.config.json` alone.
+2. **Re-run `init` with your original flags — and do NOT add `--force`.** Unlike v1.7, this release
+   edits **no** `[P]` file you already have: the entire installable delta is two brand-new files, and
+   `init` writes new files without `--force`. So `--force` buys you only a refreshed version stamp in
+   `core/OWNER_COMMS.md`, and it **costs** you the hand-authored content of every `[G]` file —
+   your completed Owner contract is reverted to the raw template, and `.claude/kit.config.json` is
+   rewritten from flags, silently dropping any family you added by hand. Both leave a `.bak` and warn,
+   and `init` still exits 0. Most adopters should skip `--force` entirely. (Earlier releases DID need
+   it, which is why the v1.7 and v1.4 notes say so; the rule is per-release, not permanent.)
+3. Read `PORTABILITY.md` § Why the Codex lane is unguarded, and **correct anything your team believes
+   about Codex-lane enforcement.** If anyone is relying on those origin-repo `.codex/hooks/*` files,
+   they are relying on scripts that have never executed.
+
+**Verify it landed — a green `init` exit is not evidence:**
+
+Run this **in your adopted repo** (if you passed `--skip-codex-lane`, omit the first two lines **and
+the `grep` line** — that `grep` reads one of the files you chose not to install):
+
+```bash
+test -f .codex/config.toml || { echo "FAIL missing .codex/config.toml"; exit 1; }
+test -f .codex/agents/cold-reviewer.toml || { echo "FAIL missing cold-review seat"; exit 1; }
+test -f core/GATES.md || { echo "FAIL core/ not adopted"; exit 1; }
+grep -q 'CODEX_COLD_MODEL' .codex/agents/cold-reviewer.toml && echo "NOTE: cold-review seat model still unfilled"
+echo "v2.0 adopt verified"
+```
+
+Each check tests existence **before** content: a `grep` against a missing file exits non-zero for the
+wrong reason, which a `!`-negated check would read as clean. (`--risk-tokens` cannot be checked from
+the adopted repo — `bin/init.mjs` ships only in the kit checkout. Verify it there:
+`node bin/init.mjs --risk-tokens x; echo $?` must print `2`.)
 
 ## What's new in v1.7
 
@@ -228,6 +312,9 @@ model's name).
   PACKET` carries across; there it is a cross-family gate on the same question. The skill says so
   at the point of use. The origin repo's Codex agent config (`.codex/agents/*.toml`) is **not** in
   this release — it ships with the Codex-lane enforcement work reserved for v2.0.
+  **↑ Superseded: v2.0 shipped the agent config but NOT Codex-lane enforcement — the two were
+  separated once the enforcement was measured. See "What's new in v2.0". Do not read this sentence
+  as a claim that v2.0 guards the Codex lane; it does not.**
 
 **v1.6 adds no `core/` method doc changes** — the skill and agents cite the existing doctrine
 (`core/REVIEW.md` payload contract and pass-types, `core/GATES.md` § Model · effort matrix,
@@ -298,6 +385,8 @@ in the machinery itself:
   for v2.0): still parsed so a saved init invocation keeps working, warns loudly that it configures
   nothing, and no longer writes `laneRiskTokens`. Every control **tolerates** a legacy
   `laneRiskTokens` key in an older adopter's config — ignored, never fatal.
+  **↑ Superseded at v2.0: the flag is now REMOVED and exits 2. See "What's new in v2.0". The legacy
+  `laneRiskTokens` KEY is still tolerated — only the flag went away.**
 - **`exempt` now declares a tier — the one behavior change to a LIVE route.** It was the only route
   carrying no tier, which meant a reason set entirely about review-seat availability (`codex-down` /
   `codex-quota` / `trivial-edit`) silently selected the mode that skipped tier declaration. Which seat
@@ -319,6 +408,7 @@ first — commit before you run it; `[G]` files get a `.bak`, `[P]` files do not
   The block names the missing field.
 - Dropping `--risk-tokens` from your saved invocation is optional — it now just warns. A stale
   `laneRiskTokens` entry in your `kit.config.json` is harmless: every control ignores it.
+  (**At v2.0 dropping it is no longer optional** — the flag exits 2. The stale key stays harmless.)
 - If anything was still using the `lane` route (v1.4 already said not to), re-declare it `in-thread`
   with the tier.
 
