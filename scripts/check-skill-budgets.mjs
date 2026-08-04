@@ -6,9 +6,10 @@
 // `scripts/check-doc-size.mjs` measures BYTES against role caps over an ADOPTED repo's core/ docs
 // and has never looked at the kit's own skills, shims, or agents. The honour system is the known
 // loser here (the origin repo shipped with two of six skill files over their own declared numbers
-// before its checker existed). This is the kit-repo governance gate: it runs first in `npm test`.
+// before its checker existed). This is the kit-repo governance gate and the FIRST of the two rungs
+// `npm test` runs (scripts/run-checks.mjs runs both and combines their exit codes).
 //
-// THREE CLASSES, three policies — the class fix, not one instance:
+// FOUR CLASSES, three policies — the class fix, not one instance:
 //   skills/**       DECLARED — every .md (canonical bodies AND reference-layer siblings, e.g.
 //                   INVOKE.md) declares `Word budget: N` in its head. UNDECLARED is RED, never
 //                   skipped: a skill carrying no budget line is ungoverned by omission, the
@@ -22,6 +23,8 @@
 //                   for all of them.
 //   agents/*.md     CLASS CAP (AGENT_CAP). Reviewer seat definitions are system prompts; length
 //                   is a first-order cost (ARTIFACT_CLASS instruction physics).
+//   commands/**     CLASS CAP (COMMAND_CAP). The dual-harness command assets — same species as
+//                   the shims, and the instance a three-class fix would have skipped.
 //
 // ⚠ WHAT THIS DOES **NOT** CLOSE. A skills/ file declares its own limit, so an author may still
 // raise the number to fit the fold — the very failure that motivates the check. KNOWN_OVER pins the
@@ -53,15 +56,21 @@ const DEFAULT_ROOT = process.env.SKILL_BUDGETS_ROOT
   ? path.resolve(process.env.SKILL_BUDGETS_ROOT)
   : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// The three governed classes. Caps are Owner-ratified numbers of record (v1.7.0): the largest shim
-// ships at ~200 words and the largest agent at ~375, so the caps leave real headroom without
-// letting a pointer quietly become a body or a seat definition become a doctrine file.
+// The governed classes. THE CAPS ARE AUTHOR-SET, NOT OWNER-RATIFIED — each is placed above the
+// current largest member of its class (shim 198, agent 371, command 568) so a pointer cannot
+// quietly become a body, and each is an Owner decision to change. Saying "ratified" about a
+// number nobody ratified is the same false-attribution this checker exists to make expensive.
 export const SHIM_CAP = 250;
 export const AGENT_CAP = 500;
+export const COMMAND_CAP = 650;
 export const CLASSES = [
   { name: "skills", root: "skills", policy: "declared" },
   { name: "skill-shims", root: "skill-shims", policy: "cap", cap: SHIM_CAP, forbidMarker: true },
   { name: "agents", root: "agents", policy: "cap", cap: AGENT_CAP },
+  // The `commands/` dual-harness assets are the same species and were the instance this "class
+  // fix" first skipped — a checker whose header says "the class fix, not one instance" must not
+  // leave a 568-word [P] instruction artifact ungoverned. Cap set above the current largest.
+  { name: "commands", root: "commands", policy: "cap", cap: COMMAND_CAP },
 ];
 
 // The budget line lives in the file head, where a reader meets it (line 3-9 in the current tree —
@@ -69,6 +78,10 @@ export const CLASSES = [
 // "Word budget:" in an example satisfy the check.
 const MARKER_SCAN_LINES = 12;
 const BUDGET_RE = /^Word budget:\s*(\d+)/m;
+// A declared budget must be a USABLE BOUND. `Number("9".repeat(400))` is `Infinity`, and every
+// finite word count is below it — so a marker-shaped line could satisfy the gate while bounding
+// nothing, the fail-OPEN this check exists to prevent. Anything not a safe positive integer is
+// treated as no usable bound at all (UNDECLARED), never as a budget that always passes.
 
 // A NOTICE BAND, so a bare `if (measured > declared)` cannot take a file PASS → hard FAIL on one
 // added word with no warning. An ABSOLUTE margin, not a ratio: skill budgets are set near the
@@ -79,10 +92,21 @@ const WARN_MARGIN_WORDS = 15;
 // ── THE RATCHET ─────────────────────────────────────────────────────────────────────────────────
 // Recorded budget debt: an entry may hold or shrink, never grow; it FAILS as stale once the file is
 // back under budget, or if the file's declared budget changes (raising the number would otherwise
-// neutralise the ratchet in one edit — `declared` is load-bearing, not a comment). EMPTY at v1.7.0:
-// every governed file ships within budget. The mechanism stays, exercised by test via the
-// injectable `known`, so future debt is recorded here instead of the check being loosened.
-export const KNOWN_OVER = new Map([]);
+// neutralise the ratchet in one edit — `declared` is load-bearing, not a comment).
+//
+// THE ENTRY BELOW IS AN OPEN OWNER DECISION, recorded rather than silently resolved. `/closeout`
+// absorbed the PR / land / verify-the-target stages `core/OPERATE.md` requires, which its
+// author-set budget predates. Raising a budget to fit a fold is an OWNER call, not a build-time
+// convenience, so the overage is booked as debt: it prints on every run, it may only shrink, and
+// the Owner either ratifies a higher number or the text comes down. Silently rewriting `550` to
+// `573` is the move this file exists to stop.
+//
+// `/lane-declare` was booked here too and is NOT any more: its corrections were folded and the
+// body was cut back under 350, so its entry was DELETED rather than left as a standing excuse —
+// which is also what the STALE-EXEMPTION state would have forced.
+export const KNOWN_OVER = new Map([
+  ["skills/closeout/SKILL.md", { declared: 550, measured: 573, since: "2026-08-04" }],
+]);
 
 /** `wc -w` semantics: whitespace-delimited tokens over the entire file. */
 export function countWords(text) {
@@ -92,7 +116,9 @@ export function countWords(text) {
 export function declaredBudget(text) {
   const head = text.split(/\r?\n/, MARKER_SCAN_LINES).join("\n");
   const match = BUDGET_RE.exec(head);
-  return match ? Number(match[1]) : null;
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 /**
@@ -263,6 +289,49 @@ export function checkCapped(relPath, { root = DEFAULT_ROOT, cap, forbidMarker = 
   return { path: relPath, state: "OK", ok: true, declared: cap, measured };
 }
 
+// REACHABILITY OF THE REFERENCE LAYER. The doctrine prefers splitting an over-budget body into a
+// sibling (INVOKE.md, BULLET.md) over raising its number — but it also holds that a correction of a
+// false claim may never move to a layer the executor might not load. The semantic half of that rule
+// (is THIS sentence a correction?) is a review-time judgment and is NOT mechanized here; do not read
+// a green run as enforcing it. What IS mechanical is the structural precondition: a sibling the body
+// never points at is a layer no executor is told to load, so anything moved there is invisible.
+// An ORPHANED sibling therefore FAILS, and so does a skill directory with no body at all.
+export function checkReachability(root, skillFiles) {
+  const results = [];
+  const byDir = new Map();
+  for (const rel of skillFiles) {
+    const dir = path.posix.dirname(rel);
+    if (!byDir.has(dir)) byDir.set(dir, []);
+    byDir.get(dir).push(rel);
+  }
+  for (const [dir, files] of byDir) {
+    const body = files.find((f) => path.posix.basename(f) === "SKILL.md");
+    if (!body) {
+      results.push({
+        path: `${dir}/`, state: "NO-BODY", ok: false,
+        reason: `skill directory has no SKILL.md — the shims point at <name>/SKILL.md, so every ` +
+          `file here is unreachable and this command would dead-end.`,
+      });
+      continue;
+    }
+    let text;
+    try { text = readFileSync(path.join(root, body), "utf8"); } catch { continue; } // the row for `body` already reports it
+    for (const sibling of files) {
+      if (sibling === body) continue;
+      const name = path.posix.basename(sibling);
+      if (!text.includes(name)) {
+        results.push({
+          path: sibling, state: "UNREACHABLE-LAYER", ok: false,
+          reason: `nothing in ${body} points at ${name}, so the executor is never told to load it. ` +
+            `A reference layer is only a legitimate home for displaced text while the body names it ` +
+            `— point at it from the body, or fold it back in.`,
+        });
+      }
+    }
+  }
+  return results;
+}
+
 export function checkAll({ root = DEFAULT_ROOT, known = KNOWN_OVER } = {}) {
   const results = [];
   const skillFilesPresent = new Set();
@@ -286,6 +355,7 @@ export function checkAll({ root = DEFAULT_ROOT, known = KNOWN_OVER } = {}) {
         results.push(checkCapped(f, { root, cap: cls.cap, forbidMarker: cls.forbidMarker }));
       }
     }
+    if (cls.policy === "declared") results.push(...checkReachability(root, files));
   }
 
   // An exemption outliving its subject would silently excuse a future file at the same path.
@@ -307,6 +377,9 @@ function main() {
   // Under the override the ledger is therefore empty — announced, never silent.
   const planted = Boolean(process.env.SKILL_BUDGETS_ROOT);
   const results = checkAll(planted ? { known: new Map() } : {});
+  // ANNOUNCED ON EVERY SURFACE. The override empties the debt ledger, so a run under it can never
+  // be mistaken for a real one — but a machine reader consuming --json saw no trace of that at
+  // all, which is the silent half of the same hazard.
   if (planted && !json) {
     console.log(`check-skill-budgets: SKILL_BUDGETS_ROOT=${DEFAULT_ROOT} — planted tree, debt ledger NOT applied.`);
   }
@@ -324,7 +397,7 @@ function main() {
   const ok = results.every((r) => r.ok);
 
   if (json) {
-    console.log(JSON.stringify({ ok, results }, null, 2));
+    console.log(JSON.stringify({ ok, root: DEFAULT_ROOT, planted, debtLedgerApplied: !planted, results }, null, 2));
     process.exit(ok ? 0 : 1);
   }
 
@@ -347,8 +420,9 @@ function main() {
   }
   console.log(`\ncheck-skill-budgets: ${results.length} governed file(s) OK` +
     (warned.length ? ` · ${warned.length} on notice (recorded debt or near cap)` : "") +
-    ` — unit is \`wc -w\` over the whole file; skills declare their own budgets, shims (cap ${SHIM_CAP})` +
-    ` and agents (cap ${AGENT_CAP}) are class-capped. Does NOT govern core/ docs (that is doc:size in an adopted repo).`);
+    ` — unit is \`wc -w\` over the whole file; skills/ declare their own budgets, shims (${SHIM_CAP}),` +
+    ` agents (${AGENT_CAP}) and commands (${COMMAND_CAP}) are class-capped. Does NOT govern core/ docs` +
+    ` (that is doc:size), nor any file outside those four roots.`);
 }
 
 // realpathSync, not resolve(): under a symlinked invocation path the two differ and main() would

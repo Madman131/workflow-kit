@@ -533,7 +533,8 @@ function main() {
   //
   // And a shim naming NO body at all is a FAILURE, not a pass. Zero matches means zero comparisons,
   // so "no dangling reference" would be vacuously true for precisely the broken artifact this check
-  // exists to catch — a live risk because two later work-stages add skills through this mechanism.
+  // exists to catch — not hypothetical: every skill added since (v1.6's frontier-review, v1.7's
+  // three ritual skills) arrived through this mechanism, with no edit here.
   const BODY_REF_RE = /\.agents\/skills\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+\.md)/g;
   let dangling = 0, verified = 0;
   for (const [lane, name, dst] of installedShims) {

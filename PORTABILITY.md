@@ -247,9 +247,21 @@ one-way dependency `/humanize` has on `core/OWNER_COMMS.md`:
   controls, the skill's description of their behavior no longer matches your repo: it describes
   the kit's shipped versions, not whatever sits at those paths.
 
+**A second asymmetry, inside the declaration itself (v1.7, newly documented — the behavior is
+unchanged since v1.0).** The two readers do not fail closed on the same things. Both block an
+undeclared, malformed or stale declaration. **Only the PreToolUse guard binds the SESSION:** it
+compares the declared `sessionId` to the live session and blocks a mismatch. The `pre-commit`
+floor requires the field to be present and well-formed but has no live session to compare
+against, so **a declaration left over from another thread still permits a commit** — verified by
+executing a real commit against an adopted repo, not by reading the code. Re-declaring at every
+task boundary is what actually closes that, and no control checks that you did. Closing it
+mechanically would need a binding the floor does not have (file mtime, branch, or similar); that
+is unbuilt design, not a shipped control, and it is recorded here rather than implied away.
+
 **The budget checker is kit-repo governance, not an installed control.** `scripts/check-skill-budgets.mjs`
-gates the KIT's own tree (`skills/`, `skill-shims/`, `agents/`) in the kit's `npm test`; `init`
-does **not** copy it into adopters, and nothing in an adopted repo runs it. The installed skill
+gates the KIT's own tree (`skills/`, `skill-shims/`, `agents/`, `commands/`) as the first rung of
+the kit's `npm test`; `init` does **not** copy it into adopters, and nothing in an adopted repo
+runs it. The installed skill
 bodies still carry their `Word budget:` lines — in your repo those are declared numbers with no
 mechanical enforcement unless you wire your own (copying the checker and re-pointing its class
 roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).

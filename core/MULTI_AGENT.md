@@ -51,9 +51,26 @@ Owner) do the committing.
 What the route carried, what was dropped with it, and what survived generally: `core/README.md`
 § Provenance.*
 
-- **A declaration is required and fails closed.** It binds session id + kebab task id and names
-  exactly one route; undeclared, malformed, stale, or session-mismatched ⇒ **BLOCK**. The hook
-  enforces the declaration; it never classifies semantics (IO).
+- **A declaration is required and fails closed.** It names session id + kebab task id and
+  exactly one route; undeclared, malformed, or stale ⇒ **BLOCK** at either reader that covers
+  the path. Their scopes differ, so "both" is wrong in both directions: the write guard exempts
+  the `docs/` and `memory/` subtrees, while the commit floor treats every staged path that is
+  not `.md`/`.mdx`/`.rst`/`.txt` (or a README/LICENSE-class basename) as code-bearing. Either
+  reader enforces the declaration; neither classifies semantics (IO).
+- **What the readers do NOT bind — stated because the gaps are invisible from the block
+  messages.** (a) **Session binding is the write guard's alone:** it compares the declared
+  `sessionId` to the live session and blocks a mismatch; the commit floor requires only that
+  the field be present and well-formed — git exposes no live session to compare against — so a
+  declaration carrying another thread's session id still passes the floor. (b) **Neither reader
+  binds the TASK:** both check only the task id's SHAPE, so a live declaration from your
+  PREVIOUS task passes both and ledgers this work under the wrong task. (c) Refreshing the
+  file's mtime clears `stale` at both readers while leaving a wrong `sessionId`/`taskId`
+  intact. **These are known gaps, not allowances.** Re-declare at every task boundary, and
+  re-declaring means writing NEW field values for YOUR session and YOUR task — not re-touching
+  the old file. Committing under a declaration you know is not yours is a violation whether or
+  not a control stops you. A lane with no PreToolUse guard has no deny message to read a
+  session id from: use your own run/thread identifier, and never copy the `sessionId` already
+  in the file — that is the other lane's, and it is the one value no control can catch.
 - **Two routes exist — `in-thread` (with the tier) and `exempt` (with a ledgered reason).**
   A third, `lane`, belonged to the retired build lane and is **REFUSED by both controls with an
   explicit `lane-retired` state** — at write time and at commit time; the block says the route is
@@ -64,7 +81,10 @@ What the route carried, what was dropped with it, and what survived generally: `
   in-thread, still run the tier's normal cold pass (substituting seats per `core/REVIEW.md` § External
   gate), and ledger the escape. No free-text reason is accepted, and an exemption whose tier is
   missing OR invalid BLOCKS.
-- **Gated decisions are ledgered, and the ledger FAILS CLOSED.** A gated decision appends its exact
+- **Gated decisions are ledgered BY THE WRITE GUARD ALONE, and that ledger FAILS CLOSED.** The
+  commit floor writes no row, pass or block — so a commit that passed the floor under a foreign
+  declaration leaves NO trace for the Owner's spot-check, and a lane with no PreToolUse guard is
+  unledgered entirely. Within the guard: a gated decision appends its exact
   path with an append+sync write; concurrent processes may duplicate a row but can never replace
   another process's row. **Symlink traversal and any ledger-write failure BLOCK** — so no route, an
   exemption included, can proceed unlogged. **A PERMITTED write's row also carries a

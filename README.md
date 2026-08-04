@@ -22,31 +22,61 @@ a checklist over doctrine the kit already carries, never a restatement of it.
     push → **verify on the ref you actually pushed** → the `CLOSEOUT: ARCHIVE-READY |
     NOT ARCHIVE-READY` receipt. The doctrine stays in `core/`; where they differ, `core/` wins.
   - **`/lane-declare`** — writes `.claude/task-lane.json` for the two readers that actually
-    enforce it (the Claude-lane PreToolUse guard; the every-lane `.githooks/pre-commit`), with
-    the cures for `stale`, session-mismatch, and `ledger-error` — described from the kit's own
-    controls, not the origin repo's (the kit ledger has no lock; a `ledger-error` here means the
-    append itself failed).
+    enforce it, and says **which reader enforces what**: both block an undeclared, malformed or
+    stale declaration, but **only the Claude-lane write guard binds the session** — the
+    every-lane commit floor has no live session to compare against, so another thread's leftover
+    declaration still passes it. Cures for `stale`, session-mismatch and `ledger-error` are
+    described from the kit's own controls (a `ledger-error` here is any ledger write the guard
+    refuses — a symlinked ledger, a corrupt row, or a missing trailing newline — not only a
+    failed append).
 - **`scripts/check-skill-budgets.mjs` — budget is now a GATE for the kit's own artifacts, not an
-  honour system.** It runs first in `npm test` and FAILS the build on a violation, governing
-  three classes: `skills/**` (each file declares `Word budget: N` in its head; **marker-less is
-  RED**, never skipped), `skill-shims/**` (class cap 250 words — and a shim *declaring* a budget
-  fails too: rules worth budgeting belong in the body), and `agents/*.md` (class cap 500). Each
+  honour system.** `npm test` runs it and FAILS the build on a violation, governing **four**
+  classes: `skills/**` (each file declares `Word budget: N` in its head; **marker-less is RED**,
+  never skipped), `skill-shims/**` (class cap 250 — and a shim *declaring* a budget fails too:
+  rules worth budgeting belong in the body), `agents/*.md` (500), and `commands/**` (650). Each
   file carries its OWN number — a body and its reference layer are never summed. The unit is
-  `wc -w` over the whole file, checkable by hand in one command. Two honest limits, stated in
-  the file head: a skills/ number is self-declared (the ratchet pins *recorded* debt only), and
-  the checker governs the KIT repo — `init` does **not** install it into adopters.
-- **The boot-order enumerations are now asserted in lockstep.** The boot set is enumerated in
-  five places (both entry-stub templates, `core/README.md`, `core/MULTI_AGENT.md`,
-  `core/WORKFLOW.md`'s six-method list) and now a sixth (`/boot`); nothing previously asserted
-  they agree, so renaming or adding a method doc could silently drift them apart. A suite test
-  now pins every enumeration to one canon — and proves it can detect a planted reorder and a
-  planted omission.
-- **`core/ARTIFACT_CLASS.md`'s budget citation is repaired.** It pointed at
-  `core/REPO_INVARIANTS.md` § Instruction-artifact word budgets — a section the generated
-  template does not carry, so the pointer dangled in every adopted repo. The standing record is
-  now what actually exists: the `Word budget:` line in the artifact's own head, plus the
-  mechanical checkers. (The origin repo keeps budget doctrine OUT of the reviewer-payload file
-  deliberately; the kit follows.)
+  `wc -w` over the whole file, checkable by hand in one command. Honest limits, stated in the
+  file head: a `skills/` number is **self-declared** (the ratchet pins *recorded* debt only, and
+  the class caps are author-set, not Owner-ratified); the four roots are all it governs —
+  `core/` docs are `doc:size`'s job; and the checker governs the **kit repo only**, `init` does
+  not install it into adopters.
+- **`npm test` is now `scripts/run-checks.mjs`, which runs both rungs and combines their exit
+  codes.** Chained with `&&`, one word over budget would have stopped the control suite, the
+  acceptance harness and the FM1 guard from running at all — a prose notice preempting the proof
+  that the controls work. Both always run; `npm test` is red if either is.
+- **The boot-order enumerations are now asserted in lockstep.** The kit enumerates the boot set
+  in **seven** places — both entry-stub templates, `core/README.md`, `core/MULTI_AGENT.md`,
+  `core/WORKFLOW.md`'s six-method list, `templates/BINDINGS.md.tmpl`, and the new `/boot` —
+  and nothing asserted they agree, so renaming or adding a method doc could silently drift them
+  apart. A suite test pins every one to a single canon, proves it detects a planted reorder and
+  omission in each real source, **and** asserts every name in the canon resolves to a file on
+  disk (consistency and resolvability are different properties; agreeing on a doc that no longer
+  exists is not a pass).
+- **`core/ARTIFACT_CLASS.md`'s budget citation is repaired, and so is its twin.** Rule 1 pointed
+  at `core/REPO_INVARIANTS.md` § Instruction-artifact word budgets — a section the generated
+  template does not carry, so the pointer dangled in every adopted repo. `core/README.md`'s file
+  table carried the same claim and is fixed with it. Rule 1 now describes the records that
+  actually exist — the artifact's own `Word budget:` line where it has one, otherwise the
+  mechanical cap its class is governed by — without naming a script adopters never receive.
+
+**A correction this release ships, and the gap it exposes.** `core/MULTI_AGENT.md` said a
+declaration blocks when it is "undeclared, malformed, stale, or **session-mismatched**" — stated
+about the declaration, i.e. about both controls. Execution disproves the last one for the commit
+floor: `.githooks/pre-commit` requires only that `sessionId` be a present, non-empty string, and
+git exposes no live session for it to compare against, so **a declaration carrying another
+thread's session id passes the every-lane commit floor** (reproduced with a real commit). The
+doc and the new skill now attribute session binding to the write guard alone and say plainly
+what the floor does instead. **The underlying gap is pre-existing (since v1.0), is not closed
+here, and is now honestly documented** — closing it needs a binding mechanism the floor does not
+have (mtime, branch, or other), which is new design and an Owner decision, not a v1.7 change.
+
+**One open Owner decision, recorded rather than silently resolved.** `/closeout` (573/550)
+absorbed gate-mandated corrections its author-set budget predates. Raising a budget to fit a fold
+is an Owner call, so instead of rewriting the number the overage is **booked as ratcheted debt**:
+it prints on every run, it may only shrink, and it is either ratified as a higher number or the
+text comes down. Silently changing `550` to `573` is the move the checker exists to make
+expensive. (`/lane-declare` was booked the same way and then cut back under its budget, so its
+entry was deleted — which the checker's `STALE-EXEMPTION` state would have forced anyway.)
 
 **Upgrading — two different rules, read both.** The three skills are NEW files: a plain `init`
 re-run with your original flags installs them (bodies, shims, and the Codex prompts unless
@@ -55,10 +85,25 @@ re-run with your original flags installs them (bodies, shims, and the Codex prom
 (its budget marker) — and `init` never overwrites a file it did not write this run: without
 `--force` those two stay stale while `init` exits 0. So: commit first, then re-run with your
 original flags **plus `--force`** (the `--force` warnings in the v1.4/v1.3 notes apply — `[G]`
-files get a `.bak`, **`[P]` files do not**; your commit is the backup). Verify, because a green
-exit is not evidence: `grep -c 'check-skill-budgets' core/ARTIFACT_CLASS.md` and
-`grep -c 'Word budget' .agents/skills/frontier-review/INVOKE.md` must be non-zero, and
-`.agents/skills/boot/SKILL.md` must exist.
+files get a `.bak`, **`[P]` files do not**; your commit is the backup).
+
+**Verify it landed — a green `init` exit is not evidence:**
+
+```bash
+for f in .agents/skills/boot/SKILL.md .agents/skills/closeout/SKILL.md \
+         .agents/skills/lane-declare/SKILL.md .agents/skills/frontier-review/INVOKE.md \
+         core/ARTIFACT_CLASS.md core/MULTI_AGENT.md; do
+  test -f "$f" || { echo "FAIL missing: $f"; exit 1; }
+done
+grep -q 'Word budget' .agents/skills/frontier-review/INVOKE.md || { echo "FAIL stale INVOKE.md"; exit 1; }
+grep -q 'Instruction-artifact word budgets' core/ARTIFACT_CLASS.md && { echo "FAIL stale citation"; exit 1; }
+grep -q 'session-mismatched' core/MULTI_AGENT.md && { echo "FAIL stale session claim"; exit 1; }
+echo "v1.7 upgrade verified"
+```
+
+Each line tests existence **before** grepping, deliberately: a bare `! grep -q X f` *succeeds*
+when `f` is merely missing (grep exits 2), which is how a half-upgraded repo reads as clean —
+the same trap the v1.4 verification block documents.
 
 ## What's new in v1.6.1
 
@@ -528,8 +573,9 @@ root `CLAUDE.md` / `AGENTS.md` entry stubs, `core/BINDINGS.md`, `core/REPO_INVAR
   `.agents/skills/<name>/`.
 - `skill-shims/claude/*.md` → `.claude/skills/<name>/SKILL.md`; `skill-shims/codex/*.md` → your Codex
   prompts dir. `humanize-bullet` ships in both lanes as an **alias** shim with no body of its own.
-- `scripts/check-skill-budgets.mjs` — the KIT repo's own word-budget gate over these classes (runs
-  first in the kit's `npm test`; **not** installed by `init` — see `PORTABILITY.md`).
+- `scripts/check-skill-budgets.mjs` — the KIT repo's own word-budget gate over `skills/`,
+  `skill-shims/`, `agents/` and `commands/` (the first rung of the kit's `npm test`; **not**
+  installed by `init` — see `PORTABILITY.md`).
 
 **The agents** (`agents/`, `[P]` — reviewer seat definitions → `.claude/agents/`, Claude lane only):
 - `agents/cold-reviewer.md` — the blind cold seat (payload-only mandate; `tools: Read, Grep, Glob`).

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "check:skill-budgets": "node scripts/check-skill-budgets.mjs",
-    "test": "node scripts/check-skill-budgets.mjs && node --test tests/*.test.mjs",
+    "test": "node scripts/run-checks.mjs",
     "acceptance": "bash acceptance/plant-the-bug.sh"
   }
 }
