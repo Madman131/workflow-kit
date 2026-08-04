@@ -535,11 +535,24 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
   // what --force COSTS, which is the half a bare "--force is required" note leaves out: the [G] doc
   // is regenerated (hand-written Owner content replaced, recoverable from .bak) while the [P] body
   // is overwritten with no backup at all. Both halves executed; the note itself pinned.
-  const { dir, run, cleanup } = adopt(["--owner-name", "Alex", "--skip-codex-prompt"]);
+  const { dir, run, cleanup } = adopt(["--owner-name", "Alex", "--skip-codex-prompt", "--source-dirs", "app"]);
   try {
     const doc = path.join(dir, "core", "OWNER_COMMS.md");
     const body = path.join(dir, ".agents", "skills", "humanize", "SKILL.md");
+    const cfg = path.join(dir, ".claude", "kit.config.json");
     const PROFILE = "They read on a phone between meetings.";
+    // Bystander [P] files from two other classes. The release note's blast-radius paragraph is a
+    // claim about the CLASS, and it was a one-time observation until this test existed.
+    const bystanders = [path.join(dir, "core", "WORKFLOW.md"), path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs")];
+    const MINE = "MY LOCAL EDIT";
+    for (const b of bystanders) writeFileSync(b, readFileSync(b, "utf8") + `\n${MINE}\n`);
+    // Guard the guard: if the edit never landed, "the edit is gone after --force" is vacuously true.
+    for (const b of bystanders) {
+      assert.match(readFileSync(b, "utf8"), new RegExp(MINE),
+        `the local edit to ${path.basename(b)} actually landed — without it the post-force check proves nothing`);
+    }
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs?.[0], "app",
+      "the adopter starts with a NARROWED write guard, which is what --force is about to widen");
 
     // Roll the adopter back to the v2.1.0 state: no rule 8, no buried-ask miss, the OLD version
     // stamp, and an Owner doc they have since filled in by hand — the only shape where the upgrade
@@ -575,6 +588,19 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     assert.ok(!existsSync(`${body}.bak`),
       "[P]: the /humanize body is overwritten with NO .bak — an adopter who edited it has only git");
 
+    // The blast radius itself, now mechanical rather than reported: --force is not scoped to the
+    // files a release edits. Two UNRELATED [P] files from two other classes lose their local edits
+    // in the same run, with no backup, and the config that BOUNDS the write guard is reset because
+    // this run omitted --source-dirs. That reset widens the guard, so it is the dangerous direction.
+    for (const b of bystanders) {
+      assert.doesNotMatch(readFileSync(b, "utf8"), new RegExp(MINE),
+        `--force also destroyed the local edit in ${path.basename(b)} — the radius is the whole [P] class`);
+      assert.ok(!existsSync(`${b}.bak`), `…and left no .bak for ${path.basename(b)}`);
+    }
+    assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")), {},
+      "--force rewrote kit.config.json from THIS run's flags: the narrowed executedPathDirs is gone (guard widened)");
+    assert.match(readFileSync(`${cfg}.bak`, "utf8"), /app/, "…recoverable, but only if the adopter knows to look");
+
     // The note carries the instruction AND the recovery step. Scoped to the v2.1.1 section: the
     // neighbouring v2.1 section also says --force, and would satisfy an unscoped match on its own.
     const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
@@ -597,7 +623,7 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     // Class-scoped on purpose. An alternation that also accepted the per-file sentence ("the [P]
     // /humanize body is overwritten with no .bak") passed a mutation that struck the CLASS claim —
     // the narrow statement stood in for the broad one, which is the whole omission being pinned.
-    assert.match(section, /\*\*every `\[P\]`\s+file you already have\*\*/,
+    assert.match(section, /\*\*every `\[P\]`\s+file that run installs\*\*/,
       "…must name the whole [P] CLASS as the blast radius, not only this release's own file");
     assert.match(section, /\*\*with no `\.bak` at all\*\*/,
       "…and must say that class gets no backup, which is the irreversible half");

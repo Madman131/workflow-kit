@@ -29,15 +29,18 @@ Executed both ways against a real v2.1.0 adopter: a plain re-run **exits 0 havin
 no rule 8, no `/humanize` line, and the doc still stamped `v2.1.0` — while `--force` lands both.
 
 **`--force` is GLOBAL. It is not scoped to this release's two files.** It overwrites **every `[P]`
-file you already have** — all the `core/*.md` method docs, the hooks, `scripts/`, `commands/`,
-`skills/`, the shims, `agents/`, and the user-global Codex prompts — **with no `.bak` at all**, so any
-local edit to those is recoverable only from git. It also rewrites `.claude/kit.config.json` from the
-flags you pass **this** run: omit the `--source-dirs` (or other family) flags you originally adopted
-with and `executedPathDirs` resets to `{}`, which **widens** the write guard until you restore it. All
-of this is executed, not inferred — a `--force` re-run on an adopter carrying three hand-edited `[P]`
-files destroyed all three with no backup and reset a configured `executedPathDirs: ["app"]` to `{}`.
-(`kit.config.json` and the `[G]` files do get a `.bak`; the `[P]` files do not.) **Commit before you
-run it.**
+file that run installs** — the `core/*.md` method docs, the hooks, `scripts/`, `commands/`, `skills/`,
+the shims, `agents/`, and the user-global Codex prompts — **with no `.bak` at all**, so any local edit
+to those is recoverable only from git. (*That run* is the qualifier that matters: `--force` does not
+choose WHICH assets are installed, your flags do. `--skip-codex-prompt`, `--skip-codex-lane` and a
+missing `--with-gate-runners` each leave a family out entirely, so it is untouched rather than
+protected.) It also rewrites `.claude/kit.config.json` from the flags you pass **this** run: omit the
+`--source-dirs` (or other family) flags you originally adopted with and `executedPathDirs` resets to
+`{}`, which **widens** the write guard until you restore it. All of this is executed, not inferred,
+and pinned by test: a `--force` re-run on an adopter carrying hand-edited `[P]` files destroys them
+with no backup and resets a configured `executedPathDirs: ["app"]` to `{}`. (`kit.config.json` and
+the `[G]` files do get a `.bak` — but only when their new content actually differs; an identical file
+is left alone and gets none.) **Commit before you run it.**
 
 **What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the
 template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and shorthand rows are replaced by
@@ -55,8 +58,8 @@ smaller:
    `core/OWNER_COMMS.md.bak`, and diff your `[P]` files against git rather than trusting the exit code.
 2. **Hand-add rule 8** — paste the rule below into your `core/OWNER_COMMS.md` after rule 7, replacing
    `<Owner>` with your Owner's name, and paste the `/humanize` bullet into
-   `.agents/skills/humanize/SKILL.md`. There is no way to take one file with `--force` — it is
-   all-or-nothing — so for a customized adopter this is the smaller operation, and it is not
+   `.agents/skills/humanize/SKILL.md`. `--force` has no per-file form — it applies to everything that
+   run installs — so for a customized adopter this is the smaller operation, and it is not
    second-class: nothing mechanical reads the rule count.
 
 ```markdown

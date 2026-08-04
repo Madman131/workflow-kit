@@ -760,7 +760,13 @@ test("rule 8 ships in the GENERATED Owner contract and in the INSTALLED /humaniz
     // The count sweep, made mechanical on the GENERATED side: the claim in the release note is that
     // no artifact an adopter receives states a rule TOTAL, so a later edit that reintroduces one
     // (in the contract or in the skill that repairs against it) must go red here, not in review.
-    const COUNT_CLAIM = /\b(six|seven|eight|nine|\d+)\s+rules\b|\brules\s*1\s*[-–]\s*\d/i;
+    // A detector must OVER-trigger relative to the thing it warns about, or it is decoration. The
+    // first cut matched "eight rules" and "rules 1-8" and sailed past "eight numbered rules",
+    // "rules 1 through 8" and "rules 1 to 8" — a seat found all three. It allows up to two words
+    // between the number and "rules", and spells the range separators out. It is still a blacklist
+    // of spellings, not a proof: a genuinely novel phrasing of a total would pass, and the sweep in
+    // the release note is what covers that.
+    const COUNT_CLAIM = /\b(six|seven|eight|nine|ten|\d+)\s+(?:\w+\s+){0,2}rules\b|\brules\s*1\s*(?:[-–—]|through|thru|to)\s*\d/i;
     for (const rel of [["core", "OWNER_COMMS.md"], [".agents", "skills", "humanize", "SKILL.md"],
       [".agents", "skills", "humanize", "BULLET.md"]]) {
       const generated = readFileSync(path.join(named.dir, ...rel), "utf8");
