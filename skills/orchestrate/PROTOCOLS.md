@@ -1,12 +1,11 @@
 # PROTOCOLS — the rules, and the incident each one cost
 
 Word budget: 2000 (author-set at first release — no Owner ruling names a number for this file; its
-own number, never summed with its body). **The number moved from 1300 to 2000 before shipping**, as
-the bank absorbed a further round of banked incidents; that is the initial number still being set,
-not a ratchet being loosened, and it is disclosed rather than quietly rewritten. **From this release
-it is a ratchet: raising it again is an Owner call.** Deliberately NOT split — a bank is a flat list
-whose only seam is the section headings it already has, and two half-banks would be two files to
-forget instead of one to read.
+own number, never summed with its body). **It moved from 1300 to 2000 before shipping** as the bank
+absorbed more incidents: the initial number still being set, disclosed rather than quietly
+rewritten. **From this release it is a ratchet — raising it again is an Owner call.** Deliberately
+NOT split: a bank's only seam is its section headings, and two half-banks are two files to forget
+instead of one to read.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.
@@ -41,18 +40,16 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   a default one tier above the effort its own doctrine named as standard, so anyone who simply ran
   it gated at the exception tier believing they were at the norm. Announce what you passed.
 - **Every round carries a fresh random receipt the seat must echo**, and the seat verifies the
-  FROZEN SHA itself rather than being told it. A receipt proves the reply completed; it says nothing
-  about whether a decision was stated, so require an explicit verdict and an inspected-scope line
-  too, and fail closed when either is missing.
+  FROZEN SHA itself rather than being told it. What a receipt does NOT prove is in the body.
 - **A warm delta round may write no thread sidecar of its own** — chain every resume from the
   ORIGINAL cold round's sidecar, and refuse an empty id rather than silently starting a new thread.
-- **A cross-family seat returning a tool-failure with a DIFFERENT denied tool each attempt MAY be
-  agentic drift** — changing sandbox policy, runner state or a genuine missing prerequisite produce
-  the same shape, so the pattern does not settle the cause. Either way record it as "unreliable
-  here", never "categorically unavailable", cap the retries, and receipt them. **Never widen tool permissions to buy a green
+- **A cross-family seat failing with a DIFFERENT denied tool each attempt MAY be agentic drift** —
+  sandbox policy, runner state or a real missing prerequisite produce the same shape, so the pattern
+  does not settle the cause. Either way record "unreliable here", never "categorically unavailable",
+  cap the retries, and receipt them. **Never widen tool permissions to buy a green
   rung** — that trades the gate's meaning for its colour.
 - **A read-only seat cannot execute the suite.** Its "tests fail" may be a COVERAGE judgment, not a
-  result — read the receipt, not the label, and always pair it with a seat that executes.
+  result — read the receipt, not the label, and pair it with a seat that executes.
 - **Deviating TOWARD a repo's stricter contract, over a non-Owner instruction to do the looser
   thing, is correct** — and is disclosed, not done quietly. When the conflict is with an OWNER
   instruction it is not yours to resolve: surface the contract and consult.
@@ -60,9 +57,8 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
 ## Evidence discipline
 - **The raw-look habit: any verification returning "absent", "zero" or "clean" earns ONE look at the
   raw material before it is believed.** In one changeset four CHECKS were broken rather than the
-  things they checked — a grep returning zero on a line-wrapped phrase, a probe inferring mechanism
-  from outcome, a probe pair differing in two variables, and a mutation canary grepping for a string
-  its test runner never prints.
+  things they checked — among them a grep returning zero on a line-wrapped phrase, and a mutation
+  canary grepping for a string its test runner never prints.
 - **The dead-sensor canary: never accept "did not reproduce" without proving the checking mechanism
   was LIVE.** Paired trap: a mutation runner must verify its ANCHOR EXISTS and report
   ANCHOR-MISSING as an outcome distinct from SURVIVED — they mean opposite things, look identical,
@@ -83,6 +79,9 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
 - **A doc-pinning assertion is decoration until you strike the EXACT PHRASE and watch it go red** —
   if the spelling occurs innocently elsewhere in scope, the assertion pins nothing. Mutate the
   phrase, assert the sentence, never the word.
+- **A RETRACTION IS NOT COMPLETE UNTIL ITS PATTERN JOINS THE CROSS-SURFACE TEST.** Correcting a
+  claim where you noticed it leaves it shipping on every other surface that narrates it — the fix is
+  not the edit, it is the assertion that the retracted spelling can never return.
 - **Run suites under a scratch temp directory, and under BOTH regimes** (inside and outside any
   allow-listed scratch root) — or pin the sensitivity. A suite green under one regime proved the
   rig, not the suite.
