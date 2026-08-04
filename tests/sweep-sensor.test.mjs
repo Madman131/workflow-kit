@@ -566,7 +566,11 @@ test("THE INSTALLED HOOKS RUN IN A REAL ADOPTER TREE — presence and registrati
     rmSync(path.join(dir, "scripts", "check-doc-size.mjs"));
     const degraded = runHook("sensor-sweep-owed.mjs", "./core/WORKFLOW.md");
     assert.equal(degraded.status, 0, "a sensor exits 0 even when its OWN dependency is missing");
-    assert.match(degraded.stderr, /DEGRADED/, "…and says so, rather than covering less in silence");
+    // EXACTLY ONCE, not merely present. A degradation notice repeated per target is noise, and
+    // noise on ordinary work is how a reader learns to switch a sensor off — the failure mode this
+    // whole design keeps guarding against. Once per run is the contract.
+    assert.equal((degraded.stderr.match(/DEGRADED/g) || []).length, 1,
+      "the degradation is announced ONCE per run, not once per target");
     assert.doesNotMatch(degraded.stderr, /ERR_MODULE_NOT_FOUND|Cannot find module/,
       "the missing module is HANDLED, not surfaced as a crash");
     // The half that needs no module still works: a skill body is in scope by PATH alone.
