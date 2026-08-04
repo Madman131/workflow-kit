@@ -1,8 +1,12 @@
 # PROTOCOLS — the rules, and the incident each one cost
 
-Word budget: 1300 (author-set for this new reference layer — no Owner ruling names a number for it;
-its own number, never summed with its body). It is a BANK: entries are added as incidents are paid
-for, so moving this number is an Owner call once it is spent.
+Word budget: 2000 (author-set at first release — no Owner ruling names a number for this file; its
+own number, never summed with its body). **The number moved from 1300 to 2000 before shipping**, as
+the bank absorbed a further round of banked incidents; that is the initial number still being set,
+not a ratchet being loosened, and it is disclosed rather than quietly rewritten. **From this release
+it is a ratchet: raising it again is an Owner call.** Deliberately NOT split — a bank is a flat list
+whose only seam is the section headings it already has, and two half-banks would be two files to
+forget instead of one to read.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.
@@ -26,6 +30,29 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   whatever it says (which stops verdict-chasing), AND carve out the one severity that can never ship
   under that bound — a fail-open in a shipped control stops the PR and escalates (which stops the
   bound becoming a loophole).
+- **When ONE class survives repeated rounds, diagnose PLUMBING or CONCEPT before re-fixing.** If the
+  recurrence is bespoke logic sitting beside the real grammar, relocating it INTO that one shared
+  grammar dissolves the design objection; if the concept itself is wrong, no relocation saves it.
+  Two NO-GO rounds on one class is the trigger to ask, and the adjudication is the orchestrator's.
+
+## Seats and runners
+- **Pass the model and effort EXPLICITLY; never inherit a runner's default.** A gate runner shipped
+  a default one tier above the effort its own doctrine named as standard, so anyone who simply ran
+  it gated at the exception tier believing they were at the norm. Announce what you passed.
+- **Every round carries a fresh random receipt the seat must echo**, and the seat verifies the
+  FROZEN SHA itself rather than being told it. A receipt proves the reply completed; it says nothing
+  about whether a decision was stated, so require an explicit verdict and an inspected-scope line
+  too, and fail closed when either is missing.
+- **A warm delta round may write no thread sidecar of its own** — chain every resume from the
+  ORIGINAL cold round's sidecar, and refuse an empty id rather than silently starting a new thread.
+- **A cross-family seat returning a tool-failure with a DIFFERENT denied tool each attempt is
+  agentic drift, not unavailability.** Record it as "unreliable here", never "categorically
+  unavailable", cap the retries, and receipt them. **Never widen tool permissions to buy a green
+  rung** — that trades the gate's meaning for its colour.
+- **A read-only seat cannot execute the suite.** Its "tests fail" may be a COVERAGE judgment, not a
+  result — read the receipt, not the label, and always pair it with a seat that executes.
+- **Deviating TOWARD a repo's stricter contract, over an instruction to do the looser thing, is
+  correct** — and is disclosed, not done quietly.
 
 ## Evidence discipline
 - **The raw-look habit: any verification returning "absent", "zero" or "clean" earns ONE look at the
@@ -60,6 +87,11 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   registration are the two lies shipped one release apart.
 - **Read pipeline exit codes honestly.** `$?` after a pipe is the LAST command's status, and under
   `pipefail` an early-exiting consumer can poison a producer's status. Three misreads in one chip.
+- **"Byte-identical" is a claim about INSTALLATION, not execution.** Two copies proven identical can
+  still fail in one location and not the other; only running each where it installs settles it.
+- **A fix DESCRIBED as "mechanical" invites execution without re-verification.** One banked
+  "mechanical" substitution would have cured a single false version stamp by rewriting two TRUE
+  historical claims into false ones. Re-derive the fix from the artifact before believing the word.
 
 ## Shipping and merging
 - **The upgrade instruction is DERIVED PER RELEASE from what the diff actually EDITS.** Verbatim-
@@ -67,6 +99,9 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   it buys a version stamp and destroys hand-authored generated content while exiting 0. Execute both
   directions. To break a CLI contract, break it LOUDLY: exit non-zero, name the flag and version,
   carry the remediation — while tolerating the old config KEY so an existing adopter is not bricked.
+- **If an artifact must ship at exactly its budget, flag the NUMBER to the Owner.** Zero headroom
+  forces the next editor to raise the cap instead of cutting. It is a state you may inherit under a
+  parity constraint; it is never one you mint on a new artifact.
 - **Proving a change landed has TWO forms, and using the wrong one fails in the direction that
   looks safe.** A true merge: the head is an ancestor of the target. A SQUASH merge: the PR state is
   MERGED *and* the tree matches the squash commit — "ancestor-of" is permanently false there.
@@ -86,12 +121,21 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   ruling can arrive after the decision it governs. Restate it in the next message rather than
   assuming delivery — and when a worker's premise contradicts yours, re-verify before ruling: the
   worker may have fresher Owner contact than you do.
+- **Pin every head by SHA, never by "the branch"** — a chip's branch forks mid-life when a hotfix
+  is cut. Name the head you HAVE and re-verify it immediately before writing about it: composing a
+  long message takes long enough for the head to move. **And when two sources disagree, FIRST check
+  you asked them the same question** — a "three endpoints, three answers" contradiction turned out
+  to be one observer comparing two different branches.
 - **A new chip MAY be seated in a prior chip's worktree.** Before removing one, run the OCCUPANCY
   CHECK: tree-equality and a merged branch prove the TREE is done, not the DIRECTORY unoccupied.
-  Resolve every live session's cwd and refuse to remove an occupied tree.
+  **The check must GATE the removal — refuse, never merely report.** The decorative form was shipped
+  once: it printed a count of 1 and removed the tree anyway.
 - **Residue ritual at chip close:** prune, enumerate remote branches from the SERVER (a local mirror
   listing is not the server), delete merged ones, and sweep processes — including any whose working
-  directory names a deleted worktree.
+  directory names a deleted worktree. **Enumerate every worktree you CREATED, scratch registrations
+  included**: a throwaway checkout registered against the shared repo outlives the session silently
+  and is missed by otherwise exemplary residue reports. **A sweep's count excludes the sweep's own
+  pipeline** — its grep included, or the count is self-manufactured.
 - **Killing a task strands its children.** ~140 orphaned test processes accumulated across one
   program, some days old, degrading the machine. A post-kill process sweep joins the ritual.
 - **A `pgrep -f`-shaped waiter MATCHES ITS OWN SHELL'S ARGV**, so "still running" is
