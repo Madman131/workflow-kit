@@ -1,4 +1,4 @@
-# workflow-kit — v1.7.0
+# workflow-kit — v2.0.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
@@ -298,6 +298,8 @@ in the machinery itself:
   for v2.0): still parsed so a saved init invocation keeps working, warns loudly that it configures
   nothing, and no longer writes `laneRiskTokens`. Every control **tolerates** a legacy
   `laneRiskTokens` key in an older adopter's config — ignored, never fatal.
+  **↑ Superseded at v2.0: the flag is now REMOVED and exits 2. See "What's new in v2.0". The legacy
+  `laneRiskTokens` KEY is still tolerated — only the flag went away.**
 - **`exempt` now declares a tier — the one behavior change to a LIVE route.** It was the only route
   carrying no tier, which meant a reason set entirely about review-seat availability (`codex-down` /
   `codex-quota` / `trivial-edit`) silently selected the mode that skipped tier declaration. Which seat
@@ -319,6 +321,7 @@ first — commit before you run it; `[G]` files get a `.bak`, `[P]` files do not
   The block names the missing field.
 - Dropping `--risk-tokens` from your saved invocation is optional — it now just warns. A stale
   `laneRiskTokens` entry in your `kit.config.json` is harmless: every control ignores it.
+  (**At v2.0 dropping it is no longer optional** — the flag exits 2. The stale key stays harmless.)
 - If anything was still using the `lane` route (v1.4 already said not to), re-declare it `in-thread`
   with the tier.
 

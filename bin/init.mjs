@@ -39,8 +39,23 @@ const KIT_VERSION = readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim();
 // Every flag this parser accepts. Used to reject a flag that appears where a VALUE was expected.
 const KNOWN_FLAGS = new Set([
   "--help", "-h", "--target", "--repo-name", "--owner-name", "--remote-url", "--deploy-branch",
-  "--source-dirs", "--risk-tokens", "--state-docs", "--memory-dir", "--with-gate-runners",
+  "--source-dirs", "--state-docs", "--memory-dir", "--with-gate-runners",
   "--codex-prompts-dir", "--skip-codex-prompt", "--force", "--print-package-scripts",
+]);
+
+// Flags REMOVED in a major version, kept here only to fail HELPFULLY. A removed flag is still an
+// exit(2) — a breaking change must break loudly, never be silently swallowed — but the generic
+// "unknown argument" would leave an adopter with a saved invocation guessing at a one-word failure.
+// Every other refusal in this kit names the offending field AND the fix; a migration error is the
+// one an adopter meets while already frustrated, so it owes that most (FM5: the frustrated adopter
+// is how a control gets disabled). The value is the remediation sentence.
+const REMOVED_FLAGS = new Map([
+  ["--risk-tokens",
+    "REMOVED at v2.0. It was deprecated at v1.5.0 when the cost-inversion `lane` route was retired: " +
+    "the `laneRiskTokens` family it configured gates nothing, and init stopped writing it then. " +
+    "Drop the flag (and its value) from your invocation — nothing replaces it. A legacy " +
+    "`laneRiskTokens` key already sitting in your .claude/kit.config.json stays TOLERATED by every " +
+    "control (ignored, never fatal), so you do not need to edit that file."],
 ]);
 
 function parseArgs(argv) {
@@ -85,7 +100,6 @@ function parseArgs(argv) {
     else if (a === "--remote-url") out.remoteUrl = next();
     else if (a === "--deploy-branch") out.deployBranch = next();
     else if (a === "--source-dirs") out.sourceDirs = listVal(next());
-    else if (a === "--risk-tokens") out.riskTokens = listVal(next());
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
     else if (a === "--with-gate-runners") out.withGateRunners = true;
@@ -93,6 +107,7 @@ function parseArgs(argv) {
     else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
+    else if (REMOVED_FLAGS.has(a)) { console.error(`init: ${a} was ${REMOVED_FLAGS.get(a)}`); process.exit(2); }
     else { console.error(`init: unknown argument ${JSON.stringify(a)} (try --help)`); process.exit(2); }
   }
   return out;
@@ -110,9 +125,6 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --remote-url <url>      fills {{REMOTE_URL}} (the identity fingerprint)
   --deploy-branch <b>     fills {{DEPLOY_BRANCH}} (default: main)
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
-  --risk-tokens a,b       DEPRECATED, accepted but IGNORED: the lane route was retired (v1.5.0), so
-                          laneRiskTokens gates nothing and is no longer written; the flag will be
-                          removed at v2.0
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
@@ -328,13 +340,6 @@ function main() {
   {
     const bad = (args.sourceDirs || []).filter((s) => !isSegment(s));
     if (bad.length) { console.error(`init: --source-dirs values must be single path segments (no "/"); got ${JSON.stringify(bad)}. The controls match top-level dirs — pass e.g. "app", not "app/server".`); process.exit(2); }
-  }
-  // DEPRECATED, not removed (removal is a breaking CLI change reserved for v2.0): the flag still
-  // parses so an adopter's saved init invocation keeps working, but it configures nothing — the
-  // `lane` route it parameterized was retired, so the family is no longer written. Loud, so nobody
-  // believes a deny-set is armed when it gates nothing.
-  if (args.riskTokens) {
-    warn(`--risk-tokens is DEPRECATED and was IGNORED: the lane route was retired (kit v1.5.0), laneRiskTokens gates nothing and is no longer written to kit.config.json. This flag will be removed at v2.0.`);
   }
   const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || s.includes("\\") || n === ".." || n.startsWith("../"); });
   if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }

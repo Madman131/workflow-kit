@@ -53,21 +53,29 @@ echo "adopter=$ADOPTER"
 mkdir -p "$ADOPTER" "$OUTSIDE"
 git init -q "$ADOPTER"
 git -C "$ADOPTER" config user.email a@a; git -C "$ADOPTER" config user.name a
-# --risk-tokens is passed DELIBERATELY: since v1.5.0 it is deprecated (the lane route is retired), so
-# the contract under test is parse-warn-ignore — an adopter's saved init invocation keeps working, the
-# warning is loud, and the dead family is NOT written to kit.config.json.
+# --risk-tokens is NO LONGER passed: v2.0 REMOVED it (deprecated at v1.5.0 with the retired lane
+# route). Its removal is proven separately below as its own both-ways check, because a removed flag
+# now ABORTS the run — passing it here would take the whole adopt down instead of testing it.
 INIT_OUT="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
-  --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" \
-  --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)" || bad "init with the deprecated --risk-tokens flag must still exit 0"
+  --state-docs docs/state.md --memory-dir "$WORK/mem" \
+  --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)" || bad "init must exit 0 on a clean v2.0 invocation"
 mkdir -p "$ADOPTER/src" "$ADOPTER/docs" "$ADOPTER/policy"   # app dirs the adopter would already have
 # 'policy' is a CONFIG-ONLY source dir (not a portable default) — used to test that a malformed config
 # still fails closed for a path gated SOLELY by config (the F1 fail-open regression).
 echo "-- adopted (init ran) --"
 
 echo
-echo "(deprecation) --risk-tokens parses, warns loudly, and writes NOTHING"
-printf '%s' "$INIT_OUT" | grep -q 'risk-tokens is DEPRECATED' && ok "init warns that --risk-tokens is DEPRECATED (parse-warn-ignore, removal reserved for v2.0)" || bad "init must warn about the deprecated --risk-tokens flag"
+echo "(v2.0 removal) --risk-tokens is REMOVED: it FAILS the run and names the migration"
+# BOTH WAYS. Direction 1: the removed flag aborts with exit 2 and a message that names the fix — a
+# breaking change must break, and must not leave the reader guessing. Direction 2 (the line after):
+# a clean invocation still adopts, so the removal did not just break init generally.
+RM_TMP="$WORK/rm-probe"; mkdir -p "$RM_TMP"; git init -q "$RM_TMP"
+RM_OUT="$(node "$KIT/bin/init.mjs" --target "$RM_TMP" --repo-name x --risk-tokens billing --skip-codex-prompt 2>&1)"; RM_RC=$?
+assert_eq 2 "$RM_RC" "a removed flag is a clean exit 2 (never a silent ignore)"
+printf '%s' "$RM_OUT" | grep -q 'was REMOVED at v2.0' && ok "…and the failure names the flag and the version" || bad "the removal message must name the flag and version"
+printf '%s' "$RM_OUT" | grep -q 'Drop the flag' && ok "…and tells the adopter what to do instead" || bad "the removal message must carry its remediation"
+[ -f "$RM_TMP/.claude/kit.config.json" ] && bad "init must abort in arg parsing, before writing anything" || ok "…and nothing was written before it aborted"
 grep -q 'laneRiskTokens' "$ADOPTER/.claude/kit.config.json" && bad "init must NOT write laneRiskTokens (the family gates nothing)" || ok "kit.config.json carries NO laneRiskTokens (the dead family is not written)"
 grep -q '"executedPathDirs"' "$ADOPTER/.claude/kit.config.json" && ok "…while executedPathDirs (a live family) IS written" || bad "executedPathDirs missing from kit.config.json"
 
@@ -359,7 +367,7 @@ AG_CONSULT_SHA="$(shasum "$AG_CONSULT" | awk '{print $1}')"
 AGENTS_SHA1="$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')"
 node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
-  --risk-tokens billing --state-docs docs/state.md --memory-dir "$WORK/mem" \
+  --state-docs docs/state.md --memory-dir "$WORK/mem" \
   --codex-prompts-dir "$CODEX_PROMPTS" >/dev/null 2>&1 && ok "re-run init exits 0 (idempotent)" || bad "re-run init should exit 0"
 assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$ADOPTER/AGENTS.md")" "AGENTS pointer still appears exactly once after re-run (no duplication)"
 assert_eq "$CLAUDE_EDIT_SHA" "$(shasum "$CMD_CLAUDE" | awk '{print $1}')" "re-run KEEPS a user-edited Claude command (no clobber without --force)"

@@ -1,0 +1,19 @@
+# workflow-kit — [P] portable Codex lane config, installed verbatim to <repo>/.codex/config.toml.
+#
+# WHY THIS EXISTS: a pager that waits for a keypress is a deadlock in a non-interactive agent run.
+# `git log`/`git diff` invoke $GIT_PAGER, and the default pager blocks forever when nothing is
+# attached to read it. Pinning it to `cat` makes git output stream and return.
+#
+# `inherit = "core"` keeps the shell environment minimal-but-usable rather than passing the operator's
+# whole environment to model-generated commands.
+#
+# DELIBERATELY NO `hooks` KEY HERE. Codex accepts hook registrations in EITHER this file or
+# <repo>/.codex/hooks.json, and warns when both carry them ("prefer a single representation for this
+# layer"). The kit generates hooks.json, so this file must stay out of that business; `init` warns
+# rather than double-registering if it finds hooks already declared here.
+
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+GIT_PAGER = "cat"

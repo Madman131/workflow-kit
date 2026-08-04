@@ -496,21 +496,52 @@ test("the gate-ladder sensor reports a TRUE cause for a tiered exemption (still 
   } finally { cleanup(); }
 });
 
-test("--risk-tokens is DEPRECATED (v1.5.0): parses, warns loudly, and the dead family is not written", () => {
-  // The lane route this flag parameterized was retired; removal of the flag itself is a breaking CLI
-  // change reserved for v2.0. Until then the contract is parse-warn-ignore: a saved init invocation
-  // keeps working, the warning is loud, and laneRiskTokens never reaches kit.config.json.
-  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-dep-"));
+test("--risk-tokens is REMOVED (v2.0): the flag fails LOUDLY and names the migration", () => {
+  // v1.5.0 deprecated it (parse-warn-ignore) and printed a removal horizon of v2.0; this is that
+  // removal. A breaking CLI change must BREAK — a silently-ignored flag would let an adopter keep a
+  // saved invocation forever believing it configured something. exit 2, not 0.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-rm-"));
   try {
     execFileSync("git", ["init", "-q", dir]);
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name",
       "adopter", "--risk-tokens", "billing", "--source-dirs", "app", "--skip-codex-prompt"], { encoding: "utf8" });
-    assert.equal(r.status, 0, `a saved init invocation with --risk-tokens must keep working: ${r.stderr}`);
-    assert.match(r.stderr, /--risk-tokens is DEPRECATED/, "the warning is loud (stderr, not buried in the log)");
-    assert.match(r.stderr, /removed at v2\.0/, "and it states the removal horizon");
-    const cfg = JSON.parse(readFileSync(path.join(dir, ".claude", "kit.config.json"), "utf8"));
-    assert.equal(cfg.laneRiskTokens, undefined, "the dead family is NOT written");
-    assert.deepEqual(cfg.executedPathDirs, ["app"], "…while the live family still is");
+    assert.equal(r.status, 2, "a removed flag is a clean exit 2, never a silent ignore");
+    assert.match(r.stderr, /--risk-tokens was REMOVED at v2\.0/, "the failure names the flag and the version");
+    // The message must carry the FIX, not just the refusal — this is the error an adopter meets while
+    // already frustrated, and every other refusal in this kit names its remediation.
+    assert.match(r.stderr, /Drop the flag/, "…and tells them what to do instead");
+    assert.match(r.stderr, /TOLERATED/, "…and says an existing laneRiskTokens key needs no edit");
+    // It must not have adopted a half-tree on the way out: the parser rejects BEFORE any write.
+    assert.equal(existsSync(path.join(dir, ".claude", "kit.config.json")), false,
+      "the run aborts in argument parsing, so nothing was written");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("…while a legacy laneRiskTokens KEY in an adopter's config stays TOLERATED (the flag died, the key did not)", () => {
+  // The two are separate contracts and only one changed. An older adopter's kit.config.json still
+  // carries laneRiskTokens; every control ignores it rather than treating it as corrupt. Removing the
+  // flag must not turn those existing configs into fail-closed bricks — that would be a silent,
+  // repo-wide outage delivered by an upgrade.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-legacy-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name",
+      "adopter", "--source-dirs", "app", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(r.status, 0, `a clean invocation still adopts: ${r.stderr}`);
+    // Hand-write the legacy shape an older adopt would have left behind, then prove the write guard
+    // still ALLOWS a declared write rather than reading the stale key as config corruption.
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"),
+      '{"executedPathDirs":["app"],"laneRiskTokens":["billing"]}\n');
+    const sid = "legacy-session-id";
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"),
+      JSON.stringify({ mode: "in-thread", sessionId: sid, taskId: "legacy-key-check", tier: "T1" }));
+    const g = spawnSync("node", [path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs")], {
+      input: JSON.stringify({ session_id: sid, tool_input: { file_path: "app/x.mjs" } }),
+      cwd: dir, encoding: "utf8",
+    });
+    assert.equal(g.status, 0, "the guard exits cleanly");
+    assert.doesNotMatch(g.stdout, /"permissionDecision":"deny"/,
+      "a legacy laneRiskTokens key is IGNORED, never read as a malformed config");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
