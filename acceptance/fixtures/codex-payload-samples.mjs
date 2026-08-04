@@ -80,3 +80,29 @@ export const OBSERVED_SHELL_WRITES = [
 // key on OUR control's signature, never on a write having failed.
 export const CODEX_SANDBOX_REFUSAL =
   "patch rejected: writing outside of the project; rejected by user approval settings";
+
+// ── HANDOFF: the ARMING-VERIFICATION PROBE ────────────────────────────────────────────────────────
+// The probe was written and three-quarters proven during v2.0's work, then deliberately NOT shipped:
+// its load-bearing direction (ARMED) is provable only against kit-installed, TRUSTED hooks, which do
+// not exist until the Codex-guard changeset lands. The kit does not ship a control whose main
+// direction is unproven. Recover the full script from git — it is not dead code, it is early work:
+//
+//   git show adb0a4e:scripts/check-codex-hooks-armed.mjs
+//
+// ALREADY PROVEN, do not re-litigate: NOT ARMED → exit 1 (against a repo with genuinely untrusted
+// hooks) · NOT INSTALLED → exit 2 · codex CLI absent → exit 2. STILL OWED: the ARMED direction.
+//
+// RATIFIED CONTRACT it must keep:
+//  · ABSTAIN IS EXIT 2, NEVER 0. An unanswered question is not a pass — reporting "unknown" as
+//    "armed" is the precise failure the probe exists to prevent.
+//  · IT NEVER GRANTS TRUST. Not via `--dangerously-bypass-hook-trust`, and not by writing
+//    `trusted_hash` itself. Knowing where a consent grant lives does not license writing it;
+//    automating another tool's consent store is forging consent through a quieter door.
+//  · IT OBSERVES THE CONTROL, NOT THE OUTCOME. Evidence is the guard's OWN signature — a new row in
+//    `.claude/lane-ledger.jsonl`, which guard-lane-authoring appends for every gated decision, allow
+//    or deny. See CODEX_SANDBOX_REFUSAL above for why: the first draft inferred "guard denied" from
+//    "file absent" and certified hooks that were provably untrusted, because the write had failed for
+//    an unrelated reason. A file can be absent for at least four reasons and only one of them is ours.
+//  · ITS PROBE TARGET MUST BE GATED BY US **AND** WRITABLE BY CODEX. A root-level `.mjs` satisfies
+//    both. `.codex/` does NOT — Codex treats it as outside the writable project, which is exactly the
+//    trap that produced the false green.
