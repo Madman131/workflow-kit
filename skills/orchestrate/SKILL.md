@@ -5,18 +5,18 @@ description: Run a program too large for one thread as sequential CHIPS — one 
 
 # /orchestrate — one writer, one ladder, one GO
 
-Word budget: 750 (body; the brief template in `CHIP_BRIEF.md` and the incident bank in
-`PROTOCOLS.md` beside it). Doctrine: `core/MULTI_AGENT.md` § Delegation · § Multi-writer checkout ·
+Word budget: 750 (body; `CHIP_BRIEF.md` and `PROTOCOLS.md` beside it, each with its own number).
+Doctrine: `core/MULTI_AGENT.md` § Delegation · § Multi-writer checkout ·
 § Task-lane declaration · `core/WORKFLOW.md` § Gate · `core/REVIEW.md` § Decorrelation.
 Owner-facing formatting: `core/OWNER_COMMS.md`.
 
 ## When
-A program that will not fit one thread and whose parts each deserve their own gate. Split it into
-**chips**: one chip = one changeset = one version = one session. Chips run in a stated ORDER; each
+A program too large for one thread whose parts each deserve their own gate. Split it into **chips**:
+one chip = one changeset = one version, in its own session. Chips run in a stated ORDER; each
 verifies the previous chip's version actually landed before starting.
 
 Never for: work one thread can gate — a chip has real overhead — or two chips writing one repo at
-once (§ One writer).
+once (§ One writer per repo).
 
 ## The three roles
 | Role | Owns | Never |
@@ -66,8 +66,8 @@ harness features this kit does not ship and must not assume.
 
 **Degraded mode — files and a shared record, which loses nothing essential:** the program record
 becomes one append-only file both sides write; a brief is a file handed to a fresh session; a
-consult is an entry in that record, answered in the same place. What degrades is LATENCY, not the
-role split — and the role split is what the method is.
+consult is an entry in it, answered there. What degrades is LATENCY, not the role split — and the
+role split is what the method is.
 
 ⚠ **Nothing on this page is enforced.** No control counts rounds, reads a freeze, or checks who
 gave a GO (`core/WORKFLOW.md` § Gate). The two things the kit does enforce are the task-lane

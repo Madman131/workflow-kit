@@ -532,6 +532,12 @@ cross-session messaging are harness features, not kit features. The body therefo
 **degraded mode** — a shared append-only program record, briefs as files, consults as entries in
 that record — and states plainly that what degrades is latency, not the role split.
 
+**It has the same one-way `[G]` dependency `/humanize` has.** The body cites `core/OWNER_COMMS.md`
+for how an ask to the Owner is formatted, and that file is generated per repo — on an adopter whose
+`OWNER_COMMS.md` is missing or still carries its placeholders, that pointer resolves to nothing and
+the skill's Owner-facing half is a procedure over a contract you still owe. The dependency runs one
+way only: nothing in `core/OWNER_COMMS.md` depends on `/orchestrate`.
+
 **Nothing in it is enforced, and it says so.** No control counts gate rounds, reads a freeze, or
 checks who gave a GO; the kit's two real controls remain the task-lane declaration and the commit
 floor. Treat the skill as doctrine your agents follow because you told them to, exactly like the
