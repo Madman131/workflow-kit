@@ -1,8 +1,99 @@
-# workflow-kit — v2.0.0
+# workflow-kit — v2.1.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,
 decorrelated, fail-closed gates. It is the extracted, stable method + enforcement controls from a repo
 that used it in anger for months (Workflow v2, Phase 6). **Pin a version; diff when you upgrade.**
+
+## What's new in v2.1
+
+**The Codex lane gets real write-time enforcement — and one command to prove it is on.** v2.0 measured
+why a *port* was impossible: a Codex write carries no `file_path`, so the existing guards would either
+allow everything or block everything. v2.1 ships the control those findings called for.
+
+- **One guard file, both lanes, branching on payload shape.** `init` installs the same hooks to
+  `.claude/hooks/` and `.codex/hooks/` — byte-identically — and registers them per lane. There is no
+  Codex *copy* of a guard to drift out of date, which is precisely how the origin repo's Codex hooks
+  rotted 48 hours out of step with their Claude twins without anyone noticing.
+- **A real patch-envelope parser** (`hooks/payload-targets.mjs`) gating **every** target in one
+  `apply_patch` call — including **both endpoints of a rename**, since `*** Move to:` can carry a file
+  out of a gated directory as easily as into one. An envelope it cannot fully account for is
+  **denied**, never partly trusted.
+- **The registration uses the REAL Codex tool names** (`apply_patch`, `Bash`). The Claude spelling
+  `Write|Edit|MultiEdit|NotebookEdit` matches nothing there — one of the two independent reasons the
+  origin repo's Codex hooks could never have fired. The accepted `.codex/hooks.json` schema was
+  determined by **executing** Codex's own parser, which rejects the Claude shape outright.
+- **A narrow, deliberate polarity change.** `guard-cross-repo-writes` used to `exit 0` whenever it
+  found no target. That is invisible in the Claude lane and a total fail-open in the Codex lane, where
+  *every* write lands in that branch. It is now three named classes: extractable ⇒ gate ·
+  **write-shaped-but-unreadable ⇒ DENY** · no write intent ⇒ exit 0. A test executes the shipped guard
+  and the retained v2.0 guard side by side over one corpus and proves **no Claude-lane decision
+  changes** except on payloads the harness cannot produce.
+- **One ledger row per target.** A five-target envelope writes five rows, in the v1.6.1 row shape,
+  with no new fields. A patch applies as a unit, so one denying target denies the call — and every
+  row records that, rather than claiming a permission that was never exercised.
+- **`node scripts/check-codex-hooks-armed.mjs` — the arming probe.** It reports **ARMED** only on the
+  guard's *own* signature (a new ledger row), never by inferring "blocked" from "the file is missing";
+  an earlier design did the latter and certified hooks that were provably untrusted, because Codex's
+  own sandbox had refused the write and Codex's narration misattributed it. Exits: armed 0 · not
+  armed 1 · not installed 2 · `codex` CLI absent 2 — an **abstain, never a pass**.
+
+**Read this part before you tell anyone the Codex lane is guarded.** The guards are
+**installed · fail-closed by design · INERT unless your Codex run carries hook trust.** Codex will not
+run a repo's hooks until a human approves them in an **interactive** session, and `codex exec` skips
+unapproved hooks **silently** — no prompt, no warning, no exit-code change. The kit will never grant
+that for you: it does not write Codex's trust store and does not use
+`--dangerously-bypass-hook-trust`, because automating another tool's consent is forging consent, and
+that flag would arm every hook from every source. **And the guards bind write *tools*: a Codex write
+issued through a plain shell command is invisible to them, which in that lane is a main road, not a
+corner case.** `.githooks/pre-commit` is still the only floor every writer converges at.
+`PORTABILITY.md` § The enforcement asymmetry is the full account.
+
+**Corrected from v2.0:** a repo-level `.codex/agents/` **is** a real Codex discovery root — v2.0
+recorded, against its own artifact, that it might not be and that the shipped cold-review seat could
+be inert. Executed since: Codex parses `.codex/agents/*.toml` and reports a malformed one, and the
+kit's shipped template is valid to that parser.
+
+### Upgrading to v2.1
+
+**`--force` is REQUIRED this release**, and the reason is mechanical rather than habitual: v2.1
+**edits `[P]` files you already have** — all three guard hooks — and `init` never overwrites a file it
+did not write in that run. (v2.0's note said the opposite, correctly, because *that* release added
+only new files. The rule is derived per release from what the diff actually edits; do not carry either
+instruction forward.)
+
+Executed against a real v2.0 adopter, a plain re-run leaves the lanes **split**: `.claude/hooks/`
+already exists so its guards are kept at v2.0, while `.codex/hooks/` is brand new so its guards are
+written at v2.1. `init` now **detects that split and warns**, naming the files and the fix — but it
+still exits 0, so read the output.
+
+1. **Re-run `init` with your original flags plus `--force`.** It overwrites the `[P]` guard hooks with
+   this version. Note what `--force` costs elsewhere: your `[G]` files are regenerated from templates,
+   so hand-authored content in `core/OWNER_COMMS.md` and any families you hand-added to
+   `.claude/kit.config.json` are replaced. Both are backed up to `.bak` first and warned about — but
+   check them afterwards rather than trusting the exit code. (Hook files are `[P]` and are overwritten
+   with **no** `.bak`; that is intended — they are the kit's, not yours.)
+2. **Re-grant Codex hook trust, interactively.** An edited or upgraded hook is marked CHANGED and is
+   **DISARMED** until a human approves it again. Run `codex` in the repo once and answer "Hooks need
+   review" with "Trust all and continue". Order matters: trusting before upgrading arms the old file.
+3. **Verify:** `node scripts/check-codex-hooks-armed.mjs`. Exit 0 is ARMED; **exit 2 is an abstain,
+   not a pass.**
+
+**Verify it landed — a green `init` exit is not evidence:**
+
+```bash
+test -f .codex/hooks.json || { echo "FAIL missing Codex registration"; exit 1; }
+test -f .codex/hooks/payload-targets.mjs || { echo "FAIL Codex guards not installed"; exit 1; }
+test -f scripts/check-codex-hooks-armed.mjs || { echo "FAIL arming probe not installed"; exit 1; }
+grep -q apply_patch .codex/hooks.json || { echo "FAIL registration uses the wrong tool names"; exit 1; }
+diff -r .claude/hooks .codex/hooks || { echo "FAIL the two lanes have drifted — re-run init --force"; exit 1; }
+echo "v2.1 adopt verified — now grant hook trust and run scripts/check-codex-hooks-armed.mjs"
+```
+
+Each check tests existence **before** content: a `grep` against a missing file exits non-zero for the
+wrong reason, which a `!`-negated check would read as clean. The last line is deliberate — the checks
+above prove the files are *installed*, which is not the same as *armed*, and only the probe answers
+that. (If you passed `--skip-codex-lane`, none of these apply: that flag omits the Codex guards, the
+registration and the probe, and `init` says so.)
 
 ## What's new in v2.0
 
@@ -38,6 +129,11 @@ describe your Codex lane to anyone.** The headlines:
 
 A kit-built Codex-lane guard, designed around the payload shape measured here, is **in flight as its
 own gated changeset**. It is not in v2.0, and nothing in v2.0 depends on it.
+**↑ Superseded at v2.1: that guard SHIPPED — see "What's new in v2.1". The trust gate, the silent
+skip and the shell-write road all still apply to it, which is why they are stated above as platform
+properties rather than as v2.0 limitations. Two v2.0 sentences are now wrong and are corrected there:
+"v2.0 ships no Codex hooks at all" describes v2.0 only, and the Codex-lane `.codex/` files are no
+longer all conveniences — the guards and their registration are controls.**
 
 **BREAKING — `init --risk-tokens` is REMOVED.** Deprecated at v1.5.0 when the cost-inversion `lane`
 route was retired, with a stated removal horizon of v2.0; this is that removal. It now **exits 2**
