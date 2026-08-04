@@ -544,11 +544,33 @@ test("THE INSTALLED HOOKS RUN IN A REAL ADOPTER TREE — presence and registrati
         `${hook} must find what it needs in a normal adopt — degradation is the fallback, not the norm`);
     }
 
+    // ONE INSTALL LOCATION SUFFICES FOR MODULE RESOLUTION, and that is a deliberate claim rather
+    // than an oversight: `.claude/hooks/` and `.codex/hooks/` receive BYTE-IDENTICAL files (pinned
+    // by the anti-refork equality test), and both sit exactly one level under the repo root, so a
+    // path that resolves from one resolves from the other. What is NOT inferred from byte-identity
+    // is execution itself — that inference is what shipped this defect — so both lanes were run
+    // by hand end-to-end and recorded in the PR.
+
     // …and the sweep sensor must actually EMIT on a governed BINDING doc, or "it runs" would only
     // mean "it does not crash". core/WORKFLOW.md ships CLASS: BINDING.
     assert.match(runHook("sensor-sweep-owed.mjs", "./core/WORKFLOW.md").stderr, /SWEEP OWED/,
       "the installed sweep sensor emits its reminder in a real adopter tree");
     // CLEAN SIDE: ordinary ungoverned work stays quiet through the same installed path.
     assert.doesNotMatch(runHook("sensor-sweep-owed.mjs", "./src/app.mjs").stderr, /SWEEP OWED/);
+
+    // THE DEGRADED PATH, exercised rather than asserted about. Remove the module the sensor needs
+    // and the FULL failure contract must hold: skill-path coverage survives, ONE honest stderr line
+    // says which half did not run, and the process still EXITS 0. The exit code gets its own
+    // assertion because it is the property that makes this a sensor rather than a blocker — a
+    // control that breaks writes when IT is broken is worse than the gap it was covering.
+    rmSync(path.join(dir, "scripts", "check-doc-size.mjs"));
+    const degraded = runHook("sensor-sweep-owed.mjs", "./core/WORKFLOW.md");
+    assert.equal(degraded.status, 0, "a sensor exits 0 even when its OWN dependency is missing");
+    assert.match(degraded.stderr, /DEGRADED/, "…and says so, rather than covering less in silence");
+    assert.doesNotMatch(degraded.stderr, /ERR_MODULE_NOT_FOUND|Cannot find module/,
+      "the missing module is HANDLED, not surfaced as a crash");
+    // The half that needs no module still works: a skill body is in scope by PATH alone.
+    assert.match(runHook("sensor-sweep-owed.mjs", "./.agents/skills/sweep/SKILL.md").stderr, /SWEEP OWED/,
+      "skill-path coverage survives the degradation — that is what makes it a fallback, not an outage");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
