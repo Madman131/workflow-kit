@@ -156,7 +156,16 @@ export function envelopeSections(command) {
   const lines = command.split(/\r?\n/);
   let current = [];
   let owners = [];
-  const flush = () => { for (const o of owners) sections.set(o, current.join("\n")); };
+  // ACCUMULATE, never overwrite. One envelope may name the SAME target more than once — the target
+  // list already dedupes it, so a `set()` here silently kept only the LAST section and dropped every
+  // earlier one. That reproduces the exact silent-promotion defect this sectioning was written to
+  // fix: promote a file in the first section, touch it again later, and the promotion disappears.
+  // "Per target" has to mean EVERY section belonging to that target, not the most recent.
+  const flush = () => {
+    if (!current.length) return;
+    const text = current.join("\n");
+    for (const o of owners) sections.set(o, sections.has(o) ? `${sections.get(o)}\n${text}` : text);
+  };
   let lastSource = null;
   for (const raw of lines) {
     const line = raw.trimStart();

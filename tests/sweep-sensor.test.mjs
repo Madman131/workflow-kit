@@ -390,6 +390,21 @@ test("a DELETED or quoted marker does not promote, and one envelope target canno
   // Envelope grammar is nobody's content — a section must not carry the closing marker.
   assert.doesNotMatch(incomingText(envMulti, multi, "core/WORKFLOW.md"), /\*\*\* End Patch/);
 
+  // REPEATED TARGET: one envelope may name the same file twice, and the target list dedupes it. A
+  // section map that OVERWRITES then keeps only the last one — which silently drops a promotion
+  // made in an earlier section, reproducing the very defect sectioning was written to fix. "Per
+  // target" must mean EVERY section belonging to that target.
+  const repeated = { tool_input: { command:
+    "*** Begin Patch\n*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n" +
+    "*** Update File: core/WORKFLOW.md\n+x\n*** Update File: core/GATES.md\n+later text\n*** End Patch" } };
+  const repTargets = { shape: "apply_patch", targets: ["core/GATES.md", "core/WORKFLOW.md"], ok: true };
+  const repText = incomingText(repeated, repTargets, "core/GATES.md");
+  assert.match(repText, /CLASS: BINDING/, "the EARLIER section survives a later one for the same file");
+  assert.match(repText, /later text/, "…and so does the later section — accumulate, never replace");
+  assert.equal(sweepOwed("core/GATES.md", repText, { governed, readDoc })?.reason, "binding-doc");
+  // …and accumulating must not leak one file's text into its sibling.
+  assert.doesNotMatch(incomingText(repeated, repTargets, "core/WORKFLOW.md"), /CLASS: BINDING/);
+
   // CLEAN SIDE — the promotion case this fragment exists for still fires on a single-target add.
   const single = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
   const promote = { tool_input: { command: '*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n' } };
