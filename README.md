@@ -1,3 +1,38 @@
+# workflow-kit — v2.2.1
+
+## What's new in v2.2.1 — a hotfix, and the check that should have caught it
+
+**`sensor-sweep-owed` was inert in every adopter tree.** v2.2.0 shipped it importing
+`"../scripts/check-doc-size.mjs"`. In the **kit** tree `hooks/` and `scripts/` are siblings, so that
+resolves. In an **adopter** the hook installs to `.claude/hooks/`, where `../scripts/` means
+`.claude/scripts/` — which does not exist. Every governed write in every adopted repo hit
+`ERR_MODULE_NOT_FOUND`: the sensor printed a stack trace instead of its reminder, and never ran the
+check it exists to run. `sensor-mutation-owed` was unaffected — it imports only a sibling in its own
+directory.
+
+**Fixed** by loading the module at runtime from the **project root**, where `scripts/` sits in both
+layouts, and by **degrading instead of crashing**: if the module cannot be loaded the sensor keeps
+its skill-path coverage, says once on stderr that the `CLASS: BINDING` half did not run, and still
+exits 0. A top-level static import made that fallback unreachable — the failure happened before any
+of the file's own error handling could run.
+
+**Why four review rounds missed it, since that is the part worth keeping.** Every observer stood in
+the kit tree, where the path works: the cross-family seat reviewed the kit checkout, the unit tests
+import from the kit checkout, and the generated-adopter check verified **presence and registration**
+— never **execution**. v2.2.0's own release notes warn that an installed-but-unregistered hook is
+inert; this shipped one that was installed, registered, and crashing, which is the same failure one
+door over. It was found by post-merge verification *by execution*, which is the only step that could
+have found it.
+
+**The real deliverable is the missing test**: `tests/sweep-sensor.test.mjs` now adopts into a scratch
+repo and **runs both installed hooks from their installed location**, asserting exit 0, no
+module-resolution error, no degradation, and that the sweep sensor actually emits on a governed
+`CLASS: BINDING` doc and stays quiet on ordinary code. Proven against the defect: restoring the
+v2.2.0 import turns it red.
+
+**Upgrading:** `--force`, as for any `[P]` control change — and re-grant Codex hook trust afterwards,
+since editing a hook disarms it until re-approved.
+
 # workflow-kit — v2.2.0
 
 A portable, versioned kit for building **production-critical systems with AI agents** under tiered,

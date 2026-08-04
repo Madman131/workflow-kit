@@ -28,16 +28,27 @@
 // mechanism nothing reads" shape this kit pays for repeatedly. The sweep itself is a ceremony whose
 // file list is chosen by whoever runs it — so neither this sensor nor a sweep report closes anything.
 //
-// ONE SOURCE PER MECHANICAL FACT: `classify`, `governedDocs` and `CLASS_RE` are IMPORTED from
+// ONE SOURCE PER MECHANICAL FACT: `classify`, `governedDocs` and `CLASS_RE` come from
 // scripts/check-doc-size.mjs, which already owns "which documents are governed" and "what a class
 // marker looks like". Do not inline a second CLASS: regex or a second governed-doc list here — two
 // transcriptions of one population silently differ, and a test asserts this file contains no such
 // regex of its own.
+//
+// ⚠ THEY ARE LOADED AT RUNTIME FROM THE PROJECT ROOT, NOT IMPORTED AS A SIBLING — and that is a
+// SHIPPED-DEFECT FIX, not a style choice. v2.2.0 used `import … from "../scripts/check-doc-size.mjs"`,
+// which resolves in the KIT SOURCE tree (where `hooks/` and `scripts/` are siblings) and resolves to
+// NOTHING in an adopter, where this file installs to `.claude/hooks/` and `../scripts/` means
+// `.claude/scripts/`. Every governed write in every adopted repo hit ERR_MODULE_NOT_FOUND and the
+// sensor emitted its stack trace instead of its reminder: installed, registered, and inert.
+// Four review rounds missed it because every observer — the cross-family seat, the unit tests, and
+// my own generated-tree check — stood in the KIT tree, where the path works. The generated-tree
+// check verified PRESENCE and REGISTRATION and never EXECUTED the installed hook.
+// `scripts/` sits at the repo root in BOTH layouts, so resolving from the project root is correct
+// for the kit and for an adopter alike.
 
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { classify, governedDocs, CLASS_RE, loadKitConfig } from "../scripts/check-doc-size.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative, envelopeAddedText } from "./payload-targets.mjs";
 
 
@@ -59,6 +70,25 @@ export const isSkillFile = (rel) =>
   typeof rel === "string" && rel.toLowerCase().endsWith(".md") && SKILL_ROOTS.some((r) => rel.startsWith(`${r}/`));
 
 /**
+ * Load the doc-governance module from the PROJECT ROOT, or return null.
+ *
+ * Returns null rather than throwing: this is a SENSOR, and a sensor that cannot answer must go
+ * quiet on the part it cannot answer — never break the write it was only supposed to comment on.
+ * A top-level static import made that impossible, because the failure happened before any of this
+ * file's own error handling could run.
+ */
+export async function loadDocModule(root) {
+  const candidates = [
+    path.join(root, "scripts", "check-doc-size.mjs"),                              // adopter + kit alike
+    fileURLToPath(new URL("../scripts/check-doc-size.mjs", import.meta.url)),       // kit source, belt-and-braces
+  ];
+  for (const c of candidates) {
+    try { return await import(pathToFileURL(c).href); } catch { /* try the next */ }
+  }
+  return null;
+}
+
+/**
  * The class a WRITE FRAGMENT declares — deliberately a different window from `classify()`.
  *
  * `classify()` windows to the first 12 lines, which is right for a DOCUMENT (the class a reader
@@ -68,14 +98,14 @@ export const isSkillFile = (rel) =>
  * document being promoted to BINDING is silent. So scan the WHOLE fragment. Over-reading costs one
  * extra reminder; under-reading costs the control.
  */
-export function classifyFragment(text) {
-  if (typeof text !== "string" || text === "") return null;
+export function classifyFragment(text, classRe) {
+  if (typeof text !== "string" || text === "" || !classRe) return null;
   // PREFER BINDING over an earlier non-BINDING match. In a document "first wins" is right — the
   // class is what a reader meets in the head. In a FRAGMENT there is no head, and the question is
   // "does this write introduce BINDING text?", so a BINDING marker anywhere in it wins.
-  const all = String(text).match(new RegExp(CLASS_RE.source, "g")) || [];
+  const all = String(text).match(new RegExp(classRe.source, "g")) || [];
   if (all.some((m) => /BINDING/.test(m))) return "BINDING";
-  const first = CLASS_RE.exec(text);
+  const first = classRe.exec(text);
   return first ? first[1] : null;
 }
 
@@ -89,14 +119,14 @@ export function classifyFragment(text) {
  *
  * `governed` and `readDoc` are injected so a test can drive this without a tree on disk.
  */
-export function sweepOwed(rel, fragment, { governed = [], readDoc = () => "" } = {}) {
+export function sweepOwed(rel, fragment, { governed = [], readDoc = () => "", classify, classRe } = {}) {
   if (typeof rel !== "string" || !rel) return null;
   if (isSkillFile(rel)) return { reason: "skill-body", rel };
   if (!governed.includes(rel)) return null;
   // The fragment can PROMOTE a document to BINDING even when the file on disk is not yet one, so
   // check the incoming text first and fall back to the file's current class. Absence of both is not
   // a trigger: a REFERENCE or STATE doc does not owe the pre-fold sweep.
-  const declared = classifyFragment(fragment) ?? classify(readDoc(rel) || "");
+  const declared = classifyFragment(fragment, classRe) ?? (classify ? classify(readDoc(rel) || "") : null);
   return declared === "BINDING" ? { reason: "binding-doc", rel } : null;
 }
 
@@ -147,7 +177,7 @@ const REMINDER = (hits) =>
 export function main({ stdin = process.stdin, stderr = process.stderr, cwd = process.cwd() } = {}) {
   let input = "";
   stdin.on("data", (d) => (input += d));
-  stdin.on("end", () => {
+  stdin.on("end", async () => {
     let ev;
     try { ev = JSON.parse(input); } catch { process.exit(0); }   // never break the tool on a parse failure
 
@@ -164,14 +194,28 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
 
     const root = resolveProjectRoot(ev) || cwd;
     const patchBase = resolvePatchBase(ev, root);
+
+    // DEGRADE, NEVER CRASH. If the doc-governance module cannot be loaded, this sensor loses the
+    // governed-doc half of its scope and keeps the skill-path half, which needs no module and no
+    // tree. It says so once on stderr — a control that quietly covers less than it claims is the
+    // failure this whole release is about — and it still exits 0, because it is a SENSOR.
+    const docs = await loadDocModule(root);
     let governed = [];
-    try {
-      const cfg = loadKitConfig(root);
-      governed = governedDocs({ root, stateDocs: cfg?.stateDocs ?? [] });
-    } catch {
-      // A tree this sensor cannot enumerate yields no governed list. It still checks the skill-path
-      // rule, which needs no tree — degrade to less coverage, never to a crash that breaks the write.
-      governed = [];
+    if (docs) {
+      try {
+        const cfg = docs.loadKitConfig(root);
+        governed = docs.governedDocs({ root, stateDocs: cfg?.stateDocs ?? [] });
+      } catch {
+        // A tree this sensor cannot enumerate yields no governed list. It still checks the
+        // skill-path rule — degrade to less coverage, never to a crash that breaks the write.
+        governed = [];
+      }
+    } else {
+      stderr.write(
+        "sensor-sweep-owed: DEGRADED — could not load scripts/check-doc-size.mjs from " +
+        `${root}, so the CLASS: BINDING half of this check did not run; skill-path coverage only. ` +
+        "This sensor never blocks, and this notice is not a failure of your write.\n"
+      );
     }
 
     const hits = [];
@@ -181,6 +225,8 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
       const hit = sweepOwed(rel, incomingText(ev, extracted, target), {
         governed,
         readDoc: (r) => { try { return readFileSync(path.join(root, r), "utf8"); } catch { return ""; } },
+        classify: docs?.classify,
+        classRe: docs?.CLASS_RE,
       });
       if (hit && !hits.some((h) => h.rel === hit.rel)) hits.push(hit);
     }
