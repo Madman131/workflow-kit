@@ -21,6 +21,30 @@ thread** · Builder = **{{DEFAULT_BUILDER}}** · Cold reviewer = **blind {{COLD_
 **{{CODEX_FRONTIER_MODEL}}**. Re-binding the seat files themselves: `PORTABILITY.md` § the consult
 seat.
 
+## When Codex is the Builder
+*The reverse workflow: Codex writes the change, so the seats swap. **The method does not change —
+only who sits where.** `core/GATES.md` § Routing is the authority on which family gates what; this
+section names the concrete seats for THIS repo.*
+
+- **Design gate → {{CROSS_FAMILY_LENS}}**, in design mode on the design-as-contract. Unchanged from
+  the Claude-Builder row: both lanes point the cross-family lens at the design, never at a code
+  changeset.
+- **Code gate → the Claude lane.** Codex cannot gate itself, and the seat it cannot fill is the
+  *code* gate. Bind the concrete reviewer invocation here: **{{CODEX_LANE_CODE_GATE}}**.
+  ⚠ Bind a **concrete, current-generation model id and an explicit effort flag** — never a friendly
+  alias. An alias may expand to a superseded generation or a credit-gated variant, and the gate then
+  dies before reading the artifact with an entitlement error that is *not* a verdict
+  (`core/GATES.md` § Model · effort matrix).
+- **Cold panel → Codex**, and ⚠ **it MUST run through a guarded site** — `scripts/codex-gate.sh`
+  (fail-closed `claude` shim on PATH + `PIL_BLOCK_CLAUDE_COMPANION=1`) or a hermetic `CODEX_HOME`.
+  **This is a precondition of the routing above, not a nicety.** A Claude-companion Codex plugin
+  hijacks review-shaped prompts in a bare `codex exec` into a real Claude review — non-empty and
+  on-topic, so an output check passes it. An unguarded Codex panel plus a Claude code gate is
+  **one family on the code with every box ticked** (`core/GATES.md` § Routing, § Gotchas / traps).
+- **What does NOT change:** the tier, the ladder, the PM disposition contract, decorrelation, or the
+  Owner's push-GO. The Builder-family cold panel is never substituted away; it is the spine, and the
+  spine is family-relative.
+
 ## ⚠ Enforcement asymmetry — which controls bind which lane
 *(This is the canonical statement of the PM-portability caveat. Since kit v2.1 the PreToolUse guards
 register in the Codex lane too — but read the qualifier in that column as part of the value: a Codex
