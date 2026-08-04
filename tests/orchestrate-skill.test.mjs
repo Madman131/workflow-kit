@@ -70,8 +70,14 @@ test("the sole-writer check names the ARTIFACT it reads, not the convenient one"
   const body = readFileSync(BODY, "utf8");
   // A session list is the thing an agent reaches for first and it answers a different question.
   // A repo was two-writer while a session-list check reported it clear.
-  pin(body, "lane\ndeclarations", "lane declarations named");
-  pin(body, "never a list\nof sessions, which reports liveness, not intent", "session list refused");
+  pin(body, "lane declarations**", "lane declarations named");
+  pin(body, "never a list of sessions,\nwhich reports liveness, not intent", "session list refused");
+  // The check was originally described as PROVING sole-writership. It cannot: reading declarations
+  // finds writers who DECLARED, and an undeclared lane is exactly the one that is invisible. The
+  // kit's own MULTI_AGENT.md says neither reader binds the task and a stale declaration can be
+  // refreshed, so "proof" was unsupportable in the doctrine the body cites two lines above.
+  pin(body, "**This finds DECLARED writers\nonly**", "declared-only, not proof");
+  pin(body, "Unsure ⇒ fail closed", "fail closed when unclear");
 });
 
 test("the honest limits stay in the body — the method/plumbing split and the named degraded mode", () => {
@@ -80,7 +86,13 @@ test("the honest limits stay in the body — the method/plumbing split and the n
   pin(body, "**The METHOD is portable; the PLUMBING is not.**", "method/plumbing split");
   pin(body, "harness features this kit does not ship and must not assume", "no-assumed-plumbing");
   pin(body, "**Degraded mode", "degraded mode named");
-  pin(body, "What degrades is LATENCY, not the\nrole split", "what degrades");
+  pin(body, "The ROLE SPLIT survives intact", "what survives");
+  pin(body, "what degrades is LATENCY", "what degrades");
+  // The claim was originally "a shared record, which loses nothing essential" — an unverifiable
+  // guarantee, since the kit ships no shared-record implementation and no atomicity rules for two
+  // writers appending to one file. The narrowed form hands that duty to the reader, and THAT is
+  // what must not quietly revert to a promise.
+  pin(body, "**Integrity of the shared file is yours to provide**", "record integrity is the reader's");
 });
 
 test("the body admits that none of it is enforced", () => {
@@ -88,8 +100,13 @@ test("the body admits that none of it is enforced", () => {
   // The kit's recurring shipped defect is prose claiming enforcement the machinery does not do.
   // This skill enforces NOTHING, and the sentence saying so is load-bearing.
   pin(body, "**Nothing on this page is enforced.**", "enforcement honesty");
-  pin(body, "The two things the kit does enforce are the task-lane\ndeclaration and the commit floor",
-    "what IS enforced");
+  // This sentence originally read "The two things the kit does enforce are the task-lane
+  // declaration and the commit floor" — which contradicts the kit's own PORTABILITY.md, where the
+  // write guard is inert in the Codex lane until a human grants hook trust, and the commit floor is
+  // absent on a fresh clone until `core.hooksPath` is set and is bypassable with `--no-verify`.
+  // "Ships controls for" is the supportable verb; the pointer to the limits is the load-bearing half.
+  pin(body, "The kit ships controls for the declaration and the commit\nfloor", "what IS shipped");
+  pin(body, "fresh-clone and bypass limits are in `PORTABILITY.md`", "limits are pointed at");
 });
 
 test("the freeze rule is stated as panel-enforced, not as an intention", () => {
@@ -120,13 +137,21 @@ test("PORTABILITY's [P] enumeration names EVERY shipped skill — a doc that omi
   // `[P]` list was never updated, so the adopter-facing inventory of what gets copied verbatim was
   // wrong for a whole release. Adding a skill is exactly when nobody re-reads that line.
   const portability = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8");
-  const line = /\[P\]\` \(verbatim\)[\s\S]*?\n- `\[G\]\`/.exec(portability);
-  assert.ok(line, "the [P] enumeration block must be findable — its shape changed, re-point this test");
+  // Parse the SKILL LIST ITSELF, not a broad slice of the [P] bullet. An earlier cut matched from
+  // the `[P]` phrase through the next `[G]` item and then searched that whole range for names —
+  // so a reshaped or emptied skill list stayed green as long as the names appeared ANYWHERE in
+  // between (the guards, sensors and runners are enumerated in that same range). Anchor on the
+  // parenthesised list that follows the `skill-shims/*` mention and read only its `/name` tokens.
+  const listed = /`skill-shims\/\*`\s*\(([^)]*)\)/.exec(portability.replace(/\s+/g, " "));
+  assert.ok(listed, "the skills enumeration must be findable — its shape changed, re-point this test");
+  const named = new Set([...listed[1].matchAll(/`\/([A-Za-z0-9._-]+)`/g)].map((m) => m[1]));
+  assert.ok(named.size >= 7, `the parsed list must be non-empty and plural — parsed ${named.size}`);
   const shipped = execFileSync("ls", [path.join(KIT, "skills")], { encoding: "utf8" }).trim().split("\n");
   assert.ok(shipped.length >= 7, `sanity: expected the shipped skills to be discovered, got ${shipped.length}`);
   for (const name of shipped) {
-    assert.ok(line[0].includes(`\`/${name}\``),
-      `PORTABILITY.md's [P] list must name /${name} — it ships verbatim to every adopter`);
+    assert.ok(named.has(name),
+      `PORTABILITY.md's [P] skill list must name /${name} — it ships verbatim to every adopter ` +
+      `(parsed: ${[...named].join(", ")})`);
   }
 });
 

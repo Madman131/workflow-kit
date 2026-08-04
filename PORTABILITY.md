@@ -539,8 +539,8 @@ the skill's Owner-facing half is a procedure over a contract you still owe. The 
 way only: nothing in `core/OWNER_COMMS.md` depends on `/orchestrate`.
 
 **Nothing in it is enforced, and it says so.** No control counts gate rounds, reads a freeze, or
-checks who gave a GO; the kit's two real controls remain the task-lane declaration and the commit
-floor. Treat the skill as doctrine your agents follow because you told them to, exactly like the
+checks who gave a GO; the controls the kit does ship are the task-lane declaration and the commit
+floor, each with the limits recorded above (§ The enforcement asymmetry, § FM1). Treat the skill as doctrine your agents follow because you told them to, exactly like the
 gate ladder in `core/WORKFLOW.md` — not as a mechanism. Its two reference layers (`CHIP_BRIEF.md`,
 `PROTOCOLS.md`) are loaded on demand from the body; `PROTOCOLS.md` is a **bank of incidents**, so it
 is expected to grow, and its word budget is author-set rather than Owner-ratified.

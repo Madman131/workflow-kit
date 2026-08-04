@@ -16,7 +16,9 @@ correctly on its first turn is in the brief or in the shared program record it p
    FIRST AND WHOLE. It is the source material, not background reading.
 3. **Startup gate** — the sole-writer proof (lane declarations, main checkout and every worktree),
    and a startup confirmation back to the orchestrator naming the base SHA, the version, and the
-   scope as the worker understood it. A brief that is never confirmed was never delivered.
+   scope as the worker understood it. **An unacknowledged brief is unconfirmed, not undelivered** —
+   messages cross and long turns delay them, so chase it rather than re-send blind or record a
+   delivery failure that did not happen.
 4. **Scope** — what ships, and explicitly what does NOT. Name the artifacts.
 5. **Process** — the rungs in order (§ The chip cycle in the body), and which of them this chip's
    gate may skip, decided in advance rather than at the moment the worker is tired.
