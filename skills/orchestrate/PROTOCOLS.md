@@ -3,9 +3,8 @@
 Word budget: 2000 (author-set at first release — no Owner ruling names a number for this file; its
 own number, never summed with its body). **It moved from 1300 to 2000 before shipping** as the bank
 absorbed more incidents: the initial number still being set, disclosed rather than quietly
-rewritten. **From this release it is a ratchet — raising it again is an Owner call.** Deliberately
-NOT split: a bank's only seam is its section headings, and two half-banks are two files to forget
-instead of one to read.
+rewritten. **From this release it is a ratchet — raising it again is an Owner call.** Not
+split: a bank's only seam is its section headings, and two half-banks are two files to forget.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.
@@ -13,22 +12,24 @@ omits any of these hands the worker the incident again.
 ⚠ **Read these as anonymised illustrative lessons, not as receipts.** Each came from a real program,
 but anonymising strips what § Evidence discipline demands of an observation — a named artifact — so
 these are shapes to recognise, not evidence you can check. **A rule here is load-bearing once your
-own repo gives it an artifact.** That is the same standard, applied to itself.
+own repo gives it an artifact.** The same standard, applied to itself.
 
 ## Freeze and the panel
-- **Freeze compliance is PANEL-ENFORCED, not willpower.** Three separate changesets edited the
-  artifact while seats were live before the rule stuck; each disclosed it, and disclosure is not a
-  control. Give every seat the frozen SHA and have it verify that SHA itself.
-- **ENVIRONMENT is a decorrelation axis**, alongside family and charter. One changeset ran four
-  independent seats that all shared the author's temp-directory regime; a defect visible only in the
-  other regime survived all four. Vary a seat's rig, or run the mechanical rungs twice.
-- **Vary the installed LAYOUT too.** A sensor was inert in every adopted repo — it resolved a
-  sibling path that exists only in the source tree. Four rounds missed it because every observer
-  stood in the one tree where the bug is invisible.
+- **Freeze compliance is PANEL-ENFORCED, not willpower.** Three changesets edited the artifact while
+  seats were live before the rule stuck; each disclosed it, and disclosure is not a control. Give
+  every seat the frozen SHA and have it verify that SHA itself.
+- **ENVIRONMENT is a decorrelation axis**, alongside family and charter. Four independent seats once
+  shared the author's temp-directory regime; a defect visible only in the other regime survived all
+  four. Vary a seat's rig, or run the mechanical rungs twice.
+- **Vary the installed LAYOUT too.** A sensor was inert in every adopted repo — it resolved a sibling
+  path existing only in the source tree. Four rounds missed it: every observer stood in the one tree
+  where the bug is invisible.
 - **A bounded continuation past a soft stop needs BOTH halves:** pre-commit that round N is the last
   whatever it says (which stops verdict-chasing), AND carve out the one severity that can never ship
   under that bound — a fail-open in a shipped control stops the PR and escalates (which stops the
-  bound becoming a loophole).
+  bound becoming a loophole). **The bound binds the artifact JUDGED, not the changeset forever:**
+  material entering afterwards owes its own review, announced as NEW SCOPE, not as a round of the
+  closed ladder. A bound silencing review of unreviewed text is itself the loophole.
 - **When ONE class survives repeated rounds, diagnose PLUMBING or CONCEPT before re-fixing.** If the
   recurrence is bespoke logic sitting beside the real grammar, relocating it INTO that one shared
   grammar may resolve the duplicate-logic objection — then RE-EVALUATE the original objection, since
@@ -36,9 +37,9 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   Two NO-GO rounds on one class is the trigger to ask, and the adjudication is the orchestrator's.
 
 ## Seats and runners
-- **Pass the model and effort EXPLICITLY; never inherit a runner's default.** A gate runner shipped
-  a default one tier above the effort its own doctrine named as standard, so anyone who simply ran
-  it gated at the exception tier believing they were at the norm. Announce what you passed.
+- **Pass the model and effort EXPLICITLY; never inherit a runner's default.** A gate runner shipped a
+  default one tier above the effort its own doctrine called standard, so running it plainly gated at
+  the exception tier while you believed you were at the norm. Announce what you passed.
 - **Every round carries a fresh random receipt the seat must echo**, and the seat verifies the
   FROZEN SHA itself rather than being told it. What a receipt does NOT prove is in the body.
 - **A warm delta round may write no thread sidecar of its own** — chain every resume from the
@@ -49,7 +50,7 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   cap the retries, and receipt them. **Never widen tool permissions to buy a green
   rung** — that trades the gate's meaning for its colour.
 - **A read-only seat cannot execute the suite.** Its "tests fail" may be a COVERAGE judgment, not a
-  result — read the receipt, not the label, and pair it with a seat that executes.
+  result — read the receipt, not the label, and pair it with an executing seat.
 - **Deviating TOWARD a repo's stricter contract, over a non-Owner instruction to do the looser
   thing, is correct** — and is disclosed, not done quietly. When the conflict is with an OWNER
   instruction it is not yours to resolve: surface the contract and consult.
@@ -107,8 +108,8 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
 - **Proving a change landed has TWO forms, and using the wrong one fails in the direction that
   looks safe.** A true merge: the head is an ancestor of the target. A SQUASH merge: the PR state is
   MERGED *and* the tree matches the squash commit — "ancestor-of" is permanently false there.
-- **On any merge-command error, check PR STATE FIRST.** In a worktree layout the local branch-delete
-  step can fail AFTER the remote merge succeeded; read that as "merge failed" and you double-merge.
+- **On any merge-command error, check PR STATE FIRST.** In a worktree layout the branch-delete step
+  can fail AFTER the remote merge succeeded; read that as "merge failed" and you double-merge.
 - **If the harness blocks a merge or push, STOP and report the exact command to the Owner — never
   route around it.** Merging locally and pushing reaches the same irreversible target by a side
   door: a BIGGER action than the one refused, not a smaller one.
@@ -135,9 +136,9 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
 - **Residue ritual at chip close:** prune, enumerate remote branches from the SERVER (a local mirror
   listing is not the server), delete merged ones, and sweep processes — including any whose working
   directory names a deleted worktree. **Enumerate every worktree you CREATED, scratch registrations
-  included**: a throwaway checkout registered against the shared repo outlives the session silently
-  and is missed by otherwise exemplary residue reports. **A sweep's count excludes the sweep's own
-  pipeline** — its grep included, or the count is self-manufactured.
+  included**: one registered against the shared repo outlives the session silently, and is missed by
+  otherwise exemplary residue reports. **A sweep's count excludes its own pipeline** — its grep
+  included, or the count is self-manufactured.
 - **Killing a task strands its children.** ~140 orphaned test processes accumulated across one
   program, some days old, degrading the machine. A post-kill process sweep joins the ritual.
 - **A `pgrep -f`-shaped waiter MATCHES ITS OWN SHELL'S ARGV**, so "still running" is
