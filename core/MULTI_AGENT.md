@@ -62,14 +62,20 @@ What the route carried, what was dropped with it, and what survived generally: `
   an unavailable seat. **An exemption declares the TIER too, and it never skips a gate:** the reason
   names which review SEAT is unavailable, which says nothing about how risky the work is — so build
   in-thread, still run the tier's normal cold pass (substituting seats per `core/REVIEW.md` § External
-  gate), and ledger the escape. No free-text reason is accepted, and a tier-less exemption BLOCKS.
+  gate), and ledger the escape. No free-text reason is accepted, and an exemption whose tier is
+  missing OR invalid BLOCKS.
 - **Gated decisions are ledgered, and the ledger FAILS CLOSED.** A gated decision appends its exact
   path with an append+sync write; concurrent processes may duplicate a row but can never replace
   another process's row. **Symlink traversal and any ledger-write failure BLOCK** — so no route, an
   exemption included, can proceed unlogged. **A PERMITTED write's row also carries a
   `declarationHash`** — a digest over the declaration's canonical fields — so the Owner can spot-check
   which exact declaration authorized a write, and a declaration edited mid-task shows as a new hash.
-  Rows for BLOCKED writes carry no hash.
+  Rows for BLOCKED writes carry no hash. **The tier is also in CLEAR TEXT, because a hash is not a
+  tier of record to the human reading these rows:** a permitted exemption's row carries `tier`
+  (`in-thread` already states its tier inside `state`), and a row blocked for a bad exemption tier
+  carries `declaredTier` — the value that was REJECTED, absent from the row only when the declaration
+  truly carried no tier at all. That distinction is what keeps "no tier" and "a tier I refused"
+  separable when spot-checking; both forms of block are otherwise identical rows.
 
 ## Onboarding a new model
 *To plug a new model into a role, bind it in `BINDINGS.md` and give it the role's access: a **reviewer**

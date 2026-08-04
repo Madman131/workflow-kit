@@ -635,7 +635,7 @@ printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down
 CTX_EXEMPT="$(gate_ladder_ctx "$H_GATE" '{"session_id":"'"$SID"'","tool_input":{"command":"bash scripts/codex-gate.sh -m x -e xhigh"}}' "$ADOPTER")"
 printf '%s' "$CTX_EXEMPT" | grep -q 'FAIL-CLOSED to T3' && ok "a TIERED exemption still FAILS CLOSED to T3 (the tier is not honoured — resolution unchanged)" || bad "a tiered exemption must still fail closed to T3"
 printf '%s' "$CTX_EXEMPT" | grep -q 'exempt-tier-not-honoured' && ok "…under its OWN cause code (exempt-tier-not-honoured)" || bad "the sensor must report the exempt-tier-not-honoured cause"
-printf '%s' "$CTX_EXEMPT" | grep -q 'no valid tier declaration' && bad "the sensor must NOT claim there is no valid tier — the file carries T1" || ok "…and it does NOT claim 'no valid tier declaration' about a file carrying T1"
+printf '%s' "$CTX_EXEMPT" | grep -q 'no tier this sensor can use' && bad "the sensor must NOT fall back to the generic cause — the file carries T1" || ok "…and it does NOT fall back to the generic cause for a file carrying T1"
 # The mirror: a valid tier does not make an unsanctioned reason an exemption. Both enforcement
 # controls reject it as malformed, so claiming a not-honoured exemption would be the same
 # false-cause defect one branch over.

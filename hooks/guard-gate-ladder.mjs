@@ -248,8 +248,20 @@ process.stdin.on("end", () => {
     ? `GATE LADDER — declared tier ${tier} · task ${taskId}\n`
     : failClosed === "exempt-tier-not-honoured"
       ? `GATE LADDER — FAIL-CLOSED to ${tier}: this task is declared \`exempt\`, whose tier is deliberately NOT honoured here (${failClosed}).\n` +
-        `The exemption excuses a review seat; it does not lower the ladder. Declare \`in-thread\` with the tier to run the declared one.\n`
-      : `GATE LADDER — FAIL-CLOSED to ${tier}: no valid tier declaration for THIS session (${failClosed}).\n` +
+        `The exemption excuses a review seat; it does not lower the ladder.\n` +
+        // NO "declare `in-thread` instead" HERE. An earlier draft closed this branch with exactly
+        // that, one sentence after "it does not lower the ladder" — and it IS the lowering: one word
+        // in the declaration takes the surfaced ladder from T3 to the exemption's own tier, with no
+        // seat consulted, on the mode chosen when a review seat is already down. A sensor must not
+        // print the bypass of the fail-closed it just applied. The reviewer-protective line below is
+        // kept for the same reason it exists on the generic branch (header guard (b)).
+        `If you are a reviewer seat, no action is required — do NOT write ${DECLARATION}.\n`
+      // "no valid tier declaration" is FALSE of several causes that reach this branch — a retired
+      // `lane` route or an unsanctioned reason can carry a perfectly valid `tier`, and `bad-task-id`
+      // names its true cause in the parenthetical while the sentence contradicts it. "No tier this
+      // sensor can use" is true of every one of them, and stops the generic branch asserting a
+      // specific falsehood about a file it just read.
+      : `GATE LADDER — FAIL-CLOSED to ${tier}: no tier this sensor can use for THIS session (${failClosed}).\n` +
         `If you are a reviewer seat, no action is required — do NOT write ${DECLARATION}.\n` +
         `The declaring PM re-declares per core/MULTI_AGENT.md § Task-lane declaration.\n`;
 
@@ -264,7 +276,7 @@ process.stdin.on("end", () => {
     },
   }));
   console.error(failClosed
-    ? `GATE LADDER: ${failClosed === "exempt-tier-not-honoured" ? "exempt tier not honoured" : "no valid tier declaration"} (${failClosed}) — FAIL-CLOSED to ${tier}; required ladder surfaced.`
+    ? `GATE LADDER: ${failClosed === "exempt-tier-not-honoured" ? "exempt tier not honoured" : "no usable tier declaration"} (${failClosed}) — FAIL-CLOSED to ${tier}; required ladder surfaced.`
     : `GATE LADDER: declared tier ${tier} · task ${taskId} — required ladder surfaced.`);
   process.exit(0);                                                     // continue normal permission flow
 });

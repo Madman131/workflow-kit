@@ -266,10 +266,15 @@ function writeLedger(projectRoot, { decision, state, reason, tier, rel, taskId, 
     // `declaredTier` MUST be in the dedupe key. It is the only field distinguishing a tier-less deny
     // from a `T9` deny — same state, decision, task, session and path, and no hash on either — so
     // without it the second row is silently swallowed as a repeat and the trail loses the value it
-    // exists to record. (An ALLOW needs no such field: its tier is already inside the hash.)
+    // exists to record.
+    // `tier` is in the key for a DIFFERENT reason: the UPGRADE case. A row written by the previous
+    // version carries no `tier` but an identical hash, so on the hash alone it would satisfy this
+    // key forever and suppress the first row that would have carried the clear-text tier — leaving
+    // the Owner's spot-check looking at a tier-less exempt row precisely after upgrading to get one.
     if (previous?.state === state && previous?.decision === decision && previous?.reason === reason &&
       previous?.taskId === taskId && previous?.sessionId === sessionId && previous?.path === rel &&
-      previous?.declarationHash === hash && previous?.declaredTier === declaredTier) {
+      previous?.declarationHash === hash && previous?.declaredTier === declaredTier &&
+      previous?.tier === (state === "exempt" ? tier : undefined)) {
       return true;
     }
 

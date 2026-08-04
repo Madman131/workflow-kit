@@ -256,12 +256,28 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
     // NEGATIVE CONTROL for the clear-text tier: `tier` belongs on the exempt ALLOW row and nowhere
     // else. Without this, production could attach it to every row carrying one — including these
     // deny rows — and the positive assertion above would still pass.
-    assert.ok(rows().every((r) => r.state !== "exempt" ? r.tier === undefined : true),
-      "no non-exempt row carries a clear-text `tier`");
+    // Build a ledger that actually CONTAINS every row shape before asserting field scoping — an
+    // "every row satisfies X" check over rows of one state is vacuous, which is the very failure
+    // these negative controls exist to catch (a first draft of this block was exactly that, and a
+    // mutation leaking `declaredTier` onto every state walked straight through it).
     writeFileSync(ledger, "");
-    writeFileSync(decl, JSON.stringify({ mode: "in-thread", sessionId: "s1", taskId: "tier-task", tier: "T3" }) + "\n");
+    write({ ...base, tier: "T2" });   // exempt ALLOW  — carries tier, must NOT carry declaredTier
     guardSays();
-    assert.equal(rows().at(-1).tier, undefined, "an in-thread ALLOW row carries no `tier` field (its state already names it)");
+    write({ ...base, tier: "T9" });   // exempt deny   — carries declaredTier, must NOT carry tier
+    guardSays();
+    writeFileSync(decl, JSON.stringify({ mode: "in-thread", sessionId: "s1", taskId: "tier-task", tier: "T3" }) + "\n");
+    guardSays();                      // in-thread ALLOW — neither field
+    writeFileSync(decl, JSON.stringify({ mode: "lane", sessionId: "s1", taskId: "tier-task" }) + "\n");
+    guardSays();                      // lane-retired deny — neither field
+    const shapes = rows();
+    assert.ok(shapes.some((r) => r.state === "exempt") && shapes.some((r) => r.state === "exempt-tier-missing") &&
+      shapes.some((r) => r.state === "in-thread:T3") && shapes.some((r) => r.state === "lane-retired"),
+      "the scoping assertions below run against a ledger holding all four row shapes");
+    assert.ok(shapes.every((r) => (r.state === "exempt") === (r.tier !== undefined)),
+      "`tier` appears on exempt ALLOW rows and nowhere else");
+    assert.ok(shapes.every((r) => (r.state === "exempt-tier-missing" && r.declaredTier !== undefined) ||
+      (r.state !== "exempt-tier-missing" && r.declaredTier === undefined)),
+      "`declaredTier` appears on tier-rejecting DENY rows and nowhere else (it feeds the dedupe key)");
 
     // COMMIT-TIME: the every-lane floor requires it too.
     const commit = (msg) => spawnSync("git", ["-C", dir, "commit", "-q", "-m", msg], { encoding: "utf8" });
@@ -283,6 +299,69 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
       "…and the block does not claim the tier is missing from a file carrying T9");
     write({ ...base, tier: "T1" });
     assert.equal(commit("tiered exempt").status, 0, "the SAME commit passes once the tier is declared");
+  } finally { cleanup(); }
+});
+
+test("a plain init re-run does NOT update an installed [P] control — so the upgrade note must say --force", () => {
+  // A control fix reaches an adopter only through the instruction the release note gives them.
+  // `init` never overwrites a file it did not write this run: a plain re-run prints "exists, kept",
+  // EXITS 0, and leaves the old control in place. A release that changes `[P]` controls and tells the
+  // reader to "re-run init with your original flags" therefore ships them nothing while reporting
+  // success. Both halves are executed here, and the note itself is pinned.
+  const { dir, run, cleanup } = adopt(["--skip-codex-prompt"]);
+  try {
+    const installed = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
+    const marker = "// PRE-UPGRADE MARKER\n";
+    writeFileSync(installed, marker + readFileSync(installed, "utf8"));
+    run(["--skip-codex-prompt"]);
+    assert.ok(readFileSync(installed, "utf8").startsWith(marker),
+      "a plain re-run KEEPS the already-installed control (this is why --force is required)");
+    run(["--skip-codex-prompt", "--force"]);
+    assert.ok(!readFileSync(installed, "utf8").startsWith(marker),
+      "--force is what actually replaces the installed control");
+    // The note must therefore carry --force. Scoped to the v1.6.1 section so a neighbouring
+    // release's instruction cannot satisfy it.
+    const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
+    const section = readme.slice(readme.indexOf("## What's new in v1.6.1"), readme.indexOf("## What's new in v1.6\n"));
+    assert.ok(section.length > 0, "the v1.6.1 section exists");
+    assert.match(section, /--force/,
+      "the v1.6.1 upgrade instruction must require --force, or it installs none of its own control fixes");
+  } finally { cleanup(); }
+});
+
+test("the ledger's UPGRADE row is not suppressed by a pre-upgrade row with the same hash", () => {
+  // The clear-text `tier` exists for the Owner's spot-check. A row written by the PREVIOUS version
+  // carries no `tier` but an identical `declarationHash`, so on the hash alone it satisfies the whole
+  // dedupe key and suppresses the first row that would have carried the tier — leaving the upgrading
+  // reader looking at a tier-less exempt row precisely after upgrading to get one. `tier` is in the
+  // dedupe key to close that, and this test drives it through the REAL pre-upgrade row shape.
+  const { dir, cleanup } = adopt(["--skip-codex-prompt"]);
+  try {
+    const guard = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
+    const ledger = path.join(dir, ".claude", "lane-ledger.jsonl");
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"),
+      JSON.stringify({ mode: "exempt", sessionId: "s1", taskId: "upgrade-task", reason: "codex-down", tier: "T2" }) + "\n");
+    const run = () => spawnSync("node", [guard], {
+      cwd: dir, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+      input: JSON.stringify({ session_id: "s1", tool_input: { file_path: "src/x.mjs" } }),
+    });
+    // One real row, then strip `tier` from it — byte-for-byte the shape the previous version wrote.
+    run();
+    const rows = () => readFileSync(ledger, "utf8").trim().split("\n").filter(Boolean).map((r) => JSON.parse(r));
+    const preUpgrade = rows().at(-1);
+    assert.equal(preUpgrade.tier, "T2", "sanity: the current version records the tier");
+    delete preUpgrade.tier;
+    writeFileSync(ledger, `${JSON.stringify(preUpgrade)}\n`);
+    run();
+    const after = rows();
+    assert.equal(after.length, 2, "the post-upgrade write appends rather than deduping away");
+    assert.equal(after.at(-1).tier, "T2", "…and the appended row carries the clear-text tier");
+    assert.equal(after.at(-1).declarationHash, preUpgrade.declarationHash,
+      "…while the hash is unchanged across versions (so the row is a genuine upgrade twin)");
+    // …and a true repeat under the CURRENT version still dedupes (the fix must not defeat dedupe).
+    run();
+    assert.equal(rows().length, 2, "an identical repeat still dedupes");
   } finally { cleanup(); }
 });
 
@@ -314,9 +393,19 @@ test("the gate-ladder sensor reports a TRUE cause for a tiered exemption (still 
     assert.match(tiered.out, /FAIL-CLOSED to T3/, "a tiered exemption STILL fails closed to the strictest ladder");
     assert.match(tiered.out, /exempt-tier-not-honoured/, "…under its own cause code");
     assert.match(tiered.out, /deliberately NOT honoured/, "…and the text says the tier was not honoured");
-    assert.doesNotMatch(tiered.out, /no valid tier declaration/,
-      "the sensor must NOT claim the declaration lacks a valid tier — it visibly carries T1");
+    assert.doesNotMatch(tiered.out, /no tier this sensor can use/,
+      "the sensor must NOT fall back to the generic cause — the file visibly carries T1");
     assert.match(tiered.err, /exempt tier not honoured/, "the stderr line carries the true cause too");
+    // A SENSOR MUST NOT PRINT THE BYPASS OF THE FAIL-CLOSED IT JUST APPLIED. An earlier draft closed
+    // this branch with "Declare `in-thread` with the tier to run the declared one" — one word in the
+    // declaration takes the surfaced ladder from T3 to the exemption's own tier, no seat consulted,
+    // on the very mode chosen when a review seat is already down.
+    assert.doesNotMatch(tiered.out, /Declare `in-thread`/,
+      "the exempt head must not instruct the one-word edit that lowers the ladder");
+    // …and it keeps the reviewer-protective line the generic branch carries (header guard (b)):
+    // this branch fires with isDeclaredPM false, so its reader may be a fresh reviewer seat.
+    assert.match(tiered.out, /do NOT write/,
+      "the exempt head keeps the reviewer-protective line (it is a not-provably-PM branch)");
     // The T3 ladder body is what actually gets surfaced (the resolution, not just the label).
     assert.match(tiered.out, /REQUIRED LADDER for T3/, "and the T3 ladder is the one surfaced");
 
@@ -332,7 +421,21 @@ test("the gate-ladder sensor reports a TRUE cause for a tiered exemption (still 
 
     // A tier-LESS exemption keeps the generic cause: there genuinely is no tier to not-honour.
     write(base);
-    assert.match(ladderSays().out, /no valid tier declaration/, "a tier-less exemption keeps the generic cause");
+    const tierless = ladderSays();
+    assert.match(tierless.out, /no tier this sensor can use/, "a tier-less exemption keeps the generic cause");
+    // THE STDERR SURFACE NEEDS THE SAME NEGATIVE PIN AS STDOUT. Asserting only that the exempt case
+    // SAYS "exempt tier not honoured" leaves a version that says it for EVERY fail-closed cause
+    // fully green — reintroducing the false-cause defect on the surface nobody pinned.
+    assert.doesNotMatch(tierless.err, /exempt tier not honoured/,
+      "a tier-less exemption's stderr must NOT claim an exempt tier was not honoured");
+    for (const decl of [
+      { mode: "in-thread", sessionId: "other-session", taskId: "ladder-task", tier: "T2" },
+      { mode: "lane", sessionId: "s1", taskId: "ladder-task" },
+    ]) {
+      write(decl);
+      assert.doesNotMatch(ladderSays().err, /exempt tier not honoured/,
+        `a ${decl.mode} fail-closed cause must not borrow the exempt wording`);
+    }
     // EVERY sanctioned reason, and every tier: dropping one from the sensor's set would otherwise
     // leave these assertions green while that reason silently reported the false generic cause.
     for (const reason of ["codex-down", "codex-quota", "trivial-edit"]) {
@@ -342,6 +445,22 @@ test("the gate-ladder sensor reports a TRUE cause for a tiered exemption (still 
         assert.match(out, /exempt-tier-not-honoured/, `exempt ${reason}/${tier} reports the true cause`);
       }
     }
+    // THE GENERIC BRANCH MUST NOT ASSERT A SPECIFIC FALSEHOOD EITHER. A retired `lane` route and an
+    // unsanctioned reason can both carry a perfectly valid `tier`, and `bad-task-id` names its true
+    // cause in the parenthetical — so a head reading "no VALID TIER declaration" was false of every
+    // one of them. Fixing only the exempt branch and leaving these is the twin-lying failure.
+    for (const decl of [
+      { mode: "lane", sessionId: "s1", taskId: "ladder-task", tier: "T2" },
+      { mode: "exempt", sessionId: "s1", taskId: "ladder-task", reason: "because-I-said-so", tier: "T1" },
+      { mode: "in-thread", sessionId: "s1", taskId: "BAD_TASK!", tier: "T1" },
+    ]) {
+      write(decl);
+      const out = ladderSays().out;
+      assert.match(out, /FAIL-CLOSED to T3/, `${decl.mode} still fails closed`);
+      assert.doesNotMatch(out, /no valid tier declaration/,
+        `the head must not claim there is no valid tier — this declaration carries ${decl.tier}`);
+    }
+
     // THE INVARIANT THIS SENSOR IS BUILT ON: no non-in-thread declaration may resolve below T3.
     // The new branch must not have opened a route to a lighter ladder for ANY mode.
     for (const decl of [
