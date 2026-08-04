@@ -32,7 +32,8 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   bound becoming a loophole).
 - **When ONE class survives repeated rounds, diagnose PLUMBING or CONCEPT before re-fixing.** If the
   recurrence is bespoke logic sitting beside the real grammar, relocating it INTO that one shared
-  grammar dissolves the design objection; if the concept itself is wrong, no relocation saves it.
+  grammar may resolve the duplicate-logic objection — then RE-EVALUATE the original objection, since
+  the shared grammar can carry the same defect; if the concept is wrong, no relocation saves it.
   Two NO-GO rounds on one class is the trigger to ask, and the adjudication is the orchestrator's.
 
 ## Seats and runners
@@ -45,14 +46,16 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   too, and fail closed when either is missing.
 - **A warm delta round may write no thread sidecar of its own** — chain every resume from the
   ORIGINAL cold round's sidecar, and refuse an empty id rather than silently starting a new thread.
-- **A cross-family seat returning a tool-failure with a DIFFERENT denied tool each attempt is
-  agentic drift, not unavailability.** Record it as "unreliable here", never "categorically
-  unavailable", cap the retries, and receipt them. **Never widen tool permissions to buy a green
+- **A cross-family seat returning a tool-failure with a DIFFERENT denied tool each attempt MAY be
+  agentic drift** — changing sandbox policy, runner state or a genuine missing prerequisite produce
+  the same shape, so the pattern does not settle the cause. Either way record it as "unreliable
+  here", never "categorically unavailable", cap the retries, and receipt them. **Never widen tool permissions to buy a green
   rung** — that trades the gate's meaning for its colour.
 - **A read-only seat cannot execute the suite.** Its "tests fail" may be a COVERAGE judgment, not a
   result — read the receipt, not the label, and always pair it with a seat that executes.
-- **Deviating TOWARD a repo's stricter contract, over an instruction to do the looser thing, is
-  correct** — and is disclosed, not done quietly.
+- **Deviating TOWARD a repo's stricter contract, over a non-Owner instruction to do the looser
+  thing, is correct** — and is disclosed, not done quietly. When the conflict is with an OWNER
+  instruction it is not yours to resolve: surface the contract and consult.
 
 ## Evidence discipline
 - **The raw-look habit: any verification returning "absent", "zero" or "clean" earns ONE look at the
@@ -100,7 +103,7 @@ own repo gives it an artifact.** That is the same standard, applied to itself.
   directions. To break a CLI contract, break it LOUDLY: exit non-zero, name the flag and version,
   carry the remediation — while tolerating the old config KEY so an existing adopter is not bricked.
 - **If an artifact must ship at exactly its budget, flag the NUMBER to the Owner.** Zero headroom
-  forces the next editor to raise the cap instead of cutting. It is a state you may inherit under a
+  pressures the next editor to raise the cap rather than cut. It is a state you may inherit under a
   parity constraint; it is never one you mint on a new artifact.
 - **Proving a change landed has TWO forms, and using the wrong one fails in the direction that
   looks safe.** A true merge: the head is an ancestor of the target. A SQUASH merge: the PR state is

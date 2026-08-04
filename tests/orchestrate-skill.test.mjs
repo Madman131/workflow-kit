@@ -121,7 +121,16 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
   // hotter than the default, so it is an anti-arbitrary-escalation RULE: the reference-layer rule
   // forbids moving it to a layer the executor might not load, and deleting it is worse than moving.
   const body = readFileSync(BODY, "utf8");
-  pin(body, "**evidence\n   escalates them, appetite does not.**", "evidence not appetite");
+  pin(body, "**evidence escalates them, appetite does not.**", "evidence not appetite");
+});
+
+test("a receipt is not a verdict — the rule lives in the body, not only in the bank", () => {
+  // A seat's receipt proves its reply COMPLETED; it says nothing about whether a decision was
+  // stated. Treating one as the other accepts a non-verdict as a pass, which is a correction of a
+  // plausible false default — so it may not live only in the on-demand layer, where it started.
+  const body = readFileSync(BODY, "utf8");
+  pin(body, "receipt proves a reply COMPLETED, not that it judged", "receipt is not a verdict");
+  pin(body, "demand a verdict and its inspected scope", "verdict and scope demanded");
 });
 
 test("the README/PORTABILITY mirrors carry no claim the body has already retracted", () => {
