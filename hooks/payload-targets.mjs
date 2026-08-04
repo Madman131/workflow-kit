@@ -43,9 +43,8 @@ import path from "node:path";
 // (`--project-dir <abs>`) and never guessed when it can be told.
 //
 // Precedence, most trustworthy first, each step documented because each is a different kind of claim:
-//   1. `--project-dir` argv — what the registration this repo generated says. Deterministic, and it
-//      does not depend on the command string being handed to a shell (an assumption about Codex's
-//      executor that this kit has NOT verified by execution, so nothing here rests on it).
+//   1. `--project-dir` argv — what the registration this repo generated says, baked in at install
+//      time and therefore not forgeable from a payload.
 //   2. CLAUDE_PROJECT_DIR — the Claude harness's own answer.
 //   3. the payload's `cwd` — the harness's answer for a hand-written registration that passes
 //      neither. Ranked last of the informative sources deliberately: it arrives in the same payload
@@ -60,13 +59,44 @@ export function resolveProjectRoot(input, argv = process.argv.slice(2)) {
   return path.resolve(process.cwd());
 }
 
-// Directives that NAME A TARGET. Codex's envelope is line-oriented; a directive occupies a whole
-// line starting at column 0. Content lines inside a hunk are prefixed (`+`, `-`, ` `, `@@`), which
-// is what keeps a payload line like `+*** Add File: evil.txt` from being read as a directive: it is
-// added CONTENT, and the `^\*\*\* ` anchor below does not match it. That asymmetry is deliberate and
-// is pinned by test in both directions — a parser that matched `*** Add File:` anywhere in the line
-// would gate a phantom path on every patch that merely quotes one.
+// WHAT DO RELATIVE PATCH PATHS RESOLVE AGAINST? Not necessarily the repo root — and conflating the
+// two is a fail-open. `resolveProjectRoot` answers "which repo am I guarding" (where the declaration
+// and ledger live, and what counts as inside). This answers a DIFFERENT question: the applier
+// resolves a relative path in the envelope against ITS OWN working directory, which the payload
+// reports as `cwd`. Those diverge whenever a session runs in a SUBDIRECTORY of the repo — an
+// ordinary monorepo case needing no attacker at all: the guard would evaluate `<repo>/src/x.mjs`
+// while the applier writes `<repo>/packages/foo/src/x.mjs`, a path nothing checked. (Found by the
+// adversarial review seat, which demonstrated it reaching an out-of-repo location through a symlink.)
+//
+// Using the payload's `cwd` as the resolution base is also the FAIL-CLOSED choice, which is why it
+// is safe to take it from the payload: if `cwd` pointed somewhere outside the repo, every relative
+// target resolves outside too — and an out-of-repo target is exactly what guard-cross-repo-writes
+// DENIES. A forged `cwd` therefore blocks the write; it does not smuggle one past.
+export function resolvePatchBase(input, projectRoot) {
+  const cwd = input?.cwd;
+  return typeof cwd === "string" && cwd ? path.resolve(cwd) : projectRoot;
+}
+
+// Directives that NAME A TARGET.
+//
+// LEADING WHITESPACE IS PART OF THE DIRECTIVE, and getting this wrong was a real fail-open. Codex's
+// own patch parser TRIMS each line before classifying it as a header, so `␠*** Add File: x` IS a
+// directive to the applier. A first cut here anchored on `^\*\*\* ` at column 0, which meant an
+// indented directive was read as hunk CONTENT and its target silently dropped from the list — while
+// Codex went on to write the file. That is the exact shape this guard exists to prevent: an envelope
+// that parses clean and touches a path nobody gated. Found by the cross-family review seat and
+// corroborated against the shipped CLI's own patch grammar.
+//
+// So the rule is: match what the APPLIER matches. Leading whitespace is stripped before the test;
+// any other prefix is not. That still keeps a payload line like `+*** Add File: evil.txt` as
+// CONTENT — `+` is not whitespace — so a patch that merely quotes patch syntax does not gate a
+// phantom path. Both directions are pinned by test.
 const DIRECTIVE_RE = /^\*\*\* (Add File|Update File|Delete File|Move to): ?(.*)$/;
+// Directives that are real grammar but name NO target. Both are in the shipped CLI's patch
+// vocabulary. Treating them as "unknown" would fail CLOSED on a perfectly legal patch — safe in
+// direction but a brick, and a control that blocks legitimate work is a control someone turns off
+// (the frustrated-adopter failure mode this kit takes seriously).
+const NON_TARGET_DIRECTIVE_RE = /^\*\*\* (?:End of File|Environment ID:.*)$/;
 const BEGIN = "*** Begin Patch";
 const END = "*** End Patch";
 
@@ -82,6 +112,14 @@ function fail(shape, reason) { return { ok: false, shape, reason, targets: [] };
 export function parseApplyPatchEnvelope(command) {
   if (typeof command !== "string" || !command.trim()) {
     return fail("apply_patch", "the apply_patch payload carries no `command` string to parse");
+  }
+  // A line terminator this parser does not split on, but some line-splitter somewhere might, is a
+  // way to hide a directive inside what we read as one opaque content line — the target would never
+  // reach the list while an applier that DID split there would write the file. Rather than guess
+  // which splitters agree with us, refuse the envelope: "cannot fully account for it" is the same
+  // rule every other unparseable shape gets here, and these characters have no business in a patch.
+  if (/[\u2028\u2029]/.test(command) || /\r(?!\n)/.test(command)) {
+    return fail("apply_patch", "the patch envelope contains a line terminator this guard does not split on (U+2028, U+2029, or a lone CR), so a directive could be hidden inside a line it reads as content");
   }
   const lines = command.split(/\r?\n/);
   // Leading/trailing blank lines are tolerated; anything else outside the markers is not. An
@@ -99,8 +137,12 @@ export function parseApplyPatchEnvelope(command) {
   const targets = [];
   let lastUpdateSource = null;
   for (let i = start + 1; i < end; i++) {
-    const line = lines[i];
+    // trimStart, not trim: the applier ignores INDENTATION when classifying a header, so we must
+    // too or an indented directive's target vanishes from this list while the file still gets
+    // written. A `+`/`-` prefix is not whitespace and still marks the line as hunk content.
+    const line = lines[i].trimStart();
     if (!line.startsWith("*** ")) continue;              // hunk content — prefixed, never a directive
+    if (NON_TARGET_DIRECTIVE_RE.test(line.trimEnd())) continue;   // real grammar, names no path
     const m = DIRECTIVE_RE.exec(line);
     if (!m) {
       // An unknown `*** …` directive means this Codex version speaks a dialect this parser does

@@ -141,6 +141,173 @@ test("the THREE CLASSES are distinct, and the middle one is the polarity change 
   }
 });
 
+test("ROUND-2 seat findings: indented directives, non-target grammar, hidden separators", () => {
+  // Each of these came from a review seat and each was executed both ways before and after the fix.
+  //
+  // 1. AN INDENTED DIRECTIVE IS A DIRECTIVE. Codex's own patch parser trims a line before deciding
+  // whether it is a header, so `␠*** Add File: x` names a target to the applier. Anchoring at column
+  // 0 meant that target was silently dropped from the gated list while the file still got written —
+  // a real fail-open, and precisely the compliance-yet-bypass shape being hunted.
+  const indented = parseApplyPatchEnvelope(envelope(
+    "*** Add File: docs/safe.md", "+x", " *** Add File: ../sibling/escaped.mjs", "+y",
+  ));
+  assert.deepEqual(indented.targets, ["docs/safe.md", "../sibling/escaped.mjs"],
+    "an indented directive is gated, not read as hunk content");
+  // …and the `+`-prefixed spoof must STILL be content, or the fix trades one defect for its mirror.
+  assert.deepEqual(parseApplyPatchEnvelope(envelope("*** Add File: doc.md", "+*** Add File: evil.txt")).targets,
+    ["doc.md"], "a `+` prefix is not whitespace — quoted patch syntax still gates no phantom path");
+
+  // 2. REAL GRAMMAR THAT NAMES NO PATH. `*** End of File` and `*** Environment ID:` are both in the
+  // shipped CLI's patch vocabulary. Rejecting them as "unknown" fails closed — safe in direction,
+  // but it BRICKS a legal patch, and a control that blocks legitimate work gets switched off.
+  assert.deepEqual(parseApplyPatchEnvelope(envelope("*** Add File: a.txt", "+x", "*** End of File")).targets, ["a.txt"]);
+  assert.deepEqual(parseApplyPatchEnvelope(envelope("*** Environment ID: abc-123", "*** Add File: a.txt", "+x")).targets, ["a.txt"]);
+  // A genuinely unknown directive still denies — the brick fix must not become a skip-anything rule.
+  assert.equal(parseApplyPatchEnvelope(envelope("*** Add File: a.txt", "+x", "*** Rename File: b.txt")).ok, false);
+
+  // 3. LINE TERMINATORS THIS PARSER DOES NOT SPLIT ON. A U+2028 (or lone CR) lets a directive hide
+  // inside what we read as one content line. Rather than guess which splitters agree with us, the
+  // envelope is refused — the same "cannot fully account for it" rule every other odd shape gets.
+  for (const sep of ["\u2028", "\u2029", "\r"]) {
+    const smuggled = `*** Begin Patch\n*** Add File: legit.txt\n+hello${sep}*** Add File: evil.txt\n+HACKED\n*** End Patch`;
+    const r = parseApplyPatchEnvelope(smuggled);
+    assert.equal(r.ok, false, `a ${JSON.stringify(sep)} separator is refused, not silently half-parsed`);
+    assert.ok(!r.targets.includes("legit.txt"), "…and no partial target list is handed back");
+  }
+  // CRLF is a normal line ending and must still parse — the lone-CR rule must not catch it.
+  assert.deepEqual(parseApplyPatchEnvelope("*** Begin Patch\r\n*** Add File: a.txt\r\n+x\r\n*** End Patch\r\n").targets, ["a.txt"]);
+});
+
+test("ROUND-2: relative patch paths resolve against the APPLIER's cwd, not the repo root", () => {
+  // Found by the adversarial seat. `--project-dir` answers "which repo am I guarding"; it does NOT
+  // answer "what does `src/x.mjs` mean". The applier resolves a relative path against its own
+  // working directory, and those differ whenever a session runs in a SUBDIRECTORY — an ordinary
+  // monorepo case, no attacker required. Resolving against the wrong base checks a path that will
+  // never be written while the real one goes unchecked.
+  const R = guardRepo();
+  try {
+    mkdirSync(path.join(R.dir, "packages", "foo", "src"), { recursive: true });
+    R.clearLedger();
+    // Session cwd is packages/foo; the patch says `src/gated.mjs`, meaning packages/foo/src/gated.mjs.
+    const r = R.run("guard-lane-authoring.mjs", {
+      session_id: "wrong-session", cwd: path.join(R.dir, "packages", "foo"),
+      ...patchCall(envelope("*** Add File: src/gated.mjs", "+1")),
+    });
+    assert.match(r.stdout, /"permissionDecision":"deny"/, "the write is gated where it will actually land");
+    assert.equal(R.rows()[0].path, "packages/foo/src/gated.mjs",
+      "…and the ledger names the real path, not the one the repo root would have implied");
+
+    // A forged `cwd` pointing OUTSIDE the repo is the fail-closed direction, not an escape: every
+    // relative target then resolves outside, and an out-of-repo target is what the cross-repo guard
+    // denies. So the payload field is safe to trust as a resolution base.
+    // The forged cwd must sit outside EVERY allowed root — the repo, ~/.claude, /tmp and
+    // /private/tmp are all legitimate write destinations, so pointing at one of those proves
+    // nothing. (A first cut of this assertion used /private/tmp and failed for exactly that reason.)
+    const escaped = R.run("guard-cross-repo-writes.mjs", {
+      session_id: "s1", cwd: path.join(os.homedir(), "cs5b-forged-elsewhere"),
+      ...patchCall(envelope("*** Add File: src/gated.mjs", "+1")),
+    });
+    assert.match(escaped.stdout, /"permissionDecision":"deny"/, "a forged cwd blocks the write rather than smuggling it past");
+    assert.match(escaped.stdout, /outside this repo/);
+  } finally { R.cleanup(); }
+});
+
+test("ROUND-2: an UNREADABLE payload is denied by BOTH write guards, not just one", () => {
+  // The cross-repo guard's outermost JSON.parse still did `exit 0` — "cannot read it ⇒ permit it",
+  // the exact shape this release exists to remove, surviving at the one place the rewrite never
+  // looked. Its sibling had denied on the same bytes for releases, so the pair only stayed honest
+  // because any-deny-wins masked it. Each guard must be correct STANDALONE.
+  const R = guardRepo();
+  try {
+    for (const guard of ["guard-cross-repo-writes.mjs", "guard-lane-authoring.mjs"]) {
+      const r = spawnSync("node", [path.join(KIT, "hooks", guard)], {
+        cwd: R.dir, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: R.dir },
+        input: "not json at all {{{",
+      });
+      assert.equal(r.status, 0, `${guard} must still exit 0 (a hook that crashes blocks nothing)`);
+      assert.match(r.stdout, /"permissionDecision":"deny"/, `${guard} DENIES an unparseable payload`);
+    }
+    // EMPTY stdin is not an error and must stay an allow — the fix must not brick a probe or a
+    // harness that sends nothing.
+    const empty = spawnSync("node", [path.join(KIT, "hooks", "guard-cross-repo-writes.mjs")], {
+      cwd: R.dir, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: R.dir }, input: "",
+    });
+    assert.doesNotMatch(empty.stdout, /"permissionDecision":"deny"/, "empty stdin is still no-write-intent");
+  } finally { R.cleanup(); }
+});
+
+test("ROUND-2: `[features] hooks = true` is NOT a hooks registration — in init AND in the probe", async () => {
+  // A line-shaped `hooks\s*=` regex matches an ordinary Codex FEATURE FLAG, and reading that as
+  // "the adopter registered their own hooks" makes init skip its registration entirely: guards
+  // installed, nothing registered, exit 0. A false positive in this detector is a silent fail-open.
+  // Found by the cross-family seat against a config that really carries that flag.
+  const { tomlDeclaresHooks: initSays } = await import(path.join(KIT, "bin", "init.mjs"));
+  const { tomlDeclaresHooks: probeSays } = await import(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"));
+  const CORPUS = [
+    ["[features]\nhooks = true\n", false],
+    ["[features]\nhooks = true\n\n[other]\nx = 1\n", false],
+    ["[plugins.\"a@b\"]\nhooks = true\n", false],
+    ["hooks = \"./hooks.json\"\n", true],
+    ["  hooks = \"./hooks.json\"\n", true],
+    ["[hooks]\n", true],
+    ["[hooks.PreToolUse]\n", true],
+    ["[[hooks.PreToolUse]]\nmatcher = \"apply_patch\"\n", true],
+    ["hooks.PreToolUse = []\n", true],
+    ["# hooks = \"./hooks.json\"\n", false],
+    ["[shell_environment_policy]\ninherit = \"core\"\n", false],
+    ["", false],
+  ];
+  for (const [toml, expected] of CORPUS) {
+    assert.equal(initSays(toml), expected, `init misreads ${JSON.stringify(toml)}`);
+    // The probe ships standalone into an adopter's scripts/ where bin/init.mjs does not exist, so
+    // its copy is forced. Pin the two EQUAL rather than trusting them to stay in step by hand.
+    assert.equal(probeSays(toml), expected, `the probe's copy disagrees on ${JSON.stringify(toml)}`);
+  }
+
+  // …and end to end: a config carrying only the feature flag still gets the kit's registration.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-features-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-codex-prompts-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    mkdirSync(path.join(dir, ".codex"), { recursive: true });
+    writeFileSync(path.join(dir, ".codex", "config.toml"), "[features]\nhooks = true\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "f", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(path.join(dir, ".codex", "hooks.json")),
+      "a [features] hooks flag must NOT suppress the kit's registration");
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
+});
+
+test("ROUND-2: the arming probe keys on a row about ITS OWN target, not on the ledger growing", async () => {
+  // "The ledger grew" is not the guard's signature — any unrelated guarded write in the same repo
+  // (another agent, another terminal) grows it, and the probe would report ARMED without its own
+  // write ever being seen. A false green in the check whose whole job is preventing false greens.
+  const probeMod = await import(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"));
+  assert.equal(typeof probeMod.tomlDeclaresHooks, "function",
+    "importing the probe must not execute it — it is a CLI only under isMain()");
+  const probeSrc = readFileSync(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"), "utf8");
+  assert.match(probeSrc, /row\.path === PROBE_REL/, "rows are counted only when they name the probe's target");
+  assert.match(probeSrc, /if \(isMain\(\)\) main\(\);/, "…and the script still runs as a CLI");
+  // Executed: a ledger full of UNRELATED rows must read as zero probe rows, so a concurrent write
+  // cannot manufacture an ARMED verdict.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-probecount-"));
+  try {
+    mkdirSync(path.join(dir, ".claude"), { recursive: true });
+    mkdirSync(path.join(dir, ".codex"), { recursive: true });
+    writeFileSync(path.join(dir, ".codex", "hooks.json"), "{}\n");
+    writeFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"),
+      JSON.stringify({ ts: "t", decision: "allow", state: "in-thread:T2", path: "src/unrelated.mjs" }) + "\n" +
+      "{ this line is torn and unparseable\n");
+    // With no `codex` on PATH the probe abstains — but the point here is that it never claims ARMED
+    // off the back of rows that are not about its target.
+    const r = spawnSync(process.execPath, [path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"), dir], {
+      encoding: "utf8", env: { ...process.env, PATH: path.join(dir, "nothing-here") },
+    });
+    assert.equal(r.status, 2);
+    assert.doesNotMatch(r.stdout, /^ARMED/m);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("resolveProjectRoot prefers what it is TOLD over what it can guess — a wrong root is a fail-open", () => {
   // A root that does not match the tree makes in-repo paths resolve as outside the repo, which
   // guard-lane-authoring skips. So precedence is argv → env → payload cwd → process.cwd().
@@ -439,6 +606,40 @@ test("CHARACTERIZATION — the SHELL-WRITE residual: this guard is a tripwire, a
   } finally { R.cleanup(); A.cleanup(); }
 });
 
+test("CHARACTERIZATION — PRE-EXISTING gating gaps this release inherits and does NOT close", () => {
+  // NOT INTRODUCED HERE and NOT FIXED HERE. `isGatedPath` short-circuits on `isStaticallySafe`, so
+  // anything under `docs/` or `memory/` is treated as prose REGARDLESS of extension — including
+  // `.mjs` and `.sh` — and the code allowlist has gaps of its own (`CMakeLists.txt` is not in it
+  // while `Makefile` is). Both predate v2.1 and bind the CLAUDE lane identically; v2.1 only makes
+  // the same predicate apply to a second lane.
+  //
+  // They are pinned here rather than left implicit for one reason: the Codex lane is new, and a
+  // reader who sees "the Codex lane is now guarded" should be able to find out exactly what that
+  // does NOT cover without reverse-engineering a regex. Changing the deny-set is a behaviour change
+  // to a live control in BOTH lanes and belongs in its own gated changeset — narrowing it here would
+  // silently re-scope shapes this changeset never set out to touch.
+  //
+  // If this test fails, someone changed the gating predicate. That is allowed — but it is a scope
+  // change, not a bugfix: update PORTABILITY.md § Known limitations in the same changeset.
+  const R = guardRepo();
+  try {
+    mkdirSync(path.join(R.dir, "memory"), { recursive: true });
+    for (const target of ["docs/malicious.sh", "memory/payload.mjs", "CMakeLists.txt", "build/module.cmake"]) {
+      const r = R.run("guard-lane-authoring.mjs", {
+        session_id: "undeclared-session", cwd: R.dir,
+        ...patchCall(envelope(`*** Add File: ${target}`, "+x")),
+      });
+      assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/,
+        `${target} is NOT gated by the write tripwire — pre-existing, and the commit floor is the backstop`);
+    }
+    // The control that proves the assertions above are about the PREDICATE and not about a broken
+    // guard: the same undeclared session writing an ordinary code path IS blocked.
+    assert.match(
+      R.run("guard-lane-authoring.mjs", { session_id: "undeclared-session", cwd: R.dir, ...patchCall(envelope("*** Add File: src/evil.mjs", "+x")) }).stdout,
+      /"permissionDecision":"deny"/, "src/evil.mjs IS gated — the guard is working, the predicate is narrow");
+  } finally { R.cleanup(); }
+});
+
 test("the gate-ladder SENSOR reads the Codex Bash payload and still never denies", () => {
   const R = guardRepo();
   try {
@@ -565,11 +766,10 @@ test("the REGISTERED command actually runs the guard — executed verbatim, both
   } finally { A.cleanup(); }
 });
 
-test("a repo path needing quotes is quoted AND disclosed — the one case that rests on an unverified assumption", () => {
-  // Whether Codex shells out or splits the command itself is NOT verified by execution here, and
-  // the two models disagree about quotes. For an ordinary path both agree on the unquoted form, so
-  // the question never arises; a path with a space is the only case that depends on the answer, and
-  // it is disclosed rather than silently assumed.
+test("a repo path needing quotes gets POSIX shell quoting, not JSON quoting", () => {
+  // Codex runs a hook command through a shell. JSON.stringify yields DOUBLE quotes, inside which a
+  // shell still expands `$VAR` and `$(cmd)` — and a hook that fails to START blocks nothing, so a
+  // mangled command string is a fail-open. Single quotes suppress all expansion.
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit codex quoted-"));   // deliberate spaces
   const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-codex-prompts-"));
   try {
@@ -578,11 +778,40 @@ test("a repo path needing quotes is quoted AND disclosed — the one case that r
     assert.equal(r.status, 0, r.stderr);
     const reg = JSON.parse(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8"));
     const cmd = reg.hooks.PreToolUse[0].hooks[0].command;
-    assert.match(cmd, /"/, "a path with spaces IS quoted (correct under a shell)");
-    assert.match(r.stderr, /had to be QUOTED/, "…and the assumption that buys is disclosed, not buried");
-    assert.match(r.stderr, /NOT verified by execution/);
-    // Under a shell it still works — the half we can check, checked.
+    assert.match(cmd, /'/, "a path needing quotes is SINGLE-quoted");
+    assert.doesNotMatch(cmd, /"/, "…never JSON double-quoted, which leaves shell expansion live");
+    assert.match(r.stderr, /shell-QUOTED/, "…and it is disclosed, not buried");
+    // Executed through a shell — the way Codex runs it.
     assert.equal(spawnSync("sh", ["-c", cmd], { encoding: "utf8", input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }) }).status, 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
+});
+
+test("a repo path carrying shell metacharacters cannot execute anything when the hook command runs", () => {
+  // The sharp end of the quoting fix: `$(...)`/backticks/`$VAR` survive inside double quotes. A repo
+  // directory is adopter-chosen, not attacker-chosen, so this is robustness rather than a live
+  // threat — but the failure mode is a command that mangles or runs something instead of starting
+  // the guard, and a guard that never starts blocks nothing.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-$(touch PWNED)-'q'-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-codex-prompts-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "a", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const cmd = JSON.parse(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8")).hooks.PreToolUse[0].hooks[0].command;
+    // A FRESH witness directory as the shell's cwd, so `touch PWNED` would land somewhere this run
+    // owns. An earlier version asserted on a fixed `$TMPDIR/PWNED` — and when a mutation reverted the
+    // quoting, the substitution really did fire and left that file behind, after which the assertion
+    // failed forever for reasons that had nothing to do with the code under test. A test that can be
+    // poisoned by its own past runs reports the wrong thing twice: once as a false pass, once as a
+    // false fail.
+    const witness = mkdtempSync(path.join(os.tmpdir(), "kit-witness-"));
+    const run = spawnSync("sh", ["-c", cmd], {
+      cwd: witness, encoding: "utf8",
+      input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }),
+    });
+    assert.equal(run.status, 0, `the guard must start from a path with metacharacters: ${run.stderr}`);
+    assert.deepEqual(readdirSync(witness), [], "…and the command substitution in the path never executed");
+    rmSync(witness, { recursive: true, force: true });
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
 
@@ -716,6 +945,48 @@ test("the TRUST caveat ships in the same breath as \"installed\", and the kit ne
     assert.ok(mentions >= 2, "the doctrine is stated explicitly, not merely absent (an empty scan would pass vacuously)");
     // …and nothing in the generated tree passes it.
     assert.doesNotMatch(readFileSync(path.join(A.dir, ".codex", "hooks.json"), "utf8"), /--dangerously/);
+  } finally { A.cleanup(); }
+});
+
+test("the BOOT-READ entry stubs agree with PORTABILITY about what binds the Codex lane", () => {
+  // The defect this pins: v2.1 rewrote PORTABILITY.md to say the guards DO bind the Codex lane once
+  // trust is granted, while `AGENTS.md`, `CLAUDE.md` and `core/BINDINGS.md` — generated into EVERY
+  // adopter, boot-read, marked CLASS: BINDING — still said the opposite, unmarked. An agent reading
+  // its own entry stub would have been told a control that binds it does not. Found by a cold seat;
+  // nothing in the suite read generated entry-stub CONTENT before this test, which is why it
+  // survived the release that made it false.
+  //
+  // VERIFY BY GENERATING, not by grepping the templates: the templates are the input, and what an
+  // adopter is bound by is the OUTPUT on disk.
+  const A = adoptCodex();
+  try {
+    const stubs = {
+      "AGENTS.md": readFileSync(path.join(A.dir, "AGENTS.md"), "utf8"),
+      "CLAUDE.md": readFileSync(path.join(A.dir, "CLAUDE.md"), "utf8"),
+      "core/BINDINGS.md": readFileSync(path.join(A.dir, "core", "BINDINGS.md"), "utf8"),
+    };
+    for (const [name, text] of Object.entries(stubs)) {
+      // The stale universals, in the spellings the templates actually used.
+      assert.doesNotMatch(text, /never loads? them/i, `${name} still says a Codex lane never loads the guards`);
+      assert.doesNotMatch(text, /bind ONLY the Claude Code lane/i, `${name} still says the guards bind only Claude`);
+      assert.doesNotMatch(text, /do NOT bind a Codex/i, `${name} still says the guards do not bind Codex`);
+      // …and each must carry the QUALIFIER, or it swings from understating to overstating.
+      assert.match(text, /hook trust/i, `${name} must name the trust gate — "registered" is not "armed"`);
+      assert.match(text, /SILENTL?Y|silently/, `${name} must say the skip is silent, or a clean run reads as proof`);
+      assert.match(text, /check-codex-hooks-armed/, `${name} must point at the one thing that settles it`);
+    }
+    // The asymmetry TABLE is the canonical statement, so its Codex column must not still read
+    // "NOT enforced" for the three guards.
+    const table = stubs["core/BINDINGS.md"];
+    for (const guard of ["guard-cross-repo-writes", "guard-lane-authoring", "guard-gate-ladder"]) {
+      const row = table.split("\n").find((l) => l.includes(guard) && l.startsWith("|"));
+      assert.ok(row, `the asymmetry table still has a row for ${guard}`);
+      assert.doesNotMatch(row, /NOT enforced/, `${guard}'s Codex column still says NOT enforced`);
+      assert.match(row, /hook trust/, `${guard}'s Codex column must carry the trust qualifier`);
+    }
+    // No unfilled placeholder in the canonical table — it shipped as a literal `{{OTHER_LANE}}`.
+    assert.doesNotMatch(table, /\{\{OTHER_LANE\}\}/, "the asymmetry table's lane column is filled, not a placeholder");
+    assert.match(table, /Codex lane/, "…with the lane this kit actually ships hooks for");
   } finally { A.cleanup(); }
 });
 

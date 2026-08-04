@@ -22,6 +22,13 @@ The Codex column is not the Claude column. Read the qualifier in it as part of t
 The formula for the Codex write guards, in full, because every word of it is load-bearing:
 **installed · fail-closed by design · INERT unless your Codex run carries hook trust.**
 
+"Fail-closed **by design**" is a statement about the guards' own decisions — given a payload they
+read, an input they cannot account for produces a deny. It is **not** a claim that every failure mode
+ends in a block, and one distinction matters: Codex blocks a tool call on a well-formed *deny*, so a
+hook that never STARTS (a broken command string, a missing interpreter, a timeout) blocks nothing at
+all. Fail-closed logic inside a hook cannot save a hook that did not run — which is the same reason
+the trust gate matters, and the same reason the answer is a probe rather than an assurance.
+
 Two things that qualifier does *not* mean. It is not a soft caveat you can assume away: an untrusted
 hook is skipped **silently**, so a clean run is not evidence of anything (§ The trust gate). And it is
 not something the kit can fix for you — arming it is a human act, by design (§ Why the kit will never
@@ -86,12 +93,24 @@ kind.** Three classes, and this section marks which is which:
    yourself before betting on them** — and for the one that matters most, you do not have to
    improvise: `scripts/check-codex-hooks-armed.mjs` is that reproduction, packaged.
 
-**One assumption this release does NOT claim to have verified.** Whether Codex hands a hook `command`
-string to a shell or splits it itself is unknown here, and the two models disagree about quoting. So
-`init` writes the command **unquoted** whenever the repo path allows it — a form both models execute
-identically, and the test suite runs the generated command *both ways*. A repo path containing spaces
-or quotes is the only case that depends on the answer; `init` quotes it and **prints a warning saying
-exactly that**. Adopting from a path without spaces removes the question.
+**How the hook command is executed, and why the quoting matters.** Codex runs a hook `command`
+through a **shell** (the shipped CLI's hook command runner sits directly beside its `SHELL`/`-lc`
+strings; a cross-family review seat reported the same from Codex's source). An earlier draft of this
+section said the execution model was unknown — that was wrong, and it mattered, because the fallback
+quoting it chose was JSON double-quotes, inside which a shell still expands `$VAR` and `$(cmd)`. The
+generated command now uses POSIX **single** quotes, and only when the repo path needs them; an
+ordinary path is written unquoted. **A hook that fails to START does not block anything** — Codex
+blocks on a well-formed deny, not on a broken command — so a mis-quoted path would be a fail-open,
+which is why `init` warns when it had to quote and why the arming probe is the thing that settles it.
+
+**One claim this release DOWNGRADES rather than repeats.** v2.0 said the origin repo's
+`Write|Edit|MultiEdit|NotebookEdit` matchers "match nothing" in Codex. What is *observed* is
+narrower: every captured write arrived as `apply_patch` and every command as `Bash`. A cross-family
+seat asserted that Codex additionally exposes `Write`/`Edit` as **aliases** for `apply_patch`; that
+was not reproducible against the CLI on this machine, and it is not settled here. It does not change
+what the kit does — the canonical names are correct under either answer, and v2.0's conclusion rested
+on the trust gate independently — but if the alias claim is true, then "those matchers select
+nothing" is too strong, and it is recorded here as **open** rather than repeated as fact.
 
 The origin repo is a private repository not distributed with this kit, so its `.gitignore` line
 numbers below are cited for the author's audit trail, not as something you can resolve.
@@ -104,11 +123,13 @@ gitignored, so their history is unrecoverable — the same fact that makes reaso
 flat "never, not once" unprovable. What can be shown is that the registration as it stands selects
 nothing and is untrusted.) Two independent reasons, either sufficient on its own:
 
-1. **The matchers match nothing.** That registration listens for tools named
+1. **The matchers do not name the tools Codex was observed to use.** That registration listens for
    `Write|Edit|MultiEdit|NotebookEdit`. Across every invocation observed, a file write arrived as
    `tool_name: "apply_patch"` and a command as `tool_name: "Bash"` — never those names. (An absence
-   over observed runs, not a proof that no such tool exists anywhere in Codex; it is enough, because
-   a matcher that never fired in any observed write is not guarding writes.)
+   over observed runs, not a proof that no such tool exists anywhere in Codex. **Weakened at v2.1**:
+   a cross-family seat asserted Codex aliases `Write`/`Edit` onto `apply_patch`, which was not
+   reproducible here — see the provenance note above. If that is true, this reason is wrong and
+   reason 2 carries the conclusion alone.)
 2. **Trust was never granted** (see below). Even with correct matchers, they would have been skipped.
 
 Two further facts made that attempt unrepairable by copying rather than rebuilding — they are why

@@ -18,10 +18,12 @@ allow everything or block everything. v2.1 ships the control those findings call
   `apply_patch` call — including **both endpoints of a rename**, since `*** Move to:` can carry a file
   out of a gated directory as easily as into one. An envelope it cannot fully account for is
   **denied**, never partly trusted.
-- **The registration uses the REAL Codex tool names** (`apply_patch`, `Bash`). The Claude spelling
-  `Write|Edit|MultiEdit|NotebookEdit` matches nothing there — one of the two independent reasons the
-  origin repo's Codex hooks could never have fired. The accepted `.codex/hooks.json` schema was
-  determined by **executing** Codex's own parser, which rejects the Claude shape outright.
+- **The registration uses the canonical Codex tool names** (`apply_patch`, `Bash`) — the names every
+  captured payload actually carries. The accepted `.codex/hooks.json` schema was determined by
+  **executing** Codex's own parser, which rejects the Claude-shaped file outright. (v2.0 said the
+  Claude matcher spelling "matches nothing" in Codex; a review seat contested that with an alias
+  claim this work could not reproduce, so `PORTABILITY.md` now records it as open. The canonical
+  names are correct either way.)
 - **A narrow, deliberate polarity change.** `guard-cross-repo-writes` used to `exit 0` whenever it
   found no target. That is invisible in the Claude lane and a total fail-open in the Codex lane, where
   *every* write lands in that branch. It is now three named classes: extractable ⇒ gate ·
@@ -788,9 +790,13 @@ writes `.claude/kit.config.json` from your flags, and prints a checklist. Then: 
 
 ## The one thing you must not miss
 
-**Enforcement is asymmetric. The three PreToolUse hooks bind ONLY the Claude Code lane.** A Codex or
-other non-Claude agent never loads them. What binds *every* lane is the prose in `AGENTS.md` + the
-`pre-commit` hook. **Read `PORTABILITY.md` before you tell your team the guards protect them.**
+**Enforcement is still asymmetric, and v2.1 narrowed the gap without closing it.** The PreToolUse
+guards now register in the Codex lane too — but they are **INERT there until a human grants Codex
+hook trust in an interactive session**, and an untrusted hook is skipped **silently**. They also bind
+write *tools* only: a write issued through a plain shell command is invisible to them, and in the
+Codex lane that is a main road. A human with an editor loads nothing at all. What binds *every* lane
+is the prose in `AGENTS.md` + the `pre-commit` hook. **Read `PORTABILITY.md`, and run
+`node scripts/check-codex-hooks-armed.mjs`, before you tell your team the guards protect them.**
 
 ## Parameterization is fail-closed by design
 

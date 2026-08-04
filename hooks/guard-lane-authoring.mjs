@@ -19,7 +19,7 @@
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, statSync, writeSync } from "node:fs";
 import path from "node:path";
-import { extractTargets, resolveProjectRoot } from "./payload-targets.mjs";
+import { extractTargets, resolvePatchBase, resolveProjectRoot } from "./payload-targets.mjs";
 
 const DECLARATION = path.join(".claude", "task-lane.json");
 const LEDGER = path.join(".claude", "lane-ledger.jsonl");
@@ -415,9 +415,13 @@ process.stdin.on("end", () => {
   // Classify EVERY target before deciding anything. A patch envelope is applied as a unit, so a
   // per-target early exit would decide the whole call on whichever path happened to come first —
   // the fail-open a multi-target envelope is built to exploit.
+  // A RELATIVE target resolves against the APPLIER's working directory, not the repo root — they
+  // differ whenever the session runs in a subdirectory, so resolving against the wrong base gates a
+  // path that will never be written while the real one goes unchecked.
+  const patchBase = resolvePatchBase(input, projectRoot);
   const gated = [];
   for (const target of extraction.targets) {
-    const abs = path.resolve(projectRoot, String(target));
+    const abs = path.resolve(patchBase, String(target));
     let rel = path.relative(projectRoot, abs);
     // Outside-repo test must not swallow an in-repo file whose NAME starts with ".." (e.g. root
     // "..x.mjs") — a bare startsWith("..") would let it bypass the gate, failing open. An

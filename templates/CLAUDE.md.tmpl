@@ -56,11 +56,15 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    on reboot and only commits survive it.
 
 ## Enforcement is asymmetric — say it plainly
-The three `.claude/hooks/*.mjs` guards are **Claude Code `PreToolUse` registrations. They bind ONLY
-the Claude Code lane** — a Codex / non-Claude agent never loads them. What binds **every** lane is
-prose (`AGENTS.md` + the required PM-disposition emission) **plus the `.githooks/pre-commit` hook**
-`init` installed (`core.hooksPath=.githooks`). See `PORTABILITY.md`. Do not imply the PreToolUse
-guards protect a non-Claude lane.
+The three PreToolUse guards register in **both** lanes since kit v2.1 (`.claude/settings.json` for
+Claude Code, a generated `.codex/hooks.json` for Codex). **In the Codex lane they are INERT until a
+human grants hook trust interactively, and an untrusted hook is skipped SILENTLY** — so "installed"
+is not "armed", and only `node scripts/check-codex-hooks-armed.mjs` tells you which. They bind write
+TOOLS, so a shell command that rewrites a file passes them in either lane; a human with an editor
+loads none of them. What binds **every** lane unconditionally is prose (`AGENTS.md` + the required
+PM-disposition emission) **plus the `.githooks/pre-commit` hook** `init` installed
+(`core.hooksPath=.githooks`). See `PORTABILITY.md`. Do not tell your team the Codex lane is guarded
+until the arming probe says it is.
 
 ## Local traps worth knowing
 - **Env flags are toggled, never deleted;** boolean reads use explicit string compare (`=== "false"`),

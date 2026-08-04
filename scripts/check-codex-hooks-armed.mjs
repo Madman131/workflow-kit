@@ -51,18 +51,60 @@
 //    Knowing where a consent grant lives never licenses writing it.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const LEDGER_REL = path.join(".claude", "lane-ledger.jsonl");
 const PROBE_REL = "kit-armed-probe.mjs";   // gated as code, and inside Codex's writable project scope
 
-// Count COMPLETE rows only. A partial trailing line is not a decision the guard finished recording,
-// and counting it would let a torn write read as evidence the control ran.
+// Count COMPLETE rows ABOUT THIS PROBE'S OWN TARGET. Two separate reasons, and the second was a
+// false-green route found in review:
+//  · A partial trailing line is not a decision the guard finished recording, so only parseable rows
+//    count — otherwise a torn write reads as evidence the control ran.
+//  · Counting EVERY row means any unrelated guarded write happening in this repo at the same time
+//    (another agent, another terminal, a background task) inflates the count and the probe reports
+//    ARMED without our probe write ever having been seen. "The ledger grew" is not the guard's
+//    signature; "the ledger grew A ROW ABOUT THE FILE I ASKED FOR" is.
 function ledgerRows(abs) {
   if (!existsSync(abs)) return 0;
-  try { return readFileSync(abs, "utf8").split("\n").filter((l) => l.trim()).length; }
+  let text;
+  try { text = readFileSync(abs, "utf8"); }
   catch { return -1; }                      // unreadable ⇒ caller ABSTAINS rather than guessing
+  let n = 0;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }   // torn/partial line: not a finished decision
+    if (row && typeof row === "object" && row.path === PROBE_REL) n++;
+  }
+  return n;
+}
+
+// Does this `.codex/config.toml` REGISTER HOOKS? A DELIBERATE SECOND COPY of `bin/init.mjs`'s
+// function of the same name, and the duplication is forced rather than lazy: this script installs
+// into an adopter's `scripts/` where `bin/init.mjs` does not exist, so it cannot import it. The kit's
+// rule about hand-kept copies still applies, so the two are pinned EQUAL over a shared corpus by
+// tests/codex-guard.test.mjs — if they ever disagree, the suite goes red.
+//
+// The TABLE CONTEXT is the point. A line-shaped `hooks\s*=` regex matches `hooks = true` under
+// `[features]`, an ordinary Codex feature flag that registers nothing — and reading that as "the
+// adopter registered their own hooks" makes this probe excuse an unregistered lane. Only a
+// `[hooks…]` table header or a TOP-LEVEL `hooks` key counts.
+export function tomlDeclaresHooks(text) {
+  let table = "";
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.replace(/^\s+/, "");
+    if (!line || line.startsWith("#")) continue;
+    const header = /^\[\[?\s*([^\]]*?)\s*\]\]?/.exec(line);
+    if (header) {
+      table = header[1];
+      if (table === "hooks" || table.startsWith("hooks.")) return true;
+      continue;
+    }
+    if (table === "" && /^hooks\s*(?:=|\.)/.test(line)) return true;
+  }
+  return false;
 }
 
 function main() {
@@ -77,7 +119,7 @@ function main() {
     // send someone to re-run init, which will decline again for the same reason and look broken.
     const cfg = path.join(repo, ".codex", "config.toml");
     let theirs = false;
-    try { theirs = /^\s*(?:\[{1,2}\s*hooks[.\]]|hooks\s*[.=])/m.test(readFileSync(cfg, "utf8")); } catch { /* absent */ }
+    try { theirs = tomlDeclaresHooks(readFileSync(cfg, "utf8")); } catch { /* absent */ }
     if (theirs) {
       console.log(`  Your .codex/config.toml declares hooks ITSELF, so the kit did not add a second`);
       console.log(`  registration. Those hooks are yours: this check cannot speak for them.`);
@@ -131,4 +173,18 @@ function main() {
   process.exit(1);
 }
 
-main();
+// Run ONLY as a CLI, so the suite can import `tomlDeclaresHooks` and pin it against init's twin
+// without this script spawning a real `codex exec` during `npm test`.
+//
+// realpathSync, NOT path.resolve — the same trap check-doc-size.mjs documents: resolve() does not
+// follow symlinks while fileURLToPath() yields a realpath, so under a symlinked invocation path
+// (macOS /tmp -> /private/tmp, where worktrees live) they differ, main() never runs, and the CLI
+// exits 0 with NO OUTPUT. For a probe whose entire job is answering "is this armed?", exiting 0 in
+// silence is the worst possible failure: it is a pass.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+
+if (isMain()) main();

@@ -22,14 +22,17 @@ thread** · Builder = **{{DEFAULT_BUILDER}}** · Cold reviewer = **blind {{COLD_
 seat.
 
 ## ⚠ Enforcement asymmetry — which controls bind which lane
-*(This is the canonical statement of the PM-portability caveat. The three PreToolUse guards are Claude
-Code harness registrations; a non-Claude lane never loads them.)*
+*(This is the canonical statement of the PM-portability caveat. Since kit v2.1 the PreToolUse guards
+register in the Codex lane too — but read the qualifier in that column as part of the value: a Codex
+hook does not run until a human grants hook trust in an INTERACTIVE session, and an untrusted hook is
+skipped SILENTLY. `node scripts/check-codex-hooks-armed.mjs` is what settles it. All three bind write
+TOOLS only: a file rewritten by a plain shell command is invisible to them in either lane.)*
 
 | Control | Claude lane | {{OTHER_LANE}} lane | Human by hand |
 |---|---|---|---|
-| `guard-cross-repo-writes` (writes outside repo blocked) | enforced | **NOT enforced** | ❌ |
-| `guard-lane-authoring` (declaration before a code write) | enforced | **NOT enforced** | ❌ |
-| `guard-gate-ladder` (surfaces the tier's ladder) | enforced (sensor) | **NOT enforced** | ❌ |
+| `guard-cross-repo-writes` (writes outside repo blocked) | enforced | **enforced — only once hook trust is granted** | ❌ |
+| `guard-lane-authoring` (declaration before a code write) | enforced | **enforced — only once hook trust is granted** | ❌ |
+| `guard-gate-ladder` (surfaces the tier's ladder) | enforced (sensor) | **enforced (sensor) — only once hook trust is granted** | ❌ |
 | `.githooks/pre-commit` (declaration at commit) | enforced | **enforced** | **enforced** |
 
 **What binds every lane** is prose (this file + `AGENTS.md` + the required PM-disposition emission)

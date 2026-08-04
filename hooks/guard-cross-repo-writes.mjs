@@ -34,7 +34,7 @@
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { extractTargets, resolveProjectRoot } from "./payload-targets.mjs";
+import { extractTargets, resolvePatchBase, resolveProjectRoot } from "./payload-targets.mjs";
 
 const SELF = fileURLToPath(import.meta.url);   // names the RUNNING file, so the message is lane-correct
 
@@ -52,8 +52,24 @@ function deny(reason) {
 let raw = "";
 process.stdin.on("data", (d) => { raw += d; });
 process.stdin.on("end", () => {
+  // UNREADABLE INPUT IS AN UNREADABLE WRITE. This line used to `process.exit(0)` — the very
+  // "cannot read it ⇒ permit it" shape the rest of this file was rewritten to eliminate, left
+  // untouched at the outermost parse because the rewrite never looked above the target extraction.
+  // Its sibling guard has denied on this input for releases (`malformed-hook-input`), so the two
+  // controls on the same matcher disagreed about the same bytes, and only the sibling's deny kept
+  // the pair honest. Found by a cold seat. Empty stdin is still not an error: it parses as `{}` and
+  // falls through to "no write intent" exactly as before.
   let input = {};
-  try { input = JSON.parse(raw || "{}"); } catch { process.exit(0); }
+  try {
+    input = JSON.parse(raw || "{}");
+  } catch {
+    deny(
+      `Write blocked by ${SELF}: the hook input could not be parsed as JSON, so this guard cannot ` +
+      `tell what is being written or where. It fails CLOSED rather than permitting a write it never ` +
+      `read. If a harness is sending a payload shape this guard does not understand, report it — do ` +
+      `not disable the guard.`
+    );
+  }
 
   const result = extractTargets(input);
   // WRITE-SHAPED BUT UNREADABLE ⇒ DENY. Narrow by construction: it needs an `apply_patch` tool name
@@ -77,9 +93,13 @@ process.stdin.on("end", () => {
   ];
   const within = (root, abs) => abs === root || abs.startsWith(root + path.sep);
 
+  // A RELATIVE target resolves against the APPLIER's working directory, not against the repo root —
+  // they differ whenever the session runs in a subdirectory. Resolving against the wrong base checks
+  // a path that will never be written while the real one goes unchecked.
+  const patchBase = resolvePatchBase(input, projectRoot);
   const outside = [];
   for (const target of result.targets) {
-    const abs = path.resolve(projectRoot, String(target));
+    const abs = path.resolve(patchBase, String(target));
     if (!roots.some((root) => within(root, abs))) outside.push(abs);
   }
   if (!outside.length) process.exit(0);

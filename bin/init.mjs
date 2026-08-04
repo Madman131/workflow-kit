@@ -182,6 +182,37 @@ function warn(msg) { console.warn(`  ! ${msg}`); }
 function isPlainObject(v) {
   return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
 }
+
+// Does this `.codex/config.toml` REGISTER HOOKS? Codex accepts registrations in either that file or
+// `.codex/hooks.json` and warns when both carry them, so this decides whether the kit writes its
+// registration at all — which makes a false POSITIVE here a silent fail-open: guards installed,
+// nothing registered, `init` exits 0 saying the adopter's own hooks are in charge when they have
+// none.
+//
+// THE TABLE CONTEXT IS THE WHOLE POINT, and a line-shaped regex cannot see it. A bare
+// `/^\s*hooks\s*[.=]/m` matches `hooks = true` under `[features]` — an ordinary Codex feature flag
+// that registers nothing, and one that appears in real config files. (Found by the cross-family
+// review seat, against a config that actually carries it.) So the current TABLE is tracked, and only
+// two things count: a `[hooks…]`/`[[hooks…]]` table header, or a `hooks` key at TOP LEVEL — the
+// scalar `hooks = "./hooks.json"` form Codex's own schema uses.
+export function tomlDeclaresHooks(text) {
+  let table = "";                       // "" = top level
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.replace(/^\s+/, "");
+    if (!line || line.startsWith("#")) continue;
+    const header = /^\[\[?\s*([^\]]*?)\s*\]\]?/.exec(line);
+    if (header) {
+      table = header[1];
+      // `[hooks]`, `[hooks.PreToolUse]`, `[[hooks.PreToolUse]]` — the table form of a registration.
+      if (table === "hooks" || table.startsWith("hooks.")) return true;
+      continue;
+    }
+    // A `hooks` KEY only registers anything at top level. Under any other table it is that table's
+    // field — `[features] hooks = true` being the case that matters.
+    if (table === "" && /^hooks\s*(?:=|\.)/.test(line)) return true;
+  }
+  return false;
+}
 // Single non-empty path segment (no separators) — the shape the loaders' isSegmentArray requires.
 function isSegment(s) { return typeof s === "string" && s.length > 0 && !s.includes("/") && !s.includes("\\"); }
 
@@ -710,7 +741,7 @@ function main() {
         // `hooks = "./hooks.json"` is the one Codex's own schema strings use, so matching only
         // `[hooks]` left the most likely spelling undetected — a fail-open in a DETECTOR, which is
         // how an adopter ends up assuming the kit reconciled hooks it never saw. (Found by a cold seat.)
-        try { declaresHooks = /^\s*(?:\[{1,2}\s*hooks[.\]]|hooks\s*[.=])/m.test(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
+        try { declaresHooks = tomlDeclaresHooks(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
         warn(`.codex/config.toml: EXISTING kept (--force to update)${declaresHooks
           ? " — and it DECLARES HOOKS."
           : ""}`);
@@ -764,15 +795,22 @@ function main() {
         // `Write|Edit|MultiEdit|NotebookEdit` matches NOTHING in Codex: writes arrive as
         // `apply_patch` and commands as `Bash`. That mismatch is one of the two independent reasons
         // the origin repo's Codex hooks could never have fired.
-        // QUOTE ONLY WHEN THERE IS NO CHOICE. Whether Codex hands this string to a shell or splits
-        // it itself is NOT something this kit has verified by execution, and the two models disagree
-        // about quotes: under a shell `node "/a b/x.mjs"` is right and unquoted is wrong; under a
-        // naive split it is the reverse. For an ordinary path both models agree on the UNQUOTED
-        // form, so that is what gets written and the question never arises. A path that genuinely
-        // needs quoting is the only case that rests on the unverified assumption — so it is quoted
-        // AND the adopter is told, rather than the whole registration silently depending on a guess.
+        // SHELL QUOTING, because Codex runs a hook `command` through a SHELL. (The shipped CLI's hook
+        // command runner sits directly beside its `SHELL` / `-lc` strings; a cross-family review seat
+        // independently reported the same from Codex's source. An earlier draft here said the
+        // execution model was unknown and hedged by staying unquoted where possible — the hedge was
+        // harmless, the reasoning was wrong, and the QUOTING it fell back to was unsafe.)
+        //
+        // SINGLE quotes, not `JSON.stringify`. JSON gives DOUBLE quotes, inside which a shell still
+        // expands `$VAR`, `` `cmd` `` and `$(cmd)` — so a repo path containing any of those would be
+        // mangled or would execute something. And a hook that fails to start does not block the tool:
+        // Codex only blocks on a well-formed deny, so a broken command string is a FAIL-OPEN. POSIX
+        // single quotes suppress all expansion; the `'\''` dance is the only escape they need.
+        //
+        // An ordinary path still comes out UNQUOTED, which keeps the common case identical under any
+        // executor and keeps the generated file readable.
         const SHELL_SAFE = /^[A-Za-z0-9._\/@+=-]+$/;
-        const arg = (s) => (SHELL_SAFE.test(s) ? s : JSON.stringify(s));
+        const arg = (s) => (SHELL_SAFE.test(s) ? s : `'${String(s).split("'").join(`'\\''`)}'`);
         const needsQuoting = !SHELL_SAFE.test(T);
         const nodeCmd = (file) => `node ${arg(path.join(T, ".codex", "hooks", file))} --project-dir ${arg(T)}`;
         const entry = (file, statusMessage) => ({ type: "command", command: nodeCmd(file), timeout: 10, statusMessage });
@@ -802,7 +840,7 @@ function main() {
         if (writeWithBackup(hooksJson, JSON.stringify(registration, null, 2) + "\n")) {
           log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 2 write guards (fail CLOSED) · Bash ⇒ the gate-ladder sensor (never denies)`);
           if (needsQuoting) {
-            warn(`this repo's path contains characters that had to be QUOTED inside the .codex/hooks.json hook commands (${T}). Those commands are correct if Codex runs them through a shell — which this kit has NOT verified by execution. Run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust: if it says NOT ARMED on hooks you know are trusted, this is the first thing to suspect, and adopting from a path without spaces or quotes removes the question entirely.`);
+            warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
           }
         } else {
           warn(`.codex/hooks.json: REFUSED — the existing file could not be backed up, so it was left UNCHANGED. The Codex guards are registered from whatever that file says, which is not what this run wrote.`);
@@ -862,6 +900,13 @@ function main() {
     // unfilled-placeholder scan below reports it and the post-run checklist names it — the seat is
     // visibly incomplete rather than silently mis-modelled.
     CODEX_COLD_MODEL: args.codexColdModel || "{{CODEX_COLD_MODEL}}",
+    // The non-Claude lane the asymmetry table names. It shipped as an UNFILLED placeholder in every
+    // generated core/BINDINGS.md — no flag, no fill logic, so the "canonical statement of the
+    // PM-portability caveat" had a literal `{{OTHER_LANE}}` in its column header. It is not a
+    // judgment call the adopter has to make: the lane this kit ships hooks and a review seat for is
+    // Codex, so it is filled, not asked for. (Found by a cold seat; pre-existing since the template
+    // was written.)
+    OTHER_LANE: "Codex",
     KIT_VERSION,
   };
   const gen = [
@@ -1007,4 +1052,22 @@ function main() {
   );
 }
 
-main();
+// RUN ONLY AS A CLI. This file exports `tomlDeclaresHooks` so the suite can pin it against the
+// probe's forced copy — and an unguarded `main()` turns that import into a full ADOPT of whatever
+// directory the importer happens to be running in. It did exactly that once here: a test imported
+// this module and init adopted the KIT'S OWN WORKING TREE, writing entry stubs, a `.codex/` lane and
+// `.claude/` registrations into it, and setting `core.hooksPath` in the SHARED git config, which a
+// worktree layout propagates to the primary clone. Nothing was lost (every write is refuse-by-
+// default without `--force`), but a module whose import has side effects that large has no business
+// being importable without this guard.
+//
+// realpathSync, NOT path.resolve — the trap check-doc-size.mjs documents: resolve() does not follow
+// symlinks while fileURLToPath() yields a realpath, so under a symlinked invocation path (macOS
+// /tmp -> /private/tmp, where worktrees live) they differ and the CLI would exit 0 doing nothing.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+
+if (isMain()) main();
