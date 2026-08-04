@@ -48,6 +48,10 @@ vocabulary; write your real rows OUTSIDE the fence.
 `AR` = archive ready? — is this thread closed out and verified on the remote.
 ```
 The first is an INSTRUCTION (its gloss asks nothing); the second is a QUESTION (its gloss ends in
-"?"). Copy that exact format — backticks and all — but write your rows below, outside the fence.
+"?"). Copy that exact format — SINGLE backticks, exactly as shown; a double-backtick row will not
+parse, and the sensor will warn that coverage is off. Treat the row shape as RESERVED NOTATION for
+this file: a backticked ALL-CAPS token followed by "=" reads as a definition WHEREVER it appears in
+this doc, so keep that shape out of unrelated prose — and out of your glosses: inside a gloss it
+reads as the NEXT definition and ends the current one. Write your rows below, outside the fence.
 
 {{OWNER_SHORTHAND}}

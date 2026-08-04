@@ -526,6 +526,20 @@ test("guard-owner-comms is a FAIL-OPEN sensor: dormant until named, then it disc
     // (the leading/trailing rows above pin the unindented shape).
     write("  <system-reminder>project context blob</system-reminder>\nAR", LONG);
     assert.equal(decide(), "block", "an INDENTED own-line injected block is still stripped");
+    // Two closed blocks GLUED on one line: stripping the first leaves a space, so the second then
+    // begins the line. A single strip pass left it for the UNCLOSED rule, whose to-end-of-turn
+    // sweep erased the Owner's REAL question after it — the size check silently off (cold seat,
+    // executed). The fixpoint loop strips them all; the Owner's text survives.
+    write("<system-reminder>a</system-reminder> <task-notification>b</task-notification>\nAR", LONG);
+    assert.equal(decide(), "block", "adjacent glued blocks are BOTH stripped and the question survives");
+    write("<system-reminder>a</system-reminder><task-notification>b</task-notification>", LONG);
+    assert.equal(decide(), "allow", "glued blocks with nothing typed leave no question to size");
+    // CHARACTERIZATION (anchor boundary, fails open): a closed block GLUED to the Owner's text with
+    // no separator does not begin a line, so it reads as Owner text — the harness emits injected
+    // blocks on their own lines, the principle both strip rules encode. Pinned so a harness
+    // formatting change flips this visibly instead of silently.
+    write("AR<system-reminder>project context blob</system-reminder>", LONG);
+    assert.equal(decide(), "allow", "a block glued to Owner text with no separator reads as Owner text (documented boundary)");
 
     // --- a subagent's prompt must not be mistaken for the Owner's message ---
     writeEntries([
@@ -659,6 +673,18 @@ test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an em
     assert.match(r.stderr, /guard-owner-comms WARN/, "the empty harvest is announced on stderr");
     assert.match(r.stderr, /coverage is OFF/, "…and the warning says what is actually off");
 
+    // (2b) A row a human plainly WROTE as a definition but the parser cannot read — double
+    // backticks, the fence deleted. Not harvestable (single backticks are the documented format),
+    // so it must at least WARN: zero parsed definitions while the doc visibly tries to define
+    // shorthand is exactly the silently-blind state the warning exists for (cold seat, executed).
+    writeFileSync(doc, "## How to talk to Alex — Owner, not a developer\n\n``AR`` = archive ready? — closed out on the remote.\n");
+    assert.deepEqual(ownerContract(dir).questionTokens, [], "a double-backtick row does not parse (single backticks are the format)");
+    assert.equal(ownerContract(dir).shorthandUnharvested, true, "…but it is visibly definition-shaped, so the flag is raised");
+    write("AR", LONG);
+    r = run();
+    assert.equal(r.decision, "allow", "unparsed vocabulary cannot block");
+    assert.match(r.stderr, /guard-owner-comms WARN/, "…and the blindness is announced, never silent");
+
     // (3) An ALL-INSTRUCTION vocabulary parsed fine — question coverage is legitimately empty, not
     // lost, so warning here would be a perpetual false alarm for that adopter.
     writeFileSync(doc, original.replace("{{OWNER_SHORTHAND}}", "`CMPD` = commit, merge, push, deploy."));
@@ -676,6 +702,41 @@ test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an em
     r = run();
     assert.equal(r.decision, "allow", "no section means no question tokens — AR is not shorthand here");
     assert.doesNotMatch(r.stderr, /WARN/, "an Owner with no shorthand section is a legitimate state, not a warning");
+
+    // (5) CRLF line endings (a doc edited on Windows). A blank CRLF line must still terminate a
+    // gloss: without \r in the boundary class, a "?" in unrelated LATER prose bled into an
+    // instruction's gloss and turned it into a question token — a false block (found by
+    // cross-family review, confirmed by execution both ways). The question row still harvests.
+    writeFileSync(doc, "## How to talk to Alex — Owner, not a developer\r\n\r\n" +
+      "`MIS` = make it so — proceed.\r\n\r\nDo you want examples?\r\n\r\n`AR` = archive ready? — closed out.\r\n");
+    assert.deepEqual(ownerContract(dir).questionTokens, ["AR"],
+      "CRLF: the question row harvests and the instruction stays an instruction");
+    write("MIS", LONG);
+    assert.equal(run().decision, "allow", "CRLF: a '?' beyond a blank CRLF line does not bleed into MIS's gloss");
+    write("AR", LONG);
+    assert.equal(run().decision, "block", "CRLF: AR is still a covered question token");
+
+    // (6) DOCUMENTED RESIDUAL (accepted — delete if the harvest is ever section-scoped): the
+    // `TOKEN` = gloss shape is RESERVED NOTATION throughout this doc (the template says so). An
+    // incidental backticked ALL-CAPS mention in unrelated prose harvests exactly as a line-start
+    // one already did pre-v1.5.1 — the unanchored harvest WIDENS that pre-existing exposure to
+    // mid-prose, it does not create the class (executed both ways against the old hook). Bounded:
+    // a false block also needs the Owner to type that token alone as a whole turn, and the sensor
+    // stays fail-open, one nudge per turn max.
+    writeFileSync(doc, original
+      .replace("{{OWNER_SHORTHAND}}", "")
+      .replace("Explaining more is not dumbing down",
+        "By default the `PORT` = 8080? staging value applies. Explaining more is not dumbing down"));
+    assert.deepEqual(ownerContract(dir).questionTokens, ["PORT"],
+      "RESERVED NOTATION: an incidental backticked ALL-CAPS mention in prose harvests (documented residual)");
+    // …and the same reserved shape INSIDE another token's gloss splits it: the embedded mention
+    // reads as the NEXT definition (ending AR's gloss before its "?") and harvests itself. Inherent
+    // to inline-prose support — a next definition mid-prose IS a gloss boundary — so the template
+    // documents it (keep the shape out of glosses) rather than the parser guessing. Executed both
+    // ways: the old line-anchored harvest read the whole line as AR's gloss (cold seat finding).
+    writeFileSync(doc, "## How to talk to Alex — Owner, not a developer\n\n`AR` = the config uses `ENV` = prod, is it ready?\n");
+    assert.deepEqual(ownerContract(dir).questionTokens, ["ENV"],
+      "RESERVED NOTATION in a gloss reads as the next definition (documented residual)");
   } finally { cleanup(); }
 });
 

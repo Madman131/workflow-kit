@@ -137,6 +137,13 @@ const SHORTHAND_DEF_RE = /`([A-Z][A-Z0-9]{0,7})`\s*=\s*/g;
 // (the mention would count as a successfully parsed row) and plants a phantom token one prose edit
 // away from gaining a "?". Same principle as stripFences: quoted format is not vocabulary.
 const FORMAT_MENTION_RE = /``[^\n]*?``/g;
+// The WARN's "does this doc even TRY to define shorthand?" detector — deliberately LOOSER than the
+// harvester. It also matches a double-backtick row (a shape a human plainly wrote as a definition
+// but the parser cannot read; single backticks are the documented format) and it runs on the RAW
+// text, so the fenced format examples and a kept intro-paragraph mention count as section
+// apparatus. Anything this shape with zero PARSED definitions means the sensor is blind to
+// vocabulary the doc visibly carries — that state warns, it never runs silently.
+const DEF_SHAPED_RE = /`{1,2}[A-Z][A-Z0-9]{0,7}`{1,2}\s*=\s*/;
 
 // Fenced blocks are not prose. Used for BOTH the shorthand harvest (the template's EXAMPLE rows live
 // in a fence, so an adopter who never replaced them does not get someone else's vocabulary treated as
@@ -174,19 +181,22 @@ export function ownerContract(projectRoot) {
   for (let i = 0; i < defs.length; i++) {
     const start = defs[i].index + defs[i][0].length;
     let gloss = src.slice(start, i + 1 < defs.length ? defs[i + 1].index : src.length);
-    const para = gloss.search(/\n[ \t]*\n/);   // a gloss never crosses a blank line
+    // A gloss never crosses a blank line — including a CRLF one. Without \r in the class, a doc
+    // saved with Windows line endings never terminates a gloss ("\r\n\r\n" has \r between the two
+    // \n), a "?" in unrelated later prose bleeds into an instruction's gloss, and the instruction
+    // becomes a question token — a false block (cross-family review, executed both ways).
+    const para = gloss.search(/\n[ \t\r]*\n/);
     if (para !== -1) gloss = gloss.slice(0, para);
     if (gloss.includes("?")) tokens.add(defs[i][1]);
   }
-  // ZERO definitions parsed while the doc visibly CARRIES definition-shaped rows (the fenced format
-  // examples count — every generated doc keeps them until the adopter deletes the section): question
-  // coverage is off, and this kit has no fallback vocabulary to fail toward — it knows no Owner.
-  // main() surfaces that as a NON-BLOCKING stderr warning instead of running silently uncovered.
-  // Zero definitions ANYWHERE is a legitimate no-shorthand doc: stay silent. This keys on parsed
-  // DEFINITIONS, not question tokens — an all-instruction vocabulary (no "?" in any gloss) parsed
-  // fine and warns about nothing.
-  const shorthandUnharvested = defs.length === 0 &&
-    text.replace(FORMAT_MENTION_RE, " ").match(SHORTHAND_DEF_RE) !== null;
+  // ZERO definitions parsed while the doc visibly CARRIES definition-shaped rows (per the LOOSE
+  // detector above — fenced examples, a double-backtick row, a kept format mention all count):
+  // question coverage is off, and this kit has no fallback vocabulary to fail toward — it knows no
+  // Owner. main() surfaces that as a NON-BLOCKING stderr warning instead of running silently
+  // uncovered. Zero definition-shaped text ANYWHERE is a legitimate no-shorthand doc: stay silent.
+  // This keys on parsed DEFINITIONS, not question tokens — an all-instruction vocabulary (no "?"
+  // in any gloss) parsed fine and warns about nothing.
+  const shorthandUnharvested = defs.length === 0 && DEF_SHAPED_RE.test(text);
   return { ownerName, questionTokens: [...tokens], shorthandUnharvested };
 }
 
@@ -265,7 +275,15 @@ const HARNESS_BLOCK_RE = new RegExp(String.raw`^[ \t]*<(${HARNESS_TAGS})\b[\s\S]
 const HARNESS_OPEN_TAIL_RE = new RegExp(String.raw`^[ \t]*<(?:${HARNESS_TAGS})\b[\s\S]*$`, "mi");
 function ownerTypedText(s) {
   if (typeof s !== "string") return "";
-  return s.replace(HARNESS_BLOCK_RE, " ").replace(HARNESS_OPEN_TAIL_RE, " ").trim();
+  // FIXPOINT, not a single pass: stripping one own-line closed block leaves a space where it stood,
+  // and a SECOND closed block glued on the same line then sits at a (whitespace-led) line start. A
+  // single pass left that second block for the unclosed rule below, whose to-end-of-turn sweep
+  // erased the Owner's REAL text after it (executed: two glued blocks + a genuine question → "" —
+  // the size check silently off, the exact class this hook exists to keep). Each pass removes at
+  // least one block or changes nothing, so the loop terminates.
+  let prev;
+  do { prev = s; s = s.replace(HARNESS_BLOCK_RE, " "); } while (s !== prev);
+  return s.replace(HARNESS_OPEN_TAIL_RE, " ").trim();
 }
 
 function main(raw) {
@@ -283,11 +301,17 @@ function main(raw) {
   // cannot say "I am blind here" reads as clean when a whole check is off — the exact false
   // statement about a control's state this kit exists to prevent.
   if (contract.shorthandUnharvested) {
-    process.stderr.write(
-      "guard-owner-comms WARN: core/OWNER_COMMS.md carries `TOKEN` = gloss rows, but NONE parsed outside " +
-      "the fenced format examples — the Owner's question-shorthand coverage is OFF. Write real rows " +
-      "outside the fence (`TOKEN` = gloss, with \"?\" in the gloss marking a question), or delete the " +
-      "shorthand section if this Owner has none. Non-blocking: every other check still runs.\n");
+    // Best-effort by construction: a closed or broken stderr must never turn a WARNING into a crash
+    // (observed: Node exits 0 here with stderr closed; the guard pins that posture against the
+    // async-pipe-error case too).
+    try {
+      process.stderr.on("error", () => {});
+      process.stderr.write(
+        "guard-owner-comms WARN: core/OWNER_COMMS.md carries `TOKEN` = gloss rows, but NONE parsed outside " +
+        "the fenced format examples — the Owner's question-shorthand coverage is OFF. Write real rows " +
+        "outside the fence (`TOKEN` = gloss, with \"?\" in the gloss marking a question), or delete the " +
+        "shorthand section if this Owner has none. Non-blocking: every other check still runs.\n");
+    } catch { /* fail open */ }
   }
 
   let entries;
