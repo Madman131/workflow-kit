@@ -194,22 +194,40 @@ Its frontmatter `tools: []` is enforced by that harness as *no tools at all*: th
 cannot read files, run commands, or spawn agents, so "judge only the packet" is mechanical, not a
 promise. Three honesty notes, same spirit as the enforcement-asymmetry table:
 
-- **No other lane has the cage.** A Codex / non-Claude lane has no `.claude/agents/` registry; its
-  consult path is the gate runner (`--with-gate-runners` + the `codex` CLI), where packet-only is
-  achieved by *what you send*, not by a tool restriction. The skill's packet rules are prose there.
-- **The cage is silent, not honest.** A caged seat can still *fabricate* claimed tool use. The
-  cage guarantees no tool ran; it does not make the answer well-grounded — the skill's sufficiency
-  test is what carries that.
+- **No other lane has the cage, and the Codex path is not packet-only at all.** A Codex /
+  non-Claude lane has no `.claude/agents/` registry. Its consult path is the gate runner
+  (`--with-gate-runners` + the `codex` CLI), which hands the seat the **repository** and requires a
+  GO/NO-GO verdict — so it is a cross-family gate on the same question, not this seat: neither the
+  tool restriction nor `INSUFFICIENT PACKET` carries across. The skill says so at the point of use.
+- **The cage is silent, not honest.** A caged seat can still *fabricate* claimed tool use. An
+  enforced empty list means no tool ran; it does not make the answer well-grounded — the skill's
+  sufficiency test is what carries that.
+- **The kit does not execute the enforcement, and says so.** What v1.6 ships and proves is the
+  *declaration*: `tools: []` is present in the installed frontmatter, and `init` plus both suites
+  discriminate when it is not. Whether the harness then denies the seat every tool is the
+  **harness's documented behavior, not an observation this kit makes** — nothing here spawns a
+  subagent and checks its tool-use count. Treat it as a control you can verify in your own harness
+  (fire the seat, confirm zero tool uses), not one the kit has watched fire. Note the listing
+  cosmetically renders an empty list as `(Tools: All tools)`, so the UI is not the check.
 - **`init` verifies the INSTALLED file.** A kept `.claude/agents/frontier-consult.md` may be
   edited or stale; if the literal `tools: []` line is gone, `init` warns that the cage is NOT
   confirmed rather than certifying a seat it never looked at (the same pattern as the pre-commit
   `pcTrusted` check and the shim read-back).
 
+### Re-binding a seat is an edit to a `[P]` file — `--force` reverts it, with no `.bak`
+
 The agent `model:` values (`fable`, `opus`) are **Claude-harness aliases, not kit doctrine** — the
-roles they hold (frontier judge, cold reviewer) are bound per repo in `core/BINDINGS.md`
-(`{{FRONTIER_MODEL}}`, `{{CODEX_FRONTIER_MODEL}}`), and an adopter on different model names edits
-both places. The skill is deliberately de-model-named: `/frontier-review` names the ROLE; alias it
-to your model's name if your team prefers.
+roles they hold are bound per repo in `core/BINDINGS.md` (`{{FRONTIER_MODEL}}`,
+`{{CODEX_FRONTIER_MODEL}}`). An adopter whose harness uses different model names must edit the
+frontmatter of `.claude/agents/*.md` too, and **that is a local edit to a portable file**: like
+every `[P]` asset — the hooks, `pre-commit`, `core/*.md` — a `--force` re-run overwrites it with
+the kit's version and writes **no backup** (only `[G]` files get a `.bak`). Since `--force` is also
+the remedy `init` prints for a stale hook or a lost cage, record your binding in
+`core/BINDINGS.md`, which *is* `[G]`, and treat the frontmatter edit as re-appliable rather than
+durable. Never remove `frontier-consult`'s `tools: []` line when you re-bind it.
+
+The skill is deliberately de-model-named: `/frontier-review` names the ROLE; alias it to your
+model's name if your team prefers.
 
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 

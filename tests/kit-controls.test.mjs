@@ -292,22 +292,83 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     for (const p of [body, consult]) { edited[p] = readFileSync(p, "utf8") + "\n<!-- user edit: keep me -->\n"; writeFileSync(p, edited[p]); }
     run();
     for (const p of [body, consult]) assert.equal(readFileSync(p, "utf8"), edited[p], `re-run KEEPS the user-edited ${p} (no clobber without --force)`);
-    // The cage check reads the INSTALLED file (a kept agent may be edited or stale): break the line
-    // and a plain re-run must WARN; --force must restore the kit's verbatim agent. Both directions.
-    writeFileSync(consult, consultText.replace(/^tools: \[\]$/m, "tools: '*'"));
-    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
-      "--codex-prompts-dir", codexDir], { encoding: "utf8" });
-    assert.equal(r.status, 0, `init should exit 0: ${r.stderr}`);
-    assert.match(r.stderr, /packet-only cage is NOT confirmed/, "init warns when the installed seat has lost the cage");
+    // The cage check reads the INSTALLED file (a kept agent may be edited or stale). Probe it at
+    // SEVERAL points, not one: a check proven against a single broken shape is proven against that
+    // shape only — a relaxed anchor or a whole-file scope stayed green under a one-mutation suite
+    // (found by a cold seat's mutation battery).
+    const initSays = (args = []) => {
+      const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+        "--codex-prompts-dir", codexDir, ...args], { encoding: "utf8" });
+      assert.equal(r.status, 0, `init should exit 0: ${r.stderr}`);
+      return r.stdout + r.stderr;
+    };
+    const fmSwap = (line) => writeFileSync(consult, consultText.replace(/^tools: \[\]$/m, line));
+    for (const [line, label] of [["tools: '*'", "wildcard"], ["tools: [Read]", "a NON-empty list"],
+      ["tools: Read, Bash, Write", "a plain tool list"], ["# tools: []", "the line commented out"]]) {
+      fmSwap(line);
+      assert.match(initSays(), /packet-only cage is NOT confirmed/, `init warns when the frontmatter reads ${label}`);
+    }
+    // THE false-pass a whole-file grep allows: frontmatter grants tools while some BODY line happens
+    // to spell `tools: []`. The harness parses only the frontmatter; so must the check.
+    writeFileSync(consult, consultText.replace(/^tools: \[\]$/m, "tools: Read, Bash, Write")
+      + "\nMaintainer note — the kit default for this seat is:\ntools: []\n");
+    assert.match(initSays(), /packet-only cage is NOT confirmed/,
+      "a body line spelling `tools: []` must NOT certify a frontmatter that grants tools");
+    // …and the converse: spellings YAML reads as an empty list must NOT warn. A check that cries
+    // wolf on a genuinely caged seat is one adopters learn to ignore.
+    for (const [line, label] of [["tools: []  ", "trailing whitespace"], ["tools: [] # none at all", "a trailing comment"],
+      ["tools: [ ]", "a space inside the brackets"]]) {
+      fmSwap(line);
+      assert.doesNotMatch(initSays(), /cage is NOT confirmed/, `no false warning for ${label}`);
+    }
+    // ABSENCE IS NOT A PASS. The skill names a `subagent_type`; if THAT seat is not installed the
+    // consult dead-ends, and a check that silently skips would report health on a broken adopt —
+    // the same vacuity the shim check was hardened against ("zero matches means zero comparisons").
+    // Produced the way it actually happens: the installed body names a seat that does not exist
+    // (a renamed or half-updated skill). Note deleting the installed agent does NOT produce this —
+    // init simply reinstalls it, which is why the check keys on the NAME, not on a fixed filename.
+    writeFileSync(consult, consultText);   // healthy seat on disk…
+    const bodyText = readFileSync(body, "utf8");
+    writeFileSync(body, bodyText.replace('subagent_type: "frontier-consult"', 'subagent_type: "frontier-consult-v2"'));
+    const absent = initSays();
+    assert.match(absent, /"frontier-consult-v2".*is NOT installed/s, "a named seat that is NOT installed is reported, not silently skipped");
+    assert.doesNotMatch(absent, /cage \("tools: \[\]"\) is present/, "…and init does not also certify a cage it never checked");
+    writeFileSync(body, bodyText);
+    // --force restores the kit's verbatim agent ([P] class: overwritten, no .bak) and the check clears.
     run(["--force"]);
     assert.equal(readFileSync(consult, "utf8"), readFileSync(path.join(KIT, "agents", "frontier-consult.md"), "utf8"),
-      "--force restores the kit's frontier-consult verbatim ([P]: overwritten, no backup)");
-    assert.match(readFileSync(consult, "utf8"), /^tools: \[\]$/m, "…with the cage line back");
-    const clean = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
-      "--codex-prompts-dir", codexDir], { encoding: "utf8" });
-    assert.equal(clean.status, 0, `init should exit 0: ${clean.stderr}`);
-    assert.doesNotMatch(clean.stderr, /cage is NOT confirmed/, "no cage warning against a healthy installed seat (discriminates, no cry-wolf)");
+      "--force restores the kit's frontier-consult verbatim");
+    assert.ok(!existsSync(`${consult}.bak`), "[P] assets get NO .bak on --force (only [G] files do) — documented in PORTABILITY");
+    const clean = initSays();
+    assert.doesNotMatch(clean, /cage is NOT confirmed/, "no cage warning against a healthy installed seat (discriminates, no cry-wolf)");
+    assert.match(clean, /cage \("tools: \[\]"\) is present/, "…and it says so positively, so silence is never the only evidence");
   } finally { cleanup(); }
+});
+
+test("the agents install is FAILURE-ISOLATED: it cannot abort the hook registration that follows it", () => {
+  // § 4e is a NUDGE; § 5 (merging the PreToolUse/Stop registrations) is a CONTROL. An exception
+  // escaping the agents block would leave hook FILES on disk with ZERO registrations — the silent
+  // fail-open mergeSettings' own read-back exists to stop. The commands block has had this proof
+  // since v1.1; § 4e shipped without its counterpart, and removing the try/catch left BOTH suites
+  // green (found by a cold seat's mutation battery). This is that missing canary.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-agentfail-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    // A regular FILE where the directory must be: the copy throws (ENOTDIR/EEXIST) mid-block.
+    mkdirSync(path.join(dir, ".claude"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "agents"), "not a directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(r.status, 0, `a failed agents install must NOT abort the adopt: ${r.stderr}`);
+    assert.match(r.stderr, /review-seat agents install failed/, "…it warns plainly instead of dying");
+    // THE assertion that matters: the CONTROL downstream of the failure still ran.
+    const settings = JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
+    const cmds = [...(settings.hooks?.PreToolUse ?? []), ...(settings.hooks?.Stop ?? [])].flatMap((g) => g.hooks ?? []).map((h) => String(h.command));
+    assert.equal(cmds.filter((c) => /guard-(cross-repo-writes|lane-authoring|gate-ladder)\.mjs/.test(c)).length, 3,
+      "the 3 PreToolUse guards are STILL registered after the agents block failed");
+    assert.equal(cmds.filter((c) => c.includes("guard-owner-comms.mjs")).length, 1,
+      "…and so is the Stop sensor");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("init generates core/OWNER_COMMS.md as [G]; --owner-name fills only the name", () => {

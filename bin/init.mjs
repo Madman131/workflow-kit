@@ -576,15 +576,46 @@ function main() {
     if (agentFiles.length) {
       log(`  .claude/agents/: ${aInstalled} review-seat agent(s) installed, ${aKept} kept${aKept ? " — may be STALE; --force to update" : ""} (Claude lane only)`);
     }
-    // The frontier-consult seat's `tools: []` line is LOAD-BEARING: the harness enforces it as
-    // no-tools-at-all, which is what makes the skill's packet-only limit a control rather than a
-    // promise. Read the INSTALLED file (a kept one may be edited or stale — the pcTrusted pattern):
-    // if that literal line is gone, the cage is gone, and init must say so rather than certify it.
-    const consultDst = path.join(T, ".claude", "agents", "frontier-consult.md");
-    if (existsSync(consultDst)) {
-      let cageOk = false;
-      try { cageOk = /^tools: \[\]$/m.test(readFileSync(consultDst, "utf8")); } catch { cageOk = false; }
-      if (!cageOk) warn(`the installed .claude/agents/frontier-consult.md does NOT carry the literal "tools: []" line — the packet-only cage is NOT confirmed (the seat may hold tools). Re-run with --force to restore the kit's version.`);
+    // The frontier-consult seat's `tools: []` line is LOAD-BEARING: the Claude harness reads an empty
+    // tools list as no-tools-at-all, which is what the /frontier-review skill's packet-only limit
+    // rests on. Read the INSTALLED file (a kept one may be edited or stale — the pcTrusted pattern):
+    // if that line is gone from the FRONTMATTER, init must say so rather than certify it.
+    //
+    // Scoped to the frontmatter deliberately. A whole-file match certified a seat whose frontmatter
+    // read `tools: Read, Bash, Write` while a prose line further down happened to spell `tools: []`
+    // — the check reporting a cage on an armed seat (found by two cold seats, executed). The harness
+    // parses the block between the first two `---` lines; so does this.
+    //
+    // ABSENCE IS NOT A PASS. If the kit ships a `/frontier-review` skill body naming a
+    // `subagent_type` that is not installed, the command dead-ends — the same vacuity § 4d's shim
+    // check was hardened against ("zero matches means zero comparisons"). So the seat the skill
+    // NAMES is what gets checked, discovered from the installed body rather than hardcoded here.
+    const frontmatterOf = (text) => {
+      const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
+      return m ? m[1] : null;
+    };
+    // Accept every spelling the YAML parser reads as an EMPTY list — `tools: []`, with trailing
+    // whitespace, or with a trailing `#` comment. Warning on those would be a false FAIL against a
+    // seat the harness does in fact cage, and a check that cries wolf is one adopters learn to
+    // ignore. Anything that puts a VALUE in the list (`tools: [Read]`) is correctly not a cage.
+    const CAGED_RE = /^tools:[ \t]*\[[ \t]*\][ \t]*(?:#.*)?$/m;
+    const skillBody = path.join(T, ".agents", "skills", "frontier-review", "SKILL.md");
+    let namedSeat = null;
+    if (existsSync(skillBody)) {
+      try { namedSeat = (/subagent_type:\s*"([A-Za-z0-9._-]+)"/.exec(readFileSync(skillBody, "utf8")) || [])[1] ?? null; } catch { namedSeat = null; }
+    }
+    if (namedSeat) {
+      const seatDst = path.join(T, ".claude", "agents", `${namedSeat}.md`);
+      let cage = "missing";
+      if (existsSync(seatDst)) {
+        try {
+          const fm = frontmatterOf(readFileSync(seatDst, "utf8"));
+          cage = fm === null ? "no-frontmatter" : (CAGED_RE.test(fm) ? "ok" : "uncaged");
+        } catch { cage = "unreadable"; }
+      }
+      if (cage === "ok") log(`  .claude/agents/${namedSeat}.md: the packet-only cage ("tools: []") is present in the installed frontmatter`);
+      else if (cage === "missing") warn(`the /frontier-review skill names subagent_type "${namedSeat}", but .claude/agents/${namedSeat}.md is NOT installed — that consult would dead-end, and no cage was checked. Re-run with --force, or remove the skill.`);
+      else warn(`the installed .claude/agents/${namedSeat}.md does not carry "tools: []" in its FRONTMATTER (${cage}) — the packet-only cage is NOT confirmed (the seat may hold tools). Re-run with --force to restore the kit's version.`);
     }
   } catch (e) {
     warn(`the review-seat agents install failed (${e && (e.code || e.message) || "error"}) — .claude/agents/ may be missing or partial. The guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);

@@ -23,23 +23,33 @@ model's name).
 - **`agents/` — a new `[P]` asset class: reviewer seat definitions, installed to
   `.claude/agents/`.** Two ship: `cold-reviewer.md` (the blind cold seat — payload-only, read
   tools, defaults `model: opus`) and `frontier-consult.md` (the consult seat, defaults
-  `model: fable`). The consult seat's frontmatter holds **`tools: []`, which the Claude harness
-  enforces as *no tools at all*** — packet-only is a control, not a promise. That line is
-  load-bearing: `init` copies agents verbatim, warns when an installed `frontier-consult.md` has
-  lost the literal line, and both test suites assert it survives. Like the skills, discovery is
-  from disk — a future agent is one file dropped in `agents/`, no `init` edit.
+  `model: fable`). The consult seat's frontmatter holds **`tools: []`**, which the Claude harness
+  documents as *no tools at all*. **What v1.6 ships and proves is the declaration, not the
+  enforcement**: `init` copies agents verbatim, checks the line survived into the installed file's
+  **frontmatter**, warns when it did not, and warns when the seat the skill names is missing
+  entirely; both suites discriminate on all three. Whether your harness then denies the seat every
+  tool is its behavior to verify, not something this kit observes — `PORTABILITY.md` § the consult
+  seat is explicit about that. Like the skills, discovery is from disk — a future agent is one file
+  dropped in `agents/`, no `init` edit.
 - **`core/BINDINGS.md` gains the consult-role rows** (`{{FRONTIER_MODEL}}`,
   `{{CODEX_FRONTIER_MODEL}}`): the skill names roles — frontier judge · workhorse · Codex-lane
   frontier — and the generated bindings say which concrete models hold them.
-- **The Codex lane is referenced generically.** The skill points the Codex-lane consult at the
-  shipped gate runner (needs `init --with-gate-runners` + the `codex` CLI — see `PORTABILITY.md`);
-  the origin repo's Codex agent config (`.codex/agents/*.toml`) is **not** in this release — it
-  ships with the Codex-lane enforcement work reserved for v2.0.
+- **The Codex lane is referenced generically — and is NOT packet-only.** The shipped gate runner
+  (needs `init --with-gate-runners` + the `codex` CLI — see `PORTABILITY.md`) hands its seat the
+  repository and requires a GO/NO-GO verdict, so neither the tool restriction nor `INSUFFICIENT
+  PACKET` carries across; there it is a cross-family gate on the same question. The skill says so
+  at the point of use. The origin repo's Codex agent config (`.codex/agents/*.toml`) is **not** in
+  this release — it ships with the Codex-lane enforcement work reserved for v2.0.
 
 **v1.6 adds no `core/` method doc changes** — the skill and agents cite the existing doctrine
 (`core/REVIEW.md` payload contract and pass-types, `core/GATES.md` § Model · effort matrix,
-`core/WORKFLOW.md` § Gate). Upgrading: re-run `init` with your original flags (no `--force` needed —
-the new files simply install); then fill the two new placeholders in `core/BINDINGS.md`.
+`core/WORKFLOW.md` § Gate). **One rule here is genuinely new and lives only in the skill body**: the
+one-firing-per-changeset budget. It is not in `core/`, and **nothing counts it** — round count is a
+conversation fact, so the cap binds the agent that reads it and nothing else. The skill says so
+where it states the cap, rather than implying a hook enforces it.
+
+Upgrading: re-run `init` with your original flags (no `--force` needed — the new files simply
+install); then fill the two new placeholders in `core/BINDINGS.md`.
 
 ## What's new in v1.5.1
 

@@ -168,15 +168,88 @@ AG_CONSULT="$ADOPTER/.claude/agents/frontier-consult.md"
 # consult seat's packet-only limit mechanical rather than a promise.
 grep -q '^tools: \[\]$' "$AG_CONSULT" && ok "frontier-consult carries the LITERAL 'tools: []' line (the packet cage is mechanical)" || bad "frontier-consult lost its tools: [] line — the cage is gone"
 grep -q '^tools: \[\]$' "$AG_COLD" && bad "cold-reviewer must NOT be tool-less (it verifies claims against the code)" || ok "cold-reviewer is NOT caged (keeps its read tools; the cage is only the consult seat's)"
-# init verifies the INSTALLED seat, both directions: a kept agent whose cage line was lost WARNS on
-# a plain re-run (init must not certify a file it never looked at), and a healthy one stays quiet.
+# init verifies the INSTALLED seat (it must not certify a file it never looked at), probed at
+# SEVERAL points. A check proven against ONE broken shape is proven against that shape only: a
+# relaxed anchor and a whole-file scope both survived a single-mutation suite (cold-seat battery).
+# Every run asserts EXIT STATUS too — a crashed init prints no warning, which would otherwise read
+# as the healthy direction passing.
 cp "$AG_CONSULT" "$WORK/consult.orig"
-sed -i.bak "s/^tools: \[\]$/tools: '*'/" "$AG_CONSULT" && rm -f "$AG_CONSULT.bak"
-CAGE_RERUN="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)"
-printf '%s' "$CAGE_RERUN" | grep -q 'packet-only cage is NOT confirmed' && ok "init WARNS when the installed frontier-consult has lost the cage (reads the INSTALLED file)" || bad "init must warn about a lost tools: [] cage on the installed agent"
+init_out() { # -> stdout+stderr of a plain re-run; fails loudly if init did not exit 0
+  local out rc
+  out="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)"
+  rc=$?
+  [ "$rc" -eq 0 ] || bad "init exited $rc during the cage probe (a crash is not a clean result)"
+  printf '%s' "$out"
+}
+fm_swap() { # replace the frontmatter cage line with $1
+  node -e '
+    const fs=require("fs"), p=process.argv[1];
+    fs.writeFileSync(p, fs.readFileSync(process.argv[3],"utf8").replace(/^tools: \[\]$/m, process.argv[2]));
+  ' "$AG_CONSULT" "$1" "$WORK/consult.orig"
+}
+CAGE_OK=1
+for LINE in "tools: '*'" "tools: [Read]" "tools: Read, Bash, Write" "# tools: []"; do
+  fm_swap "$LINE"
+  init_out | grep -q 'packet-only cage is NOT confirmed' || { bad "init must warn when the frontmatter reads: $LINE"; CAGE_OK=0; }
+done
+[ "$CAGE_OK" = 1 ] && ok "init WARNS on every uncaged frontmatter shape probed (4), reading the INSTALLED file"
+# THE false pass a whole-file grep allows: frontmatter GRANTS tools while a body line spells the
+# cage. The harness parses only the frontmatter; so must the check.
+node -e '
+  const fs=require("fs"), p=process.argv[1];
+  fs.writeFileSync(p, fs.readFileSync(process.argv[2],"utf8").replace(/^tools: \[\]$/m, "tools: Read, Bash, Write")
+    + "\nMaintainer note — the kit default for this seat is:\ntools: []\n");
+' "$AG_CONSULT" "$WORK/consult.orig"
+init_out | grep -q 'packet-only cage is NOT confirmed' && ok "a BODY line spelling 'tools: []' does NOT certify a frontmatter that grants tools (frontmatter-scoped)" || bad "whole-file scope: init certified an uncaged seat because the body mentioned the cage"
+# …and the converse — spellings YAML reads as an empty list must NOT warn (a cry-wolf check is one
+# adopters learn to ignore).
+NOFALSE=1
+for LINE in "tools: []  " "tools: [] # none at all" "tools: [ ]"; do
+  fm_swap "$LINE"
+  init_out | grep -q 'cage is NOT confirmed' && { bad "false warning against a genuinely empty list: $LINE"; NOFALSE=0; }
+done
+[ "$NOFALSE" = 1 ] && ok "no FALSE cage warning for the empty-list spellings YAML accepts (3 probed)"
+# ABSENCE IS NOT A PASS: the skill names a subagent_type, so a seat that is not installed dead-ends
+# the consult. Produced the way it really happens — the installed body names a seat that does not
+# exist (a renamed / half-updated skill). Deleting the installed agent does NOT produce this state:
+# init just reinstalls it, which is why the check keys on the NAME rather than a fixed filename.
 cp "$WORK/consult.orig" "$AG_CONSULT"
-CAGE_CLEAN="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)"
+cp "$FR_BODY" "$WORK/frbody.orig"
+sed -i.bak 's/subagent_type: "frontier-consult"/subagent_type: "frontier-consult-v2"/' "$FR_BODY" && rm -f "$FR_BODY.bak"
+ABSENT_OUT="$(init_out)"
+printf '%s' "$ABSENT_OUT" | grep -q 'frontier-consult-v2' && printf '%s' "$ABSENT_OUT" | grep -q 'is NOT installed' \
+  && ok "a named seat that is NOT installed is REPORTED (zero checks must not read as zero failures)" \
+  || bad "init stayed silent about a subagent_type the skill names but the adopter does not have"
+printf '%s' "$ABSENT_OUT" | grep -q 'cage ("tools: \[\]") is present' && bad "init certified a cage on a seat it never checked" || ok "…and it does not also certify a cage it never saw"
+cp "$WORK/frbody.orig" "$FR_BODY"
+CAGE_CLEAN="$(init_out)"
 printf '%s' "$CAGE_CLEAN" | grep -q 'cage is NOT confirmed' && bad "init warns about a healthy caged seat (cry-wolf)" || ok "no cage warning against a healthy installed seat (discriminates)"
+printf '%s' "$CAGE_CLEAN" | grep -q 'cage ("tools: \[\]") is present' && ok "…and init states the cage POSITIVELY (silence is never the only evidence)" || bad "init should affirm a healthy cage, not merely stay quiet"
+
+echo
+echo "(agents failure-isolation) a failed agents install must NOT abort the HOOK REGISTRATION that follows"
+# § 4e is a nudge; § 5 (merging the guard registrations) is a CONTROL. An exception escaping the
+# agents block would leave hook files on disk with ZERO registrations — the silent fail-open
+# mergeSettings' read-back exists to stop. Same proof shape as the blocked-Codex-write case above.
+AGFAIL="$WORK/agentfail"; git init -q "$AGFAIL"; git -C "$AGFAIL" config user.email a@a; git -C "$AGFAIL" config user.name a
+mkdir -p "$AGFAIL/.claude"; printf 'not a directory\n' > "$AGFAIL/.claude/agents"   # a FILE where the dir must be
+if node "$KIT/bin/init.mjs" --target "$AGFAIL" --repo-name agentfail --skip-codex-prompt >/dev/null 2>&1; then
+  ok "failed agents install: init still exits 0 (the adopt is not aborted)"
+else
+  bad "a failed agents install ABORTED init — failure isolation regressed"
+fi
+assert_eq "3" "$(node -e '
+  const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  let n = 0;
+  for (const g of ((s.hooks && s.hooks.PreToolUse) || [])) for (const h of (g.hooks || [])) if (/guard-(cross-repo-writes|lane-authoring|gate-ladder)\.mjs/.test(String(h.command))) n++;
+  console.log(n);
+' "$AGFAIL/.claude/settings.json" 2>/dev/null || echo MISSING)" "the 3 PreToolUse guards are STILL registered after the agents block failed"
+assert_eq "1" "$(node -e '
+  const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  let n = 0;
+  for (const g of ((s.hooks && s.hooks.Stop) || [])) for (const h of (g.hooks || [])) if (String(h.command).includes("guard-owner-comms.mjs")) n++;
+  console.log(n);
+' "$AGFAIL/.claude/settings.json" 2>/dev/null || echo MISSING)" "…and so is the Stop sensor"
 
 echo
 echo "(commands + skills idempotency) a second init KEEPS user edits — no clobber, no duplicate pointer"
