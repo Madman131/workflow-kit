@@ -35,6 +35,14 @@ const read = (rel) => raw(rel).replace(/^\s*>\s?/gm, "").replace(/\s+/g, " ");
 test("GATES routes Gemini to DESIGNS and states the coverage REDUCTION instead of glossing it", () => {
   const g = read("core/GATES.md");
   assert.match(g, /GEMINI REVIEWS DESIGNS, NOT DIFFS/);
+  // ⚠ PIN THE TABLE ROWS, NOT ONLY THE PROSE AROUND THEM. The routing decision LIVES in the table;
+  // a future edit could reverse or delete either row while every explanatory sentence below stayed
+  // intact, and a prose-only pin would pass against a document that had lost the actual routing.
+  // (Found by the cross-family seat: this test named the rule and asserted everything except it.)
+  assert.match(g, /\| \*\*Claude\*\* \| \*\*Gemini\*\* \(`--design`\) \| \*\*Codex\*\*/,
+    "Claude-built: design gate → Gemini in DESIGN mode, code gate → Codex");
+  assert.match(g, /\| \*\*Codex\*\* \| \*\*Gemini\*\* \(`--design`\) \| \*\*Claude Code\*\*/,
+    "Codex-built: Gemini STILL design-mode, and the code gate moves to Claude — Codex cannot gate itself");
   // The honesty clause is the load-bearing half. A routing change that quietly calls the new shape
   // "equivalent" is the failure this sentence exists to prevent.
   assert.match(g, /THIS IS A REDUCTION IN CROSS-FAMILY COVERAGE OF THE CODE — say so, do not call it equivalent/);

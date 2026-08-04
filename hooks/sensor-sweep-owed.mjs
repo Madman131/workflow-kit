@@ -38,7 +38,8 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classify, governedDocs, CLASS_RE, loadKitConfig } from "../scripts/check-doc-size.mjs";
-import { extractTargets } from "./payload-targets.mjs";
+import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative } from "./payload-targets.mjs";
+
 
 // The two skill trees an ADOPTER carries (`bin/init.mjs`): `.agents/skills/` holds the canonical
 // shared bodies, `.claude/skills/` the Claude entry stubs. `.codex/skills/` is listed because the
@@ -99,6 +100,31 @@ export function sweepOwed(rel, fragment, { governed = [], readDoc = () => "" } =
   return declared === "BINDING" ? { reason: "binding-doc", rel } : null;
 }
 
+/**
+ * The incoming text a promotion could hide in — pure, so tests bite directly.
+ *
+ * This exists for ONE job: catching a write that PROMOTES a document to BINDING before the file on
+ * disk says so. My first cut handed the whole apply_patch envelope to every target and called
+ * over-attribution "the direction this sensor is allowed to be wrong in". It is not — the
+ * cross-family seat produced two ordinary writes that fire on work owing nothing, and this design's
+ * own premise is that a sensor firing on ordinary work gets switched off.
+ *
+ *   (a) A hunk that DELETES or merely quotes `CLASS: BINDING` promotes nothing. Reading a removed
+ *       line as an addition inverts the meaning, so deletion lines are stripped first.
+ *   (b) In a MULTI-target envelope one file's marker cannot be attributed to another, and this
+ *       parser does not split an envelope per target. Rather than guess, a multi-target write falls
+ *       back to each file's class ON DISK — the honest answer. It costs only a
+ *       promotion-inside-a-multi-target-patch, which the disk class catches on the next edit.
+ */
+export function incomingText(ev, extracted) {
+  if (extracted?.shape === "apply_patch") {
+    if ((extracted.targets?.length ?? 0) !== 1) return "";
+    return String(ev?.tool_input?.command ?? "")
+      .split("\n").filter((l) => !l.startsWith("-")).join("\n");
+  }
+  return ev?.tool_input?.new_string ?? ev?.tool_input?.content ?? "";
+}
+
 const REMINDER = (hits) =>
   `SWEEP OWED — pre-fold dependency check (core/WORKFLOW.md § Gate)\n\n` +
   hits.map((h) => `  · ${h.rel} — ${h.reason === "skill-body" ? "skill body" : "CLASS: BINDING document"}\n`).join("") +
@@ -131,7 +157,8 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
     // or shouting here would duplicate their job with none of their authority.
     if (!extracted?.ok || !extracted.targets?.length) process.exit(0);
 
-    const root = cwd;
+    const root = resolveProjectRoot(ev) || cwd;
+    const patchBase = resolvePatchBase(ev, root);
     let governed = [];
     try {
       const cfg = loadKitConfig(root);
@@ -142,18 +169,12 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
       governed = [];
     }
 
-    // `extractTargets` returns target PATHS (strings). The incoming text differs per lane: a Claude
-    // write carries it under `new_string`/`content`; an apply_patch write carries every target's new
-    // content inside the ONE envelope command, so the envelope itself is the fragment for each of
-    // its targets. Over-attributing a marker across targets in one envelope costs an extra
-    // reminder — the direction this sensor is allowed to be wrong in.
-    const envelopeText = extracted.shape === "apply_patch" ? (ev?.tool_input?.command ?? "") : "";
-    const claudeText = ev?.tool_input?.new_string ?? ev?.tool_input?.content ?? "";
-    const fragment = envelopeText || claudeText;
+    const fragment = incomingText(ev, extracted);
 
     const hits = [];
     for (const target of extracted.targets) {
-      const rel = path.isAbsolute(target) ? path.relative(root, target) : target;
+      const rel = toRepoRelative(target, root, patchBase);
+      if (rel === null) continue;
       const hit = sweepOwed(rel, fragment, {
         governed,
         readDoc: (r) => { try { return readFileSync(path.join(root, r), "utf8"); } catch { return ""; } },

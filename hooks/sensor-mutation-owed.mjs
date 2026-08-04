@@ -37,7 +37,7 @@
 import path from "node:path";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { extractTargets } from "./payload-targets.mjs";
+import { extractTargets, resolveProjectRoot, resolvePatchBase, toRepoRelative } from "./payload-targets.mjs";
 
 /** Files whose edit creates the obligation: a check, a gate hook, or a test for either. */
 export function owesMutationRecord(rel) {
@@ -92,9 +92,15 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
     const extracted = extractTargets(ev);
     if (!extracted?.ok || !extracted.targets?.length) process.exit(0);
 
+    // Canonicalise before matching: every pattern below names a repo-relative POSIX path, so an
+    // ordinary `./githooks/pre-commit` would otherwise match nothing and the sensor would exit 0
+    // having said nothing. Same defect the cross-family seat found in the sweep sensor.
+    const root = resolveProjectRoot(ev) || cwd;
+    const patchBase = resolvePatchBase(ev, root);
     const hits = [];
     for (const target of extracted.targets) {
-      const rel = path.isAbsolute(target) ? path.relative(cwd, target) : target;
+      const rel = toRepoRelative(target, root, patchBase);
+      if (rel === null) continue;
       const kind = owesMutationRecord(rel);
       if (kind && !hits.some((h) => h.rel === rel)) hits.push({ rel, kind });
     }

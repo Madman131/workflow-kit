@@ -77,6 +77,24 @@ export function resolvePatchBase(input, projectRoot) {
   return typeof cwd === "string" && cwd ? path.resolve(cwd) : projectRoot;
 }
 
+/**
+ * A write target as a repo-relative POSIX path, or null when it lands outside the repo.
+ *
+ * WHY THIS IS SHARED RATHER THAN WRITTEN PER CONSUMER. Any rule that compares a target against
+ * canonical paths (`core/WORKFLOW.md`, `.agents/skills/…`, `githooks/pre-commit`) must canonicalise
+ * it first, and skipping that fails SILENTLY: a perfectly ordinary `./core/WORKFLOW.md` matches no
+ * canonical entry, so a sensor exits 0 having said nothing — a miss that looks exactly like "nothing
+ * was owed". Found by a cross-family seat against the v2.2.0 sensors, reproduced in one call.
+ * It lives here, beside the extractor that produces those targets, so the two sensors cannot drift.
+ */
+export function toRepoRelative(target, root, base) {
+  if (typeof target !== "string" || !target) return null;
+  const abs = path.isAbsolute(target) ? target : path.resolve(base, target);
+  const rel = path.relative(root, abs);
+  if (!rel || rel.startsWith("..")) return null;
+  return rel.split(path.sep).join("/");
+}
+
 // Directives that NAME A TARGET.
 //
 // LEADING WHITESPACE IS PART OF THE DIRECTIVE, and getting this wrong was a real fail-open. Codex's

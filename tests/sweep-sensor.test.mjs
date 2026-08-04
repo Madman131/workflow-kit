@@ -17,7 +17,8 @@ import {
   coverageProblems, outPathProblem, buildPrompt,
 } from "../scripts/sweep.mjs";
 import { parseBanner, bannerBlock } from "../scripts/codex-banner.mjs";
-import { sweepOwed, classifyFragment, isSkillFile, SKILL_ROOTS } from "../hooks/sensor-sweep-owed.mjs";
+import { sweepOwed, classifyFragment, isSkillFile, SKILL_ROOTS, incomingText } from "../hooks/sensor-sweep-owed.mjs";
+import { toRepoRelative } from "../hooks/payload-targets.mjs";
 import { owesMutationRecord, emissionText } from "../hooks/sensor-mutation-owed.mjs";
 
 const scratch = () => mkdtempSync(path.join(os.tmpdir(), "kit-sweep-"));
@@ -274,6 +275,63 @@ test("sweepOwed fires on a BINDING doc and a skill body — and stays SILENT on 
   assert.equal(sweepOwed("src/index.mjs", "code", { governed, readDoc }), null, "ungoverned code is out of scope");
   assert.equal(sweepOwed("README.md", "docs", { governed, readDoc }), null, "an ungoverned doc is out of scope");
   assert.equal(sweepOwed("", "x", { governed, readDoc }), null);
+});
+
+test("a target is CANONICALISED before it is matched — `./core/X.md` is not a silent miss", () => {
+  // Found by the cross-family seat on the frozen changeset. Every scope rule compares against
+  // canonical repo-relative paths, so an ordinary `./core/WORKFLOW.md` from an apply_patch envelope
+  // matched nothing and the sensor exited 0 having said nothing — a MISS that looks exactly like
+  // "nothing was owed". Fails silently, which is the dangerous direction for a reminder.
+  const root = "/repo", base = "/repo";
+  assert.equal(toRepoRelative("./core/WORKFLOW.md", root, base), "core/WORKFLOW.md");
+  assert.equal(toRepoRelative("core/WORKFLOW.md", root, base), "core/WORKFLOW.md");
+  assert.equal(toRepoRelative("/repo/core/WORKFLOW.md", root, base), "core/WORKFLOW.md");
+  assert.equal(toRepoRelative("./.agents/skills/x/SKILL.md", root, base), ".agents/skills/x/SKILL.md");
+  // A relative patch path resolves against the APPLIER's cwd, which diverges from the repo root
+  // whenever the session runs in a subdirectory — the reason resolvePatchBase exists.
+  assert.equal(toRepoRelative("SKILL.md", root, "/repo/.agents/skills/x"), ".agents/skills/x/SKILL.md");
+  // Outside the repo is not this sensor's business, and must not be coerced into a bogus relative.
+  assert.equal(toRepoRelative("/elsewhere/x.md", root, base), null);
+  assert.equal(toRepoRelative("../escape.md", root, base), null);
+  assert.equal(toRepoRelative("", root, base), null);
+
+  // END TO END through the scope rule: the canonical spelling and the `./` spelling agree.
+  const governed = ["core/WORKFLOW.md"];
+  const readDoc = () => "> **CLASS: BINDING**";
+  const viaDot = sweepOwed(toRepoRelative("./core/WORKFLOW.md", root, base), "edit", { governed, readDoc });
+  assert.equal(viaDot?.reason, "binding-doc", "the `./` spelling now reaches the rule it always should have");
+});
+
+test("a DELETED or quoted marker does not promote, and one envelope target cannot speak for another", () => {
+  // Both halves found by the cross-family seat. The design's premise is that a sensor firing on
+  // ordinary work gets switched off, so a false FIRE here is a real defect, not harmless noise.
+  const envDeletes = { tool_input: { command: '*** Update File: core/GATES.md\n-> **CLASS: BINDING** was here\n+plain text\n' } };
+  const one = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
+  assert.doesNotMatch(incomingText(envDeletes, one), /CLASS: BINDING/,
+    "a REMOVED line is not an addition — reading it as one inverts the meaning");
+
+  // …so a REFERENCE doc whose hunk merely deletes the marker stays silent.
+  const governed = ["core/GATES.md"];
+  const readDoc = () => "> **CLASS: REFERENCE**";
+  assert.equal(sweepOwed("core/GATES.md", incomingText(envDeletes, one), { governed, readDoc }), null);
+
+  // MULTI-target: no per-target split exists, so no fragment is attributed at all — the disk class
+  // decides. Anything else lets one file's marker fire on a sibling that owes nothing.
+  const multi = { shape: "apply_patch", targets: ["core/GATES.md", "core/WORKFLOW.md"], ok: true };
+  const envAdds = { tool_input: { command: '*** Update File: core/WORKFLOW.md\n+> **CLASS: BINDING**\n' } };
+  assert.equal(incomingText(envAdds, multi), "", "a multi-target envelope contributes NO fragment");
+  assert.equal(sweepOwed("core/GATES.md", incomingText(envAdds, multi), { governed, readDoc }), null,
+    "the REFERENCE sibling stays silent instead of inheriting the other file's marker");
+
+  // CLEAN SIDE — the promotion case this fragment exists for still fires on a single-target add.
+  const single = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
+  const promote = { tool_input: { command: '*** Update File: core/GATES.md\n+> **CLASS: BINDING**\n' } };
+  assert.equal(sweepOwed("core/GATES.md", incomingText(promote, single), { governed, readDoc })?.reason,
+    "binding-doc", "a real single-target promotion must STILL fire — the fix must not silence it");
+
+  // …and the Claude lane is untouched by any of this.
+  assert.equal(incomingText({ tool_input: { new_string: "> **CLASS: BINDING**" } }, { shape: "claude", targets: ["a"] }),
+    "> **CLASS: BINDING**");
 });
 
 test("the sweep sensor holds NO class regex of its own — one home for the marker pattern", () => {
