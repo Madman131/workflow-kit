@@ -575,6 +575,16 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     assert.match(readFileSync(doc, "utf8"), /workflow-kit v2\.1\.0/,
       "…leaving the doc stamped with the OLD version, exactly as the note warns");
 
+    // Re-establish the baseline IMMEDIATELY before --force. Asserting it only at the top would let a
+    // regression in the PLAIN re-run destroy the bystanders first, after which the post-force checks
+    // still pass and attribute the destruction to the wrong command.
+    for (const b of bystanders) {
+      assert.match(readFileSync(b, "utf8"), new RegExp(MINE),
+        `${path.basename(b)} still carries its local edit going INTO the forced run (the plain re-run left it alone)`);
+    }
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs?.[0], "app",
+      "…and the write guard is still narrowed going in, so a widening after this is --force's doing");
+
     run(["--owner-name", "Alex", "--skip-codex-prompt", "--force"]);
     assert.match(readFileSync(doc, "utf8"), /DECISION NEEDED/, "--force is what actually installs rule 8");
     assert.match(readFileSync(body, "utf8"), /buried ask/, "…and the /humanize miss with it");

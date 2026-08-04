@@ -39,8 +39,8 @@ protected.) It also rewrites `.claude/kit.config.json` from the flags you pass *
 `{}`, which **widens** the write guard until you restore it. All of this is executed, not inferred,
 and pinned by test: a `--force` re-run on an adopter carrying hand-edited `[P]` files destroys them
 with no backup and resets a configured `executedPathDirs: ["app"]` to `{}`. (`kit.config.json` and
-the `[G]` files do get a `.bak` — but only when their new content actually differs; an identical file
-is left alone and gets none.) **Commit before you run it.**
+the `[G]` files do get a `.bak` — but only when their new content actually DIFFERS; identical content
+is rewritten with the same bytes and gets none.) **Commit before you run it.**
 
 **What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the
 template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and shorthand rows are replaced by
