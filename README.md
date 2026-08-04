@@ -37,7 +37,11 @@ allow everything or block everything. v2.1 ships the control those findings call
   guard's *own* signature (a new ledger row), never by inferring "blocked" from "the file is missing";
   an earlier design did the latter and certified hooks that were provably untrusted, because Codex's
   own sandbox had refused the write and Codex's narration misattributed it. Exits: armed 0 · not
-  armed 1 · not installed 2 · `codex` CLI absent 2 — an **abstain, never a pass**.
+  armed 1 · not installed 2 · `codex` CLI absent 2 · **nothing-was-tested 2** — every 2 an
+  **abstain, never a pass**. That last exit exists because running the probe for real caught it
+  calling a provably-armed lane UNGUARDED: Codex had read the repo's own `AGENTS.md`, declined on an
+  identity precondition, and never attempted the write, so no hook could fire. It now tells "the
+  guard did not stop it" apart from "nothing was tried" and abstains on the second.
 
 **Read this part before you tell anyone the Codex lane is guarded.** The guards are
 **installed · fail-closed by design · INERT unless your Codex run carries hook trust.** Codex will not

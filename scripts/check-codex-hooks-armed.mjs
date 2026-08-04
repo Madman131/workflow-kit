@@ -107,6 +107,25 @@ export function tomlDeclaresHooks(text) {
   return false;
 }
 
+// THE VERDICT, as a pure function of what was observed — extracted so every branch is testable
+// without a model call. Three inputs, three answers, and the middle one is the whole point:
+//   ledger grew                  ⇒ ARMED      (the guard's own signature; exit 0)
+//   no row, but the file LANDED  ⇒ NOT ARMED  (the write happened and nothing stopped it; exit 1)
+//   no row and no file           ⇒ UNKNOWN    (nothing was tested; ABSTAIN, exit 2)
+// Did the probe target land, and clear it either way. ONE operation, so the observation cannot be
+// ordered after the cleanup that destroys it. Exported so the suite can pin both directions without
+// a model call — the rest of this script's glue cannot be reached that cheaply.
+export function observeAndClear(abs) {
+  const existed = existsSync(abs);
+  if (existed) rmSync(abs, { force: true });
+  return existed;
+}
+
+export function verdictFor({ before, after, wrote }) {
+  if (after > before) return "ARMED";
+  return wrote ? "NOT_ARMED" : "UNKNOWN";
+}
+
 function main() {
   const repo = path.resolve(process.argv[2] || process.cwd());
   const ledgerAbs = path.join(repo, LEDGER_REL);
@@ -149,20 +168,54 @@ function main() {
     `If something blocks it, say so and stop. Do not retry and do not use shell commands instead.`,
   ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], input: "" });
 
-  if (existsSync(probeAbs)) rmSync(probeAbs, { force: true });
+  // Whether the write actually landed is EVIDENCE — it separates "nothing stopped it" from "it was
+  // never attempted" below — and the cleanup destroys it. Observing and clearing are therefore ONE
+  // operation rather than two statements in a fragile order: written as two, inverting them is a
+  // silent, plausible edit that turns the evidence into a constant `false`, and no test can catch it
+  // because this glue only runs behind a real model call. Made structurally impossible instead.
+  const wrote = observeAndClear(probeAbs);
   if (r.error) {
     console.log(`UNKNOWN — could not run \`codex exec\` (${r.error.code || r.error.message}). ABSTAIN, not a pass.`);
     process.exit(2);
   }
 
   const after = ledgerRows(ledgerAbs);
-  if (after > before) {
+  const verdict = verdictFor({ before, after, wrote });
+  if (verdict === "ARMED") {
     console.log(`ARMED — the lane guard ran: ${LEDGER_REL} gained ${after - before} row(s) during a real Codex write attempt.`);
     console.log("  That row is the control's own signature, so this is positive evidence, not an inference from a missing file.");
     process.exit(0);
   }
 
-  console.log("NOT ARMED — Codex attempted a gated write and the lane guard left NO ledger row. Your Codex lane is UNGUARDED.");
+  // NO LEDGER ROW IS NOT YET AN ANSWER, and reporting it as one is this check's own trap in mirror
+  // image. Two very different worlds produce it:
+  //   · Codex ATTEMPTED the write and no guard intervened  ⇒ genuinely NOT ARMED.
+  //   · Codex never attempted the write at all             ⇒ NOTHING was tested.
+  // The second is not hypothetical and not rare: an adopted repo carries this kit's own AGENTS.md,
+  // and an agent that reads it may decline the write on an identity or declaration check before any
+  // tool call happens. Observed exactly that — "the required identity check failed because this
+  // checkout has no `origin` remote" — against a lane that was provably armed and blocking, which
+  // this check then called UNGUARDED. A false alarm is not the safe direction it looks like: an
+  // adopter who is told a working control is dead disables it, or stops believing this check.
+  //
+  // The PROBE FILE settles it. It is deleted before the run, so afterwards:
+  //   · file EXISTS  ⇒ the write really happened and nothing stopped it ⇒ NOT ARMED, confidently.
+  //   · file ABSENT  ⇒ we cannot tell an inert guard from a write never attempted (Codex's own
+  //     sandbox can also refuse a path — see the fixture) ⇒ ABSTAIN, and show the run's own tail so
+  //     a human can see which it was.
+  if (verdict === "UNKNOWN") {
+    console.log("UNKNOWN — no ledger row appeared, but the probe file was never created either, so it is");
+    console.log("  NOT possible to tell an inert guard from a write Codex never attempted. ABSTAIN, not a verdict.");
+    console.log("  The usual cause is the agent declining before any tool call — an identity or declaration");
+    console.log("  check in this repo's own AGENTS.md, or Codex's sandbox refusing the path. The tail of the");
+    console.log("  run is below: if it shows the model choosing not to write, fix that precondition (a repo");
+    console.log("  with a real `origin` remote and a valid .claude/task-lane.json is the usual fix) and re-run.");
+    const tail = `${r.stdout || ""}\n${r.stderr || ""}`.split("\n").filter((l) => l.trim()).slice(-12);
+    for (const line of tail) console.log(`    | ${line}`);
+    process.exit(2);
+  }
+
+  console.log("NOT ARMED — Codex WROTE the probe file and the lane guard left NO ledger row. Your Codex lane is UNGUARDED.");
   console.log("  Codex does not run a repo's hooks until a human reviews and trusts them, and in");
   console.log("  `codex exec` it skips them SILENTLY — which is why this check exists.");
   console.log("  Fix: run `codex` INTERACTIVELY in this repo once. It shows \"Hooks need review\";");

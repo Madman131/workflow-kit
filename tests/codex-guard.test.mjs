@@ -278,6 +278,43 @@ test("ROUND-2: `[features] hooks = true` is NOT a hooks registration — in init
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
 
+test("ROUND-3: no ledger row is not automatically NOT ARMED — the probe abstains when nothing was tested", async () => {
+  // FOUND BY RUNNING IT FOR REAL against hooks a human had just trusted. The probe reported
+  // "your Codex lane is UNGUARDED" about a lane that was provably blocking — because Codex had
+  // read the adopted repo's own AGENTS.md, decided an identity precondition failed ("this checkout
+  // has no `origin` remote"), and **never attempted the write at all**. No attempt ⇒ no hook ⇒ no
+  // row. This check's founding rule is that absence is not evidence; it was applying that rule to
+  // ARMED and not to NOT ARMED.
+  //
+  // A false alarm is not the harmless direction it looks like: an adopter told that a working
+  // control is dead switches it off, or stops believing the check — which is how controls actually
+  // die in this kit's own failure taxonomy.
+  const { verdictFor } = await import(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"));
+  // The guard's own signature appeared ⇒ ARMED, whatever else happened.
+  assert.equal(verdictFor({ before: 0, after: 1, wrote: false }), "ARMED");
+  assert.equal(verdictFor({ before: 3, after: 4, wrote: true }), "ARMED");
+  // The write LANDED and no guard row appeared ⇒ the write really was unguarded. Confident.
+  assert.equal(verdictFor({ before: 0, after: 0, wrote: true }), "NOT_ARMED");
+  // No row AND no file ⇒ an inert guard and a write never attempted are indistinguishable. ABSTAIN.
+  assert.equal(verdictFor({ before: 0, after: 0, wrote: false }), "UNKNOWN");
+  // The abstain must not be reachable from a row that DID appear — that would swallow a real ARMED.
+  assert.notEqual(verdictFor({ before: 0, after: 2, wrote: false }), "UNKNOWN");
+
+  // The evidence feeding `wrote` is observed and cleared in ONE operation, because as two statements
+  // the order is invertible and the inverted form (clear, then look) silently reports `false`
+  // forever — turning every run into an abstain. Both directions, executed.
+  const { observeAndClear } = await import(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-observe-"));
+  try {
+    const f = path.join(dir, "kit-armed-probe.mjs");
+    assert.equal(observeAndClear(f), false, "absent ⇒ false, and no crash");
+    writeFileSync(f, "// probe\n");
+    assert.equal(observeAndClear(f), true, "present ⇒ true…");
+    assert.equal(existsSync(f), false, "…and it is cleared in the same breath");
+    assert.equal(observeAndClear(f), false, "…so a second look reports absent");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("ROUND-2: the arming probe keys on a row about ITS OWN target, not on the ledger growing", async () => {
   // "The ledger grew" is not the guard's signature — any unrelated guarded write in the same repo
   // (another agent, another terminal) grows it, and the probe would report ARMED without its own

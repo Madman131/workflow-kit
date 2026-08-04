@@ -198,9 +198,21 @@ narration then said "The hook blocked the file creation" — a second witness co
 cause. A model's account of *why* something failed is not evidence about the mechanism. So the probe
 requires the guard's **own signature**: `guard-lane-authoring` appends a row to
 `.claude/lane-ledger.jsonl` for every gated decision, allow or deny, and a new row is proof the guard
-ran. Its exits are deliberate: **armed 0 · not armed 1 · not installed 2 · `codex` CLI absent 2**.
-That last one is an **ABSTAIN, and abstain is never 0** — an unanswered question reported as a pass is
-the precise failure the probe exists to prevent.
+ran. Its exits are deliberate: **armed 0 · not armed 1 · not installed 2 · `codex` CLI absent 2 ·
+nothing-was-tested 2**. Every 2 is an **ABSTAIN, and abstain is never 0** — an unanswered question
+reported as a pass is the precise failure the probe exists to prevent.
+
+**That last exit was added after running the probe for real, and it is the outcome you are most
+likely to meet first.** Against hooks a human had just trusted, the probe reported NOT ARMED about a
+lane that was provably blocking — because Codex had read the adopted repo's own `AGENTS.md`, decided
+an identity precondition failed (*"this checkout has no `origin` remote"*), and **never attempted the
+write**. No attempt means no hook, which means no ledger row. The check was applying "absence is not
+evidence" to ARMED and not to NOT ARMED. It now distinguishes the two by whether the probe file
+actually landed: file written and no guard row ⇒ genuinely NOT ARMED; **no row and no file ⇒
+UNKNOWN**, printing the tail of the run so you can see the agent declining. If you see UNKNOWN, fix
+the precondition it names (usually a real `origin` remote and a valid `.claude/task-lane.json`) and
+re-run. A false alarm is not the safe direction it appears to be: an adopter told a working control
+is dead switches it off.
 
 **The shell-write road — a main road in this lane, not a footnote.** In the Claude lane
 "Bash redirection is not covered" is a small accepted class. In the Codex lane it is routine: while
