@@ -25,17 +25,29 @@ in the machinery itself:
   for v2.0): still parsed so a saved init invocation keeps working, warns loudly that it configures
   nothing, and no longer writes `laneRiskTokens`. Every control **tolerates** a legacy
   `laneRiskTokens` key in an older adopter's config — ignored, never fatal.
-- **Neither live route changed.** `in-thread` and `exempt` behave identically to v1.4; the acceptance
-  suite observes the new refusal both ways (blocked with the retirement string at write *and* commit
-  time; the same write/commit permitted under a documented route).
+- **`exempt` now declares a tier — the one behavior change to a LIVE route.** It was the only route
+  carrying no tier, which meant a reason set entirely about review-seat availability (`codex-down` /
+  `codex-quota` / `trivial-edit`) silently selected the mode that skipped tier declaration. Which seat
+  is unavailable says nothing about how risky the work is. Both controls now require
+  `"tier":"T0".."T3"` on `exempt` exactly as on `in-thread`, and a pre-v1.5 tier-less exemption is
+  **not grandfathered**: it blocks with an explicit `exempt-tier-missing` state naming the field to
+  add. `in-thread` is unchanged.
+- **The refusal is observed both ways at both layers.** The acceptance suite blocks a `mode:"lane"`
+  declaration at write *and* commit time with the retirement string asserted, and permits the same
+  write/commit under a documented route — likewise for the tier-less exemption.
 
 ### Upgrading an existing adopter to v1.5
 
 Re-run `init` with your original flags plus `--force` (read the `--force` warning in the v1.3 notes
-first — commit before you run it; `[G]` files get a `.bak`, `[P]` files do not). Dropping
-`--risk-tokens` from your saved invocation is optional — it now just warns. A stale `laneRiskTokens`
-key left in your `kit.config.json` is harmless: every control ignores it. If anything was still using
-the `lane` route (v1.4 already said not to), re-declare it `in-thread` with the tier.
+first — commit before you run it; `[G]` files get a `.bak`, `[P]` files do not). Then:
+
+- **If you use `exempt`, add a tier to it.** This is the one change that can block work you were
+  doing before: a tier-less exemption now fails closed at both the write guard and the commit floor.
+  The block names the missing field.
+- Dropping `--risk-tokens` from your saved invocation is optional — it now just warns. A stale
+  `laneRiskTokens` entry in your `kit.config.json` is harmless: every control ignores it.
+- If anything was still using the `lane` route (v1.4 already said not to), re-declare it `in-thread`
+  with the tier.
 
 ## What's new in v1.4
 
@@ -177,8 +189,8 @@ wrote.
 
 The one thing to know: **`--force` is global.** It is also the remedy `init` recommends for a stale
 hook, and it regenerates *every* `[G]` file — including a `core/OWNER_COMMS.md` you hand-wrote and a
-`.claude/kit.config.json` whose deny-set you configured (regenerating that with no family flags resets
-it to `{}`, which *widens* your lane guards). Since v1.3, `init` writes a `.bak` beside any such file
+`.claude/kit.config.json` whose families you configured (regenerating that with no family flags resets
+it to `{}`, which *widens* your write guard). Since v1.3, `init` writes a `.bak` beside any such file
 before overwriting it and says so on the console, so the upgrade path is recoverable rather than
 silently destructive. Prefer a re-run without `--force` unless you actually want the kit's versions
 back.
@@ -263,7 +275,7 @@ method is stable; v1.1 adds only the `/thread-restart` asset and its `init` wiri
 - `.claude/hooks/guard-cross-repo-writes.mjs` — blocks Write/Edit outside the repo *(Claude lane)*.
 - `.claude/hooks/guard-lane-authoring.mjs` — blocks an undeclared code write *(Claude lane)*.
 - `.claude/hooks/guard-gate-ladder.mjs` — surfaces the tier's owed ladder on a gate command *(Claude lane, sensor)*.
-- `.githooks/pre-commit` — blocks an undeclared / out-of-scope code **commit** *(**every** lane — see PORTABILITY.md)*.
+- `.githooks/pre-commit` — blocks an undeclared code **commit** *(**every** lane — see PORTABILITY.md)*.
 - `scripts/check-doc-size.mjs` — caps the BINDING method docs by role; fail-closed on a bad config.
 
 **The one sensor** (installed alongside the controls, but categorically different — read the distinction):
@@ -323,9 +335,11 @@ regardless.)
 **Coverage: a tripwire and a floor.** The Claude `guard-lane-authoring` write-time gate is a *tripwire*
 — it catches undeclared writes to known code extensions and to your configured/default source dirs, but
 it is not exhaustive (an unusual extension outside a source dir may slip it). The harness-agnostic
-`pre-commit` hook is the *floor*: it treats **every** non-docs path as code, so an undeclared/out-of-scope
+`pre-commit` hook is the *floor*: it treats **every** non-docs path as code, so an undeclared
 code **commit** is blocked for every lane. Rely on the commit floor for completeness; the write-time
-guards are early, best-effort convenience.
+guards are early, best-effort convenience. **What no control checks is task SCOPE** — since v1.5.0
+the per-file allowlist retired with the `lane` route, so "only the files my task touches" is a
+method rule (`core/MULTI_AGENT.md` § Multi-writer checkout), not a mechanical one.
 
 Proven by `acceptance/plant-the-bug.sh` and the `tests/` suite, each of which observes every control
 **both** blocking and permitting — a control only ever seen green is a control never observed working.

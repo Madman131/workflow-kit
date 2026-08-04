@@ -174,23 +174,28 @@ function declarationState(projectRoot, sessionId) {
     }
     return { state: "malformed" };
   }
+  // An exemption declares WHICH SEAT is unavailable, which says nothing about how risky the work is.
+  // Before v1.5.0 `exempt` was the one route that carried no tier, so the reason set (all about review-seat
+  // availability) silently selected the mode that skipped tier declaration — a category error. The tier is
+  // now required exactly as `in-thread` requires it. An OLD tier-less exemption is NOT grandfathered: it
+  // gets its own explicit state so the remediation can name the field that is missing.
   if (declaration.mode === "exempt") {
-    if (EXEMPT_REASONS.has(declaration.reason)) {
-      return {
-        state: "exempt",
-        reason: declaration.reason,
-        taskId: declaration.taskId,
+    if (!EXEMPT_REASONS.has(declaration.reason)) return { state: "malformed" };
+    if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) return { state: "exempt-tier-missing" };
+    return {
+      state: "exempt",
+      reason: declaration.reason,
+      taskId: declaration.taskId,
+      sessionId,
+      declarationHash: declarationHash({
+        mode: "exempt",
         sessionId,
-        declarationHash: declarationHash({
-          mode: "exempt",
-          sessionId,
-          taskId: declaration.taskId,
-          reason: declaration.reason,
-          maxAgeHours,
-        }),
-      };
-    }
-    return { state: "malformed" };
+        taskId: declaration.taskId,
+        reason: declaration.reason,
+        tier: declaration.tier,
+        maxAgeHours,
+      }),
+    };
   }
   return { state: "malformed" };
 }
@@ -268,10 +273,13 @@ function deny(projectRoot, rel, state, sessionId) {
     `See core/MULTI_AGENT.md — "Task-lane declaration". ` +
     `Remediate by writing ${path.join(projectRoot, DECLARATION)} as ONE of the two DOCUMENTED routes: ` +
     `\`{"mode":"in-thread","sessionId":"${session}","taskId":"<kebab-task>","tier":"T0"|"T1"|"T2"|"T3"}\` · ` +
-    `\`{"mode":"exempt","sessionId":"${session}","taskId":"<kebab-task>","reason":"codex-down"|"codex-quota"|"trivial-edit"}\`; ` +
+    `\`{"mode":"exempt","sessionId":"${session}","taskId":"<kebab-task>","reason":"codex-down"|"codex-quota"|"trivial-edit","tier":"T0"|"T1"|"T2"|"T3"}\`; ` +
     'optional `"maxAgeHours"` defaults to 24. ' +
     'The declaration is session/task-bound and gitignored; each state change is appended and synced to ' +
     `${path.join(projectRoot, LEDGER)} for Owner spot-check.` +
+    (state === "exempt-tier-missing"
+      ? ' This exemption is MISSING its `"tier"`. Since kit v1.5.0 `exempt` declares a tier exactly as `in-thread` does: the reason names the unavailable SEAT, which says nothing about how risky the work is. Add `"tier":"T0"|"T1"|"T2"|"T3"`. A pre-v1.5 tier-less exemption is not grandfathered.'
+      : "") +
     (state === "lane-retired"
       ? " The `lane` route was RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0) — it is not an available route. Declare `in-thread` with the tier."
       : "") +

@@ -24,9 +24,16 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAILURES=$((FAILURES+1)); }
 # assert_eq WANT GOT LABEL
 assert_eq() { if [ "$2" = "$1" ]; then ok "$3 (=$2)"; else bad "$3 (want $1, got $2)"; fi; }
 
-# Run a PreToolUse guard with a JSON event; echo "deny" if it denied, else "allow".
+# Run a PreToolUse guard with a JSON event; echo "deny" if it denied, "allow" if it cleanly allowed,
+# "CRASH(rc=N)" on a non-zero exit. A crash must NOT read as "allow": every PERMITTING assertion below
+# would otherwise stay green against a hook that threw on those very inputs, so the "no over-block"
+# half of each pair would be unfalsifiable. (comms_decision was hardened for exactly this; this helper
+# was not — found by the cold panel.)
 guard_decision() { # $1=hookfile $2=json $3=cwd
-  local out; out="$(printf '%s' "$2" | (cd "$3" && CLAUDE_PROJECT_DIR="$3" node "$1") 2>/dev/null)"
+  local out rc
+  out="$(printf '%s' "$2" | (cd "$3" && CLAUDE_PROJECT_DIR="$3" node "$1") 2>/dev/null)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then echo "CRASH(rc=$rc)"; return; fi
   if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then echo deny; else echo allow; fi
 }
 # Same, but echo the guard's raw JSON output — for asserting the deny REASON, not just the decision.
@@ -385,8 +392,25 @@ grep -q '"state":"lane-retired"' "$ADOPTER/.claude/lane-ledger.jsonl" && ok "the
 # the two DOCUMENTED routes still permit the SAME write — the refusal does not over-block
 printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
 assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "in-thread still permits the SAME write (no over-block)"
-printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"trivial-edit"}\n' "$SID" > "$DECL"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"trivial-edit","tier":"T1"}\n' "$SID" > "$DECL"
 assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "exempt still permits the SAME write (no over-block)"
+
+echo
+echo "(exempt tier) an exemption declares a TIER — the reason names the unavailable SEAT, not the risk"
+# v1.5.0: `exempt` was the ONE route carrying no tier, so a reason set entirely about review-seat
+# availability (codex-down|codex-quota|trivial-edit) silently selected the mode that skipped tier
+# declaration. Both directions, at BOTH layers, plus the pre-v1.5 shape proving it is not grandfathered.
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"trivial-edit"}\n' "$SID" > "$DECL"
+TIERLESS_OUT="$(guard_output "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")"
+printf '%s' "$TIERLESS_OUT" | grep -q '"permissionDecision":"deny"' && ok "write-time: a pre-v1.5 TIER-LESS exemption is BLOCKED (not grandfathered)" || bad "a tier-less exemption must be blocked"
+printf '%s' "$TIERLESS_OUT" | grep -q 'exempt-tier-missing' && ok "…via an EXPLICIT exempt-tier-missing state (not a generic malformed)" || bad "the deny must name the exempt-tier-missing state"
+printf '%s' "$TIERLESS_OUT" | grep -q 'MISSING its' && ok "…and the remediation names the field that is missing" || bad "the deny must name the missing tier field"
+for T in T0 T1 T2 T3; do
+  printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"%s"}\n' "$SID" "$T" > "$DECL"
+  assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "write-time: exempt + tier $T is PERMITTED (no over-block)"
+done
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T9"}\n' "$SID" > "$DECL"
+assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"src/x.mjs"}}' "$ADOPTER")" "write-time: an INVALID exempt tier (T9) is BLOCKED"
 
 echo
 echo "(fail-closed) a MALFORMED config blocks a code write (never silently permits)"
@@ -439,6 +463,19 @@ printf '%s' "$LANE_COMMIT_ERR" | grep -q 'RETIRED' && ok "the block carries the 
 printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
 if git -C "$ADOPTER" commit -q -m "same file, documented route"; then ok "the SAME staged file commits under in-thread (no over-block)"; else bad "in-thread commit of the same file should pass"; fi
 
+echo
+echo "(exempt tier, commit floor) the every-lane floor requires the tier too"
+printf 'export const y3 = 3;\n' > "$ADOPTER/src/feature3.mjs"; git -C "$ADOPTER" add src/feature3.mjs
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down"}\n' "$SID" > "$DECL"
+if TIERLESS_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "tier-less exempt" 2>&1)"; then
+  bad "commit floor: a TIER-LESS exemption must BLOCK a code commit"
+else
+  ok "commit floor: a pre-v1.5 TIER-LESS exemption is BLOCKED (not grandfathered)"
+fi
+printf '%s' "$TIERLESS_COMMIT_ERR" | grep -q 'without a tier' && ok "the block names the missing tier explicitly (not a generic malformed)" || bad "the commit block must name the missing tier"
+printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T1"}\n' "$SID" > "$DECL"
+if git -C "$ADOPTER" commit -q -m "exempt with tier"; then ok "commit floor: the SAME commit passes once the tier is declared (no over-block)"; else bad "exempt+tier commit should pass"; fi
+
 GOODCFG='{"executedPathDirs":["src","policy"],"laneRiskTokens":["billing"],"stateDocs":["docs/state.md"]}'
 # GOODCFG keeps the legacy laneRiskTokens key on purpose — every fail-closed proof below runs against
 # a config that ALSO carries the tolerated dead key, so tolerance and fail-closed are proven together.
@@ -450,6 +487,11 @@ echo "(F1 regression) malformed config STILL fails closed for a CONFIG-ONLY-gate
 rm -f "$DECL"
 printf '%s\n' "$GOODCFG" > "$ADOPTER/.claude/kit.config.json"
 assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"policy/authz.rego"}}' "$ADOPTER")" "valid config, undeclared: config-only-gated policy/authz.rego BLOCKED"
+# THE PERMIT HALF — this is what makes executedPathDirs a genuine both-ways demonstration and not two
+# deny assertions wearing a "load-bearing" label. Drop `policy` from the family and the SAME undeclared
+# path is no longer gated at write time, so it is ALLOWED: the config, not the path, did the blocking.
+printf '{"executedPathDirs":["src"],"stateDocs":["docs/state.md"]}\n' > "$ADOPTER/.claude/kit.config.json"
+assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"policy/authz.rego"}}' "$ADOPTER")" "'policy' removed from executedPathDirs -> the SAME path is no longer gated (config is load-bearing)"
 printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
 assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"policy/authz.rego"}}' "$ADOPTER")" "MALFORMED config: config-only-gated path STILL BLOCKED (fail-open fixed)"
 
@@ -510,6 +552,14 @@ rm -f "$DECL"
 printf 'x\n' > "$ADOPTER/authz.rego"; git -C "$ADOPTER" add authz.rego
 if git -C "$ADOPTER" commit -q -m "undeclared root rego" 2>/dev/null; then bad "commit floor: an undeclared root .rego commit should be BLOCKED"; else ok "commit floor: undeclared root .rego (missed by the write-tripwire) is BLOCKED at commit (every-lane floor)"; fi
 git -C "$ADOPTER" reset -q authz.rego 2>/dev/null; rm -f "$ADOPTER/authz.rego"
+# CHARACTERIZATION (tripwire scope, NOT a lane-route hole): isGatedPath() early-exits before the
+# declaration is ever read, so on an UNGATED path the write guard permits regardless of what the
+# declaration says — retired `lane` included, exactly as it already does for an undeclared or
+# malformed one. This is the documented tripwire/floor split (PORTABILITY § Coverage), asserted here
+# so a future hardening flips it visibly rather than silently.
+printf '{"mode":"lane","sessionId":"%s","taskId":"accept","allowedFiles":["authz.rego"]}\n' "$SID" > "$DECL"
+assert_eq allow "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input":{"file_path":"authz.rego"}}' "$ADOPTER")" "DEFERRED(documented): on an UNGATED root path the write-tripwire never reads the declaration (a lane declaration is not refused there) — the commit floor above is the backstop"
+rm -f "$DECL"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

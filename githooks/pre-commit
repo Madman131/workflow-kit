@@ -23,9 +23,12 @@ const EXEMPT_REASONS = new Set(["codex-down", "codex-quota", "trivial-edit"]);
 // current declaration — is config-independent. It still checks the file's STRUCTURAL integrity and
 // FAILS CLOSED on a present-but-corrupt config (not valid JSON, not an object, symlinked, or
 // unreadable): that file parameterizes the SIBLING controls (guard-lane-authoring, check-doc-size),
-// and a code-bearing commit must not proceed while the shared control config is corrupt. A legacy
-// `laneRiskTokens` key left by a pre-v1.5 adopt is IGNORED — a field no control reads cannot make a
-// control fail open.
+// and a code-bearing commit must not proceed while the shared control config is unreadable as a
+// whole. HONEST LIMIT: this is WHOLE-FILE integrity only. A sibling's FIELD being malformed (say
+// `executedPathDirs: "src"`) is caught by that sibling — the write guard denies, `doc:size` exits 1 —
+// but not here; adding per-field checks would mean re-reading families this hook does not use. A
+// legacy `laneRiskTokens` entry left by a pre-v1.5 adopt is IGNORED whatever its shape — a field no
+// control reads cannot make a control fail open.
 const KIT_CONFIG = path.posix.join(".claude", "kit.config.json");
 
 // Absent config ⇒ fine (defaults-only is legitimate). Present-but-corrupt ⇒ { ok:false } ⇒ the main
@@ -49,7 +52,7 @@ function loadKitConfig() {
   return { ok: true };
 }
 
-function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as one of the two DOCUMENTED routes: mode \"in-thread\" with sessionId, taskId, and tier; or mode \"exempt\" with sessionId, taskId, and a documented reason. Rules: core/MULTI_AGENT.md, Task-lane declaration. For hook installation run: git config core.hooksPath .githooks`) {
+function fail(reason, remediation = `Remediate by writing a fresh ${DECLARATION} as one of the two DOCUMENTED routes: mode \"in-thread\" with sessionId, taskId, and tier; or mode \"exempt\" with sessionId, taskId, a documented reason, and a tier. Rules: core/MULTI_AGENT.md, Task-lane declaration. For hook installation run: git config core.hooksPath .githooks`) {
   process.stderr.write(
     `pre-commit BLOCKED: ${reason}\n` +
     `${remediation}\n`,
@@ -126,8 +129,12 @@ function readDeclaration() {
   // RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0). An
   // explicit state, not a silent fall-through to "malformed", so the block names the real cause.
   if (declaration.mode === "lane") return { state: "lane-retired" };
+  // Since v1.5.0 an exemption declares a tier exactly as `in-thread` does: the reason names the
+  // unavailable SEAT, which says nothing about how risky the work is. A pre-v1.5 tier-less exemption
+  // is NOT grandfathered — it gets its own explicit state so the block can name the missing field.
   if (declaration.mode === "exempt") {
     if (!EXEMPT_REASONS.has(declaration.reason)) return { state: "malformed" };
+    if (!["T0", "T1", "T2", "T3"].includes(declaration.tier)) return { state: "exempt-tier-missing" };
     return { state: "exempt", taskId: declaration.taskId };
   }
   return { state: "malformed" };
@@ -168,5 +175,11 @@ if (declaration.state === "lane-retired") {
   fail(`${DECLARATION} declares the retired \`lane\` route`,
     "The `lane` route was RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0) — it is not an available route. "
     + "Declare `in-thread` with the tier. Rules: core/MULTI_AGENT.md, Task-lane declaration.");
+}
+if (declaration.state === "exempt-tier-missing") {
+  fail(`${DECLARATION} declares mode "exempt" without a tier`,
+    'Since kit v1.5.0 an exemption declares a tier exactly as "in-thread" does — the reason names the unavailable SEAT, '
+    + 'which says nothing about how risky the work is. Add "tier": "T0"|"T1"|"T2"|"T3". A pre-v1.5 tier-less exemption '
+    + 'is not grandfathered. Rules: core/MULTI_AGENT.md, Task-lane declaration.');
 }
 if (!["in-thread", "exempt"].includes(declaration.state)) fail(`${DECLARATION} is ${declaration.state}`);

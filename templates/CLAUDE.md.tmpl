@@ -45,9 +45,9 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    per the method.
 4. **Declare the task lane before the first code write.** `.claude/task-lane.json` binds this session
    id + a kebab task id + exactly one route: **`in-thread`** (with the tier) or **`exempt`** (with a
-   ledgered reason — it declares no tier, and never skips a gate). Undeclared / malformed / stale ⇒ the hook
-   BLOCKS (fail-closed). A third route, `lane`, is still accepted by the controls but its doctrine was
-   retired at kit v1.4.0 — do not start new work on it.
+   ledgered reason **and the tier** — the reason names the unavailable seat, which says nothing about
+   how risky the work is, and an exemption never skips a gate). Undeclared / malformed / stale ⇒ the
+   hook BLOCKS (fail-closed). The retired `lane` route is REFUSED by both controls (kit v1.5.0).
 5. **Multi-writer checkout — surgical staging only.** If more than one agent lane writes this
    checkout, **NEVER `git add -A` / `git add .` / `git commit -a`.** Unexplained dirty files are the
    other lane's in-flight work — never stage, stash, revert, or edit them. **Canonical text for ALL

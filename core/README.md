@@ -172,13 +172,24 @@ firing. Full rationale: root `README.md` § What's new in v1.4.
 **Authoring is in-thread. The mechanical retirement landed at kit v1.5.0.** v1.4.0 retired the lane
 in the METHOD only, leaving a documented doc/machinery inconsistency: both enforcement controls still
 accepted a `mode:"lane"` declaration. v1.5.0 closed it — both controls now **REFUSE** the route with
-an explicit `lane-retired` state (the block says the route is RETIRED, never that the JSON is wrong),
-and the token deny-set the route was the only consumer of (`laneRiskTokens` plus the built-in
-risk-token defaults) is removed from both hooks. A legacy `laneRiskTokens` key in an older adopter's
-config is ignored, never fatal; `init --risk-tokens` is deprecated (parse-warn-ignore) until its v2.0
-removal.
+an explicit `lane-retired` state, and the token deny-set the route was the only consumer of
+(`laneRiskTokens` plus the built-in risk-token defaults) is removed from both hooks. Precisely: an
+otherwise-valid declaration NAMING the retired route gets `lane-retired` rather than a generic
+"malformed" — the route dispatch is what carries the explicit state. A declaration that also fails the
+checks every route shares (freshness, session binding, `taskId` shape) reports THAT failure first,
+exactly as it would for `in-thread` or `exempt`. A legacy `laneRiskTokens` entry in an older adopter's
+config is ignored whatever its shape — no control reads it, so it cannot make one fail open; the file's
+structural integrity is still enforced. `init --risk-tokens` is deprecated (parse-warn-ignore) until
+its v2.0 removal.
+
+**Also at v1.5.0: `exempt` declares a tier.** It was the one route carrying none, so a reason set
+entirely about review-seat availability (`codex-down` / `codex-quota` / `trivial-edit`) selected the
+mode that skipped tier declaration — the seat that is unavailable says nothing about how risky the
+work is. Both controls now require `tier` on `exempt` exactly as on `in-thread`; a pre-v1.5 tier-less
+exemption is **not** grandfathered — it BLOCKS with an explicit `exempt-tier-missing` state naming the
+field to add.
 
 **Restoring the lane** is not one commit: it needs the retired `LANES.md` procedure back in `core/`,
-its binding facts restored to `MULTI_AGENT.md` § Task-lane declaration, the `mode:"lane"` acceptance
-+ eligibility machinery (globs and token deny-set) restored to both controls, and the lane-eligible
-globs plus the builder seat re-declared in `BINDINGS.md`.
+its binding facts restored to `MULTI_AGENT.md` § Task-lane declaration, both the `mode:"lane"`
+acceptance and its eligibility machinery (globs and token deny-set) restored to both controls, and the
+lane-eligible globs plus the builder seat re-declared in `BINDINGS.md`.

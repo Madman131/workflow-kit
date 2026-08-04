@@ -44,9 +44,10 @@ a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is
   `lane-retired` state (doctrine retired at kit v1.4.0, mechanism at v1.5.0 — history:
   `core/README.md` § Provenance). Rules: `core/MULTI_AGENT.md` § Task-lane declaration.
 - **Repo-specific families** live in `.claude/kit.config.json` (`executedPathDirs`, `stateDocs`,
-  `memoryDir`) — read by `guard-lane-authoring` and `check-doc-size`. Every control, the `pre-commit`
-  floor included, fails CLOSED on a structurally corrupt file; a legacy `laneRiskTokens` key from a
-  pre-v1.5 adopt is ignored, never fatal.
+  `memoryDir`) — read by `guard-lane-authoring` and `check-doc-size`. A structurally corrupt file
+  fails CLOSED in every control that reads one: it blocks a gated write, a **code-bearing** commit
+  (a docs-only commit exits before the check), and `doc:size`. A legacy `laneRiskTokens` entry from a
+  pre-v1.5 adopt is ignored whatever its shape — no control reads it.
 
 ## Canonical docs — the read-order, named
 **Boot set (read whole):** identity = `CLAUDE.md` / `AGENTS.md` → method = `core/FOUNDATIONS.md` →

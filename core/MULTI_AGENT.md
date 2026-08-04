@@ -59,14 +59,17 @@ What the route carried, what was dropped with it, and what survived generally: `
   explicit `lane-retired` state** — at write time and at commit time; the block says the route is
   RETIRED and points back here. History: `core/README.md` § Provenance.
 - **Escapes are first-class** (`codex-down` / `codex-quota` / `trivial-edit`) — work never stalls on
-  an unavailable seat. **An exemption still declares — it simply declares no tier — and it never skips
-  a gate:** build in-thread,
-  still run the tier's normal cold pass (substituting seats per `core/REVIEW.md` § External gate), and
-  ledger the escape. No free-text reason is accepted.
+  an unavailable seat. **An exemption declares the TIER too, and it never skips a gate:** the reason
+  names which review SEAT is unavailable, which says nothing about how risky the work is — so build
+  in-thread, still run the tier's normal cold pass (substituting seats per `core/REVIEW.md` § External
+  gate), and ledger the escape. No free-text reason is accepted, and a tier-less exemption BLOCKS.
 - **Gated decisions are ledgered, and the ledger FAILS CLOSED.** A gated decision appends its exact
   path with an append+sync write; concurrent processes may duplicate a row but can never replace
   another process's row. **Symlink traversal and any ledger-write failure BLOCK** — so no route, an
-  exemption included, can proceed unlogged.
+  exemption included, can proceed unlogged. **A PERMITTED write's row also carries a
+  `declarationHash`** — a digest over the declaration's canonical fields — so the Owner can spot-check
+  which exact declaration authorized a write, and a declaration edited mid-task shows as a new hash.
+  Rows for BLOCKED writes carry no hash.
 
 ## Onboarding a new model
 *To plug a new model into a role, bind it in `BINDINGS.md` and give it the role's access: a **reviewer**

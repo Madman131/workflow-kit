@@ -145,10 +145,13 @@ function resolveTier(projectRoot, sessionId) {
   if (decl.sessionId !== sessionId) return { tier: STRICTEST, failClosed: "session-mismatch" };
   if (typeof decl.taskId !== "string" || !TASK_ID_RE.test(decl.taskId)) return { tier: STRICTEST, failClosed: "bad-task-id" };
 
-  // `exempt` carries no tier, and any other mode — the retired `lane` route included, which the two
-  // enforcement controls now refuse outright — resolves to T3 here: OVER-gating rather than
-  // under-gating is the correct direction to be wrong in. Because nothing is persisted, this guess
-  // stays corrigible: declaring a real tier next call simply supersedes it.
+  // Every mode other than `in-thread` resolves to T3 here: OVER-gating rather than under-gating is
+  // the correct direction to be wrong in. That includes the retired `lane` route (which the two
+  // enforcement CONTROLS now refuse outright) and `exempt` — which since v1.5.0 does carry a tier,
+  // deliberately NOT honoured here. Reading it would route to a LOWER tier, i.e. fail-OPEN, in a
+  // SENSOR whose whole value is that it cannot under-gate; the cost is a noisier ladder on an
+  // exemption, which is the safe direction. Because nothing is persisted, this stays corrigible:
+  // declaring a real tier next call simply supersedes it.
   if (decl.mode !== "in-thread") return { tier: STRICTEST, failClosed: "no-tier", taskId: decl.taskId };
   if (!TIERS.includes(decl.tier)) return { tier: STRICTEST, failClosed: "no-tier", taskId: decl.taskId };
 
