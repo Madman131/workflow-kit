@@ -1,10 +1,13 @@
 # PROTOCOLS — the rules, and the incident each one cost
 
-Word budget: 2000 (**Owner-ratified 2026-08-04**; its own number, never summed with its body). It
-moved from 1300 to 2000 during the release that introduced it, as the bank absorbed more incidents —
-disclosed rather than quietly rewritten — and the Owner then ratified that number. **Raising it
-again is an Owner call.** Not split: a bank's only seam is its section headings, and two half-banks
-are two files to forget.
+Word budget: 2400 (**Owner-ratified 2026-08-05**; its own number, never summed with its body). It
+moved 1300 → 2000 during the release that introduced it and 2000 → 2400 in v2.4.0, each time because
+the bank absorbed more incidents, each time disclosed rather than quietly rewritten, and each time
+ratified by the Owner afterwards. **Raising it again is an Owner call.** **Still not split, and in
+v2.4.0 that was re-decided rather than inherited:** the alternative to this number was cutting three
+banked rules totalling 256 words, since the only non-rule prose here is a 165-word header that
+cannot cover the gap even if wholly deleted. A cap may never force deleting doctrine. A bank's only
+seam is its section headings, and two half-banks are two files to forget.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.

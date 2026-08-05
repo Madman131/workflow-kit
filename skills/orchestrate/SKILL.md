@@ -5,7 +5,8 @@ description: Run a program too large for one thread as sequential CHIPS — one 
 
 # /orchestrate — one writer, one ladder, one GO
 
-Word budget: 750 (body; `CHIP_BRIEF.md` and `PROTOCOLS.md` beside it). Doctrine:
+Word budget: 800 (**Owner-ratified 2026-08-05**; body; `CHIP_BRIEF.md` and `PROTOCOLS.md` beside
+it — raised from 750 when this page gained an enforced rung). Doctrine:
 `core/MULTI_AGENT.md` § Delegation · § Multi-writer checkout · § Task-lane declaration ·
 `core/WORKFLOW.md` § Gate · `core/REVIEW.md` § Decorrelation · `core/OWNER_COMMS.md` (Owner-facing
 formatting).
