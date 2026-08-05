@@ -71,7 +71,7 @@ discipline of any shared checkout.
 ⚠ **One rung on this page is enforced; the rest is honour-system.** No control counts rounds,
 reads a freeze, or checks who gave a GO (`core/WORKFLOW.md` § Gate) — the exception is
 `guard-brief-rung`, which denies a brief write or cross-session send lacking a fresh, session- and
-target-bound record of executed checks — proving such a RECORD EXISTS, never that its commands were
-run or were the right ones. The kit ships controls for the declaration and the commit
+target-bound, SINGLE-USE record of executed checks — proving such a RECORD EXISTS, never that its
+commands were run or were the right ones. The kit ships controls for the declaration and the commit
 floor, and their lane, trust, fresh-clone and bypass limits are in `PORTABILITY.md` — and a rung you
 did not name is a rung you did not run.

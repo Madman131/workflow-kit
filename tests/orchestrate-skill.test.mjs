@@ -103,7 +103,11 @@ test("the body states EXACTLY how much of it is enforced — one rung, and no mo
   // The v2.4 correction's own honesty half. `guard-brief-rung` makes the old blanket "nothing is
   // enforced" false, and the replacement must not over-correct in the other direction: what ships
   // is a tripwire that proves a ritual RAN. Both halves are load-bearing, so both are pinned.
-  pin(body, "proving such a RECORD EXISTS, never that its commands were\nrun or were the right ones", "the enforced rung claims neither execution nor sufficiency");
+  pin(body, "proving such a RECORD EXISTS, never that its\ncommands were run or were the right ones", "the enforced rung claims neither execution nor sufficiency");
+  // SINGLE-USE is a property the guard actually enforces (one ritual, one dispatch), so the body
+  // may not quietly drop it: a reader told the record is merely "session- and target-bound" would
+  // reasonably expect to reuse it inside the freshness window, which is the case consumption closes.
+  pin(body, "SINGLE-USE record of executed checks", "the rung is single-use");
   // This sentence originally read "The two things the kit does enforce are the task-lane
   // declaration and the commit floor" — which contradicts the kit's own PORTABILITY.md, where the
   // write guard is inert in the Codex lane until a human grants hook trust, and the commit floor is

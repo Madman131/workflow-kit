@@ -27,6 +27,14 @@ may declare `{"class":"status"}` instead, and that declaration is LEDGERED for t
 spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
 must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
+**One ritual authorizes one dispatch.** The sidecar carries a nonce that is SPENT on the dispatch it
+authorizes, because freshness and target-binding together still let a SECOND dispatch to the same
+target ride the first ritual — and that repeat is the dangerous one, carrying text the original
+checks never saw. The ledger row records the declared class and the target in clear text, never
+hashed, because its named consumer is the Owner's spot-check. That ledger **records; it does not
+deter**: an orchestrator who declares everything `status` is not stopped mechanically, exactly as
+`exempt` is not, and the compensation is that each declaration is a row a human can count.
+
 **Its limits ship with it, in the deny text an author actually reads.** It proves a session- and
 dispatch-bound RECORD of checks EXISTS — not that the commands were ever run, and not that they were
 the right ones. Nothing executes a receipt or compares it to reality, so a fabricated sidecar

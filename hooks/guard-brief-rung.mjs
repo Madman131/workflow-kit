@@ -151,7 +151,7 @@ export function briefTargets(input, { root, patchBase, briefPathDirs, toRepoRela
  * forgery the binding exists to stop is performed by DELETING A FIELD. Absent is not "no opinion";
  * absent is unbound, and unbound is denied.
  */
-export function sidecarState(sidecar, { ageMin, sessionId, dispatch }) {
+export function sidecarState(sidecar, { ageMin, sessionId, dispatch, spentNonces = new Set() }) {
   if (sidecar === undefined) return { state: "absent" };
   if (sidecar === null) return { state: "malformed" };
   if (!isPlainObject(sidecar)) return { state: "malformed" };
@@ -176,9 +176,24 @@ export function sidecarState(sidecar, { ageMin, sessionId, dispatch }) {
   // the worker builds from — so there is nothing for a brief write to declare its way out of.
   if (sidecar.class === "status") {
     if (dispatch.kind !== "send") return { state: "status-not-available" };
+    // Consumes NOTHING, and the asymmetry is deliberate rather than an oversight: this route
+    // presented no receipts, so there are none to spend. What it leaves behind is a legible ledger
+    // row, which is the only thing standing between this escape and invisibility.
     return { state: "status-declared" };
   }
   if (sidecar.class !== undefined && sidecar.class !== "load-bearing") return { state: "malformed" };
+
+  // CONSUME ON USE — one ritual, one dispatch.
+  //
+  // Target-binding kills the COPIED and the RE-TOUCHED sidecar, but it leaves the sharpest case
+  // open: a SECOND dispatch to the SAME target inside the freshness window. That repeat is the
+  // dangerous one, not a harmless one — a brief re-edited at the same path carries TEXT THE ORIGINAL
+  // RITUAL NEVER SAW, riding receipts minted for different content. Freshness cannot see it (the
+  // window has not closed) and target-binding cannot see it (the target matches). So the sidecar
+  // carries a NONCE, the guard records it on the dispatch it authorizes, and a nonce already spent
+  // is refused. That is the rule's actual semantics: every load-bearing dispatch owes its own rung.
+  if (typeof sidecar.nonce !== "string" || !sidecar.nonce.trim()) return { state: "nonce-missing" };
+  if (spentNonces.has(sidecar.nonce)) return { state: "rung-already-spent", named: sidecar.nonce };
 
   const checks = Array.isArray(sidecar.checks) ? sidecar.checks : [];
   const executed = checks.filter(
@@ -198,7 +213,7 @@ export const ALLOW_STATES = new Set(["receipted", "status-declared"]);
 // `control` so the Owner's spot-check can tell this control's rows from the lane guard's. A
 // STATUS-DECLARED allow is the row that matters: it is the unfalsifiable route, so it must not also
 // be the invisible one. Ledger IO fails CLOSED — an allow that cannot record its trace is denied.
-export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks }) {
+export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce }) {
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
@@ -223,7 +238,17 @@ export function writeLedger(projectRoot, { decision, state, kind, target, sessio
         : `${target.slice(0, 120)}…truncated,sha256:${createHash("sha256").update(target).digest("hex").slice(0, 16)}`,
       sessionId,
     };
+    // CLEAR TEXT, not a digest. The ledger's named consumer is the OWNER'S SPOT-CHECK, and a
+    // spot-check cannot read a hash — the same reasoning that put a clear-text tier on the lane
+    // guard's exempt rows. The declared CLASS is the field that matters most here: an orchestrator
+    // who declares every dispatch "status" is not stopped mechanically (the same unfalsifiability
+    // as `exempt`), so the honest compensation is that each such declaration is a legible row a
+    // human can COUNT. The ledger RECORDS; it does not deter, and this control does not claim it.
+    row.class = cls;
     if (checks !== undefined) row.checks = checks;
+    // The spent nonce IS the consumption record — there is no second file to lose or forge apart
+    // from the audit trail itself, and it is append-only and fsync'd for exactly that reason.
+    if (nonce !== undefined) row.nonce = nonce;
     fd = openSync(ledger, "a", 0o600);
     const line = `${JSON.stringify(row)}\n`;
     if (writeSync(fd, line) !== Buffer.byteLength(line)) return false;
@@ -236,13 +261,38 @@ export function writeLedger(projectRoot, { decision, state, kind, target, sessio
   }
 }
 
+/**
+ * Every brief-rung nonce this repo has already spent. Read from the ledger rather than a sidecar
+ * file of its own: the audit trail is already append-only, fsync'd and integrity-checked on write,
+ * so consumption inherits those properties instead of inventing weaker ones beside them.
+ *
+ * An UNREADABLE ledger yields `null`, and the caller treats that as fail-closed — if the record of
+ * what has been spent cannot be read, nothing can be honestly declared unspent.
+ */
+export function spentNoncesFrom(text) {
+  if (text === undefined) return new Set();           // no ledger yet ⇒ nothing spent
+  if (typeof text !== "string") return null;
+  if (text.length > 0 && !text.endsWith("\n")) return null;
+  const out = new Set();
+  for (const line of text.split("\n").filter(Boolean)) {
+    let row;
+    try { row = JSON.parse(line); } catch { return null; }
+    if (!isPlainObject(row)) return null;
+    if (row.control === "brief-rung" && typeof row.nonce === "string" && row.nonce) out.add(row.nonce);
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ deny text
 
 const RITUAL =
   `Before dispatching a brief, a ruling or a GO ask: OPEN every citation at its line and RECOMPUTE ` +
   `every number by execution (never by eye), then write \`${SIDECAR}\` as ` +
   `{"sessionId":"<this session>","target":"<the ONE dispatch these checks were run for>",` +
+  `"nonce":"<a value you have not used before>",` +
   `"checks":[{"command":"<what you ran>","output":"<what it returned>"}]} and retry. ` +
+  `The nonce is SPENT on the dispatch it authorizes: one ritual, one dispatch, so a second send or ` +
+  `a re-edited brief owes its own — the repeat carries text the first ritual never saw. ` +
   `A cross-session send that is NOT load-bearing may instead declare {"class":"status"} with the same ` +
   `sessionId and target — that route is LEDGERED for the Owner's spot-check, and a brief write cannot ` +
   `take it. This guard proves such a RECORD EXISTS — not that its commands were run, nor that they ` +
@@ -264,6 +314,8 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "target-missing": `${SIDECAR} names no \`target\`. Freshness alone cannot bind receipts to a dispatch: copying a sidecar gives it a NEW mtime, and re-touching one clears staleness without re-running anything.`,
     "target-mismatch": `${SIDECAR} was written for ${detail}, not for this dispatch — one ritual authorizes one dispatch.`,
     "status-not-available": `${SIDECAR} declares {"class":"status"}, which is available only to a cross-session send. A brief is load-bearing by definition: it is the artifact a worker builds from, so there is nothing here to declare out of scope.`,
+    "nonce-missing": `${SIDECAR} names no \`nonce\`. A rung is SPENT on the dispatch it authorizes, so it needs a value to spend; without one, a single ritual would authorize every dispatch inside the freshness window.`,
+    "rung-already-spent": `${SIDECAR}'s nonce ${detail} has ALREADY been spent on an earlier dispatch. One ritual authorizes ONE dispatch — a repeat to the same target is the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
     "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, or \`briefPathDirs\` is not an array of non-empty path segments). This dispatch is BLOCKED (fail-closed) — a corrupt brief-path set must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
@@ -336,10 +388,18 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       sidecar = e && e.code === "ENOENT" ? undefined : null;
     }
 
+    // WHAT HAS ALREADY BEEN SPENT. An unreadable ledger is fail-CLOSED: if the record of which
+    // rituals are used up cannot be read, no nonce can honestly be called unspent.
+    let ledgerText;
+    try { ledgerText = readFileSync(path.join(root, LEDGER), "utf8"); }
+    catch (e) { if (!(e && e.code === "ENOENT")) { emit(denyReason("ledger-error", { dispatch: dispatches[0] })); return exit(0); } }
+    const spentNonces = spentNoncesFrom(ledgerText);
+    if (spentNonces === null) { emit(denyReason("ledger-error", { dispatch: dispatches[0] })); return exit(0); }
+
     // EVERY dispatch is judged before anything is allowed. A patch envelope is applied as a unit, so
     // deciding on the first match would let a second brief in the same envelope ride the first one's
     // sidecar — the multi-target fail-open the shared grammar exists to prevent.
-    const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d }) }));
+    const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d, spentNonces }) }));
     const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
     if (blocked) {
       emit(denyReason(blocked.v.state, {
@@ -353,6 +413,8 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       const ok = writeLedger(root, {
         decision: "allow", state: v.state, kind: d.kind, target: d.target,
         sessionId: input?.session_id ?? "", checks: v.checks,
+        cls: v.state === "status-declared" ? "status" : "load-bearing",
+        nonce: v.state === "status-declared" ? undefined : sidecar.nonce,
       });
       if (!ok) { emit(denyReason("ledger-error", { dispatch: d })); return exit(0); }
     }

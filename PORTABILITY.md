@@ -282,6 +282,19 @@ the same way, by a deliberately-blocked call, before relying on it. The brief-WR
 such caveat: it is executed from its installed location, in both lanes and both directions, by
 `tests/brief-rung.test.mjs`.
 
+**One ritual authorizes ONE dispatch.** The sidecar carries a `nonce`, the guard records it on the
+dispatch it authorizes, and a nonce already spent is refused. Freshness and target-binding together
+still permitted a SECOND dispatch to the SAME target inside the window — and that repeat is the
+dangerous one, because a brief re-edited at that path carries text the first ritual never verified.
+A status-declared send consumes nothing: it presented no receipts, so it has none to spend.
+
+**The ledger RECORDS; it does not deter, and this control does not claim otherwise.** An
+orchestrator who declares every dispatch `{"class":"status"}` is not stopped mechanically — the same
+unfalsifiability the `exempt` route carries. What the declaration route buys is that every such
+declaration is a LEGIBLE ROW a human can count: the declared class and the dispatch target are
+written in clear text, never hashed, because the ledger's named consumer is the Owner's spot-check
+and a spot-check cannot read a digest.
+
 **What the sidecar proves is narrower than it looks.** Nothing executes a receipt or compares it to
 reality, so a hand-written sidecar naming commands that never ran satisfies this guard. It proves a
 session- and dispatch-bound RECORD exists — a raised cost and an auditable trace, not impossibility.

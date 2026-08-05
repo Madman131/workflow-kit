@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 
 import {
   ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, loadBriefConfig, sidecarState,
+  spentNoncesFrom,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
 
@@ -24,7 +25,7 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SEND = { kind: "send", target: "local_dest" };
 const BRIEF = { kind: "brief", target: "briefs/cs1.md" };
 const OK_CHECK = [{ command: "wc -w PROTOCOLS.md", output: "1987" }];
-const fresh = (over = {}) => ({ sessionId: "s1", target: "briefs/cs1.md", checks: OK_CHECK, ...over });
+const fresh = (over = {}) => ({ sessionId: "s1", target: "briefs/cs1.md", nonce: "n1", checks: OK_CHECK, ...over });
 const state = (sidecar, over = {}) =>
   sidecarState(sidecar, { ageMin: 1, sessionId: "s1", dispatch: BRIEF, ...over }).state;
 
@@ -140,6 +141,44 @@ test("the STATUS escape is available to a send and refused to a brief", () => {
   assert.equal(state(fresh({ class: "load-bearing", checks: [] })), "no-executed-check");
 });
 
+test("CONSUME ON USE — one ritual, one dispatch, and the repeat is the dangerous case", () => {
+  // Target-binding kills the COPIED and the RE-TOUCHED sidecar. It does NOT kill a SECOND dispatch
+  // to the SAME target inside the freshness window — and that repeat is the sharp one: a brief
+  // re-edited at the same path carries text the original ritual never saw, riding receipts minted
+  // for different content. Freshness cannot see it and target-binding cannot see it.
+  assert.equal(state(fresh({ nonce: undefined })), "nonce-missing");
+  assert.equal(state(fresh({ nonce: "   " })), "nonce-missing", "whitespace is not a nonce");
+  assert.equal(state(fresh(), { spentNonces: new Set(["n1"]) }), "rung-already-spent");
+  assert.equal(state(fresh(), { spentNonces: new Set(["other"]) }), "receipted",
+    "…and an UNRELATED spent nonce does not block this one (both directions)");
+  // The status route consumes nothing, and the asymmetry is deliberate: it presented no receipts,
+  // so it has none to spend. What it leaves is a legible ledger row.
+  assert.equal(
+    sidecarState(fresh({ class: "status", checks: undefined, nonce: undefined, target: "local_dest" }),
+      { ageMin: 1, sessionId: "s1", dispatch: SEND, spentNonces: new Set() }).state,
+    "status-declared", "a status send needs no nonce because it spends nothing");
+});
+
+test("spentNoncesFrom reads the audit trail, and fails CLOSED on one it cannot read", () => {
+  assert.deepEqual([...spentNoncesFrom(undefined)], [], "no ledger yet ⇒ nothing spent");
+  const rows = [
+    JSON.stringify({ control: "brief-rung", nonce: "a" }),
+    JSON.stringify({ control: "lane-authoring", nonce: "ignored" }),
+    JSON.stringify({ control: "brief-rung", nonce: "b" }),
+  ].join("\n") + "\n";
+  assert.deepEqual([...spentNoncesFrom(rows)].sort(), ["a", "b"], "only THIS control's nonces count");
+  // Unreadable ⇒ null ⇒ the caller denies. If the record of what is spent cannot be read, nothing
+  // can honestly be called unspent.
+  assert.equal(spentNoncesFrom("{not json}\n"), null);
+  assert.equal(spentNoncesFrom('{"control":"brief-rung"}'), null, "a missing trailing newline is a truncated trail");
+  assert.equal(spentNoncesFrom("[1,2]\n"), null, "a non-object row is a corrupt trail");
+  // The DEFENSIVE branch, pinned rather than left unproven: `readFileSync(…, "utf8")` always hands
+  // back a string today, so this is unreachable in practice — and an unpinned defensive branch is
+  // exactly what a mutation battery finds SURVIVING. It did; this is the assertion that kills it.
+  assert.equal(spentNoncesFrom(123), null, "a non-string ledger is unreadable, not empty");
+  assert.equal(spentNoncesFrom(null), null);
+});
+
 test("every deny state produces a message that names the state's OWN remediation", () => {
   // A control that misdescribes the input it just read teaches its reader to discount it. Each
   // string is asserted on the phrase that DISCRIMINATES it, never on the shared ritual template.
@@ -153,6 +192,8 @@ test("every deny state produces a message that names the state's OWN remediation
     "target-missing": /copying a sidecar gives it a NEW mtime/,
     "target-mismatch": /one ritual authorizes one dispatch/,
     "status-not-available": /load-bearing by definition/,
+    "nonce-missing": /needs a value to spend/,
+    "rung-already-spent": /One ritual authorizes ONE dispatch/,
     "no-executed-check": /assert-without-executing/,
     "kit-config-malformed": /must never silently narrow a control's scope/,
     "ledger-error": /fails CLOSED when it cannot record a trace/,
@@ -248,7 +289,7 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
     // PERMITTING direction: a fresh, session-bound, target-bound sidecar with a real receipt.
     const sidecar = path.join(dir, ".claude", "brief-rung.json");
     writeFileSync(sidecar, JSON.stringify({
-      sessionId: "s1", target: "briefs/cs1.md",
+      sessionId: "s1", target: "briefs/cs1.md", nonce: "rung-1",
       checks: [{ command: "wc -w skills/orchestrate/PROTOCOLS.md", output: "1987" }],
     }));
     const allowed = run(briefWrite);
@@ -261,6 +302,11 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
     assert.equal(rows.length, 1, "one row per allowed dispatch");
     assert.equal(rows[0].state, "receipted");
     assert.equal(rows[0].target, "briefs/cs1.md");
+    // CLEAR TEXT, both fields: the ledger's named consumer is the Owner's spot-check, and a
+    // spot-check cannot read a digest. The declared CLASS is what makes the status escape honest —
+    // it is not stopped mechanically, so it must at least be COUNTABLE by a human.
+    assert.equal(rows[0].class, "load-bearing");
+    assert.equal(rows[0].nonce, "rung-1", "the spent nonce IS the consumption record");
 
     // The CODEX-lane copy runs from ITS installed location too — byte-identity is a claim about
     // installation, not execution, and only running each where it installs settles it.
@@ -283,7 +329,7 @@ test("one sidecar authorizes ONE dispatch — a two-brief envelope cannot ride a
   try {
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
     writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
-      sessionId: "s1", target: "briefs/a.md", checks: [{ command: "c", output: "o" }],
+      sessionId: "s1", target: "briefs/a.md", nonce: "rung-1", checks: [{ command: "c", output: "o" }],
     }));
     const r = spawnSync(process.execPath, [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
       input: JSON.stringify({
@@ -293,6 +339,42 @@ test("one sidecar authorizes ONE dispatch — a two-brief envelope cannot ride a
     });
     assert.match(r.stdout, /"permissionDecision":"deny"/, "the SECOND brief is uncovered, so the call is denied");
     assert.match(r.stdout, /one ritual authorizes one dispatch/);
+  } finally { cleanup(); }
+});
+
+test("A SECOND DISPATCH CANNOT RIDE THE FIRST RITUAL — allow, then deny, same target, executed", () => {
+  // The walk-through case consumption exists for, proven END TO END rather than in the pure layer:
+  // same session, same target, same sidecar, well inside the freshness window. Before consumption
+  // this pair was allow/allow, and the second write is precisely the dangerous one — a brief
+  // re-edited at that path carries text the first ritual never verified.
+  const { dir, cleanup } = adopt();
+  try {
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    const sidecar = path.join(dir, ".claude", "brief-rung.json");
+    const payload = JSON.stringify({
+      session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: "briefs/cs1.md" },
+    });
+    const run = () => spawnSync(process.execPath,
+      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
+      { input: payload, encoding: "utf8" });
+    const write = (nonce) => writeFileSync(sidecar, JSON.stringify({
+      sessionId: "s1", target: "briefs/cs1.md", nonce,
+      checks: [{ command: "wc -w x", output: "1987" }],
+    }));
+
+    write("rung-1");
+    assert.doesNotMatch(run().stdout, /"permissionDecision":"deny"/, "first dispatch: the ritual is spent on it");
+    const second = run();
+    assert.match(second.stdout, /"permissionDecision":"deny"/, "SECOND dispatch on the SAME sidecar is refused");
+    assert.match(second.stdout, /ALREADY been spent/);
+    // …and the cure is the rule, not a workaround: run the rung again, write a new nonce.
+    write("rung-2");
+    assert.doesNotMatch(run().stdout, /"permissionDecision":"deny"/, "a NEW ritual authorizes the next dispatch");
+    // Exactly two allows, each with its own spent nonce in clear text.
+    const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.control === "brief-rung");
+    assert.deepEqual(rows.map((r) => r.nonce), ["rung-1", "rung-2"]);
   } finally { cleanup(); }
 });
 
@@ -315,7 +397,7 @@ test("a SYMLINKED sidecar is malformed, not satisfied — and a stale one is ref
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
     const sidecar = path.join(dir, ".claude", "brief-rung.json");
     const outside = path.join(dir, "elsewhere.json");
-    const good = JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", checks: [{ command: "c", output: "o" }] });
+    const good = JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", nonce: "rung-1", checks: [{ command: "c", output: "o" }] });
     const run = () => spawnSync(process.execPath, [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
       input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir, tool_input: { file_path: "briefs/cs1.md" } }),
       encoding: "utf8",
