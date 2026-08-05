@@ -1,10 +1,10 @@
 # PROTOCOLS — the rules, and the incident each one cost
 
-Word budget: 2000 (author-set at first release — no Owner ruling names a number for this file; its
-own number, never summed with its body). **It moved from 1300 to 2000 before shipping** as the bank
-absorbed more incidents: the initial number still being set, disclosed rather than quietly
-rewritten. **From this release it is a ratchet — raising it again is an Owner call.** Not
-split: a bank's only seam is its section headings, and two half-banks are two files to forget.
+Word budget: 2000 (**Owner-ratified 2026-08-04**; its own number, never summed with its body). It
+moved from 1300 to 2000 during the release that introduced it, as the bank absorbed more incidents —
+disclosed rather than quietly rewritten — and the Owner then ratified that number. **Raising it
+again is an Owner call.** Not split: a bank's only seam is its section headings, and two half-banks
+are two files to forget.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.
@@ -76,7 +76,7 @@ own repo gives it an artifact.** The same standard, applied to itself.
   alarm is not the safe direction: told a working control is dead, an adopter switches it off.
 - **Audit the RIG before the CONTROL when a verdict surprises you.** A rig LACKING a property real
   repos have, or GAINING one they lack, mints confident findings about the control that are findings
-  about the rig. Both directions were observed one release apart.
+  about the rig. Both directions appeared inside ONE release, in consecutive commits.
 - **A doc-pinning assertion is decoration until you strike the EXACT PHRASE and watch it go red** —
   if the spelling occurs innocently elsewhere in scope, the assertion pins nothing. Mutate the
   phrase, assert the sentence, never the word.
