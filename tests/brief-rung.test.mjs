@@ -256,6 +256,15 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
     assert.equal(readFileSync(codexHook, "utf8"), readFileSync(claudeHook, "utf8"),
       "…and the two lanes receive byte-identical copies");
 
+    // 1b. GITIGNORED. The sidecar is an AUTHORIZATION artifact, and a committed one travels to every
+    // clone where no ledger records its nonce as spent and `git checkout` mints it a fresh mtime.
+    // Session binding would still refuse it, but this kit does not ship a committed authorization
+    // artifact and rely on the last check standing.
+    const gi = readFileSync(path.join(dir, ".gitignore"), "utf8");
+    for (const p of [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json"]) {
+      assert.ok(gi.split("\n").includes(p), `${p} is per-session state and must be gitignored`);
+    }
+
     // 2. REGISTERED — in the generated registration each lane actually reads.
     const settings = JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
     const commands = JSON.stringify(settings.hooks.PreToolUse);

@@ -333,7 +333,7 @@ function mergeSettings(targetSettings, kitSettings, force) {
   return "written";
 }
 
-function appendGitignore(target, lines, comment = "workflow-kit: lane declaration + ledger are per-session, gitignored") {
+function appendGitignore(target, lines, comment = "workflow-kit: lane declaration, ledger and pre-send rung sidecar are per-session, gitignored") {
   const gi = path.join(target, ".gitignore");
   let text = existsSync(gi) ? readFileSync(gi, "utf8") : "";
   const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
@@ -1001,8 +1001,14 @@ function main() {
   else if (ptr === "absent") warn(`AGENTS.md absent — /thread-restart pointer NOT appended (generate AGENTS.md, then re-run)`);
   else warn(`could not ${ptr === "read-failed" ? "read" : "write"} AGENTS.md to append the /thread-restart pointer — the rest of the adopt is unaffected; fix AGENTS.md permissions and re-run`);
 
-  // 8. .gitignore (lane declaration + ledger are per-session).
-  appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl"]);
+  // 8. .gitignore (lane declaration, ledger and rung sidecar are per-session).
+  // The RUNG SIDECAR belongs in this list for the same reason as the declaration, and one reason of
+  // its own: it is an AUTHORIZATION artifact. Committed, it travels to every clone — and a fresh
+  // clone has no ledger (that is gitignored too), so nothing there records its nonce as spent, while
+  // `git checkout` hands the file a brand-new mtime that defeats the freshness window. Session
+  // binding still stands between that and a free pass, but a committed authorization artifact is a
+  // shape this kit does not ship: keep it out of the tree rather than rely on the last check standing.
+  appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json"]);
   // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
   // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
   // but `.gemini-gate/` is the allowed in-repo location; it must be gitignored so cold-review-gemini.sh's
