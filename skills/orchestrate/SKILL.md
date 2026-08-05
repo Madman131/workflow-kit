@@ -12,8 +12,8 @@ formatting).
 
 ## When
 A program too large for one thread, whose parts each deserve their own gate. Split it into
-**chips**: one chip = one changeset = one version, in its own session, run in a stated ORDER. Each
-verifies the previous chip's version landed before starting.
+**chips**: one chip = one changeset = one version, in its own session, in a stated ORDER. Each
+verifies the previous chip's version landed first.
 
 Never for: work one thread can gate, or two chips writing one repo at once (§ One writer per repo).
 
@@ -24,15 +24,15 @@ Never for: work one thread can gate, or two chips writing one repo at once (§ O
 | **Orchestrator** | briefs, rulings, fold-checks, merge diligence, the lesson bank | gives a merge-GO |
 | **Worker** | its own gate ladder, its PR, its post-merge verification | merges without the Owner's GO |
 
-**The GO is the Owner's alone**, and it may arrive DIRECTLY to a worker — a direct Owner
-instruction outranks any routing preference; the worker acts and tells the orchestrator promptly. **A GO ratifies a specific artifact:** if the changeset gains a commit afterwards the GO
-is void until re-confirmed on the new head. Pin heads by **SHA**, never by branch name — a chip's
-branch can fork mid-life.
+**The GO is the Owner's alone**, and may arrive DIRECTLY to a worker — a direct Owner instruction
+outranks any routing preference; the worker acts and tells the orchestrator promptly. **A GO
+ratifies a specific artifact:** if the changeset gains a commit the GO is void until re-confirmed on
+the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
 
 **Everything else consults the orchestrator first**; it keeps working while it waits.
 
 ## One writer per repo
-Before a chip writes, it looks for competing writers in the repo's own **lane declarations** —
+Before writing, a chip looks for competing writers in the repo's own **lane declarations** —
 `.claude/task-lane.json` in the main checkout AND in every worktree — never a list of sessions,
 which reports liveness, not intent. An open PR is a live writer too. **This finds DECLARED writers
 only**, so it is a check, not a proof: an undeclared lane is invisible to it. Unsure ⇒ fail closed,
@@ -64,12 +64,14 @@ rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing
 harness features this kit does not ship and must not assume.
 
 **Degraded mode — files and a shared record:** the program record becomes one append-only file both
-sides write; a brief is a file handed to a fresh session; a consult is an entry in it, answered
-there. The ROLE SPLIT survives intact; what degrades is LATENCY.
-**Integrity of the shared file is yours to provide** — two writers appending owe the staging
+sides write; a brief is a file handed to a fresh session; a consult is an entry answered in it. The
+ROLE SPLIT survives intact; what degrades is LATENCY. **Integrity of the shared file is yours to provide** — two writers appending owe the staging
 discipline of any shared checkout.
 
-⚠ **Nothing on this page is enforced.** No control counts rounds, reads a freeze, or checks who
-gave a GO (`core/WORKFLOW.md` § Gate). The kit ships controls for the declaration and the commit
-floor, and their lane, trust, fresh-clone and bypass limits are in `PORTABILITY.md` — everything
-here is honour-system, and a rung you did not name is a rung you did not run.
+⚠ **One rung on this page is enforced; the rest is honour-system.** No control counts rounds,
+reads a freeze, or checks who gave a GO (`core/WORKFLOW.md` § Gate) — the exception is
+`guard-brief-rung`, which denies a brief write or cross-session send lacking a fresh, session- and
+target-bound record of executed checks — proving such a RECORD EXISTS, never that its commands were
+run or were the right ones. The kit ships controls for the declaration and the commit
+floor, and their lane, trust, fresh-clone and bypass limits are in `PORTABILITY.md` — and a rung you
+did not name is a rung you did not run.

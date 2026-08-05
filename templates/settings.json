@@ -18,6 +18,12 @@
           },
           {
             "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-brief-rung.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking the pre-send verification rung for this brief…"
+          },
+          {
+            "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-sweep-owed.mjs\"",
             "timeout": 10,
             "statusMessage": "Checking whether this edit owes a pre-fold dependency sweep…"
@@ -38,6 +44,17 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-gate-ladder.mjs\"",
             "timeout": 10,
             "statusMessage": "Resolving the declared tier; surfacing the ladder it owes…"
+          }
+        ]
+      },
+      {
+        "matcher": ".*send_message",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-brief-rung.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking the pre-send verification rung for this dispatch…"
           }
         ]
       }

@@ -117,6 +117,22 @@ own repo gives it an artifact.** The same standard, applied to itself.
   writing it — that is forging consent through a quieter door. Arm by documentation plus a probe.
 
 ## Coordination
+- **VERIFY A LOAD-BEARING DISPATCH BEFORE YOU SEND IT — a brief, a ruling, a GO ask.** Every citation
+  OPENED at its line; every number RECOMPUTED by execution, never by eye; every claim about a frozen
+  artifact checked against the artifact, not your memory of it. Minutes, in your own turn, no seat.
+  **Scope it to LOAD-BEARING dispatches and no wider** — a rule taxing every status message is one
+  nobody can afford, and an unaffordable rule gets switched off. Two programs produced this class
+  repeatedly in one day: a count asserted over a table contradicting it, a budget from a heuristic,
+  a date never opened at its cited line, an elapsed time off by an order of magnitude, a stale
+  premise ratified into a mis-scoped carve-out. One `grep -c`, or one opened line, kills each. All
+  were caught LATE, by a worker's raw look or the Owner's, because nothing checks an orchestrator's
+  OUTBOUND text — and a defect in a brief reaches the artifact it authorises before any seat sees it.
+- **A brief POINTS, it never DICTATES.** Name the landed form and its line; let the worker derive the
+  wording. Dictated wording is **unreviewed authoring smuggled into a brief** — it arrives with the
+  orchestrator's authority and nobody's review, and the panel never sees it as text to review.
+- **Cold seats stay reserved for orchestrator-authored DOCTRINE** — skill, bank and core edits, where
+  they are already mandated. A brief gets the RUNG, not a seat: seating every dispatch spends a
+  review round to catch what minutes of execution catch.
 - **A sole-writer check reads the repo's LANE DECLARATIONS — main checkout and every worktree —
   never the session list**, which reports liveness and not intent. A repo was two-writer while a
   session-list check called it clear.

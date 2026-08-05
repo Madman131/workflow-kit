@@ -1,4 +1,49 @@
-# workflow-kit — v2.3.0
+# workflow-kit — v2.4.0
+
+## What's new in v2.4.0 — the pre-send verification rung, and the control that makes it bite
+
+**`/orchestrate` shipped a method in which the orchestrator's own outbound text was the one artifact
+nothing checked.** Briefs, rulings and GO asks carry numbers, citations and claims about frozen
+documents — and they reach the artifacts they authorise before any seat sees them. Two independent
+programs produced the same defect class repeatedly inside a single day: a count asserted over a
+table that contradicted it, a budget asserted from a heuristic, a date asserted without opening the
+section cited, an elapsed time off by an order of magnitude, a stale premise ratified into a
+mis-scoped carve-out. One `grep -c`, or one opened line, would have killed each. Every one was
+caught late — by a worker's raw look or the Owner's — never by anything checking the outbound text.
+
+**The doctrine (`PROTOCOLS.md` § Coordination), in one line each.** Verify a load-bearing dispatch
+BEFORE you send it: every citation opened at its line, every number recomputed by execution. Scope
+it to load-bearing dispatches — briefs, rulings, GO asks — and no wider, because a rule that taxes
+every status message is one nobody can afford, and an unaffordable rule gets switched off. A brief
+POINTS at a landed form and its line; it never DICTATES wording, which is unreviewed authoring
+smuggled in with the orchestrator's authority. Cold seats stay reserved for orchestrator-authored
+doctrine; a brief gets the rung, not a seat.
+
+**And because a prompt is not a control, the rung ships with one.** `hooks/guard-brief-rung.mjs` is
+a PreToolUse guard that denies a brief write or a cross-session send unless a verification sidecar
+(`.claude/brief-rung.json`) is fresh, names THIS session, names THIS dispatch, and carries at least
+one executed check — a command AND its captured output. A send that is genuinely not load-bearing
+may declare `{"class":"status"}` instead, and that declaration is LEDGERED for the Owner's
+spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
+must not make for its consumer (`core/INVARIANTS.md` rule 1).
+
+**Its limits ship with it, in the deny text an author actually reads.** It proves a session- and
+dispatch-bound RECORD of checks EXISTS — not that the commands were ever run, and not that they were
+the right ones. Nothing executes a receipt or compares it to reality, so a fabricated sidecar
+satisfies it: what it buys is a raised cost and an auditable trace, never impossibility. Saying
+instead that it "proves the ritual ran" would be the very over-claim the rung exists to catch, so
+the control does not say it. It is TOOL-BOUND — a shell redirection writes a brief without
+passing it, exactly as every sibling guard is bypassed. It is a TRIPWIRE, not a floor. Its
+cross-session SEND half binds a `…send_message` tool the Claude harness has and Codex does not, so
+in the Codex lane that half is inert BY ABSENCE while the brief-write half binds through the shared
+envelope grammar — stated in `PORTABILITY.md` rather than left to an adopter to infer.
+
+**This release also corrects a sentence it falsifies.** `/orchestrate` shipped a blanket claim that
+none of its rungs were enforced. One now is, so the body states exactly how much is — one rung, and
+no more — and the retracted spelling joined the cross-surface retraction test — the maintenance rule v2.3.0 shipped, applied to the first
+claim that came due under it. A pre-existing miss went with it: `PORTABILITY.md` had understated the
+Codex registration since v2.2.0, naming the write guards and the gate-ladder sensor while omitting
+the two `apply_patch` sensors that release registered.
 
 ## What's new in v2.3.0 — `/orchestrate`, the method for work too big for one thread
 
