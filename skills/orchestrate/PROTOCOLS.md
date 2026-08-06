@@ -134,8 +134,12 @@ own repo gives it an artifact.** The same standard, applied to itself.
   wording. Dictated wording is **unreviewed authoring smuggled into a brief** — it arrives with the
   orchestrator's authority and nobody's review, and the panel never sees it as text to review.
 - **Cold seats stay reserved for orchestrator-authored DOCTRINE** — skill, bank and core edits, where
-  they are already mandated. A brief gets the RUNG, not a seat: seating every dispatch spends a
-  review round to catch what minutes of execution catch.
+  they are already mandated. A brief that DISPATCHES existing doctrine gets the RUNG, not a seat:
+  seating every dispatch spends a review round to catch what minutes of execution catch. **But a
+  brief that AUTHORS doctrine is an instruction artifact and takes its class's gate** — a new rule, a
+  gate change, an emit-or-stop condition, an instruction directing a production write. Read the
+  rung as a floor for dispatches, never as a ceiling that exempts authored content from the
+  artifact-class ladder: "it was only a brief" is exactly how unreviewed doctrine ships.
 - **A sole-writer check reads the repo's LANE DECLARATIONS — main checkout and every worktree —
   never the session list**, which reports liveness and not intent. A repo was two-writer while a
   session-list check called it clear.

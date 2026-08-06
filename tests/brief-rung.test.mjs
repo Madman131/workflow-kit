@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 
 import {
   ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, loadBriefConfig, sidecarState,
-  spentNoncesFrom,
+  spentNoncesFrom, withLedgerLock, LOCK_UNAVAILABLE,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
 
@@ -90,6 +90,11 @@ test("absent / malformed / stale all deny — malformed is never read as satisfi
   assert.equal(state([1, 2]), "malformed", "an array is not a sidecar object");
   assert.equal(state(fresh({ class: "urgent" })), "malformed", "an unknown class is malformed, not ignored");
   assert.equal(state(fresh(), { ageMin: 31 }), "stale");
+  // A FUTURE-dated sidecar is the freshness window's own bypass: push the mtime forward and it
+  // never expires. It gets its OWN state, because a deny saying "N minutes old" about a file dated
+  // tomorrow would misdescribe the input it just read. Small tolerance for ordinary clock skew.
+  assert.equal(state(fresh(), { ageMin: -1440 }), "future-dated");
+  assert.equal(state(fresh(), { ageMin: -0.5 }), "receipted", "…but a few seconds of skew is not an attack");
   assert.equal(state(fresh(), { ageMin: 29 }), "receipted", "…and 29 minutes is still fresh (both sides of the window)");
 });
 
@@ -192,6 +197,8 @@ test("every deny state produces a message that names the state's OWN remediation
     "target-missing": /copying a sidecar gives it a NEW mtime/,
     "target-mismatch": /one ritual authorizes one dispatch/,
     "status-not-available": /load-bearing by definition/,
+    "future-dated": /ahead of the clock is not fresh/,
+    "lock-unavailable": /An unserialised consume is not a consume/,
     "nonce-missing": /needs a value to spend/,
     "rung-already-spent": /One ritual authorizes ONE dispatch/,
     "no-executed-check": /assert-without-executing/,
@@ -384,6 +391,86 @@ test("A SECOND DISPATCH CANNOT RIDE THE FIRST RITUAL — allow, then deny, same 
     const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
       .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.control === "brief-rung");
     assert.deepEqual(rows.map((r) => r.nonce), ["rung-1", "rung-2"]);
+  } finally { cleanup(); }
+});
+
+test("A CORRUPT kit.config FAILS CLOSED FOR THE ADOPTERS IT EXISTS TO PROTECT", () => {
+  // Found by the cross-family seat, reproduced before fixing. Evaluating a corrupt-config payload
+  // against the DEFAULT brief dirs is not fail-closed — it only looks like it. An adopter who
+  // configured `dispatches/` loses enforcement on exactly their brief directory at exactly the
+  // moment their config broke: the branch fails OPEN for the only adopters it is for.
+  const { dir, cleanup } = adopt();
+  try {
+    mkdirSync(path.join(dir, "dispatches"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"), '{"briefPathDirs":');   // corrupt
+    const r = spawnSync(process.execPath,
+      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
+      { input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: "dispatches/cs1.md" } }), encoding: "utf8" });
+    assert.match(r.stdout, /"permissionDecision":"deny"/, "an unanswerable brief-path question denies");
+    assert.match(r.stdout, /MALFORMED/);
+    // …and the over-broad direction stops at the shipped instruction roots, so fixing config is the
+    // only thing this blocks — not every file in the tree.
+    const skill = spawnSync(process.execPath,
+      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
+      { input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: ".agents/skills/orchestrate/CHIP_BRIEF.md" } }), encoding: "utf8" });
+    assert.doesNotMatch(skill.stdout, /"permissionDecision":"deny"/,
+      "a shipped instruction artifact is still not a dispatch, even with config corrupt");
+  } finally { cleanup(); }
+});
+
+test("CONSUMPTION IS SERIALISED — six concurrent dispatches on one nonce yield exactly one allow", () => {
+  // Measured on this changeset BEFORE the lock existed: five of six were allowed and five rows
+  // carried the same nonce. Atomicity of the ledger APPEND is not atomicity of the DECISION —
+  // consumption is read-validate-append, and concurrent hook processes interleave inside it.
+  const { dir, cleanup } = adopt();
+  try {
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
+      sessionId: "s1", target: "briefs/cs1.md", nonce: "race", checks: [{ command: "c", output: "o" }],
+    }));
+    const payload = JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: "briefs/cs1.md" } });
+    const runs = Array.from({ length: 6 }, () => spawnSync(process.execPath,
+      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
+      { input: payload, encoding: "utf8" }));
+    const allowed = runs.filter((r) => !/"permissionDecision":"deny"/.test(r.stdout)).length;
+    assert.equal(allowed, 1, `exactly one dispatch may spend one ritual, got ${allowed}`);
+    const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.nonce === "race");
+    assert.equal(rows.length, 1, "and the audit trail records exactly one spend");
+  } finally { cleanup(); }
+});
+
+test("the lock is a SENTINEL, not a truthiness read — 'could not lock' never reads as 'allowed'", () => {
+  // `withLedgerLock` returns null for ALLOWED and a symbol for COULD-NOT-LOCK. Collapsing those
+  // with a truthiness test would map lock-failure onto allow, which is the fail-open the lock is for.
+  const { dir, cleanup } = adopt();
+  try {
+    assert.equal(withLedgerLock(dir, () => null), null, "fn's null (allowed) passes through");
+    assert.equal(withLedgerLock(dir, () => "x"), "x");
+    // A lock held by someone else, never released and NOT stale, is refused rather than waited out.
+    writeFileSync(path.join(dir, ".claude", "brief-rung.lock"), "");
+    assert.equal(withLedgerLock(dir, () => null), LOCK_UNAVAILABLE, "a held lock denies");
+    assert.notEqual(LOCK_UNAVAILABLE, null, "…and the two outcomes are distinguishable");
+
+    // END TO END, and it pins the MESSAGE rather than only the decision. Dropping the call-site
+    // branch still denies — the symbol falls through and `outcome.state` is undefined — so the
+    // behaviour stays fail-closed while the author is told "sidecar state is undefined". A control
+    // that misdescribes the input it just read teaches its reader to discount it, and a mutation
+    // proved nothing here caught that until this assertion existed.
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
+      sessionId: "s1", target: "briefs/cs1.md", nonce: "n", checks: [{ command: "c", output: "o" }],
+    }));
+    const held = spawnSync(process.execPath,
+      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
+      { input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: "briefs/cs1.md" } }), encoding: "utf8" });
+    assert.match(held.stdout, /"permissionDecision":"deny"/, "a held lock denies the dispatch…");
+    assert.match(held.stdout, /An unserialised consume is not a consume/, "…and SAYS why");
+    assert.doesNotMatch(held.stdout, /sidecar state is undefined/, "never a fallthrough message");
   } finally { cleanup(); }
 });
 

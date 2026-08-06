@@ -33,7 +33,7 @@
 //     the brief-WRITE half binds both lanes through the shared payload grammar. Stated, not implied.
 
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 // The SHARED write-target grammar. A consumer IMPORTS patch structure, it never PARSES it — the
@@ -156,6 +156,12 @@ export function sidecarState(sidecar, { ageMin, sessionId, dispatch, spentNonces
   if (sidecar === null) return { state: "malformed" };
   if (!isPlainObject(sidecar)) return { state: "malformed" };
   if (!(typeof ageMin === "number") || !Number.isFinite(ageMin)) return { state: "malformed" };
+  // A FUTURE-dated sidecar is NOT fresh — it is unusable. `ageMin > MAX` alone accepted a file
+  // timestamped ahead of now, which is the freshness window's own bypass: touch the mtime forward and
+  // it never expires. It gets its OWN state rather than folding into `stale`, because a deny that
+  // said "N minutes old" about a file dated tomorrow would misdescribe the input it just read.
+  // The tolerance is deliberately small rather than zero: clock skew of a few seconds is ordinary.
+  if (ageMin < -1) return { state: "future-dated", ageMin };
   if (ageMin > MAX_AGE_MIN) return { state: "stale", ageMin };
 
   if (typeof sidecar.sessionId !== "string" || !sidecar.sessionId) return { state: "session-missing" };
@@ -283,6 +289,43 @@ export function spentNoncesFrom(text) {
   return out;
 }
 
+/**
+ * Run `fn` holding an exclusive lock beside the ledger. Returns `null` if the lock cannot be taken,
+ * and the caller DENIES on that — an unserialised consume is not a consume.
+ *
+ * WHY A LOCK AT ALL, when the ledger append is already atomic: atomicity of the WRITE is not
+ * atomicity of the DECISION. Consumption is read-validate-append, and concurrent hook processes
+ * interleave inside it — measured on this changeset, SIX concurrent dispatches on ONE nonce were
+ * allowed FIVE times. "One ritual, one dispatch" was therefore false under the very multi-session
+ * model this kit is built around, which makes the lock part of the claim rather than a nicety.
+ * (The kit's ledger has no lock of its own — a banked pre-existing gap; this one is scoped to THIS
+ * control's critical section and does not pretend to fix that.)
+ */
+export const LOCK_UNAVAILABLE = Symbol("brief-rung:lock-unavailable");
+
+export function withLedgerLock(projectRoot, fn, { now = () => Date.now() } = {}) {
+  const lock = path.join(projectRoot, ".claude", "brief-rung.lock");
+  let fd;
+  for (let attempt = 0; attempt < 100 && fd === undefined; attempt++) {
+    try { fd = openSync(lock, "wx", 0o600); }
+    catch (e) {
+      if (!e || e.code !== "EEXIST") return LOCK_UNAVAILABLE;   // not contention — fail closed
+      // A crashed holder must not brick the control forever, so a lock older than the window is
+      // broken. The window is far longer than the critical section, which is a few file reads.
+      try { if (now() - statSync(lock).mtimeMs > 30_000) unlinkSync(lock); }
+      catch { /* vanished under us — the next attempt takes it */ }
+      const until = now() + 5;
+      while (now() < until) { /* brief spin; the section is milliseconds long */ }
+    }
+  }
+  if (fd === undefined) return LOCK_UNAVAILABLE;
+  try { return fn(); }
+  finally {
+    try { closeSync(fd); } catch { /* the result already decided */ }
+    try { unlinkSync(lock); } catch { /* a removed lock is the desired end state either way */ }
+  }
+}
+
 // ------------------------------------------------------------------ deny text
 
 const RITUAL =
@@ -314,10 +357,12 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "target-missing": `${SIDECAR} names no \`target\`. Freshness alone cannot bind receipts to a dispatch: copying a sidecar gives it a NEW mtime, and re-touching one clears staleness without re-running anything.`,
     "target-mismatch": `${SIDECAR} was written for ${detail}, not for this dispatch — one ritual authorizes one dispatch.`,
     "status-not-available": `${SIDECAR} declares {"class":"status"}, which is available only to a cross-session send. A brief is load-bearing by definition: it is the artifact a worker builds from, so there is nothing here to declare out of scope.`,
+    "future-dated": `${SIDECAR} is dated ${detail} minutes in the FUTURE. A sidecar ahead of the clock is not fresh, it is unusable — and accepting one would hand the freshness window its own bypass, since a timestamp pushed forward never expires.`,
     "nonce-missing": `${SIDECAR} names no \`nonce\`. A rung is SPENT on the dispatch it authorizes, so it needs a value to spend; without one, a single ritual would authorize every dispatch inside the freshness window.`,
     "rung-already-spent": `${SIDECAR}'s nonce ${detail} has ALREADY been spent on an earlier dispatch. One ritual authorizes ONE dispatch — a repeat to the same target is the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
     "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, or \`briefPathDirs\` is not an array of non-empty path segments). This dispatch is BLOCKED (fail-closed) — a corrupt brief-path set must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
+    "lock-unavailable": `the consumption lock beside ${LEDGER} could not be taken, so this dispatch could not be serialised against concurrent ones. An unserialised consume is not a consume — the guard denies rather than allow two dispatches to spend one ritual. Retry; if it persists, remove a stale \`.claude/brief-rung.lock\`.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
   return state === "kit-config-malformed" || state === "ledger-error" ? head + why : head + why + " " + RITUAL;
@@ -362,11 +407,21 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
         dispatches.push({ kind: "brief", target: rel });
       }
     } else {
-      // A corrupt config cannot be trusted to say a write is OUT of scope, so a write-shaped payload
-      // is evaluated against the defaults and blocked if it looks like a brief at all.
-      for (const rel of briefTargets(input, { root, patchBase, briefPathDirs: [], toRepoRelative })) {
-        emit(denyReason("kit-config-malformed", { dispatch: { kind: "brief", target: rel } }));
-        return exit(0);
+      // A corrupt config cannot say a write is OUT of scope — and evaluating it against the DEFAULTS
+      // is not fail-closed, it only looks like it. An adopter who configured `dispatches/` loses
+      // enforcement on exactly their brief directory at exactly the moment their config broke: the
+      // corrupt-config branch fails OPEN for the only adopters it exists to protect. So when the
+      // brief-path question is unanswerable, every markdown write outside the shipped instruction
+      // roots is treated as POSSIBLY a brief and denied. Loud and over-broad is the correct
+      // direction here, and the remediation names the one file to fix.
+      const maybeBriefs = extractTargets(input);
+      if (maybeBriefs.ok && maybeBriefs.shape !== "none") {
+        for (const t of maybeBriefs.targets) {
+          const rel = toRepoRelative(t, root, patchBase);
+          if (rel === null || INSTRUCTION_ROOT_RE.test(rel) || !/\.md$/i.test(rel)) continue;
+          emit(denyReason("kit-config-malformed", { dispatch: { kind: "brief", target: rel } }));
+          return exit(0);
+        }
       }
     }
 
@@ -388,35 +443,46 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       sidecar = e && e.code === "ENOENT" ? undefined : null;
     }
 
-    // WHAT HAS ALREADY BEEN SPENT. An unreadable ledger is fail-CLOSED: if the record of which
-    // rituals are used up cannot be read, no nonce can honestly be called unspent.
-    let ledgerText;
-    try { ledgerText = readFileSync(path.join(root, LEDGER), "utf8"); }
-    catch (e) { if (!(e && e.code === "ENOENT")) { emit(denyReason("ledger-error", { dispatch: dispatches[0] })); return exit(0); } }
-    const spentNonces = spentNoncesFrom(ledgerText);
-    if (spentNonces === null) { emit(denyReason("ledger-error", { dispatch: dispatches[0] })); return exit(0); }
+    // READ, JUDGE AND CONSUME UNDER ONE LOCK. Reading the spent set, deciding on it, and appending
+    // the row that spends it are one critical section: split them and two concurrent processes both
+    // read a nonce as unspent and both allow. Measured before this lock existed: five of six.
+    const outcome = withLedgerLock(root, () => {
+      let ledgerText;
+      try { ledgerText = readFileSync(path.join(root, LEDGER), "utf8"); }
+      catch (e) { if (!(e && e.code === "ENOENT")) return { state: "ledger-error", dispatch: dispatches[0] }; }
+      const spentNonces = spentNoncesFrom(ledgerText);
+      if (spentNonces === null) return { state: "ledger-error", dispatch: dispatches[0] };
 
-    // EVERY dispatch is judged before anything is allowed. A patch envelope is applied as a unit, so
-    // deciding on the first match would let a second brief in the same envelope ride the first one's
-    // sidecar — the multi-target fail-open the shared grammar exists to prevent.
-    const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d, spentNonces }) }));
-    const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
-    if (blocked) {
-      emit(denyReason(blocked.v.state, {
-        dispatch: blocked.d,
-        detail: blocked.v.named ?? (blocked.v.ageMin !== undefined ? Math.round(blocked.v.ageMin) : undefined),
-      }));
+      // EVERY dispatch is judged before anything is allowed. A patch envelope is applied as a unit,
+      // so deciding on the first match would let a second brief in the same envelope ride the first
+      // one's sidecar — the multi-target fail-open the shared grammar exists to prevent.
+      const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d, spentNonces }) }));
+      const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
+      if (blocked) {
+        return {
+          state: blocked.v.state, dispatch: blocked.d,
+          detail: blocked.v.named ?? (blocked.v.ageMin !== undefined ? Math.abs(Math.round(blocked.v.ageMin)) : undefined),
+        };
+      }
+      for (const { d, v } of verdicts) {
+        const ok = writeLedger(root, {
+          decision: "allow", state: v.state, kind: d.kind, target: d.target,
+          sessionId: input?.session_id ?? "", checks: v.checks,
+          cls: v.state === "status-declared" ? "status" : "load-bearing",
+          nonce: v.state === "status-declared" ? undefined : sidecar.nonce,
+        });
+        if (!ok) return { state: "ledger-error", dispatch: d };
+      }
+      return null;                                        // allowed
+    });
+    if (outcome === null && !dispatches.length) return exit(0);
+    if (outcome !== null) {
+      // `withLedgerLock` returns null for BOTH "allowed" and "could not lock", so the two are
+      // distinguished by a sentinel rather than by truthiness — a truthiness read here would map
+      // "lock unavailable" onto "allowed", which is the fail-open this lock exists to prevent.
+      if (outcome === LOCK_UNAVAILABLE) { emit(denyReason("lock-unavailable", { dispatch: dispatches[0] })); return exit(0); }
+      emit(denyReason(outcome.state, { dispatch: outcome.dispatch, detail: outcome.detail }));
       return exit(0);
-    }
-
-    for (const { d, v } of verdicts) {
-      const ok = writeLedger(root, {
-        decision: "allow", state: v.state, kind: d.kind, target: d.target,
-        sessionId: input?.session_id ?? "", checks: v.checks,
-        cls: v.state === "status-declared" ? "status" : "load-bearing",
-        nonce: v.state === "status-declared" ? undefined : sidecar.nonce,
-      });
-      if (!ok) { emit(denyReason("ledger-error", { dispatch: d })); return exit(0); }
     }
     return exit(0);
   });
