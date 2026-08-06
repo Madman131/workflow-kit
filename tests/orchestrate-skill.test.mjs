@@ -95,11 +95,20 @@ test("the honest limits stay in the body — the method/plumbing split and the n
   pin(body, "**Integrity of the shared file is yours to provide**", "record integrity is the reader's");
 });
 
-test("the body admits that none of it is enforced", () => {
+test("the body states EXACTLY how much of it is enforced — one rung, and no more", () => {
   const body = readFileSync(BODY, "utf8");
   // The kit's recurring shipped defect is prose claiming enforcement the machinery does not do.
   // This skill enforces NOTHING, and the sentence saying so is load-bearing.
-  pin(body, "**Nothing on this page is enforced.**", "enforcement honesty");
+  pin(body, "**One rung on this page is enforced; the rest is honour-system.**", "enforcement honesty");
+  // The v2.4 correction's own honesty half. `guard-brief-rung` makes the old blanket "nothing is
+  // enforced" false, and the replacement must not over-correct in the other direction: what ships
+  // is a tripwire that proves a session- and dispatch-bound RECORD EXISTS — not that its commands
+  // ever ran. Both halves are load-bearing, so both are pinned.
+  pin(body, "proving such a RECORD EXISTS, never that its\ncommands were run or were the right ones", "the enforced rung claims neither execution nor sufficiency");
+  // SINGLE-USE is a property the guard actually enforces (one ritual, one dispatch), so the body
+  // may not quietly drop it: a reader told the record is merely "session- and target-bound" would
+  // reasonably expect to reuse it inside the freshness window, which is the case consumption closes.
+  pin(body, "SINGLE-USE record of executed checks", "the rung is single-use");
   // This sentence originally read "The two things the kit does enforce are the task-lane
   // declaration and the commit floor" — which contradicts the kit's own PORTABILITY.md, where the
   // write guard is inert in the Codex lane until a human grants hook trust, and the commit floor is
@@ -158,7 +167,11 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
   const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
   const portability = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8");
   const surfaces = {
-    "README.md § v2.3.0": section(readme, "# workflow-kit — v2.3.0", "# workflow-kit — v2.2.1", "README"),
+    // Re-pointed each release to the CURRENT release note: that is the surface a correction is
+    // most likely to be narrated on and least likely to be swept, and `section` hard-fails rather
+    // than searching an empty string if the anchor ever stops resolving.
+    "README.md § v2.4.0": section(readme, "# workflow-kit — v2.4.0", "## What's new in v2.3.0", "README"),
+    "README.md § v2.3.0": section(readme, "## What's new in v2.3.0", "# workflow-kit — v2.2.1", "README"),
     "PORTABILITY.md § /orchestrate": section(portability, "## `/orchestrate` (v2.3)", "\n## ", "PORTABILITY"),
     "skills/orchestrate/SKILL.md": readFileSync(BODY, "utf8"),
     "skills/orchestrate/CHIP_BRIEF.md": readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8"),
@@ -169,6 +182,7 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     [/one version\s*=\s*one session/i, "the chip/session identity asserted in BOTH directions"],
     [/loses nothing essential/i, "the degraded mode GUARANTEEING nothing essential is lost"],
     [/two (?:real )?controls (?:are|remain)/i, "naming two things the kit ENFORCES rather than ships controls for"],
+    [/nothing on this page is enforced/i, "the blanket claim that NOTHING in /orchestrate is enforced — false since v2.4 shipped guard-brief-rung"],
   ];
   for (const [file, text] of Object.entries(surfaces)) {
     for (const [re, what] of retracted) {
@@ -181,7 +195,8 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
   // one still BITES by running it against text that does contain the retracted spelling.
   const decoys = ["a chip proves it is the sole writer by reading", "the sole-writer proof (lane declarations)",
     "one chip = one changeset = one version = one session", "a shared record, which loses nothing essential",
-    "the kit's two real controls are still the task-lane declaration"];
+    "the kit's two real controls are still the task-lane declaration",
+    "⚠ Nothing on this page is enforced. No control counts rounds"];
   for (const [i, [re, what]] of retracted.entries()) {
     assert.match(decoys[i], re, `the pattern for "${what}" must still match its own retracted spelling`);
   }
@@ -287,7 +302,7 @@ test("a fresh adopt lands the /orchestrate body and BOTH lane shims, and every p
     const installed = readFileSync(body, "utf8");
     assert.equal(installed, readFileSync(BODY, "utf8"), "the installed body is byte-identical to the kit's");
     pin(installed, "**The GO is the Owner's alone**", "installed body keeps the GO rule");
-    pin(installed, "**Nothing on this page is enforced.**", "installed body keeps the enforcement honesty");
+    pin(installed, "**One rung on this page is enforced; the rest is honour-system.**", "installed body keeps the enforcement honesty");
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(codexDir, { recursive: true, force: true });

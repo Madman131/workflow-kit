@@ -3,3 +3,4 @@ node_modules
 # if the kit is ever self-adopted:
 .claude/task-lane.json
 .claude/lane-ledger.jsonl
+.claude/brief-rung.json

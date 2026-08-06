@@ -788,14 +788,23 @@ test("init generates .codex/hooks.json with the REAL Codex matcher names and an 
         assert.ok(existsSync(path.join(A.dir, ".codex", "hooks", file)), `${file} is registered AND installed`);
       }
     }
-    // apply_patch gets BOTH write guards AND both sensors; Bash gets the gate-ladder sensor only.
+    // apply_patch gets ALL THREE write guards AND both sensors; Bash gets the gate-ladder sensor only.
+    // `guard-brief-rung` appears here for its brief-WRITE half only: its cross-session send half
+    // binds a `…send_message` tool that exists in the Claude harness and not in Codex, so there is
+    // no second group for it to join. That asymmetry is a property of the lane, and PORTABILITY.md
+    // states it rather than leaving an adopter to infer a symmetry that is not there.
     const applyPatch = reg.hooks.PreToolUse[0].hooks.map((h) => /hooks\/([\w.-]+\.mjs)/.exec(h.command)[1]);
     assert.deepEqual(applyPatch, [
       "guard-cross-repo-writes.mjs",
       "guard-lane-authoring.mjs",
+      "guard-brief-rung.mjs",
       "sensor-sweep-owed.mjs",
       "sensor-mutation-owed.mjs",
     ], "an INSTALLED-but-UNREGISTERED sensor is inert — this list is what makes registration provable");
+    // …and the Codex registration carries NO send-matcher group, proven rather than assumed: a
+    // group appearing here later would mean someone registered a half this lane cannot run.
+    assert.equal(reg.hooks.PreToolUse.length, 2, "apply_patch and Bash — no send group in the Codex lane");
+    assert.ok(!JSON.stringify(reg).includes("send_message"), "the send half is inert BY ABSENCE here");
     assert.equal(reg.hooks.PreToolUse[1].hooks.length, 1);
     // The probe the checklist tells the adopter to run must be a file init actually wrote.
     assert.ok(existsSync(path.join(A.dir, "scripts", "check-codex-hooks-armed.mjs")));

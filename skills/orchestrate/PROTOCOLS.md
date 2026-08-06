@@ -1,10 +1,13 @@
 # PROTOCOLS — the rules, and the incident each one cost
 
-Word budget: 2000 (**Owner-ratified 2026-08-04**; its own number, never summed with its body). It
-moved from 1300 to 2000 during the release that introduced it, as the bank absorbed more incidents —
-disclosed rather than quietly rewritten — and the Owner then ratified that number. **Raising it
-again is an Owner call.** Not split: a bank's only seam is its section headings, and two half-banks
-are two files to forget.
+Word budget: 2400 (**Owner-ratified 2026-08-05**; its own number, never summed with its body). It
+moved 1300 → 2000 during the release that introduced it and 2000 → 2400 in v2.4.0, each time because
+the bank absorbed more incidents, each time disclosed rather than quietly rewritten, and each time
+ratified by the Owner afterwards. **Raising it again is an Owner call.** **Still not split, and in
+v2.4.0 that was re-decided rather than inherited:** the alternative to this number was cutting three
+banked rules totalling 256 words, since the only non-rule prose here is a 165-word header that
+cannot cover the gap even if wholly deleted. A cap may never force deleting doctrine. A bank's only
+seam is its section headings, and two half-banks are two files to forget.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.
@@ -117,6 +120,26 @@ own repo gives it an artifact.** The same standard, applied to itself.
   writing it — that is forging consent through a quieter door. Arm by documentation plus a probe.
 
 ## Coordination
+- **VERIFY A LOAD-BEARING DISPATCH BEFORE YOU SEND IT — a brief, a ruling, a GO ask.** Every citation
+  OPENED at its line; every number RECOMPUTED by execution, never by eye; every claim about a frozen
+  artifact checked against the artifact, not your memory of it. Minutes, in your own turn, no seat.
+  **Scope it to LOAD-BEARING dispatches and no wider** — a rule taxing every status message is one
+  nobody can afford, and an unaffordable rule gets switched off. Two programs produced this class
+  repeatedly in one day: a count asserted over a table contradicting it, a budget from a heuristic,
+  a date never opened at its cited line, an elapsed time off by an order of magnitude, a stale
+  premise ratified into a mis-scoped carve-out. One `grep -c`, or one opened line, kills each. All
+  were caught LATE, by a worker's raw look or the Owner's, because nothing checks an orchestrator's
+  OUTBOUND text — and a defect in a brief reaches the artifact it authorises before any seat sees it.
+- **A brief POINTS, it never DICTATES.** Name the landed form and its line; let the worker derive the
+  wording. Dictated wording is **unreviewed authoring smuggled into a brief** — it arrives with the
+  orchestrator's authority and nobody's review, and the panel never sees it as text to review.
+- **Cold seats stay reserved for orchestrator-authored DOCTRINE** — skill, bank and core edits, where
+  they are already mandated. A brief that DISPATCHES existing doctrine gets the RUNG, not a seat:
+  seating every dispatch spends a review round to catch what minutes of execution catch. **But a
+  brief that AUTHORS doctrine is an instruction artifact and takes its class's gate** — a new rule, a
+  gate change, an emit-or-stop condition, an instruction directing a production write. Read the
+  rung as a floor for dispatches, never as a ceiling that exempts authored content from the
+  artifact-class ladder: "it was only a brief" is exactly how unreviewed doctrine ships.
 - **A sole-writer check reads the repo's LANE DECLARATIONS — main checkout and every worktree —
   never the session list**, which reports liveness and not intent. A repo was two-writer while a
   session-list check called it clear.

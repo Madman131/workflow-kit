@@ -256,11 +256,63 @@ table or the scalar `hooks = "./hooks.json"` that Codex's own schema uses — `i
 `hooks.json`, tells you so, and leaves your registration alone. Those hooks are then yours: the kit
 did not change them and the arming probe will not vouch for them.
 
-**Registered in the Codex lane: the two write guards and the gate-ladder sensor. Not the Owner-comms
+**Registered in the Codex lane: the three write guards (`guard-cross-repo-writes`,
+`guard-lane-authoring`, `guard-brief-rung`) and the three sensors — `sensor-sweep-owed` and
+`sensor-mutation-owed` on `apply_patch`, `guard-gate-ladder` on `Bash`. Not the Owner-comms
 Stop sensor.** Codex does list a `Stop` hook event, but this kit has not observed that payload, and
 registering a sensor against an unverified payload shape would ship a control nobody has watched. The
 file installs — the two hook trees are byte-identical by construction — and only the registration is
-withheld.
+withheld. (This sentence had understated the list since v2.2.0, naming the write guards and the
+gate-ladder sensor while omitting the two `apply_patch` sensors that release registered; the
+generated registration was right and the description of it was not.)
+
+**`guard-brief-rung` is INERT for an adopter whose briefs are neither under a brief directory nor
+named for one** — say `docs/dispatch-cs1.md` with no `briefPathDirs` configured. The control is
+installed, registered and silent, which is the shape this kit treats as a lie. Name your brief
+directory in `.claude/kit.config.json` (`{"briefPathDirs":["dispatches"]}`) or accept that the write
+half does not cover you; the arming question is "does it FIRE on my briefs", never "is it installed".
+
+**The SEND half is REGISTERED but UNVERIFIED IN ANGER, and that distinction is this kit's own.**
+`templates/settings.json` carries a `.*send_message` matcher group, and a fresh adopt is proven to
+land it. What is NOT proven is that the Claude harness matches that pattern against an MCP tool name
+like `mcp__ccd_session_mgmt__send_message` and fires the hook: a PreToolUse registration binds
+nothing until the changeset lands and the session RELOADS, so no test in this repo can watch it fire.
+Treat it exactly as this kit treats Codex hook trust — **installed is not armed** — and confirm it
+the same way, by a deliberately-blocked call, before relying on it. The brief-WRITE half carries no
+such caveat: it is executed from its installed location, in both lanes and both directions, by
+`tests/brief-rung.test.mjs`.
+
+**One ritual authorizes ONE dispatch, and consumption is a property of the AUDIT TRAIL rather than
+of a lock beside it.** Each attempt appends its own row carrying a unique token, then reads back: the
+FIRST attempt row bearing that nonce wins. A loser's ATTEMPT row is already in the trail and stays
+there; an explicit `deny` resolution is appended on top when the trail is writable — if that second
+append fails the call still denies, and the trail shows an unresolved attempt instead. There is no lock file, so there is nothing to leave behind — and **the atomicity this rests
+on is the ledger's own** (a single `O_APPEND` write of a small row), so the kit gains no new platform
+assumption, and inherits the same local-filesystem caveat the ledger already carries. **The residual,
+named:** a process killed after its attempt row lands has burned that nonce without dispatching; the
+cure is re-running the rung and writing a new nonce — one ritual, and strictly cheaper than a crashed
+holder leaving a lock file a human must delete before any brief can move. Freshness and target-binding together
+still permitted a SECOND dispatch to the SAME target inside the window — and that repeat is the
+dangerous one, because a brief re-edited at that path carries text the first ritual never verified.
+A status-declared send consumes nothing: it presented no receipts, so it has none to spend.
+
+**The ledger RECORDS; it does not deter, and this control does not claim otherwise.** An
+orchestrator who declares every dispatch `{"class":"status"}` is not stopped mechanically — the same
+unfalsifiability the `exempt` route carries. What the declaration route buys is that every such
+declaration is a LEGIBLE ROW a human can count: the declared class and the dispatch target are
+written in clear text, never hashed, because the ledger's named consumer is the Owner's spot-check
+and a spot-check cannot read a digest.
+
+**What the sidecar proves is narrower than it looks.** Nothing executes a receipt or compares it to
+reality, so a hand-written sidecar naming commands that never ran satisfies this guard. It proves a
+session- and dispatch-bound RECORD exists — a raised cost and an auditable trace, not impossibility.
+
+**`guard-brief-rung` is registered HALF here, and the missing half is a property of the lane rather
+than a decision.** Its brief-WRITE half binds Codex through the shared envelope grammar, exactly as
+the other write guards do. Its cross-session SEND half binds a tool named `…send_message`, which the
+Claude harness has and Codex does not — so in this lane that half is **inert by absence**: there is
+no payload for it to read, and nothing to register it against. It is named here rather than left for
+an adopter to infer a symmetry that is not there.
 
 **The Codex review seat — a v2.0 disclosure this release CORRECTS.** v2.0 recorded, against its own
 artifact, that a repo-level `.codex/agents/` was "*not* something this work verified as a discovery
@@ -595,7 +647,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 ## What is portable verbatim vs generated
 
-- `[P]` (verbatim): `core/*` method docs, the three PreToolUse guards, the two PreToolUse sensors
+- `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the two PreToolUse sensors
   (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
