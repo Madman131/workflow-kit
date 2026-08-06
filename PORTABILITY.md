@@ -282,8 +282,15 @@ the same way, by a deliberately-blocked call, before relying on it. The brief-WR
 such caveat: it is executed from its installed location, in both lanes and both directions, by
 `tests/brief-rung.test.mjs`.
 
-**One ritual authorizes ONE dispatch.** The sidecar carries a `nonce`, the guard records it on the
-dispatch it authorizes, and a nonce already spent is refused. Freshness and target-binding together
+**One ritual authorizes ONE dispatch, and consumption is a property of the AUDIT TRAIL rather than
+of a lock beside it.** Each attempt appends its own row carrying a unique token, then reads back: the
+FIRST attempt row bearing that nonce wins, and every other attempt stands in the trail as a legible
+refusal. There is no lock file, so there is nothing to leave behind — and **the atomicity this rests
+on is the ledger's own** (a single `O_APPEND` write of a small row), so the kit gains no new platform
+assumption, and inherits the same local-filesystem caveat the ledger already carries. **The residual,
+named:** a process killed after its attempt row lands has burned that nonce without dispatching; the
+cure is re-running the rung and writing a new nonce — one ritual, and strictly cheaper than a crashed
+holder leaving a lock file a human must delete before any brief can move. Freshness and target-binding together
 still permitted a SECOND dispatch to the SAME target inside the window — and that repeat is the
 dangerous one, because a brief re-edited at that path carries text the first ritual never verified.
 A status-declared send consumes nothing: it presented no receipts, so it has none to spend.

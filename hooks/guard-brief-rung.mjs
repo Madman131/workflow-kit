@@ -28,6 +28,14 @@
 //     every-lane floor, and it does not bind dispatches at all.
 //   · It is a TRIPWIRE, not a floor. Its purpose is to make an unverified dispatch visible at the
 //     point it is attempted — not to make one impossible.
+//   · CONSUMPTION'S RESIDUAL, named: a process killed AFTER its attempt row lands has BURNED that
+//     nonce without dispatching anything. The cure is re-running the rung and writing a new nonce —
+//     one ritual — which is strictly cheaper than the lockfile this replaced, where a crashed holder
+//     left a file a human had to delete before ANY brief could be dispatched. Cheaper, still real,
+//     and never hidden.
+//   · THE ATOMICITY ASSUMPTION IS INHERITED, NOT NEW. Adjudication rests on a single O_APPEND write
+//     of a small row being atomic — the property this ledger already stands on, with the same
+//     local-filesystem caveat it already carries. The kit gains no new platform surface here.
 //   · The SEND half is HARNESS-SPECIFIC. It binds a tool named `…send_message`, which exists in the
 //     Claude lane and has no Codex equivalent; in the Codex lane that half is inert by absence, and
 //     the brief-WRITE half binds both lanes through the shared payload grammar. Stated, not implied.
@@ -153,7 +161,7 @@ export function briefTargets(input, { root, patchBase, briefPathDirs, toRepoRela
  * forgery the binding exists to stop is performed by DELETING A FIELD. Absent is not "no opinion";
  * absent is unbound, and unbound is denied.
  */
-export function sidecarState(sidecar, { ageMin, sessionId, dispatch, spentNonces = new Set() }) {
+export function sidecarState(sidecar, { ageMin, sessionId, dispatch }) {
   if (sidecar === undefined) return { state: "absent" };
   if (sidecar === null) return { state: "malformed" };
   if (!isPlainObject(sidecar)) return { state: "malformed" };
@@ -204,7 +212,6 @@ export function sidecarState(sidecar, { ageMin, sessionId, dispatch, spentNonces
   // carries a NONCE, the guard records it on the dispatch it authorizes, and a nonce already spent
   // is refused. That is the rule's actual semantics: every load-bearing dispatch owes its own rung.
   if (typeof sidecar.nonce !== "string" || !sidecar.nonce.trim()) return { state: "nonce-missing" };
-  if (spentNonces.has(sidecar.nonce)) return { state: "rung-already-spent", named: sidecar.nonce };
 
   const checks = Array.isArray(sidecar.checks) ? sidecar.checks : [];
   const executed = checks.filter(
@@ -224,7 +231,7 @@ export const ALLOW_STATES = new Set(["receipted", "status-declared"]);
 // `control` so the Owner's spot-check can tell this control's rows from the lane guard's. A
 // STATUS-DECLARED allow is the row that matters: it is the unfalsifiable route, so it must not also
 // be the invisible one. Ledger IO fails CLOSED — an allow that cannot record its trace is denied.
-export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce }) {
+export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce, attempt }) {
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
@@ -260,6 +267,9 @@ export function writeLedger(projectRoot, { decision, state, kind, target, sessio
     // The spent nonce IS the consumption record — there is no second file to lose or forge apart
     // from the audit trail itself, and it is append-only and fsync'd for exactly that reason.
     if (nonce !== undefined) row.nonce = nonce;
+    // The ATTEMPT TOKEN is what makes first-occurrence adjudicable: without per-attempt identity two
+    // near-simultaneous rows for one nonce are indistinguishable, and "first" collapses to "any".
+    if (attempt !== undefined) row.attempt = attempt;
     fd = openSync(ledger, "a", 0o600);
     const line = `${JSON.stringify(row)}\n`;
     if (writeSync(fd, line) !== Buffer.byteLength(line)) return false;
@@ -273,72 +283,47 @@ export function writeLedger(projectRoot, { decision, state, kind, target, sessio
 }
 
 /**
- * Every brief-rung nonce this repo has already spent. Read from the ledger rather than a sidecar
- * file of its own: the audit trail is already append-only, fsync'd and integrity-checked on write,
- * so consumption inherits those properties instead of inventing weaker ones beside them.
+ * ADJUDICATE CONSUMPTION FROM THE AUDIT TRAIL ITSELF. Pure.
  *
- * An UNREADABLE ledger yields `null`, and the caller treats that as fail-closed — if the record of
- * what has been spent cannot be read, nothing can be honestly declared unspent.
+ * The rule: among the attempt rows bearing this nonce, the FIRST one wins. Allow iff that first row
+ * carries MY attempt token.
+ *
+ * WHY THIS AND NOT A LOCK. Two rounds of review died on a lock built BESIDE the ledger: the first
+ * cut had no serialisation at all (six concurrent dispatches, five allowed), and the second's
+ * stale-lock break WAS the race it existed to survive — a holder paused past the window has its live
+ * lock unlinked, and its own unconditional release then deletes the next holder's. Every time this
+ * program has seen one class survive rounds, the cure was relocating the mechanism INTO the shared,
+ * already-hardened store rather than hardening the bespoke one next to it. So consumption becomes a
+ * PROPERTY OF THE TRAIL — append order — and there is no second mechanism to coordinate with.
+ *
+ * THE ATOMICITY ASSUMPTION IS INHERITED, NOT NEW: a single O_APPEND write of a small row is the
+ * property this ledger already stands on, with the same local-filesystem caveat it already carries.
+ * The kit gains no new platform surface here.
+ *
+ * PER-ATTEMPT IDENTITY IS LOAD-BEARING. Without a unique token, two near-simultaneous rows for one
+ * nonce are indistinguishable on read-back and "first occurrence" collapses into "some row exists".
  */
-export function spentNoncesFrom(text) {
-  if (text === undefined) return new Set();           // no ledger yet ⇒ nothing spent
+export function adjudicateFirst(rows, nonce, attempt) {
+  const first = rows.find(
+    (r) => isPlainObject(r) && r.control === "brief-rung" && r.decision === "attempt" && r.nonce === nonce
+  );
+  if (!first) return { won: false, reason: "no-attempt-row" };   // our own append vanished ⇒ fail closed
+  return { won: first.attempt === attempt, winner: first.attempt };
+}
+
+/** Parse the ledger into rows, or null when it cannot be trusted (⇒ the caller denies). */
+export function ledgerRows(text) {
+  if (text === undefined) return [];
   if (typeof text !== "string") return null;
   if (text.length > 0 && !text.endsWith("\n")) return null;
-  const out = new Set();
+  const out = [];
   for (const line of text.split("\n").filter(Boolean)) {
     let row;
     try { row = JSON.parse(line); } catch { return null; }
     if (!isPlainObject(row)) return null;
-    if (row.control === "brief-rung" && typeof row.nonce === "string" && row.nonce) out.add(row.nonce);
+    out.push(row);
   }
   return out;
-}
-
-/**
- * Run `fn` holding an exclusive lock beside the ledger. Returns `null` if the lock cannot be taken,
- * and the caller DENIES on that — an unserialised consume is not a consume.
- *
- * WHY A LOCK AT ALL, when the ledger append is already atomic: atomicity of the WRITE is not
- * atomicity of the DECISION. Consumption is read-validate-append, and concurrent hook processes
- * interleave inside it — measured on this changeset, SIX concurrent dispatches on ONE nonce were
- * allowed FIVE times. "One ritual, one dispatch" was therefore false under the very multi-session
- * model this kit is built around, which makes the lock part of the claim rather than a nicety.
- * (The kit's ledger has no lock of its own — a banked pre-existing gap; this one is scoped to THIS
- * control's critical section and does not pretend to fix that.)
- */
-export const LOCK_UNAVAILABLE = Symbol("brief-rung:lock-unavailable");
-
-export function withLedgerLock(projectRoot, fn, { now = () => Date.now() } = {}) {
-  const lock = path.join(projectRoot, ".claude", "brief-rung.lock");
-  // NO TIME-BASED STALE BREAK, and that is the correction rather than an omission. A first cut broke
-  // any lock older than 30s so a crashed holder could not brick the control — and the review seat
-  // showed the break IS the race it was meant to survive: a holder paused past the window (a slow
-  // ledger parse suffices, no signal needed) has its live lock unlinked by a second process, both
-  // then hold "the" lock, and the double-spend the lock exists to stop is back. Worse, the first
-  // holder's unconditional unlink then deletes the SECOND holder's lock, admitting a third.
-  // So: contention DENIES, and a crashed holder leaves a lock a human removes — loud, fail-closed,
-  // and free of the break-race entirely. The deny message names the file to delete.
-  const token = `${process.pid}:${createHash("sha256").update(`${process.pid}${now()}`).digest("hex").slice(0, 12)}`;
-  let fd;
-  try { fd = openSync(lock, "wx", 0o600); }
-  catch (e) {
-    // EEXIST is contention; anything else is an IO fault. Both fail closed — an unserialised
-    // consume is not a consume, and this control never trades that for availability.
-    return LOCK_UNAVAILABLE;
-  }
-  try {
-    writeSync(fd, token);
-    fsyncSync(fd);
-    return fn();
-  } finally {
-    try { closeSync(fd); } catch { /* the result already decided */ }
-    // UNLINK ONLY OUR OWN LOCK, verified by reading the token back. An unconditional unlink deletes
-    // whatever file is at that path — including a DIFFERENT holder's lock, if one ever replaced
-    // ours. Nothing should replace ours now that the break is gone; this is the belt that makes
-    // that guarantee checkable rather than assumed.
-    try { if (readFileSync(lock, "utf8") === token) unlinkSync(lock); }
-    catch { /* already gone, or not ours — either way, not ours to remove */ }
-  }
 }
 
 // ------------------------------------------------------------------ deny text
@@ -374,10 +359,10 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "status-not-available": `${SIDECAR} declares {"class":"status"}, which is available only to a cross-session send. A brief is load-bearing by definition: it is the artifact a worker builds from, so there is nothing here to declare out of scope.`,
     "future-dated": `${SIDECAR} is dated ${detail} minutes in the FUTURE. A sidecar ahead of the clock is not fresh, it is unusable — and accepting one would hand the freshness window its own bypass, since a timestamp pushed forward never expires.`,
     "nonce-missing": `${SIDECAR} names no \`nonce\`. A rung is SPENT on the dispatch it authorizes, so it needs a value to spend; without one, a single ritual would authorize every dispatch inside the freshness window.`,
-    "rung-already-spent": `${SIDECAR}'s nonce ${detail} has ALREADY been spent on an earlier dispatch. One ritual authorizes ONE dispatch — a repeat to the same target is the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
+    "rung-already-spent": `${SIDECAR}'s nonce has ALREADY been spent — an earlier attempt (${detail}) claimed it first, and this attempt is recorded in the trail as a refused one. One ritual authorizes ONE dispatch: a repeat to the same target is exactly the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
+    "adjudication-unreadable": `the dispatch's own attempt row could not be read back from ${LEDGER}, so it is not possible to tell whether this attempt claimed the nonce first. An unadjudicated consume is not a consume — the guard denies rather than guess. Fix that file, re-run the rung, and retry.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
     "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, or \`briefPathDirs\` is not an array of non-empty path segments). This dispatch is BLOCKED (fail-closed) — a corrupt brief-path set must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
-    "lock-unavailable": `the consumption lock beside ${LEDGER} could not be taken, so this dispatch could not be serialised against concurrent ones. An unserialised consume is not a consume — the guard denies rather than allow two dispatches to spend one ritual. Retry; if it persists, remove a stale \`.claude/brief-rung.lock\`.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
   return state === "kit-config-malformed" || state === "ledger-error" ? head + why : head + why + " " + RITUAL;
@@ -458,46 +443,63 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       sidecar = e && e.code === "ENOENT" ? undefined : null;
     }
 
-    // READ, JUDGE AND CONSUME UNDER ONE LOCK. Reading the spent set, deciding on it, and appending
-    // the row that spends it are one critical section: split them and two concurrent processes both
-    // read a nonce as unspent and both allow. Measured before this lock existed: five of six.
-    const outcome = withLedgerLock(root, () => {
-      let ledgerText;
-      try { ledgerText = readFileSync(path.join(root, LEDGER), "utf8"); }
-      catch (e) { if (!(e && e.code === "ENOENT")) return { state: "ledger-error", dispatch: dispatches[0] }; }
-      const spentNonces = spentNoncesFrom(ledgerText);
-      if (spentNonces === null) return { state: "ledger-error", dispatch: dispatches[0] };
-
-      // EVERY dispatch is judged before anything is allowed. A patch envelope is applied as a unit,
-      // so deciding on the first match would let a second brief in the same envelope ride the first
-      // one's sidecar — the multi-target fail-open the shared grammar exists to prevent.
-      const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d, spentNonces }) }));
-      const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
-      if (blocked) {
-        return {
-          state: blocked.v.state, dispatch: blocked.d,
-          detail: blocked.v.named ?? (blocked.v.ageMin !== undefined ? Math.abs(Math.round(blocked.v.ageMin)) : undefined),
-        };
-      }
-      for (const { d, v } of verdicts) {
-        const ok = writeLedger(root, {
-          decision: "allow", state: v.state, kind: d.kind, target: d.target,
-          sessionId: input?.session_id ?? "", checks: v.checks,
-          cls: v.state === "status-declared" ? "status" : "load-bearing",
-          nonce: v.state === "status-declared" ? undefined : sidecar.nonce,
-        });
-        if (!ok) return { state: "ledger-error", dispatch: d };
-      }
-      return null;                                        // allowed
-    });
-    if (outcome === null && !dispatches.length) return exit(0);
-    if (outcome !== null) {
-      // `withLedgerLock` returns null for BOTH "allowed" and "could not lock", so the two are
-      // distinguished by a sentinel rather than by truthiness — a truthiness read here would map
-      // "lock unavailable" onto "allowed", which is the fail-open this lock exists to prevent.
-      if (outcome === LOCK_UNAVAILABLE) { emit(denyReason("lock-unavailable", { dispatch: dispatches[0] })); return exit(0); }
-      emit(denyReason(outcome.state, { dispatch: outcome.dispatch, detail: outcome.detail }));
+    // JUDGE THE SIDECAR FIRST — every dispatch, before anything touches the trail. A patch envelope
+    // is applied as a unit, so deciding on the first match would let a second brief in the same
+    // envelope ride the first one's sidecar.
+    const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d }) }));
+    const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
+    if (blocked) {
+      emit(denyReason(blocked.v.state, {
+        dispatch: blocked.d,
+        detail: blocked.v.named ?? (blocked.v.ageMin !== undefined ? Math.abs(Math.round(blocked.v.ageMin)) : undefined),
+      }));
       return exit(0);
+    }
+
+    // APPEND, THEN ADJUDICATE. Consumption is a property of the TRAIL's append order, not of a lock
+    // beside it. Each attempt writes its own row carrying a unique token, then reads back: the FIRST
+    // attempt row bearing this nonce wins, and everyone else's row stands in the trail as a legible
+    // refusal. There is no critical section to serialise, so there is nothing to leave behind.
+    const attempt = `${process.pid}-${createHash("sha256").update(`${process.pid}:${Date.now()}:${Math.random()}`).digest("hex").slice(0, 12)}`;
+
+    for (const { d, v } of verdicts) {
+      // A STATUS-DECLARED send consumes nothing — it presented no receipts, so it claims no nonce and
+      // needs no adjudication. One row, and it is the legible declaration the Owner counts.
+      if (v.state === "status-declared") {
+        if (!writeLedger(root, { decision: "allow", state: v.state, kind: d.kind, target: d.target,
+          sessionId: input?.session_id ?? "", cls: "status" })) {
+          emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+        }
+        continue;
+      }
+
+      if (!writeLedger(root, { decision: "attempt", state: v.state, kind: d.kind, target: d.target,
+        sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
+        nonce: sidecar.nonce, attempt })) {
+        emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+      }
+
+      const rows = ledgerRows((() => {
+        try { return readFileSync(path.join(root, LEDGER), "utf8"); } catch { return undefined; }
+      })());
+      if (rows === null) { emit(denyReason("adjudication-unreadable", { dispatch: d })); return exit(0); }
+      const ruling = adjudicateFirst(rows, sidecar.nonce, attempt);
+      if (!ruling.won) {
+        // Our attempt row is already in the trail and stays there as the refusal's own record.
+        if (!writeLedger(root, { decision: "deny", state: "rung-already-spent", kind: d.kind,
+          target: d.target, sessionId: input?.session_id ?? "", cls: "load-bearing",
+          nonce: sidecar.nonce, attempt })) {
+          emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+        }
+        emit(denyReason(ruling.reason === "no-attempt-row" ? "adjudication-unreadable" : "rung-already-spent",
+          { dispatch: d, detail: ruling.winner }));
+        return exit(0);
+      }
+      if (!writeLedger(root, { decision: "allow", state: v.state, kind: d.kind, target: d.target,
+        sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
+        nonce: sidecar.nonce, attempt })) {
+        emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+      }
     }
     return exit(0);
   });

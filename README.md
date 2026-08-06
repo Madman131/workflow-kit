@@ -27,10 +27,14 @@ may declare `{"class":"status"}` instead, and that declaration is LEDGERED for t
 spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
 must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
-**One ritual authorizes one dispatch.** The sidecar carries a nonce that is SPENT on the dispatch it
-authorizes, because freshness and target-binding together still let a SECOND dispatch to the same
-target ride the first ritual — and that repeat is the dangerous one, carrying text the original
-checks never saw. The ledger row records the declared class and the target in clear text, never
+**One ritual authorizes one dispatch**, because freshness and target-binding together still let a
+SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,
+carrying text the original checks never saw. Consumption is a property of the AUDIT TRAIL: each
+attempt appends a row carrying a unique token and then reads back, the first row bearing that nonce
+wins, and the losers stand in the trail as legible refusals. No lock, so nothing to leave behind —
+and the atomicity is the ledger's own, so the kit takes on no new platform assumption. Residual,
+named: a process killed after its row lands burns that nonce without dispatching, and the cure is
+re-running the rung. The ledger row records the declared class and the target in clear text, never
 hashed, because its named consumer is the Owner's spot-check. That ledger **records; it does not
 deter**: an orchestrator who declares everything `status` is not stopped mechanically, exactly as
 `exempt` is not, and the compensation is that each declaration is a row a human can count.

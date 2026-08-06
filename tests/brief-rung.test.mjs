@@ -8,7 +8,7 @@
 // the two lies this kit has already shipped, one release apart.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 
 import {
   ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, loadBriefConfig, sidecarState,
-  spentNoncesFrom, withLedgerLock, LOCK_UNAVAILABLE,
+  adjudicateFirst, ledgerRows,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
 
@@ -153,39 +153,43 @@ test("the STATUS escape is available to a send and refused to a brief", () => {
 test("CONSUME ON USE — one ritual, one dispatch, and the repeat is the dangerous case", () => {
   // Target-binding kills the COPIED and the RE-TOUCHED sidecar. It does NOT kill a SECOND dispatch
   // to the SAME target inside the freshness window — and that repeat is the sharp one: a brief
-  // re-edited at the same path carries text the original ritual never saw, riding receipts minted
-  // for different content. Freshness cannot see it and target-binding cannot see it.
+  // re-edited at that path carries text the original ritual never saw.
   assert.equal(state(fresh({ nonce: undefined })), "nonce-missing");
   assert.equal(state(fresh({ nonce: "   " })), "nonce-missing", "whitespace is not a nonce");
-  assert.equal(state(fresh(), { spentNonces: new Set(["n1"]) }), "rung-already-spent");
-  assert.equal(state(fresh(), { spentNonces: new Set(["other"]) }), "receipted",
-    "…and an UNRELATED spent nonce does not block this one (both directions)");
-  // The status route consumes nothing, and the asymmetry is deliberate: it presented no receipts,
-  // so it has none to spend. What it leaves is a legible ledger row.
+  assert.equal(state(fresh()), "receipted", "a nonce-bearing sidecar passes the SIDECAR check…");
+  // …and whether it may SPEND that nonce is adjudicated from the trail, not decided here.
   assert.equal(
     sidecarState(fresh({ class: "status", checks: undefined, nonce: undefined, target: "local_dest" }),
-      { ageMin: 1, sessionId: "s1", dispatch: SEND, spentNonces: new Set() }).state,
+      { ageMin: 1, sessionId: "s1", dispatch: SEND }).state,
     "status-declared", "a status send needs no nonce because it spends nothing");
 });
 
-test("spentNoncesFrom reads the audit trail, and fails CLOSED on one it cannot read", () => {
-  assert.deepEqual([...spentNoncesFrom(undefined)], [], "no ledger yet ⇒ nothing spent");
-  const rows = [
-    JSON.stringify({ control: "brief-rung", nonce: "a" }),
-    JSON.stringify({ control: "lane-authoring", nonce: "ignored" }),
-    JSON.stringify({ control: "brief-rung", nonce: "b" }),
-  ].join("\n") + "\n";
-  assert.deepEqual([...spentNoncesFrom(rows)].sort(), ["a", "b"], "only THIS control's nonces count");
-  // Unreadable ⇒ null ⇒ the caller denies. If the record of what is spent cannot be read, nothing
-  // can honestly be called unspent.
-  assert.equal(spentNoncesFrom("{not json}\n"), null);
-  assert.equal(spentNoncesFrom('{"control":"brief-rung"}'), null, "a missing trailing newline is a truncated trail");
-  assert.equal(spentNoncesFrom("[1,2]\n"), null, "a non-object row is a corrupt trail");
-  // The DEFENSIVE branch, pinned rather than left unproven: `readFileSync(…, "utf8")` always hands
-  // back a string today, so this is unreachable in practice — and an unpinned defensive branch is
-  // exactly what a mutation battery finds SURVIVING. It did; this is the assertion that kills it.
-  assert.equal(spentNoncesFrom(123), null, "a non-string ledger is unreadable, not empty");
-  assert.equal(spentNoncesFrom(null), null);
+test("ADJUDICATION IS FIRST-ROW-WINS, and per-attempt identity is what makes it decidable", () => {
+  // Consumption is a property of the TRAIL's append order. Two rounds of review died on a lock built
+  // beside the ledger; this deletes that mechanism rather than hardening it.
+  const row = (nonce, attempt) => ({ control: "brief-rung", decision: "attempt", nonce, attempt });
+  const rows = [row("n1", "A"), row("n1", "B"), row("n2", "C")];
+  assert.equal(adjudicateFirst(rows, "n1", "A").won, true, "the FIRST attempt row wins");
+  assert.equal(adjudicateFirst(rows, "n1", "B").won, false, "a later attempt on the same nonce loses");
+  assert.equal(adjudicateFirst(rows, "n1", "B").winner, "A", "…and the deny can name who won");
+  assert.equal(adjudicateFirst(rows, "n2", "C").won, true, "a different nonce is unaffected");
+  // Our own row missing means the append did not land — fail closed, never "nobody claimed it".
+  assert.equal(adjudicateFirst([], "n1", "A").won, false);
+  assert.equal(adjudicateFirst([], "n1", "A").reason, "no-attempt-row");
+  // Only THIS control's attempt rows count; an allow/deny row is a resolution, not a claim.
+  const noise = [{ control: "lane-authoring", decision: "attempt", nonce: "n1", attempt: "X" },
+                 { control: "brief-rung", decision: "allow", nonce: "n1", attempt: "X" },
+                 row("n1", "A")];
+  assert.equal(adjudicateFirst(noise, "n1", "A").won, true, "resolutions and other controls do not claim");
+});
+
+test("ledgerRows fails CLOSED on a trail it cannot trust", () => {
+  assert.deepEqual(ledgerRows(undefined), [], "no ledger yet ⇒ no rows");
+  assert.equal(ledgerRows('{"a":1}\n').length, 1);
+  assert.equal(ledgerRows("{not json}\n"), null);
+  assert.equal(ledgerRows('{"a":1}'), null, "a missing trailing newline is a truncated trail");
+  assert.equal(ledgerRows("[1,2]\n"), null, "a non-object row is a corrupt trail");
+  assert.equal(ledgerRows(123), null, "a non-string ledger is unreadable, not empty");
 });
 
 test("every deny state produces a message that names the state's OWN remediation", () => {
@@ -202,7 +206,7 @@ test("every deny state produces a message that names the state's OWN remediation
     "target-mismatch": /one ritual authorizes one dispatch/,
     "status-not-available": /load-bearing by definition/,
     "future-dated": /ahead of the clock is not fresh/,
-    "lock-unavailable": /An unserialised consume is not a consume/,
+    "adjudication-unreadable": /An unadjudicated consume is not a consume/,
     "nonce-missing": /needs a value to spend/,
     "rung-already-spent": /One ritual authorizes ONE dispatch/,
     "no-executed-check": /assert-without-executing/,
@@ -319,14 +323,18 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
     // …and the allow left an audit row the Owner can spot-check.
     const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
       .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.control === "brief-rung");
-    assert.equal(rows.length, 1, "one row per allowed dispatch");
-    assert.equal(rows[0].state, "receipted");
-    assert.equal(rows[0].target, "briefs/cs1.md");
+    // TWO rows per load-bearing dispatch: the ATTEMPT that claims the nonce, and the RESOLUTION that
+    // records how adjudication went. Both are the trail's, not a side file's.
+    assert.deepEqual(rows.map((r) => r.decision), ["attempt", "allow"]);
+    const allow = rows.find((r) => r.decision === "allow");
+    assert.equal(allow.state, "receipted");
+    assert.equal(allow.target, "briefs/cs1.md");
+    assert.equal(rows[0].attempt, allow.attempt, "the resolution names the attempt it resolves");
     // CLEAR TEXT, both fields: the ledger's named consumer is the Owner's spot-check, and a
     // spot-check cannot read a digest. The declared CLASS is what makes the status escape honest —
     // it is not stopped mechanically, so it must at least be COUNTABLE by a human.
-    assert.equal(rows[0].class, "load-bearing");
-    assert.equal(rows[0].nonce, "rung-1", "the spent nonce IS the consumption record");
+    assert.equal(allow.class, "load-bearing");
+    assert.equal(allow.nonce, "rung-1", "the spent nonce IS the consumption record");
 
     // The CODEX-lane copy runs from ITS installed location too — byte-identity is a claim about
     // installation, not execution, and only running each where it installs settles it.
@@ -394,7 +402,10 @@ test("A SECOND DISPATCH CANNOT RIDE THE FIRST RITUAL — allow, then deny, same 
     // Exactly two allows, each with its own spent nonce in clear text.
     const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
       .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.control === "brief-rung");
-    assert.deepEqual(rows.map((r) => r.nonce), ["rung-1", "rung-2"]);
+    // The whole story is legible in the trail: rung-1 claimed and allowed, rung-1 claimed again and
+    // REFUSED, rung-2 claimed and allowed. The refusal is a row, not a silence.
+    assert.deepEqual(rows.map((r) => `${r.nonce}:${r.decision}`),
+      ["rung-1:attempt", "rung-1:allow", "rung-1:attempt", "rung-1:deny", "rung-2:attempt", "rung-2:allow"]);
   } finally { cleanup(); }
 });
 
@@ -454,50 +465,43 @@ test("CONSUMPTION IS SERIALISED — six TRULY CONCURRENT dispatches on one nonce
     assert.equal(allowed, 1, `exactly one dispatch may spend one ritual, got ${allowed}`);
     const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
       .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.nonce === "race");
-    assert.equal(rows.length, 1, "and the audit trail records exactly one spend");
+    assert.equal(rows.filter((r) => r.decision === "allow").length, 1, "exactly one spend recorded");
+    // N−1 LEGIBLE REFUSALS. The losers are not silent: each stands in the trail as its own row, which
+    // is the observability the lock design never had.
+    assert.equal(rows.filter((r) => r.decision === "deny").length, 5, "and five legible refusals");
+    assert.equal(rows.filter((r) => r.decision === "attempt").length, 6, "one attempt row each");
   } finally { cleanup(); }
 });
 
-test("the lock is a SENTINEL, not a truthiness read — 'could not lock' never reads as 'allowed'", () => {
-  // `withLedgerLock` returns null for ALLOWED and a symbol for COULD-NOT-LOCK. Collapsing those
-  // with a truthiness test would map lock-failure onto allow, which is the fail-open the lock is for.
+test("THE CRASH RESIDUAL: a burned nonce denies, and the cure is ONE RITUAL — never a brick", () => {
+  // The residual changed SHAPE when the lock was deleted, and the disclosure changed with it. Under
+  // the lock, a crashed holder left a file a human had to delete before ANY brief could move. Now a
+  // process killed after its attempt row lands has burned only THAT nonce, and re-running the rung
+  // clears it. Strictly cheaper, still real, and asserted rather than asserted-about.
   const { dir, cleanup } = adopt();
   try {
-    assert.equal(withLedgerLock(dir, () => null), null, "fn's null (allowed) passes through");
-    assert.equal(withLedgerLock(dir, () => "x"), "x");
-    // A lock held by someone else, never released and NOT stale, is refused rather than waited out.
-    writeFileSync(path.join(dir, ".claude", "brief-rung.lock"), "");
-    assert.equal(withLedgerLock(dir, () => null), LOCK_UNAVAILABLE, "a held lock denies");
-    assert.notEqual(LOCK_UNAVAILABLE, null, "…and the two outcomes are distinguishable");
-
-    // END TO END, and it pins the MESSAGE rather than only the decision. Dropping the call-site
-    // branch still denies — the symbol falls through and `outcome.state` is undefined — so the
-    // behaviour stays fail-closed while the author is told "sidecar state is undefined". A control
-    // that misdescribes the input it just read teaches its reader to discount it, and a mutation
-    // proved nothing here caught that until this assertion existed.
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
-    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
-      sessionId: "s1", target: "briefs/cs1.md", nonce: "n", checks: [{ command: "c", output: "o" }],
-    }));
-    const held = spawnSync(process.execPath,
+    const payload = JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: "briefs/cs1.md" } });
+    const run = () => spawnSync(process.execPath,
       [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
-      { input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
-        tool_input: { file_path: "briefs/cs1.md" } }), encoding: "utf8" });
-    assert.match(held.stdout, /"permissionDecision":"deny"/, "a held lock denies the dispatch…");
-    assert.match(held.stdout, /An unserialised consume is not a consume/, "…and SAYS why");
-    assert.doesNotMatch(held.stdout, /sidecar state is undefined/, "never a fallthrough message");
+      { input: payload, encoding: "utf8" });
+    const sidecar = (nonce) => writeFileSync(path.join(dir, ".claude", "brief-rung.json"),
+      JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", nonce, checks: [{ command: "c", output: "o" }] }));
 
-    // THE RELEASE ONLY REMOVES ITS OWN LOCK. An unconditional unlink deletes whatever sits at that
-    // path — including a DIFFERENT holder's lock, which would admit a third consumer. With the
-    // time-based stale break gone nothing should replace ours; this asserts that guarantee instead
-    // of assuming it, by replacing the lock file mid-section and requiring the impostor to survive.
-    rmSync(path.join(dir, ".claude", "brief-rung.lock"), { force: true });
-    const foreign = path.join(dir, ".claude", "brief-rung.lock");
-    const result = withLedgerLock(dir, () => { writeFileSync(foreign, "SOMEONE-ELSES-LOCK"); return "ran"; });
-    assert.equal(result, "ran", "the section still ran");
-    assert.equal(readFileSync(foreign, "utf8"), "SOMEONE-ELSES-LOCK",
-      "a lock that is not ours survives our release — we unlink only what carries our token");
-    rmSync(foreign, { force: true });
+    // A process that appended its attempt and then died: the row is there, the dispatch never was.
+    writeFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"),
+      JSON.stringify({ ts: "t", control: "brief-rung", decision: "attempt", state: "receipted",
+        kind: "brief", target: "briefs/cs1.md", sessionId: "s1", class: "load-bearing",
+        nonce: "burned", attempt: "9999-dead" }) + "\n");
+    sidecar("burned");
+    assert.match(run().stdout, /ALREADY been spent/, "the burned nonce is refused…");
+
+    sidecar("fresh-one");
+    assert.doesNotMatch(run().stdout, /"permissionDecision":"deny"/,
+      "…and re-running the rung with a NEW nonce moves immediately — no file to delete by hand");
+    // And nothing was left behind to clean up: the lock class is deleted, not minimised.
+    assert.ok(!existsSync(path.join(dir, ".claude", "brief-rung.lock")), "no lock file exists at all");
   } finally { cleanup(); }
 });
 
