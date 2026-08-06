@@ -51,6 +51,8 @@ const KIT_CONFIG = path.join(".claude", "kit.config.json");
 // seam because a stale declaration only mis-labels a lane; here the whole claim IS "these checks
 // were run for THIS dispatch, JUST NOW".
 const MAX_AGE_MIN = 30;
+// Five seconds, expressed in the same unit as MAX_AGE_MIN so the two are comparable at a glance.
+const MAX_FUTURE_SKEW_MIN = 5 / 60;
 
 // WHICH WRITES ARE BRIEFS? Two clauses, because either alone leaves a real gap.
 //   (a) anything under a brief directory — portable default UNION `.claude/kit.config.json`'s
@@ -160,8 +162,11 @@ export function sidecarState(sidecar, { ageMin, sessionId, dispatch, spentNonces
   // timestamped ahead of now, which is the freshness window's own bypass: touch the mtime forward and
   // it never expires. It gets its OWN state rather than folding into `stale`, because a deny that
   // said "N minutes old" about a file dated tomorrow would misdescribe the input it just read.
-  // The tolerance is deliberately small rather than zero: clock skew of a few seconds is ordinary.
-  if (ageMin < -1) return { state: "future-dated", ageMin };
+  // The tolerance is FIVE SECONDS, named and exact: the mtime and the clock come from the same
+  // machine, so this covers filesystem timestamp granularity and nothing else. A first cut allowed
+  // a full minute while its comment said "a few seconds" — the wording and the number have to agree,
+  // or the boundary a reader relies on is not the boundary that ships.
+  if (ageMin < -MAX_FUTURE_SKEW_MIN) return { state: "future-dated", ageMin };
   if (ageMin > MAX_AGE_MIN) return { state: "stale", ageMin };
 
   if (typeof sidecar.sessionId !== "string" || !sidecar.sessionId) return { state: "session-missing" };
@@ -305,24 +310,34 @@ export const LOCK_UNAVAILABLE = Symbol("brief-rung:lock-unavailable");
 
 export function withLedgerLock(projectRoot, fn, { now = () => Date.now() } = {}) {
   const lock = path.join(projectRoot, ".claude", "brief-rung.lock");
+  // NO TIME-BASED STALE BREAK, and that is the correction rather than an omission. A first cut broke
+  // any lock older than 30s so a crashed holder could not brick the control — and the review seat
+  // showed the break IS the race it was meant to survive: a holder paused past the window (a slow
+  // ledger parse suffices, no signal needed) has its live lock unlinked by a second process, both
+  // then hold "the" lock, and the double-spend the lock exists to stop is back. Worse, the first
+  // holder's unconditional unlink then deletes the SECOND holder's lock, admitting a third.
+  // So: contention DENIES, and a crashed holder leaves a lock a human removes — loud, fail-closed,
+  // and free of the break-race entirely. The deny message names the file to delete.
+  const token = `${process.pid}:${createHash("sha256").update(`${process.pid}${now()}`).digest("hex").slice(0, 12)}`;
   let fd;
-  for (let attempt = 0; attempt < 100 && fd === undefined; attempt++) {
-    try { fd = openSync(lock, "wx", 0o600); }
-    catch (e) {
-      if (!e || e.code !== "EEXIST") return LOCK_UNAVAILABLE;   // not contention — fail closed
-      // A crashed holder must not brick the control forever, so a lock older than the window is
-      // broken. The window is far longer than the critical section, which is a few file reads.
-      try { if (now() - statSync(lock).mtimeMs > 30_000) unlinkSync(lock); }
-      catch { /* vanished under us — the next attempt takes it */ }
-      const until = now() + 5;
-      while (now() < until) { /* brief spin; the section is milliseconds long */ }
-    }
+  try { fd = openSync(lock, "wx", 0o600); }
+  catch (e) {
+    // EEXIST is contention; anything else is an IO fault. Both fail closed — an unserialised
+    // consume is not a consume, and this control never trades that for availability.
+    return LOCK_UNAVAILABLE;
   }
-  if (fd === undefined) return LOCK_UNAVAILABLE;
-  try { return fn(); }
-  finally {
+  try {
+    writeSync(fd, token);
+    fsyncSync(fd);
+    return fn();
+  } finally {
     try { closeSync(fd); } catch { /* the result already decided */ }
-    try { unlinkSync(lock); } catch { /* a removed lock is the desired end state either way */ }
+    // UNLINK ONLY OUR OWN LOCK, verified by reading the token back. An unconditional unlink deletes
+    // whatever file is at that path — including a DIFFERENT holder's lock, if one ever replaced
+    // ours. Nothing should replace ours now that the break is gone; this is the belt that makes
+    // that guarantee checkable rather than assumed.
+    try { if (readFileSync(lock, "utf8") === token) unlinkSync(lock); }
+    catch { /* already gone, or not ours — either way, not ours to remove */ }
   }
 }
 

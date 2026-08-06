@@ -7,7 +7,7 @@
 // then EXECUTES the installed hook from where `init` puts it, because presence and registration are
 // the two lies this kit has already shipped, one release apart.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,7 +94,11 @@ test("absent / malformed / stale all deny — malformed is never read as satisfi
   // never expires. It gets its OWN state, because a deny saying "N minutes old" about a file dated
   // tomorrow would misdescribe the input it just read. Small tolerance for ordinary clock skew.
   assert.equal(state(fresh(), { ageMin: -1440 }), "future-dated");
-  assert.equal(state(fresh(), { ageMin: -0.5 }), "receipted", "…but a few seconds of skew is not an attack");
+  // The tolerance is FIVE SECONDS and the assertions say so in the same unit the code uses. A first
+  // cut allowed a full minute (`ageMin: -0.5` = 30s) under a comment reading "a few seconds" — the
+  // seat caught the wording and the number disagreeing, which is the boundary a reader relies on.
+  assert.equal(state(fresh(), { ageMin: -4 / 60 }), "receipted", "4s of filesystem granularity is fine");
+  assert.equal(state(fresh(), { ageMin: -30 / 60 }), "future-dated", "30s ahead is NOT 'a few seconds'");
   assert.equal(state(fresh(), { ageMin: 29 }), "receipted", "…and 29 minutes is still fresh (both sides of the window)");
 });
 
@@ -420,10 +424,15 @@ test("A CORRUPT kit.config FAILS CLOSED FOR THE ADOPTERS IT EXISTS TO PROTECT", 
   } finally { cleanup(); }
 });
 
-test("CONSUMPTION IS SERIALISED — six concurrent dispatches on one nonce yield exactly one allow", () => {
-  // Measured on this changeset BEFORE the lock existed: five of six were allowed and five rows
-  // carried the same nonce. Atomicity of the ledger APPEND is not atomicity of the DECISION —
-  // consumption is read-validate-append, and concurrent hook processes interleave inside it.
+test("CONSUMPTION IS SERIALISED — six TRULY CONCURRENT dispatches on one nonce yield exactly one allow", async () => {
+  // Measured on this changeset BEFORE the lock existed: five of six allowed, five rows carrying the
+  // same nonce. Atomicity of the ledger APPEND is not atomicity of the DECISION.
+  //
+  // THIS TEST WAS DECORATIVE ON ITS FIRST CUT AND A REVIEW SEAT CAUGHT IT. It used `spawnSync`
+  // inside `Array.from` — `spawnSync` BLOCKS, so the six ran strictly one after another and the
+  // first spent the nonce before the second started. It reported "1 of 6" with the lock removed
+  // just as happily as with it: a concurrency test containing no concurrency, asserting the
+  // property it could not observe. `spawn` + `Promise.all` is what makes them overlap.
   const { dir, cleanup } = adopt();
   try {
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
@@ -432,10 +441,16 @@ test("CONSUMPTION IS SERIALISED — six concurrent dispatches on one nonce yield
     }));
     const payload = JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: "briefs/cs1.md" } });
-    const runs = Array.from({ length: 6 }, () => spawnSync(process.execPath,
-      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
-      { input: payload, encoding: "utf8" }));
-    const allowed = runs.filter((r) => !/"permissionDecision":"deny"/.test(r.stdout)).length;
+    const once = () => new Promise((resolve) => {
+      const p = spawn(process.execPath,
+        [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir]);
+      let out = "";
+      p.stdout.on("data", (d) => { out += d; });
+      p.on("close", () => resolve(out));
+      p.stdin.end(payload);
+    });
+    const outs = await Promise.all(Array.from({ length: 6 }, once));
+    const allowed = outs.filter((o) => !/"permissionDecision":"deny"/.test(o)).length;
     assert.equal(allowed, 1, `exactly one dispatch may spend one ritual, got ${allowed}`);
     const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
       .split("\n").filter(Boolean).map((r) => JSON.parse(r)).filter((r) => r.nonce === "race");
@@ -471,6 +486,18 @@ test("the lock is a SENTINEL, not a truthiness read — 'could not lock' never r
     assert.match(held.stdout, /"permissionDecision":"deny"/, "a held lock denies the dispatch…");
     assert.match(held.stdout, /An unserialised consume is not a consume/, "…and SAYS why");
     assert.doesNotMatch(held.stdout, /sidecar state is undefined/, "never a fallthrough message");
+
+    // THE RELEASE ONLY REMOVES ITS OWN LOCK. An unconditional unlink deletes whatever sits at that
+    // path — including a DIFFERENT holder's lock, which would admit a third consumer. With the
+    // time-based stale break gone nothing should replace ours; this asserts that guarantee instead
+    // of assuming it, by replacing the lock file mid-section and requiring the impostor to survive.
+    rmSync(path.join(dir, ".claude", "brief-rung.lock"), { force: true });
+    const foreign = path.join(dir, ".claude", "brief-rung.lock");
+    const result = withLedgerLock(dir, () => { writeFileSync(foreign, "SOMEONE-ELSES-LOCK"); return "ran"; });
+    assert.equal(result, "ran", "the section still ran");
+    assert.equal(readFileSync(foreign, "utf8"), "SOMEONE-ELSES-LOCK",
+      "a lock that is not ours survives our release — we unlink only what carries our token");
+    rmSync(foreign, { force: true });
   } finally { cleanup(); }
 });
 
