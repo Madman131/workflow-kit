@@ -31,7 +31,8 @@ must not make for its consumer (`core/INVARIANTS.md` rule 1).
 SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,
 carrying text the original checks never saw. Consumption is a property of the AUDIT TRAIL: each
 attempt appends a row carrying a unique token and then reads back, the first row bearing that nonce
-wins, and the losers stand in the trail as legible refusals. No lock, so nothing to leave behind —
+wins; a loser's attempt row stays in the trail and gains an explicit refusal row on top whenever the
+trail is writable (if that second append fails the call still denies, and the row stands unresolved). No lock, so nothing to leave behind —
 and the atomicity is the ledger's own, so the kit takes on no new platform assumption. Residual,
 named: a process killed after its row lands burns that nonce without dispatching, and the cure is
 re-running the rung. The ledger row records the declared class and the target in clear text, never

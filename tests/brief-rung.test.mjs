@@ -435,7 +435,7 @@ test("A CORRUPT kit.config FAILS CLOSED FOR THE ADOPTERS IT EXISTS TO PROTECT", 
   } finally { cleanup(); }
 });
 
-test("CONSUMPTION IS SERIALISED — six TRULY CONCURRENT dispatches on one nonce yield exactly one allow", async () => {
+test("CONSUMPTION IS SERIALISED — six overlapping dispatches on one nonce yield exactly one allow", async () => {
   // Measured on this changeset BEFORE the lock existed: five of six allowed, five rows carrying the
   // same nonce. Atomicity of the ledger APPEND is not atomicity of the DECISION.
   //
@@ -452,15 +452,21 @@ test("CONSUMPTION IS SERIALISED — six TRULY CONCURRENT dispatches on one nonce
     }));
     const payload = JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: "briefs/cs1.md" } });
-    const once = () => new Promise((resolve) => {
-      const p = spawn(process.execPath,
-        [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir]);
+    // A RELEASE BARRIER, not merely async spawning. The hook does nothing until its stdin closes, so
+    // every child is started FIRST and only then are all six payloads released together. Without the
+    // barrier the children can simply run to completion one after another on a busy scheduler, and
+    // the test would pass for the wrong reason — which is the sharper form of the defect a seat
+    // already caught here once. What this proves is OVERLAP, not a guaranteed interleaving: the
+    // discriminating proof is the mutation that neuters adjudication, which reddens this test.
+    const children = Array.from({ length: 6 }, () => spawn(process.execPath,
+      [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir]));
+    const settled = children.map((p) => new Promise((resolve) => {
       let out = "";
       p.stdout.on("data", (d) => { out += d; });
       p.on("close", () => resolve(out));
-      p.stdin.end(payload);
-    });
-    const outs = await Promise.all(Array.from({ length: 6 }, once));
+    }));
+    for (const p of children) p.stdin.end(payload);       // release them together
+    const outs = await Promise.all(settled);
     const allowed = outs.filter((o) => !/"permissionDecision":"deny"/.test(o)).length;
     assert.equal(allowed, 1, `exactly one dispatch may spend one ritual, got ${allowed}`);
     const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")

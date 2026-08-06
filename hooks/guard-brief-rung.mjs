@@ -458,8 +458,12 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
 
     // APPEND, THEN ADJUDICATE. Consumption is a property of the TRAIL's append order, not of a lock
     // beside it. Each attempt writes its own row carrying a unique token, then reads back: the FIRST
-    // attempt row bearing this nonce wins, and everyone else's row stands in the trail as a legible
-    // refusal. There is no critical section to serialise, so there is nothing to leave behind.
+    // attempt row bearing this nonce wins. A loser's ATTEMPT row is already in the trail and stays
+    // there, and a `deny` resolution is appended on top of it WHEN THE TRAIL IS WRITABLE — if that
+    // second append fails the call still denies (fail-closed), but the trail then shows an
+    // unresolved attempt rather than an explicit refusal. Stated precisely because the broader
+    // claim — 'every loser leaves a legible refusal' — is not true on that I/O-failure path.
+    // There is no critical section to serialise, so there is nothing to leave behind.
     const attempt = `${process.pid}-${createHash("sha256").update(`${process.pid}:${Date.now()}:${Math.random()}`).digest("hex").slice(0, 12)}`;
 
     for (const { d, v } of verdicts) {

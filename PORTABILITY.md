@@ -284,8 +284,9 @@ such caveat: it is executed from its installed location, in both lanes and both 
 
 **One ritual authorizes ONE dispatch, and consumption is a property of the AUDIT TRAIL rather than
 of a lock beside it.** Each attempt appends its own row carrying a unique token, then reads back: the
-FIRST attempt row bearing that nonce wins, and every other attempt stands in the trail as a legible
-refusal. There is no lock file, so there is nothing to leave behind — and **the atomicity this rests
+FIRST attempt row bearing that nonce wins. A loser's ATTEMPT row is already in the trail and stays
+there; an explicit `deny` resolution is appended on top when the trail is writable — if that second
+append fails the call still denies, and the trail shows an unresolved attempt instead. There is no lock file, so there is nothing to leave behind — and **the atomicity this rests
 on is the ledger's own** (a single `O_APPEND` write of a small row), so the kit gains no new platform
 assumption, and inherits the same local-filesystem caveat the ledger already carries. **The residual,
 named:** a process killed after its attempt row lands has burned that nonce without dispatching; the
