@@ -6,7 +6,7 @@
 In the program that produced this release, a changeset whose final deliverable was **two prose
 sentences at the lowest tier** consumed **four gate rounds and twelve reviewer verdicts**. None of
 that was the reviews being too careful — every round found something real. The waste was running deep
-gates on an artifact that a five-minute check would have reshaped or rejected first. Three such
+gates on an artifact that a five-minute check would have reshaped or rejected first. Four such
 checks now sit in the doctrine, each placed against the rule it completes rather than gathered into a
 new section nobody would find.
 
@@ -37,7 +37,26 @@ contain. It also **bounds the packet, never the seat's reach** — a seat holdin
 can still read an untracked round record sitting on disk, which is the same reason a filename
 blocklist fails, so keep round records outside the tree the seat can reach.
 
-**Each of the three says in its own text that no mechanism stands behind it,** and each names what it
+**When a control needs a JUDGMENT, the cure depends on whether that judgment can be DECLARED**
+(`core/FOUNDATIONS.md` § Principles P2 and `core/INVARIANTS.md` rule 1). The *prohibition* was already
+here, on both surfaces — *"enforce a mechanical invariant — yes; make the semantic decision — no."*
+What was missing was what to do instead. Declarable, because the artifact is structured and its author
+writes it ⇒ replace the predicate with a **DECLARATION** and keep enforcing the mechanical comparison;
+that is stronger than dropping the control, because a wrong declaration is a deliberate false statement
+rather than a parsing accident. Not declarable ⇒ **demote to a SENSOR** that surfaces candidates and
+never claims prevention. And when successive widenings of a predicate each fall to a seat, the concept
+is the defect — do not build generation four. This is distinct from "sensors, not actuators"
+(`core/OPERATE.md` § Garden), which governs whether a check *enacts*, not whether it can decide.
+
+**That one is stated twice on purpose, and a test binds the copies.** `core/README.md` § Do NOT "read
+everything in `core/`" records that `INVARIANTS.md` is shipped to the *reviewer* by the gate runner and
+is "never read by the builder at all". The cure is guidance a builder needs, and the reviewer judging
+whether a control should have been a predicate receives only the payload — so a pointer would dangle
+for whichever reader could not follow it. Unbound duplication is the defect this kit has already paid
+for; bound duplication is a design choice, so `tests/gating-doctrine.test.mjs` asserts the two copies
+carry the same claim, and editing one reddens. **This is the one place duplication is correct here.**
+
+**Each of the four says in its own text that no mechanism stands behind it,** and each names what it
 does not cover: the enumeration cannot be proven complete, the sweep does not reach a surface the
 changeset never edits, and a clean dry-run is not a closed fold risk. `guard-gate-ladder.mjs` surfaces
 the declared tier's ladder and never denies; `sensor-sweep-owed` reminds you of exactly one rung, keyed
@@ -46,23 +65,35 @@ disciplines, and they are cheap precisely because they are honest about being ch
 
 ### Upgrading to v2.5.0
 
-**`--force` is REQUIRED for this release**, and the requirement is derived from what the diff actually
-edits rather than assumed: v2.5.0 changes `[P]` portable docs (`core/WORKFLOW.md`, `core/REVIEW.md`),
-and **a plain `init` re-run keeps every existing `core/` doc and exits 0 having shipped nothing** —
-verified by running both arms against a real v2.4.0 adopter.
+**`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
+rather than assumed: v2.5.0 changes four `[P]` portable docs — `core/WORKFLOW.md`, `core/REVIEW.md`,
+`core/FOUNDATIONS.md`, `core/INVARIANTS.md`.
 
-**Know the blast radius before you run it; it is global, and it was measured, not estimated.**
+**Both arms were executed, not reasoned about.** Against a fresh adopter created by running
+`bin/init.mjs --target .` from a clone of v2.4.0, with a hand edit **planted** in `core/OPERATE.md`
+(a `[P]` file this release never touches) and another in `core/BINDINGS.md` (`[G]`), so the blast
+radius is a measurement rather than an estimate:
 
-- `--force` rewrote **all nine `core/` method docs** ("core/ method docs: 9 written, 0 kept"), not
-  only the two this release changes.
-- A hand edit planted in `core/OPERATE.md` — a `[P]` file this release never touches — was
-  **destroyed, with no `.bak`**.
-- Exactly **two** backups were written, both `[G]` generated files: `AGENTS.md.bak` and
-  `core/BINDINGS.md.bak`.
+- **`node bin/init.mjs --target .`** (plain re-run) → exit 0, init's own summary reads
+  **`core/ method docs: 0 written, 9 kept`**, `core/WORKFLOW.md` unchanged at 16770 B, and every new
+  clause absent (`grep -c` returned 0 at all five sites). A plain re-run reports success and ships
+  nothing.
+- **`node bin/init.mjs --target . --force`** → exit 0, the summary flips to
+  **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the four this release
+  changes — and `grep -c` returns 1 at all five sites.
+- The planted `[P]` edit in `core/OPERATE.md` was **destroyed, and no `.bak` was written for it.**
+  `find . -name '*.bak'` returned four, and **every one is a generated `[G]` file**:
+  `AGENTS.md.bak`, `core/BINDINGS.md.bak`, `core/OWNER_COMMS.md.bak`, `.codex/hooks.json.bak`. The
+  backup set is drawn from what init GENERATES, never from what it overwrites.
 
-So: **`[P]` hand divergences are lost silently and are not recoverable from init.** Before upgrading,
-record every `[P]` divergence your repo carries and its rationale; after upgrading, re-apply them and
-verify byte-for-byte. `[G]` files leave a `.bak` — read it rather than trusting that the regenerated
+**Scope of that claim:** it is what this version's init did to an adopter of this shape, built from
+v2.4.0. It is not a general statement about `--force` in every release or every tree — re-derive it
+for yours.
+
+**The consequence, stated in the direction that costs you something: hand edits in any `[P]` `core/`
+doc are lost silently and are not recoverable from init.** Only `[G]` files leave a handle. Before
+upgrading, write down every `[P]` divergence your repo carries and why; after upgrading, re-apply each
+and verify byte-for-byte. For `[G]` files, read the `.bak` rather than trusting that the regenerated
 file preserved what a human wrote there.
 
 ## What's new in v2.4.0 — the pre-send verification rung, and the control that makes it bite
