@@ -253,3 +253,67 @@ test("CHARACTERIZATION: the kit's governed-file census reads the FILESYSTEM, so 
       "an UNTRACKED governed file must be inside the denominator — a census that misses it clears its own build");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---------------------------------------------------------------- v2.6.0 claim honesty
+
+test("PORTABILITY states EXACTLY what each of the Owner's three requests got, and cannot over-claim in either direction", () => {
+  // WHY A PIN. v2.6.0 ships doctrine for three things the Owner asked for and a mechanism for
+  // almost none of them. A reader who meets "the sensor was extended" without the breakdown infers
+  // the complaint was mechanized.
+  //
+  // ⚠ AND WHY THIS PIN IS SHAPED THE WAY IT IS. Its first version pinned the sentence "NONE of those
+  // three gets a mechanical check", which was FALSE — the size-mismatch check had been testing a
+  // narrow case of succinctness since v1.3, and this same file says so four paragraphs earlier. The
+  // pin hardened the falsehood, and two independent cold reviewers found it. So this version pins
+  // BOTH directions: the claim may not shrink (a check that exists must stay named) and it may not
+  // grow (a check that does not exist must not appear). A disclosure can over-claim its own modesty.
+  const p = read("PORTABILITY.md");
+  // The one check that DOES exist must be named, with the condition that bounds it — an unbounded
+  // "succinctness is checked" would be the opposite over-claim.
+  assert.match(p, /the size-mismatch check — it fires \*\*only\*\* when the Owner asked a question of 12 words or fewer/,
+    "the ONE existing check is named, with the condition under which it fires");
+  // The two that do NOT exist must stay marked as absent.
+  assert.match(p, /\| avoid walls of text \| \*\*none\*\* \|/, "walls of text: no mechanism, stated");
+  assert.match(p, /\| use bullet points and tables \| \*\*none\*\* \|/, "bullets and tables: no mechanism, stated");
+  assert.match(p, /So one of the three has a narrow check and two have nothing — and this release adds no check at\s+all\./,
+    "…and the summary states BOTH the split and that this release adds nothing to it");
+  // The release ships doctrine and no mechanism. That is the fact most likely to be quietly rounded
+  // up later into "the sensor was extended", which is what the whole disclosure exists to prevent.
+  // Copied from the source, not from memory: writing a needle from recollection has produced four
+  // false alarms in this file's history — wrong article, wrong asterisk placement, a curly
+  // apostrophe. Pin the load-bearing GENERALISATION, which is the sentence a later editor would
+  // most want to drop, rather than the narrative around it.
+  assert.match(p, /check was\s+built, reviewed, and withdrawn/,
+    "…records that a check was built and dropped, so 'unbuilt' cannot be read as 'never attempted'");
+  assert.match(p, /A predicate over an\s+unbounded input space cannot be completed by widening/,
+    "…and states WHY, in the form a successor can act on");
+  // Rule 8 must stay a FOURTH thing, or "one of three" reads as "the release did nothing".
+  assert.match(p, /came out of the same feedback but is a fourth\s+thing/,
+    "rule 8 is named as a fourth thing, not as one of the three");
+  // THE RETRACTION ITSELF IS PINNED. The false sentence must not return, and the record of why it
+  // was false must not be quietly dropped — a correction deleted is a correction that never happened.
+  assert.doesNotMatch(p, /NONE of those three gets a mechanical check/,
+    "the false categorical must not return");
+  assert.match(p, /A disclosure can over-claim its own modesty, and that is still an\s+over-claim/,
+    "the retraction stays in the file, with its reason");
+  // CROSS-SURFACE. The false categorical was written on THREE surfaces and corrected on one at a
+  // time; a pin on a single file passes while the other two still ship it. This is the mirror of the
+  // kit's own cross-surface retraction rule: a correction that lands on one surface and not its
+  // mirrors leaves the old claim shipping.
+  for (const [file, text] of [["README.md", read("README.md")], ["hooks/guard-owner-comms.mjs", read("hooks/guard-owner-comms.mjs")]]) {
+    assert.doesNotMatch(text, /none of the three gets a mechanical check/i,
+      `${file} must not carry the retracted categorical`);
+    assert.doesNotMatch(text, /All three (?:are|get) doctrine only/i,
+      `${file} must not carry its second half either`);
+  }
+  // …and the canary: the patterns must still bite, or the two assertions above are decoration.
+  for (const decoy of ["none of the three gets a mechanical check", "All three are doctrine only"]) {
+    assert.ok(/none of the three gets a mechanical check/i.test(decoy) || /All three (?:are|get) doctrine only/i.test(decoy),
+      "the retraction patterns still match their own retracted spelling");
+  }
+
+  // Hedges in the other direction stay barred.
+  for (const hedge of [/sensor (?:now )?covers (?:the |all )?(?:wall|brevity)/i, /partially mechanized/i]) {
+    assert.doesNotMatch(p, hedge, `the disclosure must not be hedged by "${hedge}"`);
+  }
+});

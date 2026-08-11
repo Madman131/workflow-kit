@@ -443,11 +443,47 @@ this document. Three separate reasons it cannot enforce anything:
    ceiling: the bad message was still sent.
 3. **It is dormant until armed, and only ever samples two failure modes.** With `{{OWNER_NAME}}`
    unfilled it allows unconditionally. Armed, it checks two things — narration in the closing message,
-   and a short question answered past ~350 words of prose — out of eight rules. Rules 2 through 6 are
-   not mechanically checkable and are not checked. Rule 8 (an ask must be bolded, bulleted and
-   labeled) **is** checkable in principle — a Stop hook can see whether a question mark outside a
-   fence sits on an unbolded line — and this sensor does not check it either. Do not read the two
-   cases as one: five rules are out of reach, one is merely unbuilt.
+   and a short question answered past ~350 words of prose — out of nine rules. Rules 2 through 6 are
+   not mechanically checkable and are not checked. Two others **are** checkable in principle and are
+   not checked either: rule 8 (an ask must be bolded, bulleted and labeled) — a Stop hook can see
+   whether a question mark outside a fence sits on an unbolded line — and rule 9 (a long message with
+   no bullet or table in it). Do not read the two cases as one: five rules are out of reach, two are
+   merely unbuilt.
+
+**Which of the Owner's words got a mechanism, and which got only doctrine.** The rules this sensor
+serves came from an Owner who asked for three things — *keep it succinct · avoid walls of text · use
+bullet points and tables*. Here is exactly what each one got:
+
+| The Owner asked for | Mechanical check | Which |
+|---|---|---|
+| keep it succinct | **one, and it is narrow** | the size-mismatch check — it fires **only** when the Owner asked a question of 12 words or fewer and the answer ran past ~350 words of prose. Any other long message is invisible to it |
+| avoid walls of text | **none** | doctrine only (`core/OWNER_COMMS.md` rule 9) |
+| use bullet points and tables | **none** | doctrine only (rules 1 and 9) |
+
+**So one of the three has a narrow check and two have nothing — and this release adds no check at
+all.** A rule-8 check was built and dropped before shipping (below); the sensor is unchanged. **Rule 8
+is not one of the three** — an ask must be findable came out of the same feedback but is a fourth
+thing, so even had it shipped it would not have answered any of the Owner's three requests.
+
+> **This paragraph previously stated categorically that not one of the three had any mechanical
+> check and that all three were doctrine only** — paraphrased rather than quoted, so the retracted
+> spelling survives nowhere but in the test that forbids its return. That was false: the
+> size-mismatch check had been testing a narrow case of
+> succinctness since v1.3, and this file's own § 3 said so four paragraphs earlier. **A disclosure
+> can over-claim its own modesty, and that is still an over-claim** — it understated the mechanism to
+> make an honest-sounding sentence, in a release whose subject is not claiming more than you verified.
+
+**Two checks were designed for this release and both were dropped**, which is why the count above is
+unchanged. The rule-9 (wall-of-text) check has no calibratable threshold without a corpus of real
+Owner-facing messages to measure a false-positive rate against. The rule-8 (unlabeled-ask) check was
+built, reviewed, and withdrawn: its question is countable, but its INPUT is arbitrary prose whose
+shape-tail has no end — an unterminated fence and an unclosed inline-code span each produced a false
+BLOCK, found one per review round, each a different unrecognised construct. **A predicate over an
+unbounded input space cannot be completed by widening.** It needs a bounded input or a real parser,
+not a third regex pass. An over-firing fail-open sensor teaches people to switch it off, after which
+it catches nothing at all. **Saying
+"the sensor was extended" without this paragraph would imply the complaint was mechanized. It was
+not** — which is the claim-inflation this document exists to refuse.
 
 What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method
 doc. The sensor catches one habitual miss, late, sometimes. Off switch:

@@ -739,19 +739,109 @@ test("init generates core/OWNER_COMMS.md as [G]; --owner-name fills only the nam
   } finally { named.cleanup(); }
 });
 
-test("rule 8 ships in the GENERATED Owner contract and in the INSTALLED /humanize body", () => {
+test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /humanize body", () => {
   // Read what an ADOPTER gets, never the template: a rule that survives in templates/ and dies in
   // generation is the failure this whole [G] path can have, and grepping the source would miss it.
   const named = adopt(["--owner-name", "Alex"]);
   try {
     const doc = readFileSync(path.join(named.dir, "core", "OWNER_COMMS.md"), "utf8");
+    // Whitespace-FLATTENED for the clause pins below: every one of these rules wraps across lines in
+    // the shipped file, so an unflattened pin would be pinning typography and would go red on a
+    // reflow that changed no rule. (Same reasoning as tests/gating-doctrine.test.mjs's `read`.)
+    const flat = doc.replace(/\s+/g, " ");
     const rule8 = /^8\. \*\*Questions and recommendations never blend in\.\*\*([\s\S]*?)(?=\n\n)/m.exec(doc);
     assert.ok(rule8, "the generated contract carries rule 8");
     for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**"]) {
       assert.ok(rule8[0].includes(lead), `rule 8 names the ${lead} lead verbatim — the label IS the rule`);
     }
     assert.ok(rule8[0].includes("Alex"), "the Owner's real name reached rule 8; a rule addressed to {{OWNER_NAME}} names nobody");
-    assert.doesNotMatch(doc, /^9\. /m, "the rules stop at 8 — a duplicate would renumber silently");
+
+    // ---- rule 9 (v2.6.0): brevity and structure as a STANDING default, not a permission.
+    // WHY EACH PIN IS THE SENTENCE AND NOT A WORD: "bullet", "table" and "structure" all occur
+    // innocently elsewhere in this contract (rule 1 points at rule 9; rule 7 points at BULLET.md),
+    // so a word-level pin would pass against a document that had lost rule 9 entirely.
+    const rule9 = /^9\. \*\*A wall of text is a defect, not thoroughness\.\*\*([\s\S]*?)(?=\n\n)/m.exec(doc);
+    assert.ok(rule9, "the generated contract carries rule 9");
+    const rule9flat = rule9[0].replace(/\s+/g, " ");
+    assert.match(rule9flat, /Structure is the DEFAULT, not a favour you do them when the news is complicated/,
+      "rule 9 states structure as the DEFAULT — a permission ('whenever they help') is the thing it replaces");
+    assert.match(rule9flat, /a message past roughly \*\*200 words\*\* with \*\*no bullet and no table\*\* in it is not finished/,
+      "…and names the observable condition, or it is a sentiment rather than a rule");
+    // WORDS, NOT LINES. A line-measured floor is cleared by wrapping rather than by structuring:
+    // three 200-word lines are a 600-word wall that satisfies "past a few lines" trivially. The unit
+    // is the rule here — a display-dependent trigger is not an observable condition at all.
+    assert.match(rule9flat, /Words, not lines: three 200-word lines are a 600-word wall/,
+      "…and says why the unit is words, so the display-dependent form cannot come back");
+    assert.doesNotMatch(rule9flat, /past a few lines/,
+      "the display-dependent trigger is gone, not merely supplemented");
+    // A HEADING MUST NOT SATISFY IT. A heading is decoration: a 700-word wall opening with
+    // "## Update" carries one, would satisfy a condition that accepted headings, and is still a
+    // wall. Decorative structure is the common case, so a condition that accepts it is a binary
+    // whose common case is neither branch.
+    assert.match(rule9flat, /\*\*a heading does not count, and neither does a single bullet\.\*\*/,
+      "rule 9 excludes decorative structure — the walk-through case that killed its first version");
+    // AND IT MUST DECLARE ITSELF A FLOOR. Prose cannot add a missing state: no countable condition
+    // is sufficient for "is this a wall", so a rule that implies its condition IS sufficient is
+    // making the over-claim this release exists to refuse. Pinning the disclaimer is what stops a
+    // later edit from quietly promoting the floor back into a test.
+    assert.match(rule9flat, /\*\*Clearing the floor is not proof the message is not a wall\.\*\*/,
+      "rule 9 states that its own condition is not sufficient");
+    assert.match(rule9flat, /That judgment stays yours/,
+      "…and says where the judgment actually lives");
+    // Rule 9 no longer NAMES the Owner: the clause that did ("Keep what {{OWNER_NAME}} must know or
+    // act on now") duplicated rule 1 and was cut by the subtractive leg. The name-substitution
+    // property is still pinned on rule 8 above. What is pinned HERE is the stronger and still-live
+    // property: whatever placeholders rule 9 does or does not use, none may reach an adopter
+    // unsubstituted — a rule shipping "{{OWNER_NAME}}" addresses nobody.
+    assert.ok(!rule9flat.includes("{{"),
+      "rule 9 carries no unsubstituted {{placeholder}} in the generated contract");
+    // Rule 9 must POINT at the conversion procedure, never carry it: BULLET.md is a reference layer
+    // loaded only when `/humanize bullet` fires, and rule 7 says in terms "Do not restate those
+    // rules here". A rule 9 that inlined the four conversion categories would put the kit's own
+    // duplication rule in violation the day it shipped.
+    assert.match(rule9flat, /`\.agents\/skills\/humanize\/BULLET\.md` \(rule 7\) — loaded on demand, and not restated here/,
+      "rule 9 points at BULLET.md and disclaims restating it");
+    // ⚠ WHAT THIS ASSERTION DOES AND DOES NOT PROVE — do not read it as covering rule 7.
+    // It rejects three LITERAL fragments of BULLET.md and cannot see a paraphrase. Conversion-
+    // direction prose in rule 9 — phrasings like "offer the rest" or "put any ask where skimming
+    // finds it" — would restate BULLET.md while passing this check, even as the rule claims at its
+    // own tail to be "not restated here". Such clauses are kept OUT of rule 9, and the gap in the
+    // checker stays: **whether rule 9
+    // paraphrases BULLET.md is a REVIEWER's judgment, and no assertion here discharges it.**
+    // "not restated here" in the rule is a directive to a future editor, never a proven property.
+    assert.doesNotMatch(rule9flat, /set of two or more|a \*\*comparison\*\*|Never invent a cell/,
+      "rule 9 does not copy BULLET.md's conversion rules VERBATIM — literal check only, paraphrase is unproven");
+
+    // ---- the two clauses that were READ AS LICENSING LENGTH. These are the half of this change
+    // that has no new text to find: the defect was existing sentences, so the only way to pin the
+    // fix is to pin BOTH the new wording's presence AND the old wording's absence. A presence-only
+    // pin passes against a document carrying both readings at once, which is the state the Owner
+    // actually met.
+    assert.match(flat, /completeness is a property of the work, not the word count \(`core\/OPERATE\.md` § closeout\), \*\*which licenses the SWEEP and never the REPORT\.\*\*/,
+      "rule 1's completeness clause is scoped to the sweep, so it cannot be read as licensing a long report");
+    assert.match(flat, /Being understood beats being TERSE — but length is not what makes you understood/,
+      "rule 6 keeps 'do not sacrifice clarity' while denying that length delivers it");
+    // A trailing "— cut words, never facts" is deliberately absent: it repeats rule 1's reporting
+    // constraint ("Offer the detail… but a RISK, BLOCKER… is never 'detail'"). The load-bearing
+    // half is the licence denial, which is what stays pinned.
+    assert.match(flat, /\*\*Neither half is a licence to write more\.\*\*/,
+      "…and says so in terms, because the old closing clause is what the length grew under");
+    assert.doesNotMatch(flat, /Being understood beats being brief/,
+      "the superseded wording is GONE — the sentence the length grew under cannot survive alongside its own fix");
+    assert.doesNotMatch(flat, /Bullets and tables whenever they help/,
+      "…and so is the permissive spelling rule 9 replaces");
+    assert.match(flat, /\*\*Bullets and tables by default \(rule 9\)\.\*\*/,
+      "rule 1 now POINTS at rule 9 rather than restating or permitting");
+
+    // ---- the scope statement. The measured lapse was that the rules were honoured in formal
+    // reports and dropped in chat replies, so "which messages does this bind" was the load-bearing
+    // gap — it is pinned in the PREAMBLE, above rule 1, where a reader meets it before any rule.
+    const preamble = doc.slice(0, doc.search(/^1\. \*\*Answer first/m));
+    assert.match(preamble.replace(/\s+/g, " "),
+      /\*\*Every rule below binds every message Alex reads — an ordinary chat reply exactly as much as a formal report, a status update or a hand-off\.\*\*/,
+      "the contract states that it binds chat replies, and states it BEFORE rule 1");
+
+    assert.doesNotMatch(doc, /^10\. /m, "the rules stop at 9 — a duplicate would renumber silently");
     // The labels alone are not the rule: a version that kept the three strings and dropped the SHAPE
     // requirement would satisfy every assertion above while permitting exactly what rule 8 forbids.
     assert.match(rule8[0], /bolded, on its own bulleted line, with\s+a labeled lead/,
@@ -775,10 +865,17 @@ test("rule 8 ships in the GENERATED Owner contract and in the INSTALLED /humaniz
     }
 
     // The skill that repairs a message against these rules must know about the new one, or /humanize
-    // certifies as clean a message rule 8 rejects.
+    // certifies as clean a message rule 8 rejects. The SAME obligation is what makes rule 9's entry
+    // below non-optional rather than a nicety: the repair pass is the only place an agent re-reads
+    // these rules after the fact, so a rule missing from the miss list is a rule /humanize clears.
     const skill = readFileSync(path.join(named.dir, ".agents", "skills", "humanize", "SKILL.md"), "utf8");
     assert.match(skill, /buried ask/, "the /humanize miss list checks for a buried ask");
     assert.match(skill, /\(rule 8\)/, "…and points at the rule it comes from");
+    assert.match(skill.replace(/\s+/g, " "), /- \*\*A wall of text\*\* — long, with no bullet or table \(rule 9\)\./,
+      "the miss list carries rule 9, or /humanize clears the message rule 9 rejects");
+    assert.match(skill.replace(/\s+/g, " "),
+      /re-read a sentence, look up a word, or meet a paragraph block where a list belonged\?/,
+      "…and the closing check tests for it too, which is the gate the whole pass ends on");
   } finally { named.cleanup(); }
 });
 

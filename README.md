@@ -1,4 +1,102 @@
-# workflow-kit — v2.5.0
+# workflow-kit — v2.6.0
+
+## What's new in v2.6.0 — a permission is not a rule
+
+**An Owner asked what happened to three mandates — keep it succinct, avoid walls of text, use bullets
+and tables — because they had stopped being followed.** The uncomfortable half of the answer was in
+these docs. Two of the three *were* written down, and had been since v1.3: `core/OWNER_COMMS.md`
+rule 1 carried *"Bullets and tables whenever they help"* and *"If they could reasonably reply 'give me
+the short version', cut again"*.
+
+**They were written as permissions, and permissions do not bind.** *"Whenever they help"* is a
+licence to decide they do not; *"if they could reasonably reply"* is a test the writer grades. Worse,
+both sat between two clauses pulling the other way — rule 1's *"completeness is a property of the
+work, not the word count"* and rule 6's closing *"Being understood beats being brief"*. An agent
+looking for permission to keep writing found it twice, in the rule that was supposed to stop it.
+
+**So the fix is not a new rule. It is an observable condition, which is the thing the old text never
+had.** Rule 9 says *a message past a few lines with no bullet, table or heading in it is not
+finished* — a property of the message, not a judgment about the reader. A permission and an
+observable condition are different artifacts, not two spellings of one, and that difference is the
+whole finding. Rule 1 now points at rule 9 rather than permitting; rule 6 keeps *do not sacrifice
+clarity for terseness* while denying that length is what delivers it; and the preamble states that
+every rule binds **an ordinary chat reply exactly as much as a formal report**, which is where the
+lapse actually happened — the long documents stayed compliant the whole time.
+
+**Rule 9 points at `BULLET.md`; it does not restate it.** The kit's strongest structure rule already
+lived in `.agents/skills/humanize/BULLET.md` — *"Default every set, comparison, sequence and status
+to a bullet or a table"* — behind the `/humanize bullet` flag, loaded only when the Owner asked for
+it. **A load-bearing rule in a layer the executor might never load is a rule that rots**, and rule 7
+forbids copying it into the boot-read contract. One home, one pointer.
+
+**What this release does NOT do, because the alternative is letting you infer otherwise.** The Owner
+asked for three things. **This release ships doctrine for all three and a mechanism for none of
+them — it adds no check at all.** Exactly one of the three has any mechanism and it is not new: the
+size-mismatch check that has existed since v1.3 tests a narrow case of *"keep it succinct"*, and only
+when the Owner asked a question of twelve words or fewer. **Walls of text and bullets-and-tables have
+nothing.** The
+**two** checks were designed for this release and both were dropped before it shipped. The
+wall-of-text check has no calibratable threshold without a corpus of real messages to measure a
+false-positive rate against. A rule-8 check was built, reviewed and withdrawn: its question is
+countable, but its input is arbitrary prose whose shape-tail has no end — an unterminated fence and
+an unclosed inline-code span each produced a false BLOCK, one found per review round. **A predicate
+over an unbounded input space cannot be completed by widening**; it needs a bounded input or a real
+parser. `PORTABILITY.md` states both in full, and a test pins the breakdown so a later edit cannot
+quietly round it up.
+
+**The sensor is UNCHANGED by this release** — byte-identical to v2.5.0. It still enforces nothing: it
+fails open, it fires after the message is already sent, and it is dormant until you name your Owner.
+That is not a caveat, it is what the thing is.
+
+### Upgrading to v2.6.0
+
+**`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
+rather than assumed: `git diff --name-only 344fff8..HEAD` shows v2.6.0 touches **two** surfaces an
+adopter installs — the `[G]` template `templates/OWNER_COMMS.md.tmpl` and the `[P]` skill body
+`skills/humanize/SKILL.md`. **`hooks/guard-owner-comms.mjs` is byte-identical to v2.5.0**, so the
+sensor needs no upgrade at all. Everything else this release edits (`README.md`, `PORTABILITY.md`,
+`tests/`) is kit-only and never installed.
+
+**Both arms were executed against a tree adopted from v2.5.0 and then hand-edited**, with canaries
+planted first so the blast radius is a measurement rather than an estimate — a hand-written Owner
+paragraph in the `[G]` contract, a local edit in the `[P]` humanize body, and a local edit in
+`core/WORKFLOW.md`, a `[P]` file this release never touches. **Every cell below was observed in that
+run; none is inferred.**
+
+| | plain re-run | `--force` |
+|---|---|---|
+| exit code | 0 | 0 |
+| rule 9 in the `[G]` contract | absent | **present** |
+| rule 9 miss in the `[P]` humanize body | absent | **present** |
+| version stamp in the contract | `v2.5.0` | **`v2.6.0`** |
+| hand-written Owner paragraph | kept | **gone** |
+| `.bak` beside the `[G]` contract | not written | **written** |
+| `[P]` body local edit | kept | **gone** |
+| `.bak` beside the `[P]` body | none | **none** |
+| `[P]` bystander local edit (`core/WORKFLOW.md`) | kept | **gone** |
+| `.bak` beside the `[P]` bystander | none | **none** |
+| `.claude/kit.config.json` contents | `{"executedPathDirs":["app"]}` | **`{}`** |
+
+**A plain re-run exits 0 and ships none of it.** That is the failure mode worth naming: nothing warns
+you, and the stamp still reads `v2.5.0`, which is the symptom you would eventually notice.
+
+**On that last row, stated as what was observed rather than as what it implies:** the file is
+rewritten to `{}`, so the `executedPathDirs` narrowing you passed at adopt time is gone. What that
+means for the write guard's behaviour depends on how `bin/init.mjs` and the guard treat an absent
+list — read them before relying on either reading. **Re-pass `--source-dirs` after forcing** and you
+do not need to care which it is.
+
+**Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
+mechanism does not, and it is readable in `bin/init.mjs`. `[P]` files go through `copyGuarded`, which
+has **no backup path at all**; the runs above confirm no `.bak` appears beside either `[P]` file.
+`[G]` files go through `backupBeforeOverwrite`, which writes a `.bak` only when your content
+**differs** from what init is about to generate. So the `[G]` contract is recoverable and the `[P]`
+body is not, and **`--force` is not scoped to the files a release edits** — the bystander
+`core/WORKFLOW.md`, which this release never touches, lost its local edit in the same run.
+
+**After forcing:** diff `core/OWNER_COMMS.md.bak` and restore your own Owner paragraph, profile,
+irreversible asset and shorthand rows; re-pass `--source-dirs`; and recover any `[P]` edits from git,
+which is the only place they exist.
 
 ## What's new in v2.5.0 — the checks that run before the gate does
 
@@ -1040,7 +1138,7 @@ who does not write code was getting five hundred words of inventory in answer to
 question. v1.3 adds the missing half: a generated contract, a skill that repairs a message against it,
 and a sensor that notices the most common miss.
 
-- **`core/OWNER_COMMS.md`** — seven rules (v2.1.1 adds an eighth) for writing to a decision-maker
+- **`core/OWNER_COMMS.md`** — seven rules (v2.1.1 adds an eighth, v2.6.0 a ninth) for writing to a decision-maker
   rather than a fellow engineer: answer first in one sentence · define every term on first use ·
   give the background · say
   why it matters to *them* · a decision means the choice, each option's cost, and a recommendation ·
@@ -1173,7 +1271,7 @@ method is stable; v1.1 adds only the `/thread-restart` asset and its `init` wiri
 - `scripts/check-doc-size.mjs` — caps the BINDING method docs by role; fail-closed on a bad config.
 
 **The one sensor** (installed alongside the controls, but categorically different — read the distinction):
-- `.claude/hooks/guard-owner-comms.mjs` — a **Stop**-event nudge toward `core/OWNER_COMMS.md` rule 1.
+- `.claude/hooks/guard-owner-comms.mjs` — a **Stop**-event nudge toward `core/OWNER_COMMS.md` rules 1 and 8.
   It **fails OPEN**, fires only *after* the message is already sent, and is dormant until you name your
   Owner. **It enforces nothing.** A clean run proves nothing about a message *(Claude lane, sensor)*.
 
