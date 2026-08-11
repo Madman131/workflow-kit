@@ -1,4 +1,93 @@
-# workflow-kit — v2.5.0
+# workflow-kit — v2.6.0
+
+## What's new in v2.6.0 — a permission is not a rule
+
+**An Owner asked what happened to three mandates — keep it succinct, avoid walls of text, use bullets
+and tables — because they had stopped being followed.** The uncomfortable half of the answer was in
+these docs. Two of the three *were* written down, and had been since v1.3: `core/OWNER_COMMS.md`
+rule 1 carried *"Bullets and tables whenever they help"* and *"If they could reasonably reply 'give me
+the short version', cut again"*.
+
+**They were written as permissions, and permissions do not bind.** *"Whenever they help"* is a
+licence to decide they do not; *"if they could reasonably reply"* is a test the writer grades. Worse,
+both sat between two clauses pulling the other way — rule 1's *"completeness is a property of the
+work, not the word count"* and rule 6's closing *"Being understood beats being brief"*. An agent
+looking for permission to keep writing found it twice, in the rule that was supposed to stop it.
+
+**So the fix is not a new rule. It is an observable condition, which is the thing the old text never
+had.** Rule 9 says *a message past a few lines with no bullet, table or heading in it is not
+finished* — a property of the message, not a judgment about the reader. A permission and an
+observable condition are different artifacts, not two spellings of one, and that difference is the
+whole finding. Rule 1 now points at rule 9 rather than permitting; rule 6 keeps *do not sacrifice
+clarity for terseness* while denying that length is what delivers it; and the preamble states that
+every rule binds **an ordinary chat reply exactly as much as a formal report**, which is where the
+lapse actually happened — the long documents stayed compliant the whole time.
+
+**Rule 9 points at `BULLET.md`; it does not restate it.** The kit's strongest structure rule already
+lived in `.agents/skills/humanize/BULLET.md` — *"Default every set, comparison, sequence and status
+to a bullet or a table"* — behind the `/humanize bullet` flag, loaded only when the Owner asked for
+it. **A load-bearing rule in a layer the executor might never load is a rule that rots**, and rule 7
+forbids copying it into the boot-read contract. One home, one pointer.
+
+**The sensor gains the check `PORTABILITY.md` had already specified and called unbuilt.**
+`guard-owner-comms.mjs` now surfaces an **unlabeled ask** (rule 8): a line whose visible text ends in
+"?" in a message carrying no labeled lead anywhere. One lead clears the whole message, so a correctly
+formatted decision message is never nagged for the question marks in its explanation. Fences, inline
+code, blockquotes and any bolded line pass. The leads are **harvested from your contract**, so
+renaming them works and an empty harvest turns the check off and says so on stderr.
+
+**What this release does NOT do, because the alternative is letting you infer otherwise.** The Owner
+asked for three things and **none of the three gets a mechanical check. All three are doctrine only.**
+What gained a check is rule 8, which came out of the same feedback but is a fourth thing. The
+wall-of-text check that would have covered one of those words was designed and deliberately not
+built: its threshold cannot be calibrated without a corpus of real messages to measure a
+false-positive rate against, and an over-firing fail-open sensor teaches people to switch it off,
+after which it catches nothing at all. `PORTABILITY.md` states this in full, and a test pins the word
+**NONE** so a later edit cannot soften it to "not fully".
+
+**The sensor still enforces nothing.** It fails open, it fires after the message is already sent, and
+it is dormant until you name your Owner. That has not changed and is not a caveat — it is what the
+thing is.
+
+### Upgrading to v2.6.0
+
+**`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
+rather than assumed: `git diff --name-only 344fff8..HEAD` shows v2.6.0 touches three surfaces an
+adopter installs — the `[G]` template `templates/OWNER_COMMS.md.tmpl`, the `[P]` skill body
+`skills/humanize/SKILL.md`, and the `[P]` hook `hooks/guard-owner-comms.mjs`. Everything else it
+edits (`README.md`, `PORTABILITY.md`, `tests/`) is kit-only and never installed.
+
+**Both arms were executed against a tree adopted from v2.5.0 and then hand-edited**, with canaries
+planted first so the blast radius is a measurement rather than an estimate — a hand-written Owner
+paragraph in the `[G]` contract, a local edit in the `[P]` humanize body, and a local edit in
+`core/WORKFLOW.md`, a `[P]` file this release never touches:
+
+| | plain re-run | `--force` |
+|---|---|---|
+| exit code | 0 | 0 |
+| rule 9 in the `[G]` contract | absent | **present** |
+| rule 9 miss in the `[P]` humanize body | absent | **present** |
+| check 3 in the installed hook | absent | **present** |
+| version stamp in the contract | `v2.5.0` | **`v2.6.0`** |
+| hand-written Owner paragraph | kept | **gone** — `.bak` written |
+| `[P]` body local edit | kept | **gone, no `.bak`** |
+| `[P]` bystander local edit | kept | **gone, no `.bak`** |
+| `.claude/kit.config.json` write-guard dirs | `["app"]` | **reset** — the guard WIDENS |
+
+**A plain re-run exits 0 and ships none of it.** That is the failure mode worth naming: nothing warns
+you, and the stamp still reads `v2.5.0`, which is the symptom you would eventually notice.
+
+**Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
+mechanism does not, and it is readable in `bin/init.mjs`. `[P]` files go through `copyGuarded`, which
+has **no backup path at all**; with `--force` it copies over your file and there is nothing to
+recover. `[G]` files go through `backupBeforeOverwrite`, which writes a `.bak` only when your content
+**differs** from what init is about to generate. So the `[G]` contract is recoverable and the `[P]`
+body and hook are not, and **`--force` is not scoped to the files a release edits** — unrelated `[P]`
+files lose local edits in the same run.
+
+**After forcing:** diff `core/OWNER_COMMS.md.bak` and restore your own Owner paragraph, profile,
+irreversible asset and shorthand rows; re-pass `--source-dirs` to re-narrow the write guard; and
+recover any `[P]` edits from git, which is the only place they exist.
 
 ## What's new in v2.5.0 — the checks that run before the gate does
 
