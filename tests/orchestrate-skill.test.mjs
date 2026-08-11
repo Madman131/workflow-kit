@@ -170,7 +170,11 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     // Re-pointed each release to the CURRENT release note: that is the surface a correction is
     // most likely to be narrated on and least likely to be swept, and `section` hard-fails rather
     // than searching an empty string if the anchor ever stops resolving.
-    "README.md § v2.4.0": section(readme, "# workflow-kit — v2.4.0", "## What's new in v2.3.0", "README"),
+    // v2.5.0 re-pointed the CURRENT anchor and ADDED to this list rather than swapping the previous
+    // entry out: the older sections keep their coverage for free, and a release that silently drops an
+    // assertion is indistinguishable from one that never had it.
+    "README.md § v2.5.0": section(readme, "# workflow-kit — v2.5.0", "## What's new in v2.4.0", "README"),
+    "README.md § v2.4.0": section(readme, "## What's new in v2.4.0", "## What's new in v2.3.0", "README"),
     "README.md § v2.3.0": section(readme, "## What's new in v2.3.0", "# workflow-kit — v2.2.1", "README"),
     "PORTABILITY.md § /orchestrate": section(portability, "## `/orchestrate` (v2.3)", "\n## ", "PORTABILITY"),
     "skills/orchestrate/SKILL.md": readFileSync(BODY, "utf8"),

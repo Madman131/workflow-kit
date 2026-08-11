@@ -1,4 +1,69 @@
-# workflow-kit — v2.4.0
+# workflow-kit — v2.5.0
+
+## What's new in v2.5.0 — the checks that run before the gate does
+
+**Every rung in this kit reviews an artifact. Nothing ran before you decided what to review, or how.**
+In the program that produced this release, a changeset whose final deliverable was **two prose
+sentences at the lowest tier** consumed **four gate rounds and twelve reviewer verdicts**. None of
+that was the reviews being too careful — every round found something real. The waste was running deep
+gates on an artifact that a five-minute check would have reshaped or rejected first. Three such
+checks now sit in the doctrine, each placed against the rule it completes rather than gathered into a
+new section nobody would find.
+
+**Enumerate the mandated rungs BY CITATION before the gate runs** (`core/WORKFLOW.md` § Gate). List
+what *this* repo's doctrine mandates for the declared tier **and** the artifact's class — by file and
+section, quoting enough of each clause to survive renumbering, because a line number alone is a moving
+reference: an amendment inserting lines above a citation repoints it while the sender is fully
+compliant. Prior rounds are never a reason to run a lighter gate. The rung most often missed is the
+one a *general* tier row does not mention because a **narrower clause elsewhere adds it** — this kit's
+own § Steer tier row says a T1 seat is cross-family "by default", while `core/REVIEW.md`
+§ Decorrelation makes it cross-family *without exception* on any `core/` file. Two readings, one
+mandate, and only the enumeration finds the second.
+
+**Sweep by CLAIM — never by authorship or filename** (§ Gate, beside the dependency sweep it aims).
+The pre-fold sweep was already mandated; what it was missing was a question. It is: which *other*
+lines assert something this edit makes FALSE — same file, same section, and any sibling doc the same
+changeset edits. Not which lines you wrote. And one claim has several spellings — a figure, its
+unit-converted twin and the prose that paraphrases it are one claim in three renderings — so **a grep
+proves a spelling, never a claim**, and an "absent" result earns one look at the raw material before
+you believe it.
+
+**Dry-run the packet against the packet rules before any seat is spawned** (`core/REVIEW.md`
+§ Cold review). Those rules already said what a payload must carry and must not; running them *as a
+check on the payload you are about to send* is a separate act, and it is the one that gets skipped. A
+diff carrying prior verdicts folds every seat it reaches by construction, before a word of the review
+is read, and the round is spent by the time the fold is visible. It adds nothing to what a packet may
+contain. It also **bounds the packet, never the seat's reach** — a seat holding tools and a checkout
+can still read an untracked round record sitting on disk, which is the same reason a filename
+blocklist fails, so keep round records outside the tree the seat can reach.
+
+**Each of the three says in its own text that no mechanism stands behind it,** and each names what it
+does not cover: the enumeration cannot be proven complete, the sweep does not reach a surface the
+changeset never edits, and a clean dry-run is not a closed fold risk. `guard-gate-ladder.mjs` surfaces
+the declared tier's ladder and never denies; `sensor-sweep-owed` reminds you of exactly one rung, keyed
+on a file's class rather than on the clause that mandates it. Nothing reads the rest. These are
+disciplines, and they are cheap precisely because they are honest about being checklists.
+
+### Upgrading to v2.5.0
+
+**`--force` is REQUIRED for this release**, and the requirement is derived from what the diff actually
+edits rather than assumed: v2.5.0 changes `[P]` portable docs (`core/WORKFLOW.md`, `core/REVIEW.md`),
+and **a plain `init` re-run keeps every existing `core/` doc and exits 0 having shipped nothing** —
+verified by running both arms against a real v2.4.0 adopter.
+
+**Know the blast radius before you run it; it is global, and it was measured, not estimated.**
+
+- `--force` rewrote **all nine `core/` method docs** ("core/ method docs: 9 written, 0 kept"), not
+  only the two this release changes.
+- A hand edit planted in `core/OPERATE.md` — a `[P]` file this release never touches — was
+  **destroyed, with no `.bak`**.
+- Exactly **two** backups were written, both `[G]` generated files: `AGENTS.md.bak` and
+  `core/BINDINGS.md.bak`.
+
+So: **`[P]` hand divergences are lost silently and are not recoverable from init.** Before upgrading,
+record every `[P]` divergence your repo carries and its rationale; after upgrading, re-apply them and
+verify byte-for-byte. `[G]` files leave a `.bak` — read it rather than trusting that the regenerated
+file preserved what a human wrote there.
 
 ## What's new in v2.4.0 — the pre-send verification rung, and the control that makes it bite
 
