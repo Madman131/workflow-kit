@@ -443,11 +443,12 @@ this document. Three separate reasons it cannot enforce anything:
    ceiling: the bad message was still sent.
 3. **It is dormant until armed, and only ever samples two failure modes.** With `{{OWNER_NAME}}`
    unfilled it allows unconditionally. Armed, it checks two things — narration in the closing message,
-   and a short question answered past ~350 words of prose — out of eight rules. Rules 2 through 6 are
-   not mechanically checkable and are not checked. Rule 8 (an ask must be bolded, bulleted and
-   labeled) **is** checkable in principle — a Stop hook can see whether a question mark outside a
-   fence sits on an unbolded line — and this sensor does not check it either. Do not read the two
-   cases as one: five rules are out of reach, one is merely unbuilt.
+   and a short question answered past ~350 words of prose — out of nine rules. Rules 2 through 6 are
+   not mechanically checkable and are not checked. Two others **are** checkable in principle and are
+   not checked either: rule 8 (an ask must be bolded, bulleted and labeled) — a Stop hook can see
+   whether a question mark outside a fence sits on an unbolded line — and rule 9 (a long message with
+   no bullet, table or heading in it), which is a count of two countable things. Do not read the two
+   cases as one: five rules are out of reach, two are merely unbuilt.
 
 What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method
 doc. The sensor catches one habitual miss, late, sometimes. Off switch:

@@ -5,8 +5,7 @@ description: Rewrite the previous message to obey the "How to talk to the Owner"
 
 # /humanize — rewrite the last message for the Owner
 
-Word budget: 450 words, whole file. The Owner typed `/humanize` because the message did not land.
-Do not defend it, re-explain, or apologize. Rewrite it.
+Word budget: 450 words, whole file. Do not defend the message, re-explain, or apologize. Rewrite it.
 
 **Modes.** Plain `/humanize` runs everything below. Bullet mode fires when the Owner ASKS FOR bullets
 or a table (`/humanize bullet`, "humanize that in bullets") and NOT when they want fewer or complain —
@@ -24,15 +23,16 @@ then follow `.agents/skills/humanize/BULLET.md`. The rest of the line is a focus
    the message lacks. CUT what they do not need NOW — status recitals, proofs, unrequested detail —
    offering it in one clause. **Never cut a risk, blocker, partial failure, or anything they must
    decide**; those lead.
-4. Output ONLY the rewrite. No preamble, no "here is a clearer version", no list of changes.
+4. Output ONLY the rewrite. No preamble, no list of changes.
 
 ## The usual misses — check each against the section
 - **Answer buried** — it belongs in the first sentence (rule 1).
 - **Over-answered** (rule 1; the most common failure). A small question drew an inventory. Cut every
-  line narrating or re-classifying the question, and offer the rest. A mandated sweep
-  (`core/OPERATE.md` § closeout) is still DONE — its completeness is not a word count.
+  line narrating or re-classifying the question. A mandated sweep (`core/OPERATE.md` § closeout) is
+  still DONE — its completeness is not a word count.
+- **A wall of text** — long, with no bullet or table (rule 9).
 - **Undefined terms**, or shorthand you coined (rule 2).
-- **Missing background** — where it sits, what depends on it, why it matters (rule 3).
+- **Missing background** — where it sits, what depends on it (rule 3).
 - **Missing consequence** — what it costs or protects for THEM (rule 4).
 - **A decision with no recommendation** (rule 5).
 - **Jargon, long sentences, bloat** (rule 6).
@@ -40,5 +40,5 @@ then follow `.agents/skills/humanize/BULLET.md`. The rest of the line is a focus
   pull it out, bold it, label it.
 
 ## Then check
-Could they reasonably reply "give me the short version", re-read a sentence, or look up a word? If
-so, it is not done.
+Could they reasonably reply "give me the short version", re-read a sentence, look up a word, or meet
+a paragraph block where a list belonged? If so, it is not done.

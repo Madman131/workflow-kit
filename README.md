@@ -1040,7 +1040,7 @@ who does not write code was getting five hundred words of inventory in answer to
 question. v1.3 adds the missing half: a generated contract, a skill that repairs a message against it,
 and a sensor that notices the most common miss.
 
-- **`core/OWNER_COMMS.md`** — seven rules (v2.1.1 adds an eighth) for writing to a decision-maker
+- **`core/OWNER_COMMS.md`** — seven rules (v2.1.1 adds an eighth, v2.6.0 a ninth) for writing to a decision-maker
   rather than a fellow engineer: answer first in one sentence · define every term on first use ·
   give the background · say
   why it matters to *them* · a decision means the choice, each option's cost, and a recommendation ·
