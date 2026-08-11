@@ -52,18 +52,6 @@ outcome.** You are checking these, not hunting generic bugs.
    MUST NOT decide the substance for, or cap, a higher-intelligence consumer downstream. A backend
    label is an advisory input the frontier model can override, never binding. Sharp line: enforce a
    mechanical invariant — yes; make the semantic decision — no.
-   **When a control needs a JUDGMENT, the cure depends on whether that judgment can be DECLARED.**
-   Declarable (a structured artifact whose author writes it) ⇒ replace the predicate with a
-   **DECLARATION** and keep enforcing the mechanical comparison — stronger than dropping the control,
-   because a wrong declaration is a deliberate false statement rather than a parsing accident. A DECLARATION is stronger only if someone READS the declarations — name the consumer (an Owner spot-check; an audit row a human can count) or it is a SENSOR wearing a guard's clothes. Not
-   declarable (arbitrary artifacts, no declaration point) ⇒ **demote to a SENSOR**: it surfaces
-   candidates and never claims prevention. When successive widenings of a predicate each fall to a
-   seat, the CONCEPT is the defect — do not build generation four. *(Distinct from "sensors, not
-   actuators" in `core/OPERATE.md` § Garden, which governs whether a check ENACTS, not whether it can
-   decide.)* *(This paragraph is duplicated verbatim in `core/FOUNDATIONS.md` § Principles P2 — a
-   builder never reads this file and a reviewer receives only the payload (`core/README.md` § Do NOT
-   "read everything in core/"), so a pointer would dangle for one of them; `tests/` pins the two, and
-   editing one reddens.)*
 2. **Exact provenance / no fabricated answers.** Every derived label maps EXACTLY to its source or is
    NULL — never guessed or fuzzy. When a classifier cannot tell, abstain (indeterminate); never force
    a confident wrong label.
