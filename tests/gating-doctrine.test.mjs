@@ -253,3 +253,31 @@ test("CHARACTERIZATION: the kit's governed-file census reads the FILESYSTEM, so 
       "an UNTRACKED governed file must be inside the denominator — a census that misses it clears its own build");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---------------------------------------------------------------- v2.6.0 claim honesty
+
+test("PORTABILITY states which of the Owner's words got a mechanism, and NONE cannot be softened", () => {
+  // WHY A PIN AND NOT A REVIEW NOTE. The Owner asked for three things — succinct, no walls of text,
+  // bullets and tables — and v2.6.0 ships doctrine for all three and a mechanism for none of them.
+  // A reader who meets "the sensor was extended" without that sentence infers the complaint was
+  // mechanized. The disclosure is therefore load-bearing, and load-bearing prose that only a
+  // reviewer defends erodes one softening at a time: "none" → "not fully" → "partially" → gone.
+  // Each step reads like a copy-edit. This makes the first one loud.
+  const p = read("PORTABILITY.md");
+  assert.match(p, /NONE of those three gets a mechanical check\. All three get doctrine only/,
+    "the disclosure states NONE, not a hedge");
+  // The three words must be NAMED. "None of those three" is meaningless if a later edit drops the
+  // list it refers back to — the pin would still pass while the sentence pointed at nothing.
+  assert.match(p, /keep it succinct · avoid walls of text · use bullet points and tables/,
+    "…and names the three, so the claim has a referent");
+  // And it must say what DID get a check, or "none" reads as "the release did nothing".
+  assert.match(p, /What gains a check is rule 8 — an ask must be findable — which came out of the same feedback but is a fourth thing/,
+    "…and names rule 8 as a FOURTH thing, not as one of the three");
+  // THE SOFTENING GUARD, which is the half a presence pin cannot give: these spellings must be
+  // ABSENT. A doc can carry the strong sentence AND a hedge three lines later, and a
+  // presence-only pin passes against exactly that.
+  for (const hedge of [/sensor (?:now )?covers (?:the |all )?(?:wall|brevity)/i,
+    /partially mechanized/i, /not fully mechanized/i]) {
+    assert.doesNotMatch(p, hedge, `the disclosure must not be hedged by "${hedge}"`);
+  }
+});

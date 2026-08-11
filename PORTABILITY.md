@@ -452,9 +452,11 @@ this document. Three separate reasons it cannot enforce anything:
 
 **Which of the Owner's words got a mechanism, and which got only doctrine.** The rules this sensor
 serves came from an Owner who asked for three things — *keep it succinct · avoid walls of text · use
-bullet points and tables*. **The sensor mechanizes none of them.** All three are doctrine only
-(`core/OWNER_COMMS.md` rules 1, 6 and 9). What check 3 covers is rule 8 — an ask must be findable —
-which came out of the same conversation but is a fourth thing. The rule-9 check that *would* have
+bullet points and tables*. **NONE of those three gets a mechanical check. All three get doctrine
+only** (`core/OWNER_COMMS.md` rules 1, 6 and 9). What gains a check is rule 8 — an ask must be
+findable — which came out of the same feedback but is a fourth thing. **"NONE" is the word, and it is
+pinned by a test: a later edit softening it to "not fully" or "partially" goes red rather than
+quietly shrinking the disclosure.** The rule-9 check that *would* have
 covered one of those words was designed and dropped: its threshold cannot be calibrated without a
 corpus of real Owner-facing messages to measure a false-positive rate against, and an over-firing
 fail-open sensor teaches people to switch it off, after which it catches nothing at all. **Saying
