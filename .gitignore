@@ -4,3 +4,6 @@ node_modules
 .claude/task-lane.json
 .claude/lane-ledger.jsonl
 .claude/brief-rung.json
+
+# Thread-restart digests — transient handoffs, stale within hours; commit one only on purpose.
+thread-restarts/
