@@ -51,7 +51,7 @@ radius is a measurement rather than an estimate:
   clauses absent (`grep -c` returned 0 for each). A plain re-run reports success and ships nothing.
 - **`node bin/init.mjs --target . --force`** → exit 0, the summary flips to
   **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the one this release
-  changes — `core/WORKFLOW.md` goes 16770 → 18767 B (`wc -c`), and `grep -c` returns 1 for each clause.
+  changes — `core/WORKFLOW.md` goes 16770 → 18949 B (`wc -c`), and `grep -c` returns 1 for each clause.
 - The planted `[P]` edit in `core/OPERATE.md` was **destroyed, and no `.bak` was written for it.**
 
 **Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
