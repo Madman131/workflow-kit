@@ -29,8 +29,9 @@ proves a spelling, never a claim**, and an "absent" result earns one look at the
 you believe it.
 
 **Both say in their own text that no mechanism stands behind them,** and each names what it does not
-cover: enumerating a rung is not the same as running it, and the sweep does not reach a surface the
-changeset never edits. `guard-gate-ladder.mjs` surfaces the declared tier's ladder and never denies; `sensor-sweep-owed` reminds you of exactly one rung, keyed
+cover: an unenumerated rung is indistinguishable from a discharged one until a seat runs it, and the
+sweep does not reach a surface the changeset never edits. `guard-gate-ladder.mjs` surfaces the
+declared tier's ladder and never denies; `sensor-sweep-owed` reminds you of exactly one rung, keyed
 on a file's class rather than on the clause that mandates it. Nothing reads the rest. These are
 disciplines, and they are cheap precisely because they are honest about being checklists.
 
@@ -45,11 +46,11 @@ rather than assumed: v2.5.0 edits one `[P]` portable doc, `core/WORKFLOW.md`.
 radius is a measurement rather than an estimate:
 
 - **`node bin/init.mjs --target .`** (plain re-run) → exit 0, init's own summary reads
-  **`core/ method docs: 0 written, 9 kept`**, `core/WORKFLOW.md` unchanged at 16770 B, and both new
+  **`core/ method docs: 0 written, 9 kept`**, `core/WORKFLOW.md` unchanged at 16770 B (`wc -c`), and both new
   clauses absent (`grep -c` returned 0 for each). A plain re-run reports success and ships nothing.
 - **`node bin/init.mjs --target . --force`** → exit 0, the summary flips to
   **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the one this release
-  changes — `core/WORKFLOW.md` goes 16770 → 18923 B, and `grep -c` returns 1 for each clause.
+  changes — `core/WORKFLOW.md` goes 16770 → 18923 B (`wc -c`), and `grep -c` returns 1 for each clause.
 - The planted `[P]` edit in `core/OPERATE.md` was **destroyed, and no `.bak` was written for it.**
 
 **Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
