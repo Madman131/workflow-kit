@@ -1,4 +1,82 @@
-# workflow-kit — v2.4.0
+# workflow-kit — v2.5.0
+
+## What's new in v2.5.0 — the checks that run before the gate does
+
+**Every rung in this kit reviews an artifact. Nothing ran before you decided what to review, or how.**
+In the program that produced this release, a changeset whose final deliverable was **two prose
+sentences at the lowest tier** consumed **four gate rounds and twelve reviewer verdicts**. None of
+that was the reviews being too careful — every round found something real. The waste was running deep
+gates on an artifact that a five-minute check would have reshaped or rejected first. Two such
+checks now sit in the doctrine, each placed against the rule it completes rather than gathered into a
+new section nobody would find.
+
+**Enumerate the mandated rungs BY CITATION before the gate runs** (`core/WORKFLOW.md` § Gate). List
+what *this* repo's doctrine mandates for the declared tier **and** the artifact's class — by file and
+section, quoting enough of each clause to survive renumbering, because a line number alone is a moving
+reference: an amendment inserting lines above a citation repoints it while the sender is fully
+compliant. Prior rounds are never a reason to run a lighter gate. The rung most often missed is the
+one a *general* tier row does not mention because a **narrower clause elsewhere adds it** — this kit's
+own § Steer tier row says a T1 seat is cross-family "by default", while `core/REVIEW.md`
+§ Decorrelation makes it cross-family *without exception* on any `core/` file. Two readings, one
+mandate, and only the enumeration finds the second.
+
+**Sweep by CLAIM — never by authorship or filename** (§ Gate, beside the dependency sweep it aims).
+The pre-fold sweep was already mandated; what it was missing was a question. It is: which *other*
+lines assert something this edit makes FALSE — same file, same section, and any sibling doc the same
+changeset edits. Not which lines you wrote. And one claim has several spellings — a figure, its
+unit-converted twin and the prose that paraphrases it are one claim in three renderings — so **a grep
+proves a spelling, never a claim**, and an "absent" result earns one look at the raw material before
+you believe it.
+
+**Both say in their own text that no mechanism stands behind them,** and each names what it does not
+cover: an unenumerated rung is indistinguishable from a discharged one until a seat runs it, and the
+sweep does not reach a surface the changeset never edits. `guard-gate-ladder.mjs` surfaces the
+declared tier's ladder and never denies; `sensor-sweep-owed` reminds you of exactly one rung, keyed
+on a file's class rather than on the clause that mandates it. Nothing reads the rest. These are
+disciplines, and they are cheap precisely because they are honest about being checklists.
+
+### Upgrading to v2.5.0
+
+**`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
+rather than assumed: `git diff --name-only 315bcb1..HEAD` shows v2.5.0 edits exactly one `[P]`
+portable doc, `core/WORKFLOW.md`.
+
+**Both arms were executed, not reasoned about.** Against a fresh adopter created by running
+`bin/init.mjs --target .` from a clone of v2.4.0, with a hand edit **planted** in `core/OPERATE.md`
+(a `[P]` file this release never touches) and another in `core/BINDINGS.md` (`[G]`), so the blast
+radius is a measurement rather than an estimate:
+
+- **`node bin/init.mjs --target .`** (plain re-run) → exit 0, init's own summary reads
+  **`core/ method docs: 0 written, 9 kept`**, `core/WORKFLOW.md` unchanged at 16770 B (`wc -c`), and both new
+  clauses absent (`grep -c` returned 0 for each). A plain re-run reports success and ships nothing.
+- **`node bin/init.mjs --target . --force`** → exit 0, the summary flips to
+  **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the one this release
+  changes — `core/WORKFLOW.md` goes 16770 → 18949 B (`wc -c`), and `grep -c` returns 1 for each clause.
+- The planted `[P]` edit in `core/OPERATE.md` was **destroyed, and no `.bak` was written for it.**
+
+**Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
+mechanism does not, and it is readable in `bin/init.mjs`:
+
+- **`[P]` docs — the nine files the kit's own `core/` actually contains (`ls core/`) — are copied by
+  `copyGuarded`,
+  which has no backup path at all.** (`core/BINDINGS.md`, `REPO_INVARIANTS.md`, `SYSTEM_MAP.md` and
+  `OWNER_COMMS.md` are *not* among them: they are `[G]`, generated from `templates/*.tmpl`. Those nine
+  are exactly the "9 written" in init's summary line.) With
+  `--force` it calls `copyFileSync` over your file. There is nothing to recover.
+- **`[G]` generated files go through `backupBeforeOverwrite`, which writes a `.bak` only when the
+  existing content DIFFERS** from what init is about to generate (identical content returns
+  `not-needed` — nothing to preserve). So which `[G]` files leave a backup depends on which ones you
+  had diverged, and counting `.bak` files in someone else's tree tells you nothing about yours.
+
+**Scope of that claim:** it is what this version's init did to an adopter of this shape, built from
+v2.4.0. It is not a general statement about `--force` in every release or every tree — re-derive it
+for yours.
+
+**The consequence, stated in the direction that costs you something: hand edits in any `[P]` `core/`
+doc are lost silently and are not recoverable from init.** Only `[G]` files leave a handle. Before
+upgrading, write down every `[P]` divergence your repo carries and why; after upgrading, re-apply each
+and verify byte-for-byte. For `[G]` files, read the `.bak` rather than trusting that the regenerated
+file preserved what a human wrote there.
 
 ## What's new in v2.4.0 — the pre-send verification rung, and the control that makes it bite
 
