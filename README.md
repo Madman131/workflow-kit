@@ -49,6 +49,26 @@ after which it catches nothing at all. `PORTABILITY.md` states this in full, and
 it is dormant until you name your Owner. That has not changed and is not a caveat — it is what the
 thing is.
 
+### What this release's own checks caught, in it
+
+**A mutation battery found two DEAD clauses in the new check, and the tests could not see them.**
+Three of eight mutations survived the first run. Deleting the bold clearance and deleting the
+inline-code strip both left the suite green — because the ask-line anchor demanded `?` as the
+literal last character, so a line like `**Should I run it now?**` never reached either clause. It
+still *allowed*, which looks correct, **by accident**. The lesson is not "write a stronger
+assertion": **an outcome-only assertion cannot distinguish a live clause from a dead one**, because
+both produce the same verdict. The fix was **reachability** — the anchor now tolerates trailing
+emphasis and backticks, which makes both clauses do work and makes three previously vacuous
+assertions real. If you take one habit from this release, take that one: a clause you cannot make
+fail is a clause you have not tested.
+
+**And the rule-count sweep fired on this release's own header.** v2.1.1 shipped a test forbidding any
+adopter-installed artifact from stating a rule TOTAL, on the reasoning that *a count is what goes
+stale when a rule is added*. The release that adds the ninth rule wrote "the other seven rules have
+none at all" into the contract's own header, and that test caught it. **A control catching its own
+release is worth more than a clean run** — it is the only evidence that the control was ever load
+bearing.
+
 ### Upgrading to v2.6.0
 
 **`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
