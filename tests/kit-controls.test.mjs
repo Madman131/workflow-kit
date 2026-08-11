@@ -765,18 +765,45 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     const rule9flat = rule9[0].replace(/\s+/g, " ");
     assert.match(rule9flat, /Structure is the DEFAULT, not a favour you do them when the news is complicated/,
       "rule 9 states structure as the DEFAULT — a permission ('whenever they help') is the thing it replaces");
-    assert.match(rule9flat, /a message past a few lines with no bullet, table or heading in it is not finished/,
+    assert.match(rule9flat, /a message past a few lines with \*\*no bullet and no table\*\* in it is not finished/,
       "…and names the observable condition, or it is a sentiment rather than a rule");
-    assert.ok(rule9flat.includes("Alex"),
-      "the Owner's real name reached rule 9 too — a rule addressed to {{OWNER_NAME}} names nobody");
+    // A HEADING MUST NOT SATISFY IT. A cold seat's walk-through defeated the first version in one
+    // sentence: a 700-word wall that opens with "## Update" carries a heading, satisfied the
+    // condition as written, and was still a wall. Decorative structure is the common case, so a
+    // condition that accepts it is a binary whose common case is neither branch.
+    assert.match(rule9flat, /\*\*a heading does not count, and neither does a single bullet\.\*\*/,
+      "rule 9 excludes decorative structure — the walk-through case that killed its first version");
+    // AND IT MUST DECLARE ITSELF A FLOOR. Prose cannot add a missing state: no countable condition
+    // is sufficient for "is this a wall", so a rule that implies its condition IS sufficient is
+    // making the over-claim this release exists to refuse. Pinning the disclaimer is what stops a
+    // later edit from quietly promoting the floor back into a test.
+    assert.match(rule9flat, /\*\*Clearing the floor is not proof the message is not a wall\.\*\*/,
+      "rule 9 states that its own condition is not sufficient");
+    assert.match(rule9flat, /That judgment stays yours/,
+      "…and says where the judgment actually lives");
+    // Rule 9 no longer NAMES the Owner: the clause that did ("Keep what {{OWNER_NAME}} must know or
+    // act on now") duplicated rule 1 and was cut by the subtractive leg. The name-substitution
+    // property is still pinned on rule 8 above. What is pinned HERE is the stronger and still-live
+    // property: whatever placeholders rule 9 does or does not use, none may reach an adopter
+    // unsubstituted — a rule shipping "{{OWNER_NAME}}" addresses nobody.
+    assert.ok(!rule9flat.includes("{{"),
+      "rule 9 carries no unsubstituted {{placeholder}} in the generated contract");
     // Rule 9 must POINT at the conversion procedure, never carry it: BULLET.md is a reference layer
     // loaded only when `/humanize bullet` fires, and rule 7 says in terms "Do not restate those
     // rules here". A rule 9 that inlined the four conversion categories would put the kit's own
     // duplication rule in violation the day it shipped.
     assert.match(rule9flat, /`\.agents\/skills\/humanize\/BULLET\.md` \(rule 7\) — loaded on demand, and not restated here/,
       "rule 9 points at BULLET.md and disclaims restating it");
+    // ⚠ WHAT THIS ASSERTION DOES AND DOES NOT PROVE — do not read it as covering rule 7.
+    // It rejects three LITERAL fragments of BULLET.md. It cannot see a paraphrase, and a cold seat
+    // found that rule 9's first version carried conversion-direction prose ("offer the rest", "put
+    // any ask where skimming finds it") while the rule claimed at its own tail to be "not restated
+    // here". So the literal check passed over exactly the restatement it appeared to govern.
+    // Those clauses are now CUT, but the gap is in the checker and stays: **whether rule 9
+    // paraphrases BULLET.md is a REVIEWER's judgment, and no assertion here discharges it.**
+    // "not restated here" in the rule is a directive to a future editor, never a proven property.
     assert.doesNotMatch(rule9flat, /set of two or more|a \*\*comparison\*\*|Never invent a cell/,
-      "…and does NOT copy BULLET.md's conversion rules into the boot-read contract");
+      "rule 9 does not copy BULLET.md's conversion rules VERBATIM — literal check only, paraphrase is unproven");
 
     // ---- the two clauses that were READ AS LICENSING LENGTH. These are the half of this change
     // that has no new text to find: the defect was existing sentences, so the only way to pin the
@@ -787,7 +814,10 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
       "rule 1's completeness clause is scoped to the sweep, so it cannot be read as licensing a long report");
     assert.match(flat, /Being understood beats being TERSE — but length is not what makes you understood/,
       "rule 6 keeps 'do not sacrifice clarity' while denying that length delivers it");
-    assert.match(flat, /\*\*Neither half is a licence to write more\*\* — cut words, never facts\./,
+    // The trailing "— cut words, never facts" was CUT by the subtractive leg: a cold seat found it
+    // repeats rule 1's reporting constraint ("Offer the detail… but a RISK, BLOCKER… is never
+    // 'detail'"). The load-bearing half is the licence denial, which is what stays pinned.
+    assert.match(flat, /\*\*Neither half is a licence to write more\.\*\*/,
       "…and says so in terms, because the old closing clause is what the length grew under");
     assert.doesNotMatch(flat, /Being understood beats being brief/,
       "the superseded wording is GONE — the sentence the length grew under cannot survive alongside its own fix");
