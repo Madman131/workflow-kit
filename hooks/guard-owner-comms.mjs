@@ -30,13 +30,19 @@
 //
 // WHAT CHECK 3 IS NOT, said plainly because the release that added it is about honest claims. The
 // Owner's complaint was three words — keep it succinct · avoid walls of text · use bullets and
-// tables — and **check 3 mechanizes NONE of them.** It covers rule 8 (an ask must be findable),
-// which came from the same conversation but is a fourth thing. All three of those words are
-// doctrine only, in `core/OWNER_COMMS.md` rules 1, 6 and 9. The wall-of-text check that WOULD have
-// covered one of them was designed and deliberately NOT built: its threshold cannot be calibrated
-// without a corpus of real Owner-facing messages to measure a false-positive rate against, and an
-// over-firing fail-open sensor teaches people to switch it off. "The sensor was extended" without
-// this paragraph would imply the complaint was mechanized. It was not.
+// tables — and **check 3 covers none of them.** It covers rule 8 (an ask must be findable), which
+// came from the same conversation but is a fourth thing.
+// Of the three, exactly ONE has any mechanism at all and it is check 2 above: the size-mismatch
+// check tests a narrow case of succinctness, and only when the Owner asked a question of 12 words
+// or fewer. Walls of text and bullets/tables have NO check — they are doctrine only
+// (`core/OWNER_COMMS.md` rules 1, 6 and 9). The wall-of-text check that would have covered one of
+// them was designed and deliberately NOT built: its threshold cannot be calibrated without a corpus
+// of real Owner-facing messages to measure a false-positive rate against, and an over-firing
+// fail-open sensor teaches people to switch it off.
+// ⚠ This paragraph once said that NOT ONE of the three had any mechanism, which was false — check 2
+// was already testing succinctness, three lines above where the claim was written. **A disclosure
+// can over-claim its own modesty, and that is still an over-claim.** `PORTABILITY.md` § the
+// Owner-comms sensor carries the per-request breakdown and the test that pins it.
 //
 // WHY FAIL OPEN, when this kit's write guards fail CLOSED: those fail closed because the cost of a
 // wrong write is unrecoverable. Here the cost of a wrong BLOCK is a wedged session that cannot finish
@@ -171,7 +177,13 @@ const LEAD_DEF_RE = /`\*\*([A-Z][A-Z \-]{1,30}):\*\*`/g;
 // legitimate silent state; a contract that talks about a labeled lead while the harvest comes back
 // empty means an adopter reworded the labels and check 3 is blind to their vocabulary. That state
 // warns rather than running clean.
-const LEAD_PROSE_RE = /labeled lead/i;
+// Keyed on the literal phrase "labeled lead" ALONE, this warned about almost nothing: an adopter who
+// rewrote rule 8 in their own words — "any question gets a **Question:** label" — harvested zero
+// leads, ran with check 3 silently off, and got no warning, because the magic phrase was gone. The
+// only thing the narrow detector reliably caught was a doc that still used the kit's own wording.
+// So it also matches a BOLD-COLON LABEL anywhere: that shape is what a reworded rule 8 looks like,
+// and its presence beside an empty harvest is the state the warning exists for.
+const LEAD_PROSE_RE = /labeled lead|\*\*[A-Za-z][A-Za-z \-]{1,30}:\*\*/;
 // A line "carries a lead" when it holds one of those labels in BOLD — the form rule 8 requires in a
 // message, which is the backtick-free spelling of the harvested token.
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -187,9 +199,9 @@ const leadInMessageRe = (leads) =>
 // Trailing markdown emphasis and backticks count as "after the ?" — an ask is routinely written
 // `**Should I run it now?**`, and an end-anchor that stopped at the "?" itself would never see that
 // line at all. It would still ALLOW, which looks right, but for the wrong reason: the bold clearance
-// below would be unreachable and a mutation deleting it would survive. (It did — this class is what
-// the mutation battery forced. Same for backticks: without them `stripInlineCode` had no reachable
-// case either, so a clause the header claims does work was doing none.)
+// below would then be UNREACHABLE, and an unreachable clause is one no test can distinguish from a
+// deleted one. Backticks are here for the same reason — without them `stripInlineCode` has no
+// reachable case, so a clause the header claims does work would be doing none.
 const ASK_LINE_RE = /\?[`*_"'’”)\]]*$/;
 // Bold ANYWHERE on the line clears it. This is `PORTABILITY.md`'s own spelling of the check — "a
 // question mark outside a fence sits on an UNBOLDED line" — and it is deliberately generous: an
@@ -207,7 +219,13 @@ const stripInlineCode = (s) => s.replace(/`[^`\n]*`/g, " ");
 const stripFences = (s) => s
   .replace(/^[ \t]*```[\s\S]*?^[ \t]*```[ \t]*$/gm, " ")
   .replace(/^[ \t]*~~~[\s\S]*?^[ \t]*~~~[ \t]*$/gm, " ")
-  .replace(/```[\s\S]*?```/g, " "); // unterminated / inline-adjacent leftovers
+  .replace(/```[\s\S]*?```/g, " ")   // inline-adjacent leftovers
+  // An UNTERMINATED fence runs to the end of the message. Every rule above needs a CLOSING fence, so
+  // before this line an unfinished paste was not stripped at all — and a pasted transcript ending in
+  // a question line then read as an unlabeled ask and BLOCKED. That is a fail-open sensor blocking on
+  // an unrecognized shape, which is the one thing it must never do. A truncated or still-streaming
+  // paste is the ordinary way a message ends mid-fence, not an exotic input.
+  .replace(/^[ \t]*(?:```|~~~)[\s\S]*$/m, " ");
 
 // Read the Owner contract. Returns null (⇒ the sensor is DORMANT and allows) when there is no doc,
 // no heading in the exact shape this hook parses, or an unfilled {{OWNER_NAME}}. Never throws.
@@ -274,14 +292,19 @@ export function ownerContract(projectRoot) {
 // rule 8 says must be findable and is not.
 function detectUnlabeledAsk(message, leads) {
   if (!leads.length) return null;                    // no vocabulary harvested ⇒ check 3 is OFF
-  const body = stripFences(message);
+  // INLINE CODE IS STRIPPED BEFORE THE CLEARANCE, not after. Stripping it per-line further down was
+  // a spoofable suppressor: a message could mention `**QUESTION:**` inside a code span — the natural
+  // way to write ABOUT the label — and that mention cleared the entire message, including a bare
+  // unlabeled ask three lines below it. The clearance and the scan must see the same text, or the
+  // decision is made on a body the scan never reads.
+  const body = stripInlineCode(stripFences(message));
   if (leadInMessageRe(leads).test(body)) return null;
   for (const raw of body.split("\n")) {
     // Blockquotes are excluded: a quoted line is the Owner's own words being played back, and rule 8
     // governs what YOU ask, never what you quote. (Executed both ways — without this, echoing the
     // Owner's question to confirm it blocks the reply that answers it.)
     if (/^[ \t]*>/.test(raw)) continue;
-    const line = stripInlineCode(raw).trim();
+    const line = raw.trim();                         // inline code already stripped, above
     if (!line) continue;
     if (ASK_LINE_RE.test(line) && !BOLD_RE.test(line)) return line;
   }
@@ -435,12 +458,18 @@ function main(raw) {
   // Keep only what the Owner actually typed (harness-injected blocks removed, never the whole turn).
   lastUser = lastUser ? ownerTypedText(lastUser) : "";
 
-  const reasons = [];
+  // Which RULES actually fired, collected alongside the reasons. The payload used to name "rule 1"
+  // unconditionally, so a message stopped solely for a buried ask was told it had violated the rule
+  // about answering first — a false statement about why a control acted, in the block text the agent
+  // reads. A control that denies for the wrong stated reason is still defective, however right the
+  // decision was.
+  const reasons = [], rules = new Set();
   const narration = detectNarration(finalAnswer);
   if (narration) {
     reasons.push(
       `Your FINAL message narrates the work instead of reporting it — "${narration.slice(0, 60)}". ` +
       `Mid-turn preambles before a tool call are fine; the closing answer must state the RESULT.`);
+    rules.add(1);
   }
 
   const unlabeledAsk = detectUnlabeledAsk(finalAnswer, contract.leads);
@@ -450,6 +479,7 @@ function main(raw) {
       `with no bold and no labeled lead, and the message carries none anywhere. Put it on its own ` +
       `bulleted line, bolded, led by ${contract.leads.map((l) => `**${l}:**`).join(" / ")}. ` +
       `If ${contract.ownerName} could scroll past it, it is not formatted.`);
+    rules.add(8);
   }
 
   if (lastUser) {
@@ -472,6 +502,7 @@ function main(raw) {
       reasons.push(
         `SIZE MISMATCH: ${contract.ownerName} asked ${qWords} words ("${lastUser.replace(/\s+/g, " ").slice(0, 70)}") and you answered with ~${aWords} words of prose. ` +
         `Rule 1: a yes/no question gets a line or two and a stop, never an inventory. OFFER the detail, do not deliver it unasked.`);
+      rules.add(1);
     }
   }
 
@@ -479,7 +510,8 @@ function main(raw) {
   process.stdout.write(JSON.stringify({
     decision: "block",
     reason:
-      `guard-owner-comms (core/OWNER_COMMS.md § How to talk to ${contract.ownerName}, rule 1). ` +
+      `guard-owner-comms (core/OWNER_COMMS.md § How to talk to ${contract.ownerName}, ` +
+      `${[...rules].sort().map((n) => `rule ${n}`).join(" and ")}). ` +
       `${contract.ownerName} has ALREADY SEEN the message above — a Stop hook cannot retract it. ` +
       "Send a corrected FOLLOW-UP that stands on its own:\n" +
       reasons.map((r) => `  • ${r}`).join("\n") +

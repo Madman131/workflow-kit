@@ -37,8 +37,11 @@ code, blockquotes and any bolded line pass. The leads are **harvested from your 
 renaming them works and an empty harvest turns the check off and says so on stderr.
 
 **What this release does NOT do, because the alternative is letting you infer otherwise.** The Owner
-asked for three things and **none of the three gets a mechanical check. All three are doctrine only.**
-What gained a check is rule 8, which came out of the same feedback but is a fourth thing. The
+asked for three things. **Exactly one of them has any mechanism, and it is not new:** the
+size-mismatch check that has existed since v1.3 tests a narrow case of *"keep it succinct"*, and only
+when the Owner asked a question of twelve words or fewer. **Walls of text and bullets-and-tables have
+no check at all** — they are doctrine only. What gained a check is rule 8, which came out of the same
+feedback but is a fourth thing. The
 wall-of-text check that would have covered one of those words was designed and deliberately not
 built: its threshold cannot be calibrated without a corpus of real messages to measure a
 false-positive rate against, and an over-firing fail-open sensor teaches people to switch it off,
@@ -48,26 +51,6 @@ after which it catches nothing at all. `PORTABILITY.md` states this in full, and
 **The sensor still enforces nothing.** It fails open, it fires after the message is already sent, and
 it is dormant until you name your Owner. That has not changed and is not a caveat — it is what the
 thing is.
-
-### What this release's own checks caught, in it
-
-**A mutation battery found two DEAD clauses in the new check, and the tests could not see them.**
-Three of eight mutations survived the first run. Deleting the bold clearance and deleting the
-inline-code strip both left the suite green — because the ask-line anchor demanded `?` as the
-literal last character, so a line like `**Should I run it now?**` never reached either clause. It
-still *allowed*, which looks correct, **by accident**. The lesson is not "write a stronger
-assertion": **an outcome-only assertion cannot distinguish a live clause from a dead one**, because
-both produce the same verdict. The fix was **reachability** — the anchor now tolerates trailing
-emphasis and backticks, which makes both clauses do work and makes three previously vacuous
-assertions real. If you take one habit from this release, take that one: a clause you cannot make
-fail is a clause you have not tested.
-
-**And the rule-count sweep fired on this release's own header.** v2.1.1 shipped a test forbidding any
-adopter-installed artifact from stating a rule TOTAL, on the reasoning that *a count is what goes
-stale when a rule is added*. The release that adds the ninth rule wrote "the other seven rules have
-none at all" into the contract's own header, and that test caught it. **A control catching its own
-release is worth more than a clean run** — it is the only evidence that the control was ever load
-bearing.
 
 ### Upgrading to v2.6.0
 

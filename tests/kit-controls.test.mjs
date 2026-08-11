@@ -767,10 +767,10 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
       "rule 9 states structure as the DEFAULT — a permission ('whenever they help') is the thing it replaces");
     assert.match(rule9flat, /a message past a few lines with \*\*no bullet and no table\*\* in it is not finished/,
       "…and names the observable condition, or it is a sentiment rather than a rule");
-    // A HEADING MUST NOT SATISFY IT. A cold seat's walk-through defeated the first version in one
-    // sentence: a 700-word wall that opens with "## Update" carries a heading, satisfied the
-    // condition as written, and was still a wall. Decorative structure is the common case, so a
-    // condition that accepts it is a binary whose common case is neither branch.
+    // A HEADING MUST NOT SATISFY IT. A heading is decoration: a 700-word wall opening with
+    // "## Update" carries one, would satisfy a condition that accepted headings, and is still a
+    // wall. Decorative structure is the common case, so a condition that accepts it is a binary
+    // whose common case is neither branch.
     assert.match(rule9flat, /\*\*a heading does not count, and neither does a single bullet\.\*\*/,
       "rule 9 excludes decorative structure — the walk-through case that killed its first version");
     // AND IT MUST DECLARE ITSELF A FLOOR. Prose cannot add a missing state: no countable condition
@@ -795,11 +795,11 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     assert.match(rule9flat, /`\.agents\/skills\/humanize\/BULLET\.md` \(rule 7\) — loaded on demand, and not restated here/,
       "rule 9 points at BULLET.md and disclaims restating it");
     // ⚠ WHAT THIS ASSERTION DOES AND DOES NOT PROVE — do not read it as covering rule 7.
-    // It rejects three LITERAL fragments of BULLET.md. It cannot see a paraphrase, and a cold seat
-    // found that rule 9's first version carried conversion-direction prose ("offer the rest", "put
-    // any ask where skimming finds it") while the rule claimed at its own tail to be "not restated
-    // here". So the literal check passed over exactly the restatement it appeared to govern.
-    // Those clauses are now CUT, but the gap is in the checker and stays: **whether rule 9
+    // It rejects three LITERAL fragments of BULLET.md and cannot see a paraphrase. Conversion-
+    // direction prose in rule 9 — phrasings like "offer the rest" or "put any ask where skimming
+    // finds it" — would restate BULLET.md while passing this check, even as the rule claims at its
+    // own tail to be "not restated here". Such clauses are kept OUT of rule 9, and the gap in the
+    // checker stays: **whether rule 9
     // paraphrases BULLET.md is a REVIEWER's judgment, and no assertion here discharges it.**
     // "not restated here" in the rule is a directive to a future editor, never a proven property.
     assert.doesNotMatch(rule9flat, /set of two or more|a \*\*comparison\*\*|Never invent a cell/,
@@ -814,9 +814,9 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
       "rule 1's completeness clause is scoped to the sweep, so it cannot be read as licensing a long report");
     assert.match(flat, /Being understood beats being TERSE — but length is not what makes you understood/,
       "rule 6 keeps 'do not sacrifice clarity' while denying that length delivers it");
-    // The trailing "— cut words, never facts" was CUT by the subtractive leg: a cold seat found it
-    // repeats rule 1's reporting constraint ("Offer the detail… but a RISK, BLOCKER… is never
-    // 'detail'"). The load-bearing half is the licence denial, which is what stays pinned.
+    // A trailing "— cut words, never facts" is deliberately absent: it repeats rule 1's reporting
+    // constraint ("Offer the detail… but a RISK, BLOCKER… is never 'detail'"). The load-bearing
+    // half is the licence denial, which is what stays pinned.
     assert.match(flat, /\*\*Neither half is a licence to write more\.\*\*/,
       "…and says so in terms, because the old closing clause is what the length grew under");
     assert.doesNotMatch(flat, /Being understood beats being brief/,
@@ -1227,13 +1227,43 @@ test("check 3 (rule 8): an UNLABELED ask is surfaced, and a labeled one anywhere
       assert.equal(decide(), "allow", `${label} is not an unlabeled ask`);
     }
 
+    // --- AN UNTERMINATED FENCE MUST NOT BLOCK. Every fence rule needs a CLOSING fence, so an
+    // unfinished paste was stripped by none of them and its question line read as an unlabeled ask.
+    // A truncated or still-streaming paste is the ordinary way a message ends mid-fence, and a
+    // fail-open sensor blocking on an unrecognized shape is the one thing it must never do.
+    write("Here is the paste:\n\n```text\nShould I run it?\n");
+    assert.equal(decide(), "allow", "an UNTERMINATED fence is excluded like a closed one — fail open on an unfinished shape");
+
+    // --- THE SUPPRESSOR MUST NOT BE SPOOFABLE FROM MESSAGE CONTENT. Writing ABOUT the label — in a
+    // code span, which is how one naturally quotes it — used to clear the entire message, including
+    // a bare unlabeled ask below it. The clearance and the scan must read the same text.
+    write("Use the `**QUESTION:**` label when you ask.\n\nShould I run it against production now?");
+    assert.equal(decide(), "block", "a lead inside INLINE CODE is a mention, not a lead — it cannot clear the message");
+
+    // --- THE PAYLOAD MUST NAME THE RULE THAT ACTUALLY FIRED. It said "rule 1" unconditionally, so a
+    // message stopped solely for a buried ask was told it had broken the rule about answering first.
+    // Denying for the wrong stated reason is a defect however right the decision was.
+    write("The migration is staged.\nShould I run it now?");
+    assert.match(run().stdout, /§ How to talk to Alex, rule 8\)/,
+      "a check-3-only hit is attributed to rule 8 alone");
+    write("Let me check the config.\nShould I run it now?");
+    assert.match(run().stdout, /§ How to talk to Alex, rule 1 and rule 8\)/,
+      "…and a message tripping both names both, in order");
+
     // --- OFF, and it SAYS so. A contract whose labels were reworded leaves check 3 blind; a check
     // that cannot announce its own blindness reads as clean when it is not running at all.
-    writeFileSync(doc, readFileSync(doc, "utf8").replace(/`\*\*(QUESTION|RECOMMENDATION|DECISION NEEDED):\*\*`/g, "«$1»"));
+    // A REWORDED rule 8, not merely a mangled one. The warning detector used to key on the literal
+    // phrase "labeled lead", so an adopter who rewrote rule 8 in their own words got check 3 silently
+    // off and no warning — the detector reliably caught only docs still using the kit's wording.
+    // This case strips the phrase AND the backticked tokens, leaving a bold-colon label in prose,
+    // which is what a reworded rule 8 actually looks like.
+    writeFileSync(doc, readFileSync(doc, "utf8")
+      .replace(/`\*\*(QUESTION|RECOMMENDATION|DECISION NEEDED):\*\*`/g, "**$1:**")
+      .replace(/labeled lead/g, "bold label"));
     write("Should I run it against production now?");
     assert.equal(decide(), "allow", "no harvestable leads ⇒ check 3 is OFF and the sensor fails OPEN");
     assert.match(run().stderr, /guard-owner-comms WARN: .*buried-ask check \(rule 8\) is OFF/,
-      "…and the blindness is announced on stderr, never silent");
+      "…and the blindness is announced even when the kit's own phrase is gone — the reworded-rule-8 case");
   } finally { cleanup(); }
 });
 

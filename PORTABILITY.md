@@ -452,11 +452,27 @@ this document. Three separate reasons it cannot enforce anything:
 
 **Which of the Owner's words got a mechanism, and which got only doctrine.** The rules this sensor
 serves came from an Owner who asked for three things — *keep it succinct · avoid walls of text · use
-bullet points and tables*. **NONE of those three gets a mechanical check. All three get doctrine
-only** (`core/OWNER_COMMS.md` rules 1, 6 and 9). What gains a check is rule 8 — an ask must be
-findable — which came out of the same feedback but is a fourth thing. **"NONE" is the word, and it is
-pinned by a test: a later edit softening it to "not fully" or "partially" goes red rather than
-quietly shrinking the disclosure.** The rule-9 check that *would* have
+bullet points and tables*. Here is exactly what each one got:
+
+| The Owner asked for | Mechanical check | Which |
+|---|---|---|
+| keep it succinct | **one, and it is narrow** | the size-mismatch check — it fires **only** when the Owner asked a question of 12 words or fewer and the answer ran past ~350 words of prose. Any other long message is invisible to it |
+| avoid walls of text | **none** | doctrine only (`core/OWNER_COMMS.md` rule 9) |
+| use bullet points and tables | **none** | doctrine only (rules 1 and 9) |
+
+**So one of the three has a narrow check and two have nothing.** What check 3 added is rule 8 — an
+ask must be findable — which came out of the same feedback but is a fourth thing.
+
+> **This paragraph previously stated categorically that not one of the three had any mechanical
+> check and that all three were doctrine only** — paraphrased rather than quoted, so the retracted
+> spelling survives nowhere but in the test that forbids its return. That was false: the
+> size-mismatch check had been testing a narrow case of
+> succinctness since v1.3, and this file's own § 3 said so four paragraphs earlier. It was caught by
+> two independent cold reviewers. **A disclosure can over-claim its own modesty, and that is still an
+> over-claim** — it understated the mechanism to make an honest-sounding sentence, in a release whose
+> subject is not claiming more than you verified.
+
+The rule-9 check that *would* have
 covered one of those words was designed and dropped: its threshold cannot be calibrated without a
 corpus of real Owner-facing messages to measure a false-positive rate against, and an over-firing
 fail-open sensor teaches people to switch it off, after which it catches nothing at all. **Saying
