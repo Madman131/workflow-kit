@@ -1136,6 +1136,77 @@ test("guard-owner-comms is a FAIL-OPEN sensor: dormant until named, then it disc
   } finally { cleanup(); }
 });
 
+test("check 3 (rule 8): an UNLABELED ask is surfaced, and a labeled one anywhere clears the message", () => {
+  const { dir, cleanup } = adopt(["--owner-name", "Alex"]);
+  try {
+    const hook = path.join(dir, ".claude", "hooks", "guard-owner-comms.mjs");
+    const doc = path.join(dir, "core", "OWNER_COMMS.md");
+    const transcript = path.join(dir, "transcript.jsonl");
+    // The Owner turn is held to an INSTRUCTION throughout ("do it", no "?"), so checks 1 and 2 can
+    // never fire. Without that isolation a "block" here would be indistinguishable from a size
+    // mismatch and every assertion below would be measuring the wrong check.
+    const write = (assistantText) => writeFileSync(transcript, [
+      { type: "user", message: { role: "user", content: "do it" } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: assistantText }] } },
+    ].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    const run = () => spawnSync("node", [hook], {
+      cwd: dir, encoding: "utf8", input: JSON.stringify({ transcript_path: transcript }),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+    });
+    const decide = () => {
+      const r = run();
+      assert.equal(r.status, 0, `hook must exit 0, got ${r.status}: ${r.stderr}`);
+      return r.stdout.includes('"decision":"block"') ? "block" : "allow";
+    };
+
+    // --- FIRES: an ask with no label anywhere ---
+    write("The migration is staged.\nShould I run it against production now?");
+    assert.equal(decide(), "block", "a line ending in '?' with no labeled lead in the message is surfaced");
+    assert.match(run().stdout, /An ASK is buried \(rule 8\)/, "…and names the rule it comes from");
+    assert.match(run().stdout, /\*\*QUESTION:\*\* \/ \*\*RECOMMENDATION:\*\* \/ \*\*DECISION NEEDED:\*\*/,
+      "…and offers the adopter's OWN harvested leads, not a hardcoded list");
+
+    // --- CLEARS: the suppressor. A labeled lead ANYWHERE makes the whole message compliant. ---
+    // This is the case that decides whether the check is usable: a correctly formatted decision
+    // message routinely carries extra question marks in its explanation, and a version without the
+    // suppressor would block exactly the shape rule 8 exists to produce.
+    // ISOLATED, and the isolation is the whole assertion: the trailing line is unbolded AND ends in
+    // "?", so it is a live ask-line candidate that ONLY the whole-message suppressor can clear. An
+    // earlier version used an explanatory line whose "?" fell mid-sentence — the bold clearance was
+    // silently doing the work, and deleting the suppressor left the test green (mutation P1).
+    write("- **DECISION NEEDED:** run the migration now, or hold for the window?\n\nDoes that work for you?");
+    assert.equal(decide(), "allow", "a labeled lead clears the message, including a later bare ask");
+    // Likewise isolated for the BOLD clearance: bold on the line, "?" at end of the line, and NO
+    // labeled lead anywhere — so the suppressor cannot be what clears it.
+    write("**Heads up:** should I run it against production now?");
+    assert.equal(decide(), "allow", "a BOLDED ask clears — most of rule 8 is done, and nagging costs a message to buy a nit");
+    write("**Should I run it now?**");
+    assert.equal(decide(), "allow", "…including a fully-bolded ask, whose trailing ** must not hide the line from the check");
+
+    // --- CLEARS: shapes that are not asks. Each of these fired in an earlier cut. ---
+    for (const [label, msg] of [
+      ["a rhetorical question answered in the same line", "Why did it fail? The lock was stale."],
+      ["a quoted Owner question", "> ready to ship?\n\nYes — staged and verified."],
+      // The "?" must be the LAST visible thing on the line, or the end-anchor clears it for an
+      // unrelated reason and the inline-code strip is never exercised (mutation P5).
+      ["a '?' inside an inline code span", "Run `is_ready?`"],
+      ["a '?' inside a fenced block", "Done.\n\n```\nis_ready?\n```"],
+      ["a plain statement", "The migration is staged and verified."],
+    ]) {
+      write(msg);
+      assert.equal(decide(), "allow", `${label} is not an unlabeled ask`);
+    }
+
+    // --- OFF, and it SAYS so. A contract whose labels were reworded leaves check 3 blind; a check
+    // that cannot announce its own blindness reads as clean when it is not running at all.
+    writeFileSync(doc, readFileSync(doc, "utf8").replace(/`\*\*(QUESTION|RECOMMENDATION|DECISION NEEDED):\*\*`/g, "«$1»"));
+    write("Should I run it against production now?");
+    assert.equal(decide(), "allow", "no harvestable leads ⇒ check 3 is OFF and the sensor fails OPEN");
+    assert.match(run().stderr, /guard-owner-comms WARN: .*buried-ask check \(rule 8\) is OFF/,
+      "…and the blindness is announced on stderr, never silent");
+  } finally { cleanup(); }
+});
+
 test("init's armed/dormant report comes from the hook's own predicate, so it cannot drift", async () => {
   const { ownerContract } = await import(path.join(KIT, "hooks", "guard-owner-comms.mjs"));
   const { dir, cleanup } = adopt(["--owner-name", "Alex", "--skip-codex-prompt"]);

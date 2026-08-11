@@ -1173,7 +1173,7 @@ method is stable; v1.1 adds only the `/thread-restart` asset and its `init` wiri
 - `scripts/check-doc-size.mjs` — caps the BINDING method docs by role; fail-closed on a bad config.
 
 **The one sensor** (installed alongside the controls, but categorically different — read the distinction):
-- `.claude/hooks/guard-owner-comms.mjs` — a **Stop**-event nudge toward `core/OWNER_COMMS.md` rule 1.
+- `.claude/hooks/guard-owner-comms.mjs` — a **Stop**-event nudge toward `core/OWNER_COMMS.md` rules 1 and 8.
   It **fails OPEN**, fires only *after* the message is already sent, and is dormant until you name your
   Owner. **It enforces nothing.** A clean run proves nothing about a message *(Claude lane, sensor)*.
 

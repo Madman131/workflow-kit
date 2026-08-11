@@ -26,6 +26,17 @@
 // same words in the closing message mean the answer is narrating work instead of reporting it.
 //   1. NARRATION in the final message — announcing work rather than stating the result.
 //   2. SIZE MISMATCH — a short question answered at length.
+//   3. UNLABELED ASK (rule 8) — a line ending in "?" in a message carrying no labeled lead at all.
+//
+// WHAT CHECK 3 IS NOT, said plainly because the release that added it is about honest claims. The
+// Owner's complaint was three words — keep it succinct · avoid walls of text · use bullets and
+// tables — and **check 3 mechanizes NONE of them.** It covers rule 8 (an ask must be findable),
+// which came from the same conversation but is a fourth thing. All three of those words are
+// doctrine only, in `core/OWNER_COMMS.md` rules 1, 6 and 9. The wall-of-text check that WOULD have
+// covered one of them was designed and deliberately NOT built: its threshold cannot be calibrated
+// without a corpus of real Owner-facing messages to measure a false-positive rate against, and an
+// over-firing fail-open sensor teaches people to switch it off. "The sensor was extended" without
+// this paragraph would imply the complaint was mechanized. It was not.
 //
 // WHY FAIL OPEN, when this kit's write guards fail CLOSED: those fail closed because the cost of a
 // wrong write is unrecoverable. Here the cost of a wrong BLOCK is a wedged session that cannot finish
@@ -39,6 +50,11 @@
 //     Owner's questions (e.g. "AR = archive ready?"), so it counts as a short question even though
 //     it carries no "?" and no opener word. A gloss without "?" is an INSTRUCTION (e.g. "MIS = make
 //     it so"), and an instruction fairly earns a work report.
+//   · the LABELED LEADS of rule 8, harvested from the `**LABEL:**` tokens rule 8 itself quotes. Read,
+//     not baked in, for the same reason as the name: an adopter may rename them, and a hardcoded
+//     list would silently check a vocabulary their contract does not use. Harvest EMPTY ⇒ check 3 is
+//     OFF and says so on stderr, exactly like the shorthand harvest — a check that cannot see its
+//     own vocabulary must announce the blindness rather than run clean.
 // DORMANT UNTIL NAMED: if `core/OWNER_COMMS.md` is absent, has no such heading, or still carries an
 // unfilled `{{OWNER_NAME}}`, the sensor ALLOWS unconditionally. Run `init --owner-name <name>`, or
 // fill the placeholder by hand, to arm it.
@@ -145,6 +161,45 @@ const FORMAT_MENTION_RE = /``[^\n]*?``/g;
 // vocabulary the doc visibly carries — that state warns, it never runs silently.
 const DEF_SHAPED_RE = /`{1,2}[A-Z][A-Z0-9]{0,7}`{1,2}\s*=\s*/;
 
+// RULE 8's LABELED LEADS, harvested from the doc. Rule 8 quotes them inside single backticks as
+// `**QUESTION:**` etc., so the harvest keys on that shape. Letters, spaces and hyphens only: the
+// leads are words ("DECISION NEEDED"), and a looser class would swallow neighbouring punctuation
+// into the label and never match a real message.
+const LEAD_DEF_RE = /`\*\*([A-Z][A-Z \-]{1,30}):\*\*`/g;
+// The "does this doc even TRY to state rule 8?" detector, LOOSER than the harvester on purpose —
+// same asymmetry as DEF_SHAPED_RE. A contract with no rule 8 at all (a pre-v2.1.1 adopter) is a
+// legitimate silent state; a contract that talks about a labeled lead while the harvest comes back
+// empty means an adopter reworded the labels and check 3 is blind to their vocabulary. That state
+// warns rather than running clean.
+const LEAD_PROSE_RE = /labeled lead/i;
+// A line "carries a lead" when it holds one of those labels in BOLD — the form rule 8 requires in a
+// message, which is the backtick-free spelling of the harvested token.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const leadInMessageRe = (leads) =>
+  new RegExp(String.raw`\*\*(?:${leads.map(escapeRe).join("|")}):\*\*`);
+
+// An ASK LINE: a line whose visible text ENDS in "?". Requiring the "?" to TERMINATE the line is the
+// narrowing that keeps this off rhetorical prose — "Why did it fail? The lock was stale." asks the
+// Owner nothing and answers itself in the same line, while a real ask ("Should I proceed?") ends
+// there. Mid-line question marks are therefore deliberately not inspected; this check would rather
+// miss a real ask than fire on an explanation, because a fail-open sensor that cries wolf gets
+// switched off and then catches nothing at all.
+// Trailing markdown emphasis and backticks count as "after the ?" — an ask is routinely written
+// `**Should I run it now?**`, and an end-anchor that stopped at the "?" itself would never see that
+// line at all. It would still ALLOW, which looks right, but for the wrong reason: the bold clearance
+// below would be unreachable and a mutation deleting it would survive. (It did — this class is what
+// the mutation battery forced. Same for backticks: without them `stripInlineCode` had no reachable
+// case either, so a clause the header claims does work was doing none.)
+const ASK_LINE_RE = /\?[`*_"'’”)\]]*$/;
+// Bold ANYWHERE on the line clears it. This is `PORTABILITY.md`'s own spelling of the check — "a
+// question mark outside a fence sits on an UNBOLDED line" — and it is deliberately generous: an
+// agent that bolded the ask but used no label has done most of rule 8, and nagging there costs the
+// Owner a message to buy a formatting nit.
+const BOLD_RE = /\*\*[^*]+\*\*/;
+// Inline code spans are stripped before the scan: a "?" inside `curl 'x?y=1'` is not an ask, and a
+// backticked glob or regex routinely ends in one.
+const stripInlineCode = (s) => s.replace(/`[^`\n]*`/g, " ");
+
 // Fenced blocks are not prose. Used for BOTH the shorthand harvest (the template's EXAMPLE rows live
 // in a fence, so an adopter who never replaced them does not get someone else's vocabulary treated as
 // their own) and the message checks (quoted evidence is not narration, and a pasted diff is not an
@@ -197,7 +252,40 @@ export function ownerContract(projectRoot) {
   // This keys on parsed DEFINITIONS, not question tokens — an all-instruction vocabulary (no "?"
   // in any gloss) parsed fine and warns about nothing.
   const shorthandUnharvested = defs.length === 0 && DEF_SHAPED_RE.test(text);
-  return { ownerName, questionTokens: [...tokens], shorthandUnharvested };
+  // Rule 8's labeled leads. Harvested from the RAW text, not the fence-stripped copy: rule 8 is
+  // prose, and unlike the shorthand there is no "someone else's vocabulary" hazard to fence off —
+  // these labels are the contract's own, whoever the Owner is. Empty is a legitimate state (a
+  // contract with no rule 8), and main() treats it as "check 3 OFF" rather than as a failure.
+  const leads = [...new Set([...text.matchAll(LEAD_DEF_RE)].map((m) => m[1].trim()))];
+  const leadsUnharvested = leads.length === 0 && LEAD_PROSE_RE.test(text);
+  return { ownerName, questionTokens: [...tokens], shorthandUnharvested, leads, leadsUnharvested };
+}
+
+// RULE 8 (check 3): an ask the Owner could scroll past. Returns the offending line, or null.
+//
+// THE WHOLE-MESSAGE SUPPRESSOR IS THE POINT, not a shortcut: if the message carries a labeled lead
+// ANYWHERE, this allows unconditionally. An agent that labeled its ask has followed rule 8, and a
+// second question mark further down is explanatory prose or a rhetorical aside. Without this, every
+// correctly-formatted decision message with an extra "?" in it would be blocked — the sensor
+// punishing exactly the behaviour it exists to produce.
+//
+// It therefore only ever fires on a message with NO labeled lead at all, which is also why it can
+// afford to be simple: that message either has no ask (and no line will end in "?") or has one that
+// rule 8 says must be findable and is not.
+function detectUnlabeledAsk(message, leads) {
+  if (!leads.length) return null;                    // no vocabulary harvested ⇒ check 3 is OFF
+  const body = stripFences(message);
+  if (leadInMessageRe(leads).test(body)) return null;
+  for (const raw of body.split("\n")) {
+    // Blockquotes are excluded: a quoted line is the Owner's own words being played back, and rule 8
+    // governs what YOU ask, never what you quote. (Executed both ways — without this, echoing the
+    // Owner's question to confirm it blocks the reply that answers it.)
+    if (/^[ \t]*>/.test(raw)) continue;
+    const line = stripInlineCode(raw).trim();
+    if (!line) continue;
+    if (ASK_LINE_RE.test(line) && !BOLD_RE.test(line)) return line;
+  }
+  return null;
 }
 
 // Narration detection, segment by segment. Returns the offending segment, or null.
@@ -313,6 +401,16 @@ function main(raw) {
         "shorthand section if this Owner has none. Non-blocking: every other check still runs.\n");
     } catch { /* fail open */ }
   }
+  if (contract.leadsUnharvested) {
+    try {
+      process.stderr.on("error", () => {});
+      process.stderr.write(
+        "guard-owner-comms WARN: core/OWNER_COMMS.md describes a labeled lead, but NO `**LABEL:**` " +
+        "tokens parsed — the buried-ask check (rule 8) is OFF. Rule 8 must quote its leads in single " +
+        "backticks (`**QUESTION:**`) for the sensor to read them. Non-blocking: every other check " +
+        "still runs.\n");
+    } catch { /* fail open */ }
+  }
 
   let entries;
   try {
@@ -343,6 +441,15 @@ function main(raw) {
     reasons.push(
       `Your FINAL message narrates the work instead of reporting it — "${narration.slice(0, 60)}". ` +
       `Mid-turn preambles before a tool call are fine; the closing answer must state the RESULT.`);
+  }
+
+  const unlabeledAsk = detectUnlabeledAsk(finalAnswer, contract.leads);
+  if (unlabeledAsk) {
+    reasons.push(
+      `An ASK is buried (rule 8) — "${unlabeledAsk.slice(0, 60)}" ends in a question mark on a line ` +
+      `with no bold and no labeled lead, and the message carries none anywhere. Put it on its own ` +
+      `bulleted line, bolded, led by ${contract.leads.map((l) => `**${l}:**`).join(" / ")}. ` +
+      `If ${contract.ownerName} could scroll past it, it is not formatted.`);
   }
 
   if (lastUser) {
