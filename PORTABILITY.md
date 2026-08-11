@@ -467,10 +467,9 @@ ask must be findable — which came out of the same feedback but is a fourth thi
 > check and that all three were doctrine only** — paraphrased rather than quoted, so the retracted
 > spelling survives nowhere but in the test that forbids its return. That was false: the
 > size-mismatch check had been testing a narrow case of
-> succinctness since v1.3, and this file's own § 3 said so four paragraphs earlier. It was caught by
-> two independent cold reviewers. **A disclosure can over-claim its own modesty, and that is still an
-> over-claim** — it understated the mechanism to make an honest-sounding sentence, in a release whose
-> subject is not claiming more than you verified.
+> succinctness since v1.3, and this file's own § 3 said so four paragraphs earlier. **A disclosure
+> can over-claim its own modesty, and that is still an over-claim** — it understated the mechanism to
+> make an honest-sounding sentence, in a release whose subject is not claiming more than you verified.
 
 The rule-9 check that *would* have
 covered one of those words was designed and dropped: its threshold cannot be calibrated without a
