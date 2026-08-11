@@ -6,7 +6,7 @@
 In the program that produced this release, a changeset whose final deliverable was **two prose
 sentences at the lowest tier** consumed **four gate rounds and twelve reviewer verdicts**. None of
 that was the reviews being too careful — every round found something real. The waste was running deep
-gates on an artifact that a five-minute check would have reshaped or rejected first. Four such
+gates on an artifact that a five-minute check would have reshaped or rejected first. Three such
 checks now sit in the doctrine, each placed against the rule it completes rather than gathered into a
 new section nobody would find.
 
@@ -28,15 +28,6 @@ unit-converted twin and the prose that paraphrases it are one claim in three ren
 proves a spelling, never a claim**, and an "absent" result earns one look at the raw material before
 you believe it.
 
-**Dry-run the packet against the packet rules before any seat is spawned** (`core/REVIEW.md`
-§ Cold review). Those rules already said what a payload must carry and must not; running them *as a
-check on the payload you are about to send* is a separate act, and it is the one that gets skipped. A
-diff carrying prior verdicts folds every seat it reaches by construction, before a word of the review
-is read, and the round is spent by the time the fold is visible. It adds nothing to what a packet may
-contain. It also **bounds the packet, never the seat's reach** — a seat holding tools and a checkout
-can still read an untracked round record sitting on disk, which is the same reason a filename
-blocklist fails, so keep round records outside the tree the seat can reach.
-
 **When a control needs a JUDGMENT, the cure depends on whether that judgment can be DECLARED**
 (`core/FOUNDATIONS.md` § Principles P2 and `core/INVARIANTS.md` rule 1). The *prohibition* was already
 here, on both surfaces — *"enforce a mechanical invariant — yes; make the semantic decision — no."*
@@ -56,9 +47,10 @@ for whichever reader could not follow it. Unbound duplication is the defect this
 for; bound duplication is a design choice, so `tests/gating-doctrine.test.mjs` asserts the two copies
 carry the same claim, and editing one reddens. **This is the one place duplication is correct here.**
 
-**Each of the four says in its own text that no mechanism stands behind it,** and each names what it
-does not cover: the enumeration cannot be proven complete, the sweep does not reach a surface the
-changeset never edits, and a clean dry-run is not a closed fold risk. `guard-gate-ladder.mjs` surfaces
+**Each of the three says in its own text that no mechanism stands behind it,** and each names what it
+does not cover: enumerating a rung is not running it, the sweep does not reach a surface the changeset
+never edits, and the cure tells you which shape to build without proving you built it.
+`guard-gate-ladder.mjs` surfaces
 the declared tier's ladder and never denies; `sensor-sweep-owed` reminds you of exactly one rung, keyed
 on a file's class rather than on the clause that mandates it. Nothing reads the rest. These are
 disciplines, and they are cheap precisely because they are honest about being checklists.
@@ -66,8 +58,8 @@ disciplines, and they are cheap precisely because they are honest about being ch
 ### Upgrading to v2.5.0
 
 **`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
-rather than assumed: v2.5.0 changes four `[P]` portable docs — `core/WORKFLOW.md`, `core/REVIEW.md`,
-`core/FOUNDATIONS.md`, `core/INVARIANTS.md`.
+rather than assumed: v2.5.0 changes three `[P]` portable docs — `core/WORKFLOW.md`,
+`core/FOUNDATIONS.md` and `core/INVARIANTS.md`.
 
 **Both arms were executed, not reasoned about.** Against a fresh adopter created by running
 `bin/init.mjs --target .` from a clone of v2.4.0, with a hand edit **planted** in `core/OPERATE.md`
@@ -76,15 +68,22 @@ radius is a measurement rather than an estimate:
 
 - **`node bin/init.mjs --target .`** (plain re-run) → exit 0, init's own summary reads
   **`core/ method docs: 0 written, 9 kept`**, `core/WORKFLOW.md` unchanged at 16770 B, and every new
-  clause absent (`grep -c` returned 0 at all five sites). A plain re-run reports success and ships
+  clause absent (`grep -c` returned 0 at all four sites). A plain re-run reports success and ships
   nothing.
 - **`node bin/init.mjs --target . --force`** → exit 0, the summary flips to
-  **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the four this release
-  changes — and `grep -c` returns 1 at all five sites.
+  **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the three this release
+  changes — `core/WORKFLOW.md` goes 16770 → 19183 B, and `grep -c` returns 1 at all four sites.
 - The planted `[P]` edit in `core/OPERATE.md` was **destroyed, and no `.bak` was written for it.**
-  `find . -name '*.bak'` returned four, and **every one is a generated `[G]` file**:
-  `AGENTS.md.bak`, `core/BINDINGS.md.bak`, `core/OWNER_COMMS.md.bak`, `.codex/hooks.json.bak`. The
-  backup set is drawn from what init GENERATES, never from what it overwrites.
+
+**Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
+mechanism does not, and it is readable in `bin/init.mjs`:
+
+- **`[P]` docs (all of `core/`) are copied by `copyGuarded`, which has no backup path at all.** With
+  `--force` it calls `copyFileSync` over your file. There is nothing to recover.
+- **`[G]` generated files go through `backupBeforeOverwrite`, which writes a `.bak` only when the
+  existing content DIFFERS** from what init is about to generate (identical content returns
+  `not-needed` — nothing to preserve). So which `[G]` files leave a backup depends on which ones you
+  had diverged, and counting `.bak` files in someone else's tree tells you nothing about yours.
 
 **Scope of that claim:** it is what this version's init did to an adopter of this shape, built from
 v2.4.0. It is not a general statement about `--force` in every release or every tree — re-derive it

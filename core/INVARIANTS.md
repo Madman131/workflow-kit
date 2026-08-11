@@ -55,7 +55,7 @@ outcome.** You are checking these, not hunting generic bugs.
    **When a control needs a JUDGMENT, the cure depends on whether that judgment can be DECLARED.**
    Declarable (a structured artifact whose author writes it) ⇒ replace the predicate with a
    **DECLARATION** and keep enforcing the mechanical comparison — stronger than dropping the control,
-   because a wrong declaration is a deliberate false statement rather than a parsing accident. Not
+   because a wrong declaration is a deliberate false statement rather than a parsing accident. A DECLARATION is stronger only if someone READS the declarations — name the consumer (an Owner spot-check; an audit row a human can count) or it is a SENSOR wearing a guard's clothes. Not
    declarable (arbitrary artifacts, no declaration point) ⇒ **demote to a SENSOR**: it surfaces
    candidates and never claims prevention. When successive widenings of a predicate each fall to a
    seat, the CONCEPT is the defect — do not build generation four. *(Distinct from "sensors, not
