@@ -38,7 +38,8 @@ disciplines, and they are cheap precisely because they are honest about being ch
 ### Upgrading to v2.5.0
 
 **`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
-rather than assumed: v2.5.0 edits one `[P]` portable doc, `core/WORKFLOW.md`.
+rather than assumed: `git diff --name-only 315bcb1..HEAD` shows v2.5.0 edits exactly one `[P]`
+portable doc, `core/WORKFLOW.md`.
 
 **Both arms were executed, not reasoned about.** Against a fresh adopter created by running
 `bin/init.mjs --target .` from a clone of v2.4.0, with a hand edit **planted** in `core/OPERATE.md`
@@ -50,13 +51,14 @@ radius is a measurement rather than an estimate:
   clauses absent (`grep -c` returned 0 for each). A plain re-run reports success and ships nothing.
 - **`node bin/init.mjs --target . --force`** → exit 0, the summary flips to
   **`core/ method docs: 9 written, 0 kept`** — all nine rewritten, not only the one this release
-  changes — `core/WORKFLOW.md` goes 16770 → 18923 B (`wc -c`), and `grep -c` returns 1 for each clause.
+  changes — `core/WORKFLOW.md` goes 16770 → 18767 B (`wc -c`), and `grep -c` returns 1 for each clause.
 - The planted `[P]` edit in `core/OPERATE.md` was **destroyed, and no `.bak` was written for it.**
 
 **Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
 mechanism does not, and it is readable in `bin/init.mjs`:
 
-- **`[P]` docs — the nine files the kit's own `core/` actually contains — are copied by `copyGuarded`,
+- **`[P]` docs — the nine files the kit's own `core/` actually contains (`ls core/`) — are copied by
+  `copyGuarded`,
   which has no backup path at all.** (`core/BINDINGS.md`, `REPO_INVARIANTS.md`, `SYSTEM_MAP.md` and
   `OWNER_COMMS.md` are *not* among them: they are `[G]`, generated from `templates/*.tmpl`. Those nine
   are exactly the "9 written" in init's summary line.) With
