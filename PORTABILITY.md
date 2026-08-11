@@ -441,14 +441,14 @@ this document. Three separate reasons it cannot enforce anything:
    and shown. Blocking does not retract it — it forces an *additional* message. The Owner sees the
    over-long answer and then a corrected one. That round-trip *is* the benefit, and it is also the
    ceiling: the bad message was still sent.
-3. **It is dormant until armed, and only ever samples three failure modes.** With `{{OWNER_NAME}}`
-   unfilled it allows unconditionally. Armed, it checks three things — narration in the closing
-   message; a short question answered past ~350 words of prose; and an **unlabeled ask** (rule 8): a
-   line whose visible text ends in "?" in a message that carries no labeled lead anywhere. That is
-   out of nine rules. Rules 2 through 6 are not mechanically checkable and are not checked. Rule 9 (a
-   long message with no bullet, table or heading in it) **is** checkable in principle and is
-   deliberately **not** built — see below. Do not read the cases as one: five rules are out of reach,
-   one is checked, one is unbuilt on purpose.
+3. **It is dormant until armed, and only ever samples two failure modes.** With `{{OWNER_NAME}}`
+   unfilled it allows unconditionally. Armed, it checks two things — narration in the closing message,
+   and a short question answered past ~350 words of prose — out of nine rules. Rules 2 through 6 are
+   not mechanically checkable and are not checked. Two others **are** checkable in principle and are
+   not checked either: rule 8 (an ask must be bolded, bulleted and labeled) — a Stop hook can see
+   whether a question mark outside a fence sits on an unbolded line — and rule 9 (a long message with
+   no bullet or table in it). Do not read the two cases as one: five rules are out of reach, two are
+   merely unbuilt.
 
 **Which of the Owner's words got a mechanism, and which got only doctrine.** The rules this sensor
 serves came from an Owner who asked for three things — *keep it succinct · avoid walls of text · use
@@ -460,8 +460,10 @@ bullet points and tables*. Here is exactly what each one got:
 | avoid walls of text | **none** | doctrine only (`core/OWNER_COMMS.md` rule 9) |
 | use bullet points and tables | **none** | doctrine only (rules 1 and 9) |
 
-**So one of the three has a narrow check and two have nothing.** What check 3 added is rule 8 — an
-ask must be findable — which came out of the same feedback but is a fourth thing.
+**So one of the three has a narrow check and two have nothing — and this release adds no check at
+all.** A rule-8 check was built and dropped before shipping (below); the sensor is unchanged. **Rule 8
+is not one of the three** — an ask must be findable came out of the same feedback but is a fourth
+thing, so even had it shipped it would not have answered any of the Owner's three requests.
 
 > **This paragraph previously stated categorically that not one of the three had any mechanical
 > check and that all three were doctrine only** — paraphrased rather than quoted, so the retracted
@@ -471,21 +473,17 @@ ask must be findable — which came out of the same feedback but is a fourth thi
 > can over-claim its own modesty, and that is still an over-claim** — it understated the mechanism to
 > make an honest-sounding sentence, in a release whose subject is not claiming more than you verified.
 
-The rule-9 check that *would* have
-covered one of those words was designed and dropped: its threshold cannot be calibrated without a
-corpus of real Owner-facing messages to measure a false-positive rate against, and an over-firing
-fail-open sensor teaches people to switch it off, after which it catches nothing at all. **Saying
+**Two checks were designed for this release and both were dropped**, which is why the count above is
+unchanged. The rule-9 (wall-of-text) check has no calibratable threshold without a corpus of real
+Owner-facing messages to measure a false-positive rate against. The rule-8 (unlabeled-ask) check was
+built, reviewed, and withdrawn: its question is countable, but its INPUT is arbitrary prose whose
+shape-tail has no end — an unterminated fence and an unclosed inline-code span each produced a false
+BLOCK, found one per review round, each a different unrecognised construct. **A predicate over an
+unbounded input space cannot be completed by widening.** It needs a bounded input or a real parser,
+not a third regex pass. An over-firing fail-open sensor teaches people to switch it off, after which
+it catches nothing at all. **Saying
 "the sensor was extended" without this paragraph would imply the complaint was mechanized. It was
 not** — which is the claim-inflation this document exists to refuse.
-
-**What check 3 will and will not see, stated as behaviour rather than intent.** It fires only on a
-message with **no** labeled lead at all: one lead anywhere clears the whole message, so a correctly
-formatted decision message is never nagged for the extra question marks in its explanation. It skips
-fenced blocks, inline code spans and blockquoted lines (a quoted question is the Owner's own words
-played back), and it clears any line carrying bold — an agent who bolded the ask has done most of
-rule 8. It requires the "?" to END the line, so *"Why did it fail? The lock was stale."* is not an
-ask. **Each of those clearances is a deliberate miss:** the check would rather let a real ask through
-than fire on an explanation.
 
 What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method
 doc. The sensor catches one habitual miss, late, sometimes. Off switch:

@@ -765,8 +765,15 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     const rule9flat = rule9[0].replace(/\s+/g, " ");
     assert.match(rule9flat, /Structure is the DEFAULT, not a favour you do them when the news is complicated/,
       "rule 9 states structure as the DEFAULT — a permission ('whenever they help') is the thing it replaces");
-    assert.match(rule9flat, /a message past a few lines with \*\*no bullet and no table\*\* in it is not finished/,
+    assert.match(rule9flat, /a message past roughly \*\*200 words\*\* with \*\*no bullet and no table\*\* in it is not finished/,
       "…and names the observable condition, or it is a sentiment rather than a rule");
+    // WORDS, NOT LINES. A line-measured floor is cleared by wrapping rather than by structuring:
+    // three 200-word lines are a 600-word wall that satisfies "past a few lines" trivially. The unit
+    // is the rule here — a display-dependent trigger is not an observable condition at all.
+    assert.match(rule9flat, /Words, not lines: three 200-word lines are a 600-word wall/,
+      "…and says why the unit is words, so the display-dependent form cannot come back");
+    assert.doesNotMatch(rule9flat, /past a few lines/,
+      "the display-dependent trigger is gone, not merely supplemented");
     // A HEADING MUST NOT SATISFY IT. A heading is decoration: a 700-word wall opening with
     // "## Update" carries one, would satisfy a condition that accepted headings, and is still a
     // wall. Decorative structure is the common case, so a condition that accepts it is a binary
@@ -1163,107 +1170,6 @@ test("guard-owner-comms is a FAIL-OPEN sensor: dormant until named, then it disc
     assert.equal(decide(), "allow", "a retitled heading leaves the sensor DORMANT");
     rmSync(doc);
     assert.equal(decide(), "allow", "an ABSENT core/OWNER_COMMS.md allows (no contract, no nudge)");
-  } finally { cleanup(); }
-});
-
-test("check 3 (rule 8): an UNLABELED ask is surfaced, and a labeled one anywhere clears the message", () => {
-  const { dir, cleanup } = adopt(["--owner-name", "Alex"]);
-  try {
-    const hook = path.join(dir, ".claude", "hooks", "guard-owner-comms.mjs");
-    const doc = path.join(dir, "core", "OWNER_COMMS.md");
-    const transcript = path.join(dir, "transcript.jsonl");
-    // The Owner turn is held to an INSTRUCTION throughout ("do it", no "?"), so checks 1 and 2 can
-    // never fire. Without that isolation a "block" here would be indistinguishable from a size
-    // mismatch and every assertion below would be measuring the wrong check.
-    const write = (assistantText) => writeFileSync(transcript, [
-      { type: "user", message: { role: "user", content: "do it" } },
-      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: assistantText }] } },
-    ].map((e) => JSON.stringify(e)).join("\n") + "\n");
-    const run = () => spawnSync("node", [hook], {
-      cwd: dir, encoding: "utf8", input: JSON.stringify({ transcript_path: transcript }),
-      env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
-    });
-    const decide = () => {
-      const r = run();
-      assert.equal(r.status, 0, `hook must exit 0, got ${r.status}: ${r.stderr}`);
-      return r.stdout.includes('"decision":"block"') ? "block" : "allow";
-    };
-
-    // --- FIRES: an ask with no label anywhere ---
-    write("The migration is staged.\nShould I run it against production now?");
-    assert.equal(decide(), "block", "a line ending in '?' with no labeled lead in the message is surfaced");
-    assert.match(run().stdout, /An ASK is buried \(rule 8\)/, "…and names the rule it comes from");
-    assert.match(run().stdout, /\*\*QUESTION:\*\* \/ \*\*RECOMMENDATION:\*\* \/ \*\*DECISION NEEDED:\*\*/,
-      "…and offers the adopter's OWN harvested leads, not a hardcoded list");
-
-    // --- CLEARS: the suppressor. A labeled lead ANYWHERE makes the whole message compliant. ---
-    // This is the case that decides whether the check is usable: a correctly formatted decision
-    // message routinely carries extra question marks in its explanation, and a version without the
-    // suppressor would block exactly the shape rule 8 exists to produce.
-    // ISOLATED, and the isolation is the whole assertion: the trailing line is unbolded AND ends in
-    // "?", so it is a live ask-line candidate that ONLY the whole-message suppressor can clear. An
-    // earlier version used an explanatory line whose "?" fell mid-sentence — the bold clearance was
-    // silently doing the work, and deleting the suppressor left the test green (mutation P1).
-    write("- **DECISION NEEDED:** run the migration now, or hold for the window?\n\nDoes that work for you?");
-    assert.equal(decide(), "allow", "a labeled lead clears the message, including a later bare ask");
-    // Likewise isolated for the BOLD clearance: bold on the line, "?" at end of the line, and NO
-    // labeled lead anywhere — so the suppressor cannot be what clears it.
-    write("**Heads up:** should I run it against production now?");
-    assert.equal(decide(), "allow", "a BOLDED ask clears — most of rule 8 is done, and nagging costs a message to buy a nit");
-    write("**Should I run it now?**");
-    assert.equal(decide(), "allow", "…including a fully-bolded ask, whose trailing ** must not hide the line from the check");
-
-    // --- CLEARS: shapes that are not asks. Each of these fired in an earlier cut. ---
-    for (const [label, msg] of [
-      ["a rhetorical question answered in the same line", "Why did it fail? The lock was stale."],
-      ["a quoted Owner question", "> ready to ship?\n\nYes — staged and verified."],
-      // The "?" must be the LAST visible thing on the line, or the end-anchor clears it for an
-      // unrelated reason and the inline-code strip is never exercised (mutation P5).
-      ["a '?' inside an inline code span", "Run `is_ready?`"],
-      ["a '?' inside a fenced block", "Done.\n\n```\nis_ready?\n```"],
-      ["a plain statement", "The migration is staged and verified."],
-    ]) {
-      write(msg);
-      assert.equal(decide(), "allow", `${label} is not an unlabeled ask`);
-    }
-
-    // --- AN UNTERMINATED FENCE MUST NOT BLOCK. Every fence rule needs a CLOSING fence, so an
-    // unfinished paste was stripped by none of them and its question line read as an unlabeled ask.
-    // A truncated or still-streaming paste is the ordinary way a message ends mid-fence, and a
-    // fail-open sensor blocking on an unrecognized shape is the one thing it must never do.
-    write("Here is the paste:\n\n```text\nShould I run it?\n");
-    assert.equal(decide(), "allow", "an UNTERMINATED fence is excluded like a closed one — fail open on an unfinished shape");
-
-    // --- THE SUPPRESSOR MUST NOT BE SPOOFABLE FROM MESSAGE CONTENT. Writing ABOUT the label — in a
-    // code span, which is how one naturally quotes it — used to clear the entire message, including
-    // a bare unlabeled ask below it. The clearance and the scan must read the same text.
-    write("Use the `**QUESTION:**` label when you ask.\n\nShould I run it against production now?");
-    assert.equal(decide(), "block", "a lead inside INLINE CODE is a mention, not a lead — it cannot clear the message");
-
-    // --- THE PAYLOAD MUST NAME THE RULE THAT ACTUALLY FIRED. It said "rule 1" unconditionally, so a
-    // message stopped solely for a buried ask was told it had broken the rule about answering first.
-    // Denying for the wrong stated reason is a defect however right the decision was.
-    write("The migration is staged.\nShould I run it now?");
-    assert.match(run().stdout, /§ How to talk to Alex, rule 8\)/,
-      "a check-3-only hit is attributed to rule 8 alone");
-    write("Let me check the config.\nShould I run it now?");
-    assert.match(run().stdout, /§ How to talk to Alex, rule 1 and rule 8\)/,
-      "…and a message tripping both names both, in order");
-
-    // --- OFF, and it SAYS so. A contract whose labels were reworded leaves check 3 blind; a check
-    // that cannot announce its own blindness reads as clean when it is not running at all.
-    // A REWORDED rule 8, not merely a mangled one. The warning detector used to key on the literal
-    // phrase "labeled lead", so an adopter who rewrote rule 8 in their own words got check 3 silently
-    // off and no warning — the detector reliably caught only docs still using the kit's wording.
-    // This case strips the phrase AND the backticked tokens, leaving a bold-colon label in prose,
-    // which is what a reworded rule 8 actually looks like.
-    writeFileSync(doc, readFileSync(doc, "utf8")
-      .replace(/`\*\*(QUESTION|RECOMMENDATION|DECISION NEEDED):\*\*`/g, "**$1:**")
-      .replace(/labeled lead/g, "bold label"));
-    write("Should I run it against production now?");
-    assert.equal(decide(), "allow", "no harvestable leads ⇒ check 3 is OFF and the sensor fails OPEN");
-    assert.match(run().stderr, /guard-owner-comms WARN: .*buried-ask check \(rule 8\) is OFF/,
-      "…and the blindness is announced even when the kit's own phrase is gone — the reworded-rule-8 case");
   } finally { cleanup(); }
 });
 

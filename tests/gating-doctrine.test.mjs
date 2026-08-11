@@ -275,10 +275,20 @@ test("PORTABILITY states EXACTLY what each of the Owner's three requests got, an
   // The two that do NOT exist must stay marked as absent.
   assert.match(p, /\| avoid walls of text \| \*\*none\*\* \|/, "walls of text: no mechanism, stated");
   assert.match(p, /\| use bullet points and tables \| \*\*none\*\* \|/, "bullets and tables: no mechanism, stated");
-  assert.match(p, /So one of the three has a narrow check and two have nothing\./,
-    "…and the summary line states the split without rounding it in either direction");
+  assert.match(p, /So one of the three has a narrow check and two have nothing — and this release adds no check at\s+all\./,
+    "…and the summary states BOTH the split and that this release adds nothing to it");
+  // The release ships doctrine and no mechanism. That is the fact most likely to be quietly rounded
+  // up later into "the sensor was extended", which is what the whole disclosure exists to prevent.
+  // Copied from the source, not from memory: writing a needle from recollection has produced four
+  // false alarms in this file's history — wrong article, wrong asterisk placement, a curly
+  // apostrophe. Pin the load-bearing GENERALISATION, which is the sentence a later editor would
+  // most want to drop, rather than the narrative around it.
+  assert.match(p, /check was\s+built, reviewed, and withdrawn/,
+    "…records that a check was built and dropped, so 'unbuilt' cannot be read as 'never attempted'");
+  assert.match(p, /A predicate over an\s+unbounded input space cannot be completed by widening/,
+    "…and states WHY, in the form a successor can act on");
   // Rule 8 must stay a FOURTH thing, or "one of three" reads as "the release did nothing".
-  assert.match(p, /which came out of the same feedback but is a fourth thing/,
+  assert.match(p, /came out of the same feedback but is a fourth\s+thing/,
     "rule 8 is named as a fourth thing, not as one of the three");
   // THE RETRACTION ITSELF IS PINNED. The false sentence must not return, and the record of why it
   // was false must not be quietly dropped — a correction deleted is a correction that never happened.

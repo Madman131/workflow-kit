@@ -29,68 +29,74 @@ to a bullet or a table"* — behind the `/humanize bullet` flag, loaded only whe
 it. **A load-bearing rule in a layer the executor might never load is a rule that rots**, and rule 7
 forbids copying it into the boot-read contract. One home, one pointer.
 
-**The sensor gains the check `PORTABILITY.md` had already specified and called unbuilt.**
-`guard-owner-comms.mjs` now surfaces an **unlabeled ask** (rule 8): a line whose visible text ends in
-"?" in a message carrying no labeled lead anywhere. One lead clears the whole message, so a correctly
-formatted decision message is never nagged for the question marks in its explanation. Fences, inline
-code, blockquotes and any bolded line pass. The leads are **harvested from your contract**, so
-renaming them works and an empty harvest turns the check off and says so on stderr.
-
 **What this release does NOT do, because the alternative is letting you infer otherwise.** The Owner
-asked for three things. **Exactly one of them has any mechanism, and it is not new:** the
+asked for three things. **This release ships doctrine for all three and a mechanism for none of
+them — it adds no check at all.** Exactly one of the three has any mechanism and it is not new: the
 size-mismatch check that has existed since v1.3 tests a narrow case of *"keep it succinct"*, and only
 when the Owner asked a question of twelve words or fewer. **Walls of text and bullets-and-tables have
-no check at all** — they are doctrine only. What gained a check is rule 8, which came out of the same
-feedback but is a fourth thing. The
-wall-of-text check that would have covered one of those words was designed and deliberately not
-built: its threshold cannot be calibrated without a corpus of real messages to measure a
-false-positive rate against, and an over-firing fail-open sensor teaches people to switch it off,
-after which it catches nothing at all. `PORTABILITY.md` states this in full, and a test pins the word
-**NONE** so a later edit cannot soften it to "not fully".
+nothing.** The
+**two** checks were designed for this release and both were dropped before it shipped. The
+wall-of-text check has no calibratable threshold without a corpus of real messages to measure a
+false-positive rate against. A rule-8 check was built, reviewed and withdrawn: its question is
+countable, but its input is arbitrary prose whose shape-tail has no end — an unterminated fence and
+an unclosed inline-code span each produced a false BLOCK, one found per review round. **A predicate
+over an unbounded input space cannot be completed by widening**; it needs a bounded input or a real
+parser. `PORTABILITY.md` states both in full, and a test pins the breakdown so a later edit cannot
+quietly round it up.
 
-**The sensor still enforces nothing.** It fails open, it fires after the message is already sent, and
-it is dormant until you name your Owner. That has not changed and is not a caveat — it is what the
-thing is.
+**The sensor is UNCHANGED by this release** — byte-identical to v2.5.0. It still enforces nothing: it
+fails open, it fires after the message is already sent, and it is dormant until you name your Owner.
+That is not a caveat, it is what the thing is.
 
 ### Upgrading to v2.6.0
 
 **`--force` is REQUIRED for this release**, and the requirement is *derived from what the diff edits*
-rather than assumed: `git diff --name-only 344fff8..HEAD` shows v2.6.0 touches three surfaces an
-adopter installs — the `[G]` template `templates/OWNER_COMMS.md.tmpl`, the `[P]` skill body
-`skills/humanize/SKILL.md`, and the `[P]` hook `hooks/guard-owner-comms.mjs`. Everything else it
-edits (`README.md`, `PORTABILITY.md`, `tests/`) is kit-only and never installed.
+rather than assumed: `git diff --name-only 344fff8..HEAD` shows v2.6.0 touches **two** surfaces an
+adopter installs — the `[G]` template `templates/OWNER_COMMS.md.tmpl` and the `[P]` skill body
+`skills/humanize/SKILL.md`. **`hooks/guard-owner-comms.mjs` is byte-identical to v2.5.0**, so the
+sensor needs no upgrade at all. Everything else this release edits (`README.md`, `PORTABILITY.md`,
+`tests/`) is kit-only and never installed.
 
 **Both arms were executed against a tree adopted from v2.5.0 and then hand-edited**, with canaries
 planted first so the blast radius is a measurement rather than an estimate — a hand-written Owner
 paragraph in the `[G]` contract, a local edit in the `[P]` humanize body, and a local edit in
-`core/WORKFLOW.md`, a `[P]` file this release never touches:
+`core/WORKFLOW.md`, a `[P]` file this release never touches. **Every cell below was observed in that
+run; none is inferred.**
 
 | | plain re-run | `--force` |
 |---|---|---|
 | exit code | 0 | 0 |
 | rule 9 in the `[G]` contract | absent | **present** |
 | rule 9 miss in the `[P]` humanize body | absent | **present** |
-| check 3 in the installed hook | absent | **present** |
 | version stamp in the contract | `v2.5.0` | **`v2.6.0`** |
-| hand-written Owner paragraph | kept | **gone** — `.bak` written |
-| `[P]` body local edit | kept | **gone, no `.bak`** |
-| `[P]` bystander local edit | kept | **gone, no `.bak`** |
-| `.claude/kit.config.json` write-guard dirs | `["app"]` | **reset** — the guard WIDENS |
+| hand-written Owner paragraph | kept | **gone** |
+| `.bak` beside the `[G]` contract | not written | **written** |
+| `[P]` body local edit | kept | **gone** |
+| `.bak` beside the `[P]` body | none | **none** |
+| `[P]` bystander local edit (`core/WORKFLOW.md`) | kept | **gone** |
+| `.bak` beside the `[P]` bystander | none | **none** |
+| `.claude/kit.config.json` contents | `{"executedPathDirs":["app"]}` | **`{}`** |
 
 **A plain re-run exits 0 and ships none of it.** That is the failure mode worth naming: nothing warns
 you, and the stamp still reads `v2.5.0`, which is the symptom you would eventually notice.
 
+**On that last row, stated as what was observed rather than as what it implies:** the file is
+rewritten to `{}`, so the `executedPathDirs` narrowing you passed at adopt time is gone. What that
+means for the write guard's behaviour depends on how `bin/init.mjs` and the guard treat an absent
+list — read them before relying on either reading. **Re-pass `--source-dirs` after forcing** and you
+do not need to care which it is.
+
 **Why, stated as the mechanism rather than as a file count** — the count varies with your tree, the
 mechanism does not, and it is readable in `bin/init.mjs`. `[P]` files go through `copyGuarded`, which
-has **no backup path at all**; with `--force` it copies over your file and there is nothing to
-recover. `[G]` files go through `backupBeforeOverwrite`, which writes a `.bak` only when your content
+has **no backup path at all**; the runs above confirm no `.bak` appears beside either `[P]` file.
+`[G]` files go through `backupBeforeOverwrite`, which writes a `.bak` only when your content
 **differs** from what init is about to generate. So the `[G]` contract is recoverable and the `[P]`
-body and hook are not, and **`--force` is not scoped to the files a release edits** — unrelated `[P]`
-files lose local edits in the same run.
+body is not, and **`--force` is not scoped to the files a release edits** — the bystander
+`core/WORKFLOW.md`, which this release never touches, lost its local edit in the same run.
 
 **After forcing:** diff `core/OWNER_COMMS.md.bak` and restore your own Owner paragraph, profile,
-irreversible asset and shorthand rows; re-pass `--source-dirs` to re-narrow the write guard; and
-recover any `[P]` edits from git, which is the only place they exist.
+irreversible asset and shorthand rows; re-pass `--source-dirs`; and recover any `[P]` edits from git,
+which is the only place they exist.
 
 ## What's new in v2.5.0 — the checks that run before the gate does
 
