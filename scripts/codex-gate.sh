@@ -11,8 +11,12 @@
 #      tries to run a Claude review (the hijack) the CLI spawn hits the shim and is refused, and no
 #      direct-API fallback can authenticate. The gate CANNOT silently degrade to a same-family review.
 #   2. PRODUCTIVITY: prepends an anti-delegation hygiene preamble so Codex reviews the code itself.
-#   Plus --disable code_mode_host; the prompt is fed via STDIN (not an argv positional) so large
-#   diffs do not hit ARG_MAX/E2BIG (codex reads the prompt from stdin when no positional is given).
+#   The prompt is fed via STDIN (not an argv positional) so large diffs do not hit ARG_MAX/E2BIG
+#   (codex reads the prompt from stdin when no positional is given).
+#
+#   This runner NEVER disables the seat's code-mode file access. Doing so leaves the seat unable to
+#   open a single file while the run still exits 0 — a fluent verdict resting only on the payload.
+#   Measured 2026-08-12 on codex-cli 0.147.0-alpha.6.5. See core/GATES.md § Gotchas / traps.
 #
 # NOTE: this PATH shim is for the READ-ONLY DEV GATE only. Do NOT apply it to a live runtime cron
 # (e.g. the Trader Codex PM-seat cron) — that would block the trader code's own legitimate `claude`
@@ -251,13 +255,13 @@ if [ -n "$RESUME_ID" ]; then
   # `exec` REPLACES the cd-subshell with codex, so $! below is codex's own PID (not a wrapper
   # subshell's) — the watchdog then TERM/KILLs codex directly, symmetric with the fresh branch.
   ( CDPATH= cd -- "$REPO" && PATH="$GUARD_DIR:$PATH" PIL_BLOCK_CLAUDE_COMPANION=1 PIL_GUARD_HIT_FILE="$GUARD_HIT" ANTHROPIC_API_KEY="" CLAUDE_API_KEY="" \
-      exec codex exec resume "$RESUME_ID" -c sandbox_mode=read-only --disable code_mode_host \
+      exec codex exec resume "$RESUME_ID" -c sandbox_mode=read-only \
         -m "$MODEL" -c model_reasoning_effort="$EFFORT" -o "$OUT" - < "$PROMPT_TMP" ) &
 else
   # --json puts the event stream on stdout (captured) so the thread id is machine-readable; the
   # verdict still lands in -o and live progress stays on stderr.
   PATH="$GUARD_DIR:$PATH" PIL_BLOCK_CLAUDE_COMPANION=1 PIL_GUARD_HIT_FILE="$GUARD_HIT" ANTHROPIC_API_KEY="" CLAUDE_API_KEY="" \
-    codex exec -s read-only --disable code_mode_host -m "$MODEL" -c model_reasoning_effort="$EFFORT" \
+    codex exec -s read-only -m "$MODEL" -c model_reasoning_effort="$EFFORT" \
       -C "$REPO" --json -o "$OUT" < "$PROMPT_TMP" > "$JSONL_TMP" &
 fi
 CODEX_PID=$!

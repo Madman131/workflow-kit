@@ -317,3 +317,92 @@ test("PORTABILITY states EXACTLY what each of the Owner's three requests got, an
     assert.doesNotMatch(p, hedge, `the disclosure must not be hedged by "${hedge}"`);
   }
 });
+
+// ---------------------------------------------------------------- the blinded seat
+
+// MEASURED IN THIS REPO, 2026-08-12, on codex-cli 0.147.0-alpha.6.5, one variable changed:
+//   with `--disable code_mode_host` the seat answered CANNOT-READ (router: `error=code-mode host
+//   is disabled`) and the process EXITED 0; without it, same prompt/model/repo/sandbox, it quoted
+//   the requested line byte-for-byte. `codex features list` reports code_mode_host stable+default-on.
+// The flag is therefore a FAIL-OPEN: the payload still reaches the seat over the prompt, so a
+// blinded gate seat returns a fluent, on-topic, severity-ranked verdict resting on nothing it
+// could check, and nothing in the exit code distinguishes it from a healthy gate.
+
+test("no shipped runner disables the seat's file access", () => {
+  // Pin the ABSENCE in the runners and the PROHIBITION in the doc — never the absence alone. An
+  // absence pin passes just as well against a file someone deleted, and it cannot say WHY.
+  //
+  // Zero occurrences, not "no --disable pairing": the spelling is short enough that a partial
+  // pattern would let a reformatted re-add (a variable, a line continuation, an array element)
+  // slip through. core/GATES.md states the same check as `grep -n code_mode_host <runner>` must
+  // return nothing, so this is that documented check's mechanical twin.
+  for (const runner of ["scripts/codex-gate.sh", "scripts/sweep.mjs"]) {
+    assert.doesNotMatch(raw(runner), /code_mode_host/,
+      `${runner} must not disable code mode — it blinds the seat and still exits 0`);
+  }
+
+  // …and the canary, because the two assertions above are decoration if the pattern cannot bite.
+  // This is the exact text that shipped at e782f15, in both of its shipped spellings (shell argv
+  // and the JS array element in sweep.mjs).
+  for (const decoy of [
+    'codex exec -s read-only --disable code_mode_host -m "$MODEL"',
+    '"-s", "read-only", "-C", repoAbs, "--disable", "code_mode_host"',
+  ]) {
+    assert.match(decoy, /code_mode_host/, "the absence pattern still matches its own removed spelling");
+  }
+});
+
+test("GATES states the flag as a PROHIBITION with its measurement, not as defensive insurance", () => {
+  const g = read("core/GATES.md");
+
+  // The canonical invocation is the line a reader PASTES — the exposed operator is the careful one
+  // who follows the documented hand-run instead of the tooling. Pin the block itself, not the prose
+  // around it: an edit could correct every rationale below and leave the paste line blinding.
+  assert.match(g, /codex exec -s read-only -m <model> -c model_reasoning_effort=<effort>/,
+    "the copy-paste invocation must not carry the flag");
+  assert.doesNotMatch(g, /codex exec -s read-only --disable code_mode_host/,
+    "…and the blinding form must not survive anywhere in the doc as a pasteable line");
+
+  // The instruction must be a prohibition. "keep it (defensive)" is the exact compressed form that
+  // shipped, and it is what made a correctly-verified 0.144 finding into a live defect.
+  assert.doesNotMatch(g, /keep it \(defensive\)/i, "the retracted instruction must not still ship");
+  assert.doesNotMatch(g, /Keep (?:it )?as (?:cheap )?cross-version insurance/i,
+    "…nor its second spelling in Gotchas — a correction on one surface only leaves the other shipping");
+  assert.match(g, /DO NOT PASS IT/);
+
+  // The MEASUREMENT is load-bearing: without the version and the exit code this reads as taste.
+  assert.match(g, /0\.147\.0-alpha\.6\.5/, "the version the measurement was taken on");
+  assert.match(g, /still exited 0/, "the fail-open, which is the whole reason it went unnoticed");
+
+  // THE GENERAL RULE — the cure for the CLASS. A one-directional escape clause ("re-verify before
+  // DROPPING") is the defect; it is what let the 2026-07-17 check stand across two CLI generations.
+  assert.match(g, /Re-verify a version-specific flag before RELYING on it, not only before dropping it/i);
+
+  // A re-add must cost evidence, or the prohibition decays back into "keep it, defensive".
+  assert.match(g, /re-add it only with a canary proving the seat can still quote a file it was NOT given/i);
+});
+
+test("GATES' traps entry gives the SYMPTOM, the detection, and the caveat that makes detection work", () => {
+  const g = read("core/GATES.md");
+
+  // The symptom, stated as the three properties a blinded seat still satisfies — this is the
+  // sentence that connects the trap to the sufficiency test.
+  assert.match(g, /A BLINDED SEAT EXITS 0, AND ITS VERDICT IS REAL, ON-TOPIC AND SEVERITY-RANKED/);
+
+  // The detection.
+  assert.match(g, /ask the seat to quote an exact line of a file \*\*that was not in its payload\*\*|quote an exact line of a file that was not in its payload/i);
+
+  // ⚠ THE CAVEAT IS THE LOAD-BEARING HALF. Without it the detection silently fails: the packet
+  // contract carries every changed file IN FULL, so a blinded seat quotes a changeset file from
+  // what it was handed and passes the check. A detection method that can be satisfied by the
+  // failure it targets is not a control (the same shape banked in the KO11 brief's § 3D).
+  assert.match(g, /A file from the changeset does not work/i);
+
+  // The flag can arrive in a runner you copied rather than a command you typed — this is how it
+  // reached three call sites here and why the check names the runner, not the invocation.
+  assert.match(g, /the flag can hide in a runner you copied rather than a command you typed/i);
+
+  // A detected-blind run is VOID and must be re-run COLD. Resuming inherits the thread, not the
+  // eyesight — a warm re-ask of a blinded thread launders the same blindness into a second verdict.
+  assert.match(g, /re-run it cold, never `--resume` it|A run detected blind is VOID/i);
+});
