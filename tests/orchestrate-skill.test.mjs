@@ -173,10 +173,12 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     // v2.5.0 re-pointed the CURRENT anchor and ADDED to this list rather than swapping the previous
     // entry out: the older sections keep their coverage for free, and a release that silently drops an
     // assertion is indistinguishable from one that never had it.
-    // v2.6.0 re-pointed the CURRENT anchor and ADDED, per the rule above. Note the v2.5.0 entry's
-    // start anchor MOVED from the title line to its own heading: the title now names v2.6.0, and
-    // leaving it would have silently swallowed the new section into the old one's slice.
-    "README.md § v2.6.0": section(readme, "# workflow-kit — v2.6.0", "## What's new in v2.5.0", "README"),
+    // v2.6.1 re-pointed the CURRENT anchor and ADDED, per the rule above — and the v2.6.0 entry's
+    // start anchor MOVED from the title line to its own heading, exactly as v2.5.0's did one release
+    // earlier: the title now names v2.6.1, and leaving it would silently swallow the new section
+    // into the old one's slice.
+    "README.md § v2.6.1": section(readme, "# workflow-kit — v2.6.1", "## What's new in v2.6.0", "README"),
+    "README.md § v2.6.0": section(readme, "## What's new in v2.6.0", "## What's new in v2.5.0", "README"),
     "README.md § v2.5.0": section(readme, "## What's new in v2.5.0", "## What's new in v2.4.0", "README"),
     "README.md § v2.4.0": section(readme, "## What's new in v2.4.0", "## What's new in v2.3.0", "README"),
     "README.md § v2.3.0": section(readme, "## What's new in v2.3.0", "# workflow-kit — v2.2.1", "README"),

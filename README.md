@@ -1,4 +1,200 @@
-# workflow-kit — v2.6.0
+# workflow-kit — v2.6.1
+
+## What's new in v2.6.1 — the kit could not review itself
+
+**`core/REVIEW.md` § Cold review says a spec narrating its own review history folds every seat that
+reads it, and forbids handing a reviewer the author's advocacy — *"what we verified"*, *"gates
+passed"*, *"N cases pinned"*. This kit's own house style put exactly that INSIDE the artifacts.**
+The shape was a parenthetical naming a reviewer as the discoverer of a defect in the very file it sat
+in, often with the evidence ritual attached. That is the forbidden sentence in miniature: it tells
+the reviewer holding the file what a previous reviewer already found there. **So every changeset
+shipping a hook or a test handed its reviewer a contaminated packet, and the repo that defines this
+method could not obtain the unframed pass its own doctrine mandates.** This release removes the
+framing and keeps the knowledge.
+
+**THIS SECTION DESCRIBES THE REMOVED SHAPES WITHOUT REPRODUCING ANY OF THEM, AND THAT IS DELIBERATE.**
+A release note quoting the strings it removed would re-contaminate every packet that ships it —
+`README.md` changes on every release, so the note would reintroduce upstream exactly what the diff
+took out. Naming the shape carries the whole lesson and folds nobody. *(This is not a hypothetical — the first draft of this
+note quoted its examples verbatim, which would have shipped the defect upstream in the release that
+removes it.)*
+
+**Two numbers, because the difference between them is the point.** Grepping the review VOCABULARY
+(`cold seat|cold reviewer|mutation battery`) returned **20 files at v2.6.0** — but at least **eight** of those
+hits are doctrine: the T1 row of the tier table, `core/REVIEW.md`'s payload contract, the cold
+reviewer's own agent definition, three template role bindings, and **a test whose whole job is to PIN
+that phrase**. A rule built on that count would have redacted the contract in order to review it.
+Matching the *shape* instead — an attribution predicated of the material at hand, whitespace flattened
+first so a parenthetical that wraps across lines cannot hide — surfaces **86 spans across 22 files**,
+of which **77 are removed and 9 are kept**.
+
+**Those numbers were revised twice while this release was being built, and the reason is worth more
+than the figures.** Each revision followed a widening of the rule's own scope — a path filter deleted,
+then an allow-list deleted — and each time the earlier count had already been written down. **A count
+is only meaningful relative to the rule version that produced it.** The rule now scans every tracked
+file with no path filter at all, and its output on the base tree, its output here, and a per-site
+ledger derived by diffing them are all shipped with the changeset.
+
+**It adds no control, and nothing here should be read as adding one.** No rule changed, no check was
+added, no behaviour moved. What it buys is one thing: a reviewer can now be handed these files
+without being told what a previous reviewer found in them.
+
+**The rule has two legs, and a span is contamination only if it has BOTH:** (a) it names a review
+agent or a review ritual, **and** (b) it predicates that of the material at hand. The worked
+contrast, because leg (b) is the one that gets skipped: a parenthetical in a test crediting a
+reviewer with finding the gap that test now closes **is** contamination — the seat holding that test
+is told what a previous seat found in it. An anonymised lesson about how seats behave in general,
+drawn from another program and asserting nothing about the file it sits in, **is not**. **A rule with
+only leg (a) is a vocabulary match, and a vocabulary match hits doctrine.**
+
+**Two classes were removed.** *Reviewer attribution* credits a named review agent with discovering
+something in the file the note sits in. *Coverage advocacy* asserts that a verification ritual was
+performed on this material, naming no agent — a mutation reported as surviving, a fix reported as
+exercised in both directions, a defect reported as reproduced. **The behavioural claim underneath was
+kept in every case**; where a bracket carried both an attribution and a concrete failure case, only
+the attribution came out.
+
+**And in test TITLES, not only in comments.** Eight `test(...)` titles carried round numbers or
+credited a seat. Those are string literals, so editing them changes executable content — which is why
+they ride the release commit alongside the section-anchor re-point, and not the comment-only commit.
+A ninth vocabulary hit was CLEARED rather than edited: `round-3 escalation` in
+`tests/gating-doctrine.test.mjs` is `core/GATES.md`'s own name for a rule, so it fails leg (b). That
+is the vocabulary trap in miniature, caught by the rule that was built to avoid it.
+
+**Where the provenance went.** It did not move to a new file — it was already in two places and stays
+there: the gate records for each release, and this release history. If you meet a bare assertion here
+where a receipt used to be, the receipt is in the gate record for the release that introduced the
+line, findable by `git log -S` on the surviving claim.
+
+**What was deliberately KEPT, because deleting it would make the docs less honest.** Nine spans, in
+`README.md`, `PORTABILITY.md` and `scripts/cold-review-gemini.sh`, whose *subject is the review
+process itself*: the disclosure that
+the structural assertions are covered by a build-time mutation rig rather than by `npm test`, and the
+measured basis for two `--force` upgrade instructions. Those sentences are not advocacy aimed at a
+reviewer — they are the source for an instruction an adopter has to act on, and stripping them would
+turn a sourced instruction into a bare assertion.
+
+**EXAMINED AND CLEARED — not skipped.** Four surfaces were read and found not to be contamination,
+each by the two-leg test above. Saying *"out of scope"* where *"examined and cleared"* is the true
+statement would leave a successor unable to tell the two apart.
+
+- **`core/ARTIFACT_CLASS.md`:20** — *"Origin: the 2026-07-03 doctrine-bloat postmortem … the defect
+  was caught by a live run, not a review."* **Fails leg (b):** it is a labelled citation of another
+  program's postmortem, and it asserts the opposite of coverage — that no review caught it.
+- **`core/GATES.md` § Evidence** — the design-mode/diff-mode measurement log. **Fails leg (b):** it is
+  labelled *"(Provenance: … not checkable from inside this kit — treat them as the recorded basis for
+  the ruling, not as a claim you can re-derive here.)"* It is the recorded basis for a routing rule,
+  which is what a gate record is for.
+- **`skills/orchestrate/SKILL.md` and `PROTOCOLS.md`** — every seat mention is a rule about how to
+  *use* a seat, and the incidents are anonymised, from other programs, under a header that already
+  disclaims them as *"not receipts"*. **Fails leg (b)** on both counts.
+- **`templates/*.tmpl`** — clean. All four vocabulary hits are role definitions.
+- **`scripts/cold-review-gemini.sh`** — *"the `--design` run caught FIVE real issues the 3-person
+  Opus panel missed"*. **Fails leg (b):** it is the measured basis for the design-mode routing rule,
+  about another repo's review of another artifact — the same measurement `core/GATES.md` § Evidence
+  carries under an explicit provenance label.
+- **`scripts/codex-gate.sh`** — *"Found by being bitten: this kit's own release gate was launched on
+  the inherited default and had to be relaunched."* **Fails leg (b):** it names no review agent and
+  asserts a FAILURE rather than coverage, which is the same reason `core/ARTIFACT_CLASS.md:20` was
+  cleared.
+
+**Two of those last three were, for part of this work, excluded by a filter that gave no reason —
+disclosed here because an undeclared narrowing inside a rule whose auditability rests on publishing
+every exclusion is worse than the sites it hid.** The filter is gone; those files are now scanned
+like everything else and their hits are declared above. **Nothing was removed from them.**
+
+**Editing any `core/` file would additionally have made this a core-document amendment — a different
+gate — but that is not why they were left; they were left because they are not contamination.**
+
+**The tier, and who set it.** This ran at **T1 — set by the orchestrator, not by the Owner**, and
+it is one step *above* what the doctrine's own decision tree gives: `core/WORKFLOW.md` § Steer rule 4
+puts comment-and-prose-only work at **T0**. T1 buys a blind cold reviewer where T0 asks only for a
+self-check, so the work ran above its mandate rather than below it. **It is recorded as
+orchestrator-set because it was; T1 requires no Owner ratification, and labelling an inference with
+someone else's authority is its own defect.**
+
+**The one file the check DECLINES, and why declining beat patching.** `acceptance/plant-the-bug.sh`
+is shell, and on shell the check offers **no proof at all** — its two supposedly independent tests
+collapse into one shared premise there ("a line starting with `#` is a comment"). Two escapes were
+found that way, both runtime *data* dressed as comments: one inside a heredoc body, one inside
+multiline quoted text, the second visibly changing what the script prints. **Patching the first made
+the second reachable.** Shell quoting is an unbounded space and no amount of widening closes it, so
+the claim was narrowed rather than patched again: shell files abstain, which fails closed, and that
+file rides the release commit — carried by reading its two-line diff and by the acceptance suite that
+exercises it. **A control covering one instance of a class is not a control for the class.**
+
+**How the tier claim is checked, and what that check cannot do.** The first commit changes comments
+and prose only. The check is mechanical — every changed line must be a comment line in *both*
+versions, and the comment-stripped forms must match — and it runs with planted-bug controls beside
+it, because a check never observed failing proves nothing about the run that passed.
+
+**This release note does not tell you the results.** A note asserting its own gates passed is the
+author's advocacy, which `core/REVIEW.md` § Cold review forbids handing a reviewer — and `README.md`
+ships to every reviewer of every future release. The rig, its controls, and their complete output
+travel with the changeset in the review packet, where a reviewer can attack them. **If you want to
+know whether the checks passed, read the output, not this paragraph.**
+
+**A third limit, and it is structural rather than fixable.** A reviewer of this repo holds no shell.
+That means it cannot verify that any command output shipped alongside a change actually came from the
+tree the change claims — so every such figure is a **declaration**, not evidence, however carefully it
+is produced. `core/REVIEW.md` § Decorrelation already names the verifier for this class: *"the Owner
+spot-checks the free pass … that human check is the verifier, not a hash."* **No amount of additional
+text in a release note closes that gap, and pretending otherwise would be the exact over-claim this
+release exists to remove.**
+
+**Two honest limits on that machinery, because "proven" invites the question.** It is **not in this
+repository** — it was built for this changeset and is not re-runnable by a later one without being
+rebuilt; committing it would have added executable content to a release claiming to add none. And it
+is **a strong check rather than a proof**: it abstains where it can detect ambiguity, but parts of it
+decide heuristically, and it is only as good as the escapes its controls have found.
+
+**The string-literal class is FIXED, not deferred — and the first draft of this release deferred it.**
+Eight test titles carried narration. Editing them changes executable content, so an earlier cut
+recorded them as a known gap and shipped without them. That was wrong: **recording a gap does not
+close it**, and a release whose whole purpose is to make this repo's packets unframed should not ship
+contaminating strings it could have removed. They now ride the release commit, whose tier
+basis already covers string-literal edits. **The comment-only commit is untouched and keeps its
+clean claim.**
+
+**DECLARED RESIDUALS — what this release does not settle.** Listed because a reader who finds one of
+these later should find it here first.
+
+- **The narration rule is a sensor, not a proof.** Its second leg — *does this predicate a review of
+  the material at hand?* — is a judgment, so the rule surfaces candidates and the dispositions are
+  **declared**, then enforced mechanically against that declaration. It cannot establish that no
+  contamination remains; it can only make every exclusion visible. The full per-site ledger ships with
+  the changeset for exactly that reason.
+- **This release note cannot fully satisfy the clause it serves.** `core/REVIEW.md` § Cold review
+  forbids handing a reviewer the author's advocacy, and a release note describing a release is, on a
+  strict reading, advocacy in a file every future reviewer receives. The verification claims are cut;
+  what remains — what changed and why — is irreducible. **The real fix is an amendment to that clause
+  distinguishing advocacy handed to a seat as INSTRUCTION from advocacy handed to it as the ARTIFACT
+  UNDER REVIEW, and that amendment owes its own gate.** It is not made here.
+- **The mechanical check is only as good as the escapes its controls have found.** Two were found on
+  the shell path and answered by declining to check shell at all. On the JavaScript path a reviewer
+  proposed a further escape — a mis-parsed regex desynchronising template state so that template DATA
+  reads as a comment. **Six constructions of it were attempted; all six failed CLOSED** (one abstained,
+  five raised the A-versus-B disagreement the design exists to raise), because desynchronised state
+  makes the two proofs disagree rather than agree. **That is a refutation of the specific escape, not
+  a guarantee that none exists**, and the distinction is the point.
+- **Nothing here is independently verifiable by a reviewer of this repo**, because a reviewer holds no
+  shell. Every count and result is a **declaration**. § Decorrelation names the verifier for this
+  class, and it is a person, not a hash.
+
+### Upgrading to v2.6.1
+
+**`--force` is REQUIRED to receive it, and there is no reason to hurry.** Derived from what the diff
+edits rather than assumed: this release touches `hooks/*.mjs` and `scripts/check-codex-hooks-armed.mjs`,
+which an adopter does install — but it changes only their comments, so a stale copy behaves
+identically to a fresh one. Nothing an adopter's controls *do* changes.
+
+Both arms were checked against a tree adopted from v2.6.0, with the STALE direction observed first so
+the clean direction meant something:
+
+| Re-run | Installed hooks carry this release's text |
+|---|---|
+| plain `init` | **no** — `guard-cross-repo-writes.mjs`, `payload-targets.mjs` and `sensor-sweep-owed.mjs` all still the v2.6.0 text |
+| `init --force` | **yes** — all three updated, and `.claude/hooks/` and `.codex/hooks/` verified byte-identical afterwards |
 
 ## What's new in v2.6.0 — a permission is not a rule
 

@@ -511,7 +511,7 @@ test("THE CRASH RESIDUAL: a burned nonce denies, and the cure is ONE RITUAL — 
   } finally { cleanup(); }
 });
 
-test("an unreadable payload DENIES — the reference's exit(0) is the fail-open CS5b killed", () => {
+test("an unreadable payload DENIES — the reference's exit(0) is a fail-open", () => {
   const { dir, cleanup } = adopt();
   try {
     const r = spawnSync(process.execPath, [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],

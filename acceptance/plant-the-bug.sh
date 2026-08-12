@@ -28,7 +28,7 @@ assert_eq() { if [ "$2" = "$1" ]; then ok "$3 (=$2)"; else bad "$3 (want $1, got
 # "CRASH(rc=N)" on a non-zero exit. A crash must NOT read as "allow": every PERMITTING assertion below
 # would otherwise stay green against a hook that threw on those very inputs, so the "no over-block"
 # half of each pair would be unfalsifiable. (comms_decision was hardened for exactly this; this helper
-# was not — found by the cold panel.)
+# was not.)
 guard_decision() { # $1=hookfile $2=json $3=cwd
   local out rc
   out="$(printf '%s' "$2" | (cd "$3" && CLAUDE_PROJECT_DIR="$3" node "$1") 2>/dev/null)"
@@ -264,7 +264,7 @@ grep -q '^tools: \[\]$' "$AG_CONSULT" && ok "frontier-consult carries the LITERA
 grep -q '^tools: \[\]$' "$AG_COLD" && bad "cold-reviewer must NOT be tool-less (it verifies claims against the code)" || ok "cold-reviewer is NOT caged (keeps its read tools; the cage is only the consult seat's)"
 # init verifies the INSTALLED seat (it must not certify a file it never looked at), probed at
 # SEVERAL points. A check proven against ONE broken shape is proven against that shape only: a
-# relaxed anchor and a whole-file scope both survived a single-mutation suite (cold-seat battery).
+# relaxed anchor and a whole-file scope both survive a single-mutation suite.
 # Every run asserts EXIT STATUS too — a crashed init prints no warning, which would otherwise read
 # as the healthy direction passing.
 cp "$AG_CONSULT" "$WORK/consult.orig"

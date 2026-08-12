@@ -141,7 +141,7 @@ test("the THREE CLASSES are distinct, and the middle one is the polarity change 
   }
 });
 
-test("ROUND-2 seat findings: indented directives, non-target grammar, hidden separators", () => {
+test("indented directives, non-target grammar, and hidden separators", () => {
   // 1. AN INDENTED DIRECTIVE IS A DIRECTIVE. Codex's own patch parser trims a line before deciding
   // whether it is a header, so `␠*** Add File: x` names a target to the applier. Anchoring at column
   // 0 meant that target was silently dropped from the gated list while the file still got written —
@@ -176,7 +176,7 @@ test("ROUND-2 seat findings: indented directives, non-target grammar, hidden sep
   assert.deepEqual(parseApplyPatchEnvelope("*** Begin Patch\r\n*** Add File: a.txt\r\n+x\r\n*** End Patch\r\n").targets, ["a.txt"]);
 });
 
-test("ROUND-2: relative patch paths resolve against the APPLIER's cwd, not the repo root", () => {
+test("relative patch paths resolve against the APPLIER's cwd, not the repo root", () => {
   // `--project-dir` answers "which repo am I guarding"; it does NOT
   // answer "what does `src/x.mjs` mean". The applier resolves a relative path against its own
   // working directory, and those differ whenever a session runs in a SUBDIRECTORY — an ordinary
@@ -210,7 +210,7 @@ test("ROUND-2: relative patch paths resolve against the APPLIER's cwd, not the r
   } finally { R.cleanup(); }
 });
 
-test("ROUND-2: an UNREADABLE payload is denied by BOTH write guards, not just one", () => {
+test("an UNREADABLE payload is denied by BOTH write guards, not just one", () => {
   // The cross-repo guard's outermost JSON.parse still did `exit 0` — "cannot read it ⇒ permit it",
   // the exact shape this release exists to remove, surviving at the one place the rewrite never
   // looked. Its sibling had denied on the same bytes for releases, so the pair only stayed honest
@@ -234,7 +234,7 @@ test("ROUND-2: an UNREADABLE payload is denied by BOTH write guards, not just on
   } finally { R.cleanup(); }
 });
 
-test("ROUND-2: `[features] hooks = true` is NOT a hooks registration — in init AND in the probe", async () => {
+test("`[features] hooks = true` is NOT a hooks registration — in init AND in the probe", async () => {
   // A line-shaped `hooks\s*=` regex matches an ordinary Codex FEATURE FLAG, and reading that as
   // "the adopter registered their own hooks" makes init skip its registration entirely: guards
   // installed, nothing registered, exit 0. A false positive in this detector is a silent fail-open.
@@ -276,7 +276,7 @@ test("ROUND-2: `[features] hooks = true` is NOT a hooks registration — in init
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
 
-test("ROUND-3: no ledger row is not automatically NOT ARMED — the probe abstains when nothing was tested", async () => {
+test("no ledger row is not automatically NOT ARMED — the probe abstains when nothing was tested", async () => {
   // THE FAILURE, against hooks a human had just trusted. The probe reported
   // "your Codex lane is UNGUARDED" about a lane that was provably blocking — because Codex had
   // read the adopted repo's own AGENTS.md, decided an identity precondition failed ("this checkout
@@ -313,7 +313,7 @@ test("ROUND-3: no ledger row is not automatically NOT ARMED — the probe abstai
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("ROUND-2: the arming probe keys on a row about ITS OWN target, not on the ledger growing", async () => {
+test("the arming probe keys on a row about ITS OWN target, not on the ledger growing", async () => {
   // "The ledger grew" is not the guard's signature — any unrelated guarded write in the same repo
   // (another agent, another terminal) grows it, and the probe would report ARMED without its own
   // write ever being seen. A false green in the check whose whole job is preventing false greens.

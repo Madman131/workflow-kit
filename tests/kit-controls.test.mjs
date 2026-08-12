@@ -1497,7 +1497,7 @@ test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cann
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("round-2 seat findings: removed-flag `=` spelling, the hooks DETECTOR, and an honest skip message", () => {
+test("removed-flag `=` spelling, the hooks DETECTOR, and an honest skip message", () => {
   const mk = () => { const d = mkdtempSync(path.join(os.tmpdir(), "kit-r2-")); execFileSync("git", ["init", "-q", d]); return d; };
   const init = (d, ...extra) => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", d,
     "--repo-name", "x", "--skip-codex-prompt", ...extra], { encoding: "utf8" });
