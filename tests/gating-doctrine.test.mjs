@@ -394,6 +394,15 @@ test("GATES states the flag as a PROHIBITION with its measurement, not as defens
   // …and carry the fact that makes it more than taste: the original verification was CORRECT.
   assert.match(w, /CORRECT WHEN MADE/i);
 
+  // ⚠ THE GENERAL FORM, landed beside the dependency sweep because that is where it bit. A control
+  // that cannot reach its target reports "nothing found", which is shaped exactly like "all clear".
+  // Pinned in WORKFLOW because it is a rule about controls, not an invocation detail.
+  assert.match(w, /A BLIND VERIFICATION TOOL RETURNS SUCCESS/);
+  assert.match(w, /Prove the tool can see before you believe what it did not find/i);
+  // The instance must travel with it — the sweeper itself was the blind verifier, found inside its
+  // own fix. Without the instance the rule reads as a maxim nobody has paid for.
+  assert.match(w, /the sweep runner itself was launching its seat with file access disabled/i);
+
   // A re-add must cost evidence, or the prohibition decays back into "keep it, defensive".
   assert.match(g, /re-add it only with a canary proving the seat can still quote a file it was NOT given/i);
 });
@@ -411,7 +420,7 @@ test("GATES' traps entry gives the SYMPTOM, the detection, and the caveat that m
   // ⚠ THE CAVEAT IS THE LOAD-BEARING HALF. Without it the detection silently fails: the packet
   // contract carries every changed file IN FULL, so a blinded seat quotes a changeset file from
   // what it was handed and passes the check. A detection method that can be satisfied by the
-  // failure it targets is not a control (the same shape banked in the KO11 brief's § 3D).
+  // failure it targets is not a control at all — it is the failure wearing the control's uniform.
   assert.match(g, /A file from the changeset does not work/i);
 
   // The flag can arrive in a runner you copied rather than a command you typed — this is how it
@@ -434,6 +443,18 @@ test("GATES' traps entry gives the SYMPTOM, the detection, and the caveat that m
   // The general control the experiment bought — cheaper than any reviewer, and it caught two errors.
   assert.match(g, /ASK FOR THE RECEIPT, NOT THE SUMMARY/);
   assert.match(g, /owes the receipt on request/i, "…and it binds upward, not only the seat");
+
+  // ⚠ THE ANTI-INSTRUCTION. The measured hedging behaviour makes "look for hedging" an actively
+  // WRONG reading of this trap, and it is the reading a hurried editor will reach for. Stating the
+  // finding is not enough — the wrong conclusion has to be closed off by name.
+  assert.match(g, /NEVER WRITE THIS CHECK AS "LOOK FOR HEDGING"/);
+  assert.match(g, /it is not the signal/i);
+
+  // A seat can confabulate its METHOD, not only its findings — which retires any control that reads
+  // the seat's own account of its work. A self-reported scope line is written just as fluently by a seat that read nothing.
+  assert.match(g, /checking the contract directly against the current source/i,
+    "the confabulated-process instance, quoted, because the general claim is unbelievable without it");
+  assert.match(g, /Check the artifact, never the account/);
 
   // A detected-blind run is VOID and must be re-run COLD. Resuming inherits the thread, not the
   // eyesight — a warm re-ask of a blinded thread launders the same blindness into a second verdict.
@@ -514,7 +535,7 @@ test("the seat definitions claim a bounded REACH, never a proven INPUT SET", () 
   // cannot observe; "name what reached you" asks for something it can.
   assert.match(fc, /log|disclose/i);
 
-  // ⚠ THE MIRROR SURFACE, found by the neighbourhood sweep rather than by the brief. README
+  // ⚠ THE MIRROR SURFACE, and a claim-sweep found it where a filename-sweep would not. README
   // described the same cage as a "harness-enforced packet-only cage" — the identical overclaim in
   // the file an adopter reads FIRST. Correcting the seat and leaving the README is how a retracted
   // claim keeps shipping; this kit has a named rule about exactly that.
@@ -524,7 +545,7 @@ test("the seat definitions claim a bounded REACH, never a proven INPUT SET", () 
   assert.match(rm, /cage on\s+what the seat can \*\*REACH\*\*/i, "…it states what the cage actually bounds");
   assert.match(rm, /never a proven input set/i, "…and what it does not");
 
-  // ⚠ A FOURTH SURFACE, found by the mandated dependency sweep rather than by grep or by the brief.
+  // ⚠ A FOURTH SURFACE, which a dependency sweep surfaced and a grep for the phrase had missed.
   // PORTABILITY carried the identical formula — "…so 'judge only the packet' is mechanical, not a
   // promise" — inside a section whose own subject is honesty notes. Four surfaces carried one false
   // mechanism claim; correcting three of them is what leaves it shipping.
