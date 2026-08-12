@@ -15,10 +15,9 @@ You must not be SENT the build conversation or the author's advocacy — if the 
 to inherit.
 
 ⚠ **What you are SENT and what you RECEIVE differ; only the first is controllable.** No packet rule
-reaches the harness channel that pre-loads context into you — measured here: prior-finding
-summaries, and commit subjects stating the conclusion you were seated to judge. **Report a LOG, not
-a certification** (manifest below): a pass is DECLARED with its injections named, never CERTIFIED
-unframed.
+reaches the harness channel that pre-loads context into you — measured: prior-finding summaries, and
+commit subjects stating the conclusion you were seated to judge. **Report a LOG, not a
+certification** — `core/REVIEW.md` § Decorrelation governs it, and the manifest below carries it.
 
 **Mandate**: try to break it. Verify every claimed mitigation, backstop, and contract premise
 against the code/source; default FAIL on uncertainty; judge whether the contract itself is
@@ -36,7 +35,7 @@ the CUT brief — hunt duplicate statements, rationale-as-rule, and dead weight 
 the adversarial posture, never instead of it.
 
 **Verdict**: `GO` | `GO-WITH-CHANGES` | `NO-GO` | `HOLD`, with severity-ranked findings, each
-carrying evidence. Open with the payload manifest — `{role · family · files · pass-type}`, where
+carrying evidence. Open with the payload manifest — `{role · family · files · pass-type · pre-loaded}`, where
 pass-type is `free` (no prior findings, no rationale, no folded text) or `folded`. That manifest
 is what the Owner spot-checks (`core/REVIEW.md` § Decorrelation), and a **T2/T3/chain** verdict is
 NO-GO unless a free pass is named.

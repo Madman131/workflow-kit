@@ -536,6 +536,24 @@ test("the seat definitions claim a bounded REACH, never a proven INPUT SET", () 
   assert.match(p2, /not a packet-only guarantee/i, "…and denies the one that is not");
 });
 
+test("the manifest's pre-loaded field is named by the BINDING contract, not only by the seat", () => {
+  // A seat emitting a field its contract does not name is a doc/behaviour divergence, and where a
+  // doc and a behaviour disagree the doc is what the next reader obeys. Both surfaces or neither.
+  for (const [where, text] of [["core/REVIEW.md", read("core/REVIEW.md")],
+                               ["agents/cold-reviewer.md", read("agents/cold-reviewer.md")]]) {
+    assert.match(text, /role · family · files · pass-type ·\s*(?:\*\*)?pre-loaded/i,
+      `${where} must carry the five-field manifest — a contract and a seat that disagree is the divergence class`);
+  }
+  const r = read("core/REVIEW.md");
+  // The empty answer must be MANDATORY, or an omitted field reads as a clean one — which is the
+  // same fail-open as an exit code that cannot tell "passed" from "never ran".
+  assert.match(r, /`no exposure` must be written explicitly when there is none/i);
+  // …and the field must be scoped as a LOG. "Were you independent" asks a seat to certify what it
+  // cannot observe; "name what reached you" asks for something it can.
+  assert.match(r, /is a LOG, never a certification/i);
+  assert.match(r, /DECLARED with its known injections named and never CERTIFIED unframed/i);
+});
+
 test("PORTABILITY's honesty-note count matches the notes it lists", () => {
   // Caught while editing the paragraph above: the shipped text said "Three honesty notes" and listed
   // FOUR. Pre-existing and unrelated to the mechanism claim — recorded rather than silently fixed.
