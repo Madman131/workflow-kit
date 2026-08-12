@@ -69,7 +69,9 @@
 #   inspected scope; 2 = usage error; 3 = no verdict / receipt missing / verdict-contract unmet (no GO/NO-GO
 #   enum, no inspected-scope line, or conflicting decisions) / gate self-timeout — NEVER a pass; otherwise
 #   codex's own status.
-# Verify the result: confirm the -o file contains a real, on-topic, severity-ranked CODEX verdict.
+# Verify the result: confirm the -o file contains a real, on-topic, severity-ranked CODEX verdict
+#   THAT CITES EVIDENCE THE PAYLOAD DID NOT CONTAIN. The first three are exactly what a seat with no
+#   file access still produces from the payload alone, at exit 0 — see core/GATES.md, Gotchas / traps.
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"

@@ -532,8 +532,13 @@ only ever seen allowing is a sensor never observed working.
 
 `agents/frontier-consult.md` installs to `.claude/agents/`, the **Claude Code subagent registry**.
 Its frontmatter `tools: []` is enforced by that harness as *no tools at all*: the consult seat
-cannot read files, run commands, or spawn agents, so "judge only the packet" is mechanical, not a
-promise. Three honesty notes, same spirit as the enforcement-asymmetry table:
+cannot read files, run commands, or spawn agents, so its **REACH** is mechanically bounded rather
+than merely requested. ⚠ **That is a cage on FETCHING, and it is not a packet-only guarantee.**
+**Nothing bounds what the harness PRE-LOADS into the seat** — measured 2026-08-12, a seat at
+`tools: []` proven `tool_uses: 0` against a byte-identical paired control still received a
+repository memory index and a snapshot of recent commit subjects, unrequested and unsuppressable.
+**Bounded reach, never a proven input set**, and reach was never the exposure. Four honesty notes,
+same spirit as the enforcement-asymmetry table:
 
 - **No other lane has the cage, and the Codex path is not packet-only at all.** A Codex /
   non-Claude lane has no `.claude/agents/` registry. Its consult path is the gate runner

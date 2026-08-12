@@ -374,9 +374,25 @@ test("GATES states the flag as a PROHIBITION with its measurement, not as defens
   assert.match(g, /0\.147\.0-alpha\.6\.5/, "the version the measurement was taken on");
   assert.match(g, /still exited 0/, "the fail-open, which is the whole reason it went unnoticed");
 
-  // THE GENERAL RULE — the cure for the CLASS. A one-directional escape clause ("re-verify before
-  // DROPPING") is the defect; it is what let the 2026-07-17 check stand across two CLI generations.
-  assert.match(g, /Re-verify a version-specific flag before RELYING on it, not only before dropping it/i);
+  // ⚠ THE GENERAL RULE LIVES IN WORKFLOW, AND GATES MUST NOT MIRROR IT.
+  // GATES.md declares itself CLASS: REFERENCE — "missing a section here costs you an invocation
+  // detail, never a rule" — with a single enumerated exception. A rule shipped here would be an
+  // unlisted second exception, i.e. the file contradicting its own class declaration. And a COPY is
+  // a second thing to keep in step: the mirror class is what the previous release spent most of its
+  // findings on. So this asserts BOTH halves — the rule is in WORKFLOW, and GATES points rather
+  // than restates. Either half alone passes on the broken arrangement.
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /RE-VERIFY A VERSION-SPECIFIC FLAG BEFORE RELYING ON IT, NOT ONLY BEFORE DROPPING IT/i,
+    "the RULE belongs in core/WORKFLOW.md § Gate, which is BINDING");
+  assert.doesNotMatch(g, /re-verify a version-specific flag before RELYING on it/i,
+    "core/GATES.md must POINT at the rule, never carry a copy of it — a copy is a new mirror");
+  assert.match(g, /is `core\/WORKFLOW\.md` § Gate\. It is a RULE, not an invocation detail/,
+    "…and the pointer must say WHY it is not here, or a later editor helpfully copies it back");
+
+  // The rule has to state the asymmetry, or it is the same one-directional clause it replaces.
+  assert.match(w, /never fires, because nobody drops a flag they were told to keep/i);
+  // …and carry the fact that makes it more than taste: the original verification was CORRECT.
+  assert.match(w, /CORRECT WHEN MADE/i);
 
   // A re-add must cost evidence, or the prohibition decays back into "keep it, defensive".
   assert.match(g, /re-add it only with a canary proving the seat can still quote a file it was NOT given/i);
@@ -402,7 +418,152 @@ test("GATES' traps entry gives the SYMPTOM, the detection, and the caveat that m
   // reached three call sites here and why the check names the runner, not the invocation.
   assert.match(g, /the flag can hide in a runner you copied rather than a command you typed/i);
 
+  // ⚠ THE CLAIM MUST CARRY ITS EVIDENCE, because this exact sentence shipped as an INFERENCE stated
+  // in a measurement's voice and was corrected mid-changeset. A doctrine page asserting that a
+  // blinded verdict is indistinguishable, with no citation, is the thing it warns against.
+  assert.match(g, /MEASURED 2026-08-12, not inferred/i, "the silence claim must name itself as measured");
+  assert.match(g, /n=3 per arm/i, "…with the sample size, because n=1 is not a difference");
+
+  // The finding that defeats the obvious objection ("surely the seat would say something"). Its
+  // hedging is accurate — about packet gaps. That is why blindness is invisible from inside.
+  assert.match(g, /hedging tracks PACKET completeness, not SOURCE access/i);
+
+  // The bound travels with the claim or the claim over-reaches.
+  assert.match(g, /proves the CAPABILITY is gone, not that blinding harms a review with no planted defect/i);
+
+  // The general control the experiment bought — cheaper than any reviewer, and it caught two errors.
+  assert.match(g, /ASK FOR THE RECEIPT, NOT THE SUMMARY/);
+  assert.match(g, /owes the receipt on request/i, "…and it binds upward, not only the seat");
+
   // A detected-blind run is VOID and must be re-run COLD. Resuming inherits the thread, not the
   // eyesight — a warm re-ask of a blinded thread launders the same blindness into a second verdict.
   assert.match(g, /re-run it cold, never `--resume` it|A run detected blind is VOID/i);
+});
+
+// ------------------------------------------------- the sufficiency test, and what it cannot reach
+
+test("the sufficiency test demands evidence the payload could NOT have supplied", () => {
+  // THE DEFECT THIS FIXES: "real, on-topic, severity-ranked" are exactly the three properties a
+  // BLINDED seat still produces from the payload alone. The kit's stated test for a bankable
+  // verdict could not discriminate the failure it most needed to catch — and the agy lane's
+  // fail-open (exit 0, empty stdout) produces no output to apply the test to at all.
+  const g = read("core/GATES.md");
+  const sh = read("scripts/codex-gate.sh");
+
+  // ⚠ COUNT, DO NOT MATCH. GATES.md carries the sufficiency test at TWO sites in two spellings
+  // (:505's variant had already dropped "severity-ranked"). A single `assert.match` is satisfied by
+  // EITHER, so striking one leaves the test green while that surface still ships the old rule —
+  // proven by mutation: two separate strikes both passed against a one-match assertion. That is the
+  // cross-surface failure this kit names by name, committed inside the pin meant to prevent it.
+  const CITES = /cit(?:es|ing) evidence the payload did not contain/gi;
+  assert.equal((g.match(CITES) || []).length, 2,
+    "BOTH of GATES.md's sufficiency sites must carry it — a one-match pin passes on a half-corrected doc");
+  assert.match(sh, CITES, "the runner's own verify comment must carry it too");
+
+  // The discrimination sentence — without it, the new clause reads as one more adjective rather
+  // than as the only one of the four that can fail a blinded seat.
+  assert.match(g, /only the last discriminates/i);
+
+  // ⚠ THE HONEST BOUNDARY, and it is the half most likely to be dropped as pedantry. The
+  // cite-outside test catches BLINDING and does NOT catch FAMILY DEGRADATION: a hijacked
+  // Claude-companion review holds real tools, reads real files, and cites evidence outside the
+  // payload perfectly. Landing the new test beside the degradation passage without saying so
+  // would imply one detector covers both failures. It covers one.
+  // Both surfaces asserted separately, for the reason above — and `\*{0,2}` because `read()`
+  // collapses whitespace but keeps emphasis markers, so a bolded "not" is not the word "not".
+  // (A first cut of this pin matched only the second surface and reported the first as proven.)
+  assert.match(g, /does \*{0,2}not\*{0,2} detect a silent\s+degradation to another family/i,
+    "the paste-block site must state what the new test does NOT reach");
+  assert.match(g, /it cannot discriminate a hijacked run at all/i,
+    "…and so must the companion-degradation site, where the confusion actually lands");
+});
+
+test("the seat definitions claim a bounded REACH, never a proven INPUT SET", () => {
+  // MEASURED: a seat at `tools: []`, proven tool_uses:0 against a paired control, still received
+  // the user's MEMORY.md in an auto-injected system-reminder plus a gitStatus block carrying the
+  // last five commit SUBJECTS. Re-measured here from this worktree: the injection is
+  // WORKTREE-rooted (it reported this branch, not main), so it follows a seat into any checkout.
+  const fc = read("agents/frontier-consult.md");
+  const cr = read("agents/cold-reviewer.md");
+
+  // The retracted mechanism claim must not still ship. `tools: []` bounds what a seat can REACH;
+  // nothing bounds what is PUT IN FRONT OF IT, and reach was never the exposure.
+  assert.doesNotMatch(fc, /the packet-only limit is mechanical, not a promise/i,
+    "the false mechanism claim must not survive — it is shipped verbatim to every adopter");
+
+  // ⚠ TWO SURFACES AGAIN, and they are read by different people. The DESCRIPTION is what an
+  // orchestrator sees when picking a seat; the BODY is what the seat itself is told. A pin that
+  // matches either passes on a file where only one was corrected — proven by mutation, where
+  // striking the body's clause left this green off the description's copy.
+  const desc = /description:[^\n]*/i.exec(raw("agents/frontier-consult.md"))?.[0] ?? "";
+  assert.match(desc, /cannot REACH beyond the packet/i, "the seat's description states the bound");
+  assert.match(desc, /never a proven INPUT SET/i, "…and states what it is NOT");
+  assert.match(fc, /bounds your REACH, not your INPUTS/i, "the body tells the seat the same thing");
+
+  // Both seats must ASK. A seat that cannot enumerate its own inputs must at least be asked to
+  // log them — two harnesses gave two different answers to this one question, which is the only
+  // reason they were distinguishable at all.
+  for (const [where, text] of [["frontier-consult", fc], ["cold-reviewer", cr]]) {
+    assert.match(text, /I cannot distinguish pre-loaded content from my prompt/i,
+      `${where} must name the "I cannot tell" answer as acceptable — an unaskable seat is unmeasurable`);
+    assert.match(text, /no exposure/i,
+      `${where} must give an explicit empty answer, or silence reads as a clean report`);
+  }
+
+  // Report a LOG, not a JUDGMENT. "Were you independent?" asks a seat to certify something it
+  // cannot observe; "name what reached you" asks for something it can.
+  assert.match(fc, /log|disclose/i);
+
+  // ⚠ THE MIRROR SURFACE, found by the neighbourhood sweep rather than by the brief. README
+  // described the same cage as a "harness-enforced packet-only cage" — the identical overclaim in
+  // the file an adopter reads FIRST. Correcting the seat and leaving the README is how a retracted
+  // claim keeps shipping; this kit has a named rule about exactly that.
+  const rm = read("README.md");
+  assert.doesNotMatch(rm, /harness-enforced\s+packet-only cage/i,
+    "README must not still describe the reach cage as a packet-only guarantee");
+  assert.match(rm, /cage on\s+what the seat can \*\*REACH\*\*/i, "…it states what the cage actually bounds");
+  assert.match(rm, /never a proven input set/i, "…and what it does not");
+
+  // ⚠ A FOURTH SURFACE, found by the mandated dependency sweep rather than by grep or by the brief.
+  // PORTABILITY carried the identical formula — "…so 'judge only the packet' is mechanical, not a
+  // promise" — inside a section whose own subject is honesty notes. Four surfaces carried one false
+  // mechanism claim; correcting three of them is what leaves it shipping.
+  const p2 = read("PORTABILITY.md");
+  assert.doesNotMatch(p2, /"judge only the packet" is mechanical, not a\s*promise/i,
+    "PORTABILITY must not still ship the retracted mechanism claim");
+  assert.match(p2, /its \*\*REACH\*\* is mechanically bounded rather\s+than merely requested/i,
+    "…it states the bound that IS real");
+  assert.match(p2, /not a packet-only guarantee/i, "…and denies the one that is not");
+});
+
+test("PORTABILITY's honesty-note count matches the notes it lists", () => {
+  // Caught while editing the paragraph above: the shipped text said "Three honesty notes" and listed
+  // FOUR. Pre-existing and unrelated to the mechanism claim — recorded rather than silently fixed.
+  // Pinned as a COUNT derived from the document, not as a literal, so the assertion cannot go stale
+  // against a future fifth note the way the prose did.
+  const raws = raw("PORTABILITY.md");
+  const sec = raws.slice(raws.indexOf("### The `tools: []` cage is a Claude-harness control"));
+  const body = sec.slice(0, sec.indexOf("\n### ", 10));
+  const stated = /(\w+) honesty notes/.exec(body)?.[1]?.toLowerCase();
+  const listed = (body.match(/^- \*\*/gm) || []).length;
+  const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  assert.ok(stated, "the section still states how many honesty notes it carries");
+  assert.equal(WORDS[stated], listed,
+    `PORTABILITY says "${stated} honesty notes" but lists ${listed} — a count that describes nothing`);
+});
+
+test("what a seat RETURNS is left alone — only what a verifier ACCEPTS was changed", () => {
+  // TWO DIFFERENT CHANGES WEAR THE SAME PHRASE. "severity-ranked" appears in an OUTPUT SPEC (what
+  // the seat is told to emit) and in a SUFFICIENCY TEST (what a verifier may bank). Only the
+  // second is the defect. The output-spec sites sit close to text this changeset does edit —
+  // frontier-consult's is nine lines from the mechanism claim above — so proximity, not analysis,
+  // is what would edit them. This asserts they still ship UNCHANGED.
+  for (const site of [
+    "agents/cold-reviewer.md",
+    "agents/frontier-consult.md",
+    "templates/codex-cold-reviewer.toml.tmpl",
+  ]) {
+    assert.match(read(site), /severity-ranked/,
+      `${site} carries an OUTPUT SPEC, not the sufficiency test — it must not be swept up by a grep-driven fix`);
+  }
 });
