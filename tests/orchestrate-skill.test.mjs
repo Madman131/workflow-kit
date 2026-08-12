@@ -145,10 +145,10 @@ test("a receipt is not a verdict — the rule lives in the body, not only in the
 test("the README/PORTABILITY mirrors carry no claim the body has already retracted", () => {
   // WHY THIS EXISTS — it is the finding of record for this release. The same doctrine is narrated on
   // FOUR surfaces (SKILL.md, CHIP_BRIEF.md, README.md, PORTABILITY.md) and nothing bound them, so
-  // every correction had to be hand-propagated to three other places. It was missed three times in
-  // three rounds: "proves it is the sole writer" survived in CHIP_BRIEF after the body was fixed,
-  // and the chip/session identity survived in the README after the body dropped it. Each was found
-  // by a review seat, never by the suite. These are cheap NEGATIVE assertions on the retracted
+  // every correction had to be hand-propagated to three other places. Twice the propagation was
+  // incomplete and nothing said so: "proves it is the sole writer" survived in CHIP_BRIEF after the
+  // body was fixed, and the chip/session identity survived in the README after the body dropped it.
+  // Neither was reachable by the suite. These are cheap NEGATIVE assertions on the retracted
   // spellings — they cannot prove the surfaces agree in general, only that the specific claims this
   // release retracted stay retracted everywhere.
   // SCOPED TO THE SECTION, not the whole file. The first cut searched README.md entire and fired on
@@ -218,7 +218,7 @@ test("both reference layers are named by the body and declare their own budgets"
     // Scoped to the LOADABLE PATH, not the bare filename. The body names each sibling twice — once
     // in the budget line, once in the pointer — so `includes("CHIP_BRIEF.md")` stays true after the
     // pointer is deleted, which is the mention surviving while the instruction to load it is gone.
-    // (Found by mutation: the bare-filename form survived exactly that strike.) The budget
+    // The bare-filename form stays green under exactly that strike. The budget
     // checker's generic reachability rule has the same shape; this is the tighter local pin.
     assert.ok(body.includes(`.agents/skills/orchestrate/${sibling}`),
       `the body must point at .agents/skills/orchestrate/${sibling} — a bare mention is not an instruction to load it`);

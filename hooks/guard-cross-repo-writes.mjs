@@ -57,7 +57,7 @@ process.stdin.on("end", () => {
   // untouched at the outermost parse because the rewrite never looked above the target extraction.
   // Its sibling guard has denied on this input for releases (`malformed-hook-input`), so the two
   // controls on the same matcher disagreed about the same bytes, and only the sibling's deny kept
-  // the pair honest. Found by a cold seat. Empty stdin is still not an error: it parses as `{}` and
+  // the pair honest. Empty stdin is still not an error: it parses as `{}` and
   // falls through to "no write intent" exactly as before.
   let input = {};
   try {

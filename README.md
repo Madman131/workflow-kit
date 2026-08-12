@@ -293,7 +293,7 @@ reference layers and the Claude shim all land, and a hand-edited `[P]` file is p
 on an adopter created from v2.2.1). `--force` would buy nothing here and **destroys hand-edited
 `[P]` content with no `.bak`** — also executed.
 
-**One qualification, found by the review seat and then reproduced.** The Codex prompt installs into
+**One qualification.** The Codex prompt installs into
 a **user-global, flat** prompts directory shared by every repo, and `init` never overwrites a file
 it did not write that run. So if a file named `orchestrate.md` already sits there, the plain re-run
 **keeps yours and the Codex prompt does not land** — `init` says so on stderr (`! exists, kept`),
@@ -318,13 +318,11 @@ its skill-path coverage, says once on stderr that the `CLASS: BINDING` half did 
 exits 0. A top-level static import made that fallback unreachable — the failure happened before any
 of the file's own error handling could run.
 
-**Why four review rounds missed it, since that is the part worth keeping.** Every observer stood in
-the kit tree, where the path works: the cross-family seat reviewed the kit checkout, the unit tests
-import from the kit checkout, and the generated-adopter check verified **presence and registration**
-— never **execution**. v2.2.0's own release notes warn that an installed-but-unregistered hook is
+**Why nothing caught it, since that is the part worth keeping.** Every observer stood in
+the kit tree, where the path works: the unit tests import from the kit checkout, and the
+generated-adopter check verified **presence and registration** — never **execution**. v2.2.0's own release notes warn that an installed-but-unregistered hook is
 inert; this shipped one that was installed, registered, and crashing, which is the same failure one
-door over. It was found by post-merge verification *by execution*, which is the only step that could
-have found it.
+door over. Post-merge verification *by execution* is the only step that could have caught it.
 
 **The real deliverable is the missing test**: `tests/sweep-sensor.test.mjs` now adopts into a scratch
 repo and **runs both installed hooks from their installed location**, asserting exit 0, no
@@ -547,8 +545,8 @@ allow everything or block everything. v2.1 ships the control those findings call
 - **The registration uses the canonical Codex tool names** (`apply_patch`, `Bash`) — the names every
   captured payload actually carries. The accepted `.codex/hooks.json` schema was determined by
   **executing** Codex's own parser, which rejects the Claude-shaped file outright. (v2.0 said the
-  Claude matcher spelling "matches nothing" in Codex; a review seat contested that with an alias
-  claim this work could not reproduce, so `PORTABILITY.md` now records it as open. The canonical
+  Claude matcher spelling "matches nothing" in Codex; that was contested with an alias claim this
+  work could not reproduce, so `PORTABILITY.md` now records it as open. The canonical
   names are correct either way.)
 - **A narrow, deliberate polarity change.** `guard-cross-repo-writes` used to `exit 0` whenever it
   found no target. That is invisible in the Claude lane and a total fail-open in the Codex lane, where

@@ -142,8 +142,6 @@ test("the THREE CLASSES are distinct, and the middle one is the polarity change 
 });
 
 test("ROUND-2 seat findings: indented directives, non-target grammar, hidden separators", () => {
-  // Each of these came from a review seat and each was executed both ways before and after the fix.
-  //
   // 1. AN INDENTED DIRECTIVE IS A DIRECTIVE. Codex's own patch parser trims a line before deciding
   // whether it is a header, so `␠*** Add File: x` names a target to the applier. Anchoring at column
   // 0 meant that target was silently dropped from the gated list while the file still got written —
@@ -179,7 +177,7 @@ test("ROUND-2 seat findings: indented directives, non-target grammar, hidden sep
 });
 
 test("ROUND-2: relative patch paths resolve against the APPLIER's cwd, not the repo root", () => {
-  // Found by the adversarial seat. `--project-dir` answers "which repo am I guarding"; it does NOT
+  // `--project-dir` answers "which repo am I guarding"; it does NOT
   // answer "what does `src/x.mjs` mean". The applier resolves a relative path against its own
   // working directory, and those differ whenever a session runs in a SUBDIRECTORY — an ordinary
   // monorepo case, no attacker required. Resolving against the wrong base checks a path that will
@@ -240,7 +238,7 @@ test("ROUND-2: `[features] hooks = true` is NOT a hooks registration — in init
   // A line-shaped `hooks\s*=` regex matches an ordinary Codex FEATURE FLAG, and reading that as
   // "the adopter registered their own hooks" makes init skip its registration entirely: guards
   // installed, nothing registered, exit 0. A false positive in this detector is a silent fail-open.
-  // Found by the cross-family seat against a config that really carries that flag.
+  // Real Codex config files carry that flag.
   const { tomlDeclaresHooks: initSays } = await import(path.join(KIT, "bin", "init.mjs"));
   const { tomlDeclaresHooks: probeSays } = await import(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"));
   const CORPUS = [
@@ -279,7 +277,7 @@ test("ROUND-2: `[features] hooks = true` is NOT a hooks registration — in init
 });
 
 test("ROUND-3: no ledger row is not automatically NOT ARMED — the probe abstains when nothing was tested", async () => {
-  // FOUND BY RUNNING IT FOR REAL against hooks a human had just trusted. The probe reported
+  // THE FAILURE, against hooks a human had just trusted. The probe reported
   // "your Codex lane is UNGUARDED" about a lane that was provably blocking — because Codex had
   // read the adopted repo's own AGENTS.md, decided an identity precondition failed ("this checkout
   // has no `origin` remote"), and **never attempted the write at all**. No attempt ⇒ no hook ⇒ no
@@ -302,7 +300,7 @@ test("ROUND-3: no ledger row is not automatically NOT ARMED — the probe abstai
 
   // The evidence feeding `wrote` is observed and cleared in ONE operation, because as two statements
   // the order is invertible and the inverted form (clear, then look) silently reports `false`
-  // forever — turning every run into an abstain. Both directions, executed.
+  // forever — turning every run into an abstain. Both directions are pinned below.
   const { observeAndClear } = await import(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"));
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-observe-"));
   try {
@@ -569,7 +567,7 @@ test("an out-of-repo target in a multi-target patch SKIPS that target — it doe
 });
 
 test("the arming probe ABSTAINS rather than passing when it cannot answer the question", () => {
-  // An unanswered question is never a pass. These are the exits CS5a proved and this release
+  // An unanswered question is never a pass. The exits this release
   // inherits: not-installed = 2, CLI-absent = 2 (ABSTAIN), armed = 0, not-armed = 1. The two
   // abstain paths are the ones that decide whether a false green is possible at all.
   const probe = path.join(KIT, "scripts", "check-codex-hooks-armed.mjs");
@@ -935,7 +933,7 @@ test("the two installed hook trees are BYTE-IDENTICAL — the anti-refork tripwi
 });
 
 test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and init says so", () => {
-  // Found by executing the upgrade rather than reasoning about it. `.claude/hooks/` already exists
+  // `.claude/hooks/` already exists
   // on a v2.0 adopter, so every guard there is KEPT at the old version; `.codex/hooks/` is brand new,
   // so every guard there is WRITTEN at the new one. The run exits 0. Without the drift check the
   // adopter ends up with one lane upgraded and one not, and nothing anywhere says so — while the
@@ -1045,9 +1043,9 @@ test("the BOOT-READ entry stubs agree with PORTABILITY about what binds the Code
   // The defect this pins: v2.1 rewrote PORTABILITY.md to say the guards DO bind the Codex lane once
   // trust is granted, while `AGENTS.md`, `CLAUDE.md` and `core/BINDINGS.md` — generated into EVERY
   // adopter, boot-read, marked CLASS: BINDING — still said the opposite, unmarked. An agent reading
-  // its own entry stub would have been told a control that binds it does not. Found by a cold seat;
-  // nothing in the suite read generated entry-stub CONTENT before this test, which is why it
-  // survived the release that made it false.
+  // its own entry stub would have been told a control that binds it does not. Nothing in the suite
+  // read generated entry-stub CONTENT before this test, which is why it survived the release that
+  // made it false.
   //
   // VERIFY BY GENERATING, not by grepping the templates: the templates are the input, and what an
   // adopter is bound by is the OUTPUT on disk.

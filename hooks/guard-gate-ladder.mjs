@@ -38,9 +38,9 @@
 //
 // THE REVIEWER-INJECTION FIX (do not regress). This hook used to inject "YOU ARE THE PM. The
 // reviewer advises; you decide" into additionalContext on EVERY matched Bash call, including calls
-// made by reviewer seats. Two of three Phase-2 cold reviewers flagged it unprompted and refused it
-// as prompt injection; a reviewer that silently switches into PM mode stops being an independent
-// seat (core/REVIEW.md § Decorrelation). Three independent guards now, because a reviewer seat is
+// made by reviewer seats. That is prompt injection: a reviewer that silently switches into PM mode
+// stops being an independent seat (core/REVIEW.md § Decorrelation). Three independent guards now,
+// because a reviewer seat is
 // not one shape:
 //   a. MEASURED, not assumed — a probe on 2026-07-19 dumped raw PreToolUse input from the main
 //      thread and from a subagent: the subagent row carries `agent_id`/`agent_type`, the main-thread

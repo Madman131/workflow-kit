@@ -95,7 +95,7 @@ kind.** Three classes, and this section marks which is which:
 
 **How the hook command is executed, and why the quoting matters.** Codex runs a hook `command`
 through a **shell** (the shipped CLI's hook command runner sits directly beside its `SHELL`/`-lc`
-strings; a cross-family review seat reported the same from Codex's source). An earlier draft of this
+strings; the same is visible in Codex's own source). An earlier draft of this
 section said the execution model was unknown — that was wrong, and it mattered, because the fallback
 quoting it chose was JSON double-quotes, inside which a shell still expands `$VAR` and `$(cmd)`. The
 generated command now uses POSIX **single** quotes, and only when the repo path needs them; an

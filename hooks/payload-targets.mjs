@@ -66,8 +66,8 @@ export function resolveProjectRoot(input, argv = process.argv.slice(2)) {
 // resolves a relative path in the envelope against ITS OWN working directory, which the payload
 // reports as `cwd`. Those diverge whenever a session runs in a SUBDIRECTORY of the repo — an
 // ordinary monorepo case needing no attacker at all: the guard would evaluate `<repo>/src/x.mjs`
-// while the applier writes `<repo>/packages/foo/src/x.mjs`, a path nothing checked. (Found by the
-// adversarial review seat, which demonstrated it reaching an out-of-repo location through a symlink.)
+// while the applier writes `<repo>/packages/foo/src/x.mjs`, a path nothing checked. Through a
+// symlink the unchecked path reaches an out-of-repo location.
 //
 // Using the payload's `cwd` as the resolution base is also the FAIL-CLOSED choice, which is why it
 // is safe to take it from the payload: if `cwd` pointed somewhere outside the repo, every relative
@@ -85,7 +85,7 @@ export function resolvePatchBase(input, projectRoot) {
  * canonical paths (`core/WORKFLOW.md`, `.agents/skills/…`, `githooks/pre-commit`) must canonicalise
  * it first, and skipping that fails SILENTLY: a perfectly ordinary `./core/WORKFLOW.md` matches no
  * canonical entry, so a sensor exits 0 having said nothing — a miss that looks exactly like "nothing
- * was owed". Found by a cross-family seat against the v2.2.0 sensors, reproduced in one call.
+ * was owed". That is exactly what the v2.2.0 sensors did.
  * It lives here, beside the extractor that produces those targets, so the two sensors cannot drift.
  */
 export function toRepoRelative(target, root, base) {
@@ -125,8 +125,8 @@ export function toRepoRelative(target, root, base) {
  * WHY THIS EXISTS. A consumer that needs "what text is this write adding to THIS file" previously
  * had two bad options: hand every target the whole envelope (one file's marker fires on a sibling
  * that owes nothing) or hand a multi-target envelope to nobody (a real change to one file goes
- * unseen). The cross-family seat found BOTH, one round apart — the second was my own fix for the
- * first. The envelope is already parsed here for targets; sectioning it is the same walk, so the
+ * unseen). Both are real failures, and the second is what a fix for the first turns into.
+ * The envelope is already parsed here for targets; sectioning it is the same walk, so the
  * grammar stays in ONE place rather than being re-derived by each sensor.
  *
  * `Move to` maps BOTH endpoints to the same section, matching how the target list treats them.
@@ -204,8 +204,8 @@ export function envelopeSections(command) {
 // directive to the applier. A first cut here anchored on `^\*\*\* ` at column 0, which meant an
 // indented directive was read as hunk CONTENT and its target silently dropped from the list — while
 // Codex went on to write the file. That is the exact shape this guard exists to prevent: an envelope
-// that parses clean and touches a path nobody gated. Found by the cross-family review seat and
-// corroborated against the shipped CLI's own patch grammar.
+// that parses clean and touches a path nobody gated. The authority for the rule is the shipped
+// CLI's own patch grammar.
 //
 // So the rule is: match what the APPLIER matches. Leading whitespace is stripped before the test;
 // any other prefix is not. That still keeps a payload line like `+*** Add File: evil.txt` as

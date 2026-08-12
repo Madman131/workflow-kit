@@ -638,8 +638,7 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     for (const p of [body, consult]) assert.equal(readFileSync(p, "utf8"), edited[p], `re-run KEEPS the user-edited ${p} (no clobber without --force)`);
     // The cage check reads the INSTALLED file (a kept agent may be edited or stale). Probe it at
     // SEVERAL points, not one: a check proven against a single broken shape is proven against that
-    // shape only — a relaxed anchor or a whole-file scope stayed green under a one-mutation suite
-    // (found by a cold seat's mutation battery).
+    // shape only — a relaxed anchor or a whole-file scope stays green under a one-mutation suite.
     const initSays = (args = []) => {
       const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
         "--codex-prompts-dir", codexDir, ...args], { encoding: "utf8" });
@@ -694,7 +693,7 @@ test("the agents install is FAILURE-ISOLATED: it cannot abort the hook registrat
   // escaping the agents block would leave hook FILES on disk with ZERO registrations — the silent
   // fail-open mergeSettings' own read-back exists to stop. The commands block has had this proof
   // since v1.1; § 4e shipped without its counterpart, and removing the try/catch left BOTH suites
-  // green (found by a cold seat's mutation battery). This is that missing canary.
+  // green. This is that missing canary.
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-agentfail-"));
   try {
     execFileSync("git", ["init", "-q", dir]);
@@ -852,7 +851,7 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     // (in the contract or in the skill that repairs against it) must go red here, not in review.
     // A detector must OVER-trigger relative to the thing it warns about, or it is decoration. The
     // first cut matched "eight rules" and "rules 1-8" and sailed past "eight numbered rules",
-    // "rules 1 through 8" and "rules 1 to 8" — a seat found all three. It allows up to two words
+    // "rules 1 through 8" and "rules 1 to 8" — all three. It allows up to two words
     // between the number and "rules", and spells the range separators out. It is still a blacklist
     // of spellings, not a proof: a genuinely novel phrasing of a total would pass, and the sweep in
     // the release note is what covers that.
@@ -1123,8 +1122,8 @@ test("guard-owner-comms is a FAIL-OPEN sensor: dormant until named, then it disc
     assert.equal(decide(), "block", "an INDENTED own-line injected block is still stripped");
     // Two closed blocks GLUED on one line: stripping the first leaves a space, so the second then
     // begins the line. A single strip pass left it for the UNCLOSED rule, whose to-end-of-turn
-    // sweep erased the Owner's REAL question after it — the size check silently off (cold seat,
-    // executed). The fixpoint loop strips them all; the Owner's text survives.
+    // sweep erased the Owner's REAL question after it — the size check silently off. The fixpoint
+    // loop strips them all; the Owner's text survives.
     write("<system-reminder>a</system-reminder> <task-notification>b</task-notification>\nAR", LONG);
     assert.equal(decide(), "block", "adjacent glued blocks are BOTH stripped and the question survives");
     write("<system-reminder>a</system-reminder><task-notification>b</task-notification>", LONG);
@@ -1271,7 +1270,7 @@ test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an em
     // (2b) A row a human plainly WROTE as a definition but the parser cannot read — double
     // backticks, the fence deleted. Not harvestable (single backticks are the documented format),
     // so it must at least WARN: zero parsed definitions while the doc visibly tries to define
-    // shorthand is exactly the silently-blind state the warning exists for (cold seat, executed).
+    // shorthand is exactly the silently-blind state the warning exists for.
     writeFileSync(doc, "## How to talk to Alex — Owner, not a developer\n\n``AR`` = archive ready? — closed out on the remote.\n");
     assert.deepEqual(ownerContract(dir).questionTokens, [], "a double-backtick row does not parse (single backticks are the format)");
     assert.equal(ownerContract(dir).shorthandUnharvested, true, "…but it is visibly definition-shaped, so the flag is raised");
@@ -1300,8 +1299,8 @@ test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an em
 
     // (5) CRLF line endings (a doc edited on Windows). A blank CRLF line must still terminate a
     // gloss: without \r in the boundary class, a "?" in unrelated LATER prose bled into an
-    // instruction's gloss and turned it into a question token — a false block (found by
-    // cross-family review, confirmed by execution both ways). The question row still harvests.
+    // instruction's gloss and turned it into a question token — a false block. The question row
+    // still harvests.
     writeFileSync(doc, "## How to talk to Alex — Owner, not a developer\r\n\r\n" +
       "`MIS` = make it so — proceed.\r\n\r\nDo you want examples?\r\n\r\n`AR` = archive ready? — closed out.\r\n");
     assert.deepEqual(ownerContract(dir).questionTokens, ["AR"],
@@ -1315,7 +1314,7 @@ test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an em
     // `TOKEN` = gloss shape is RESERVED NOTATION throughout this doc (the template says so). An
     // incidental backticked ALL-CAPS mention in unrelated prose harvests exactly as a line-start
     // one already did pre-v1.5.1 — the unanchored harvest WIDENS that pre-existing exposure to
-    // mid-prose, it does not create the class (executed both ways against the old hook). Bounded:
+    // mid-prose, it does not create the class; the old hook exposed it too. Bounded:
     // a false block also needs the Owner to type that token alone as a whole turn, and the sensor
     // stays fail-open, one nudge per turn max.
     writeFileSync(doc, original
@@ -1327,8 +1326,8 @@ test("the shorthand harvest is UNANCHORED (inline-prose rows covered), and an em
     // …and the same reserved shape INSIDE another token's gloss splits it: the embedded mention
     // reads as the NEXT definition (ending AR's gloss before its "?") and harvests itself. Inherent
     // to inline-prose support — a next definition mid-prose IS a gloss boundary — so the template
-    // documents it (keep the shape out of glosses) rather than the parser guessing. Executed both
-    // ways: the old line-anchored harvest read the whole line as AR's gloss (cold seat finding).
+    // documents it (keep the shape out of glosses) rather than the parser guessing. The old
+    // line-anchored harvest read the whole line as AR's gloss.
     writeFileSync(doc, "## How to talk to Alex — Owner, not a developer\n\n`AR` = the config uses `ENV` = prod, is it ready?\n");
     assert.deepEqual(ownerContract(dir).questionTokens, ["ENV"],
       "RESERVED NOTATION in a gloss reads as the next definition (documented residual)");
@@ -1467,7 +1466,7 @@ test("a broken .codex path warns and the adopt CONTINUES — the Codex lane cann
   // seat is generated in the shared [G] template loop, which is deliberately NOT failure-isolated,
   // so a regular file sitting at `.codex` threw ENOTDIR and killed the run with a raw stack trace —
   // AFTER the guards were registered. Not the zero-registration fail-open, but a partial adopt
-  // contradicting its own contract. Found by the cross-family seat.
+  // contradicting its own contract.
   //
   // v2.1 CHANGED WHAT THIS COSTS, so the assertion changed with it. Through v2.0 the `.codex/`
   // assets were CONVENIENCES and the warning said so. They now carry the lane's write ENFORCEMENT,
