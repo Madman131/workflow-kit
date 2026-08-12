@@ -242,7 +242,7 @@ function writeLedger(projectRoot, { decision, state, reason, tier, rel, taskId, 
     // carried `tier:"T9"` — the audit-trail twin of the deny string's honesty rule. This is
     // unvalidated declaration input landing in an append-only audit file, so it is BOUNDED; but the
     // bound must not resurrect the very defect this field exists to fix, in two ways a first cut
-    // got wrong (both found by the cross-family gate seat, both reproduced):
+    // got wrong:
     //   · TYPE — `tier: 7` is a value that was PRESENT and rejected. A `typeof === "string"` test
     //     dropped it, so the row was indistinguishable from a genuinely tier-less one and then
     //     deduped away against it. Any non-undefined value is rendered via JSON, which keeps

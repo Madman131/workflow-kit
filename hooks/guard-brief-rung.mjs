@@ -383,8 +383,8 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     let input;
     // CANNOT READ THE PAYLOAD ⇒ CANNOT SEE THE DISPATCH. The reference this was modelled on allowed
     // here, reasoning that a broken payload is the harness's defect. But an unparseable payload is
-    // exactly the shape a bypass takes, and CS5b killed this same `exit(0)` in guard-cross-repo-writes
-    // as one of three fail-opens. Deny is also cheap in the direction that matters: this hook binds a
+    // exactly the shape a bypass takes, and this same `exit(0)` was one of three fail-opens removed
+    // from guard-cross-repo-writes. Deny is also cheap in the direction that matters: this hook binds a
     // narrow slice of tools, so failing closed on an unreadable payload cannot brick ordinary work.
     try { input = JSON.parse(raw); } catch {
       emit(`guard-brief-rung.mjs blocked this call: its hook payload could not be parsed, so the dispatch it names could not be read. This guard fails CLOSED on a call it cannot see — an unreadable payload is not evidence that nothing was dispatched. ${RITUAL}`);

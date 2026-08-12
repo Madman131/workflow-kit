@@ -287,7 +287,7 @@ test("sweepOwed fires on a BINDING doc and a skill body — and stays SILENT on 
 });
 
 test("a target is CANONICALISED before it is matched — `./core/X.md` is not a silent miss", () => {
-  // Found by the cross-family seat on the frozen changeset. Every scope rule compares against
+  // Every scope rule compares against
   // canonical repo-relative paths, so an ordinary `./core/WORKFLOW.md` from an apply_patch envelope
   // matched nothing and the sensor exited 0 having said nothing — a MISS that looks exactly like
   // "nothing was owed". Fails silently, which is the dangerous direction for a reminder.
@@ -368,7 +368,7 @@ test("END TO END through main(): a `./`-spelled target still reaches the reminde
 });
 
 test("a DELETED or quoted marker does not promote, and one envelope target cannot speak for another", () => {
-  // Both halves found by the cross-family seat. The design's premise is that a sensor firing on
+  // The design's premise is that a sensor firing on
   // ordinary work gets switched off, so a false FIRE here is a real defect, not harmless noise.
   const envDeletes = { tool_input: { command: '*** Update File: core/GATES.md\n-> **CLASS: BINDING** was here\n+plain text\n' } };
   const one = { shape: "apply_patch", targets: ["core/GATES.md"], ok: true };
@@ -513,9 +513,9 @@ test("THE INSTALLED HOOKS RUN IN A REAL ADOPTER TREE — presence and registrati
   // exist. Every governed write in every adopted repo hit ERR_MODULE_NOT_FOUND: installed,
   // REGISTERED, and inert, emitting a stack trace instead of a reminder.
   //
-  // Four review rounds missed it because every observer stood in the KIT tree — the cross-family
-  // seat, the unit tests above, and a generated-tree check that verified PRESENCE and REGISTRATION
-  // and never RAN the thing. This test is that missing step: adopt, then EXECUTE the installed
+  // Nothing caught it, because every observer stood in the KIT tree — the unit tests above, and a
+  // generated-tree check that verified PRESENCE and REGISTRATION and never RAN the thing.
+  // This test is that missing step: adopt, then EXECUTE the installed
   // hook from its installed location, both sensors, both directions.
   const dir = scratch();
   try {

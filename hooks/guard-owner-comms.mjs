@@ -184,7 +184,7 @@ export function ownerContract(projectRoot) {
     // A gloss never crosses a blank line — including a CRLF one. Without \r in the class, a doc
     // saved with Windows line endings never terminates a gloss ("\r\n\r\n" has \r between the two
     // \n), a "?" in unrelated later prose bleeds into an instruction's gloss, and the instruction
-    // becomes a question token — a false block (cross-family review, executed both ways).
+    // becomes a question token — a false block.
     const para = gloss.search(/\n[ \t\r]*\n/);
     if (para !== -1) gloss = gloss.slice(0, para);
     if (gloss.includes("?")) tokens.add(defs[i][1]);

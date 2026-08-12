@@ -38,7 +38,7 @@ test("GATES routes Gemini to DESIGNS and states the coverage REDUCTION instead o
   // ⚠ PIN THE TABLE ROWS, NOT ONLY THE PROSE AROUND THEM. The routing decision LIVES in the table;
   // a future edit could reverse or delete either row while every explanatory sentence below stayed
   // intact, and a prose-only pin would pass against a document that had lost the actual routing.
-  // (Found by the cross-family seat: this test named the rule and asserted everything except it.)
+  // (An earlier cut of this test named the rule and asserted everything except it.)
   assert.match(g, /\| \*\*Claude\*\* \| \*\*Gemini\*\* \(`--design`\) \| \*\*Codex\*\*/,
     "Claude-built: design gate → Gemini in DESIGN mode, code gate → Codex");
   assert.match(g, /\| \*\*Codex\*\* \| \*\*Gemini\*\* \(`--design`\) \| \*\*Claude Code\*\*/,
@@ -264,7 +264,7 @@ test("PORTABILITY states EXACTLY what each of the Owner's three requests got, an
   // ⚠ AND WHY THIS PIN IS SHAPED THE WAY IT IS. Its first version pinned the sentence "NONE of those
   // three gets a mechanical check", which was FALSE — the size-mismatch check had been testing a
   // narrow case of succinctness since v1.3, and this same file says so four paragraphs earlier. The
-  // pin hardened the falsehood, and two independent cold reviewers found it. So this version pins
+  // pin hardened the falsehood. So this version pins
   // BOTH directions: the claim may not shrink (a check that exists must stay named) and it may not
   // grow (a check that does not exist must not appear). A disclosure can over-claim its own modesty.
   const p = read("PORTABILITY.md");

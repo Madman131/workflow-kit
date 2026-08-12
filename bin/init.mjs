@@ -192,8 +192,7 @@ function isPlainObject(v) {
 //
 // THE TABLE CONTEXT IS THE WHOLE POINT, and a line-shaped regex cannot see it. A bare
 // `/^\s*hooks\s*[.=]/m` matches `hooks = true` under `[features]` — an ordinary Codex feature flag
-// that registers nothing, and one that appears in real config files. (Found by the cross-family
-// review seat, against a config that actually carries it.) So the current TABLE is tracked, and only
+// that registers nothing, and one that appears in real config files. So the current TABLE is tracked, and only
 // two things count: a `[hooks…]`/`[[hooks…]]` table header, or a `hooks` key at TOP LEVEL — the
 // scalar `hooks = "./hooks.json"` form Codex's own schema uses.
 export function tomlDeclaresHooks(text) {
@@ -663,7 +662,7 @@ function main() {
     //
     // Scoped to the frontmatter deliberately. A whole-file match certified a seat whose frontmatter
     // read `tools: Read, Bash, Write` while a prose line further down happened to spell `tools: []`
-    // — the check reporting a cage on an armed seat (found by two cold seats, executed). The harness
+    // — the check reporting a cage on an armed seat. The harness
     // parses the block between the first two `---` lines; so does this.
     //
     // ABSENCE IS NOT A PASS. If the kit ships a `/frontier-review` skill body naming a
@@ -715,8 +714,7 @@ function main() {
   // of that table which is a convenience, not part of the method. Without this flag a regular file
   // sitting at `.codex` killed the whole adopt with a raw ENOTDIR stack trace AFTER the guards were
   // registered: not the zero-registration fail-open, but a partial adopt that flatly contradicts the
-  // "carries no enforcement, the adopt continues" contract stated three lines above (found by the
-  // cross-family gate seat).
+  // "carries no enforcement, the adopt continues" contract stated three lines above.
   let codexLaneOk = !args.skipCodexLane;
   if (args.skipCodexLane) {
     // Say what is TRUE of the tree, not merely what this run did. On a re-run over a repo adopted
@@ -742,7 +740,7 @@ function main() {
         // Every TOML spelling of a hooks registration, not just the table header. The scalar form
         // `hooks = "./hooks.json"` is the one Codex's own schema strings use, so matching only
         // `[hooks]` left the most likely spelling undetected — a fail-open in a DETECTOR, which is
-        // how an adopter ends up assuming the kit reconciled hooks it never saw. (Found by a cold seat.)
+        // how an adopter ends up assuming the kit reconciled hooks it never saw.
         try { declaresHooks = tomlDeclaresHooks(readFileSync(cfgDst, "utf8")); } catch { /* reported as kept below */ }
         warn(`.codex/config.toml: EXISTING kept (--force to update)${declaresHooks
           ? " — and it DECLARES HOOKS."
@@ -921,8 +919,8 @@ function main() {
     // generated core/BINDINGS.md — no flag, no fill logic, so the "canonical statement of the
     // PM-portability caveat" had a literal `{{OTHER_LANE}}` in its column header. It is not a
     // judgment call the adopter has to make: the lane this kit ships hooks and a review seat for is
-    // Codex, so it is filled, not asked for. (Found by a cold seat; pre-existing since the template
-    // was written.)
+    // Codex, so it is filled, not asked for. (The gap was there from the day the template was
+    // written.)
     OTHER_LANE: "Codex",
     KIT_VERSION,
   };

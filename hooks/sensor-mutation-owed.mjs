@@ -51,7 +51,7 @@ export function owesMutationRecord(rel) {
   // `.codex/hooks/`) — the kit ships ONE hook source to two lanes, so all three spellings name the
   // same control and a rule matching only one of them would go quiet in the others.
   if (/^(hooks|\.claude\/hooks|\.codex\/hooks)\/(guard|sensor)-[\w.-]+\.m?js$/.test(p)) return "a gate hook";
-  // THE COMMIT FLOOR. Found by the adversarial walk-through for this release: every pattern here
+  // THE COMMIT FLOOR, and the reason it needs its own branch: every pattern here
   // was keyed to a FILE-NAMING convention, and the kit's single most important control — the one
   // layer no harness routes around, because every writer converges at the commit — is named
   // `pre-commit` and lives in `githooks/`, matching none of them. A sensor that covers the tripwires
@@ -94,7 +94,7 @@ export function main({ stdin = process.stdin, stderr = process.stderr, cwd = pro
 
     // Canonicalise before matching: every pattern below names a repo-relative POSIX path, so an
     // ordinary `./githooks/pre-commit` would otherwise match nothing and the sensor would exit 0
-    // having said nothing. Same defect the cross-family seat found in the sweep sensor.
+    // having said nothing. The sweep sensor carried this same defect.
     const root = resolveProjectRoot(ev) || cwd;
     const patchBase = resolvePatchBase(ev, root);
     const hits = [];

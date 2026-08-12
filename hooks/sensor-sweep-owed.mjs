@@ -40,9 +40,9 @@
 // NOTHING in an adopter, where this file installs to `.claude/hooks/` and `../scripts/` means
 // `.claude/scripts/`. Every governed write in every adopted repo hit ERR_MODULE_NOT_FOUND and the
 // sensor emitted its stack trace instead of its reminder: installed, registered, and inert.
-// Four review rounds missed it because every observer — the cross-family seat, the unit tests, and
-// my own generated-tree check — stood in the KIT tree, where the path works. The generated-tree
-// check verified PRESENCE and REGISTRATION and never EXECUTED the installed hook.
+// Nothing caught it, because every observer — the unit tests, and the generated-tree check — stood
+// in the KIT tree, where the path works. The generated-tree check verified PRESENCE and
+// REGISTRATION and never EXECUTED the installed hook.
 // `scripts/` sits at the repo root in BOTH layouts, so resolving from the project root is correct
 // for the kit and for an adopter alike.
 

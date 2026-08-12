@@ -96,7 +96,7 @@ test("absent / malformed / stale all deny — malformed is never read as satisfi
   assert.equal(state(fresh(), { ageMin: -1440 }), "future-dated");
   // The tolerance is FIVE SECONDS and the assertions say so in the same unit the code uses. A first
   // cut allowed a full minute (`ageMin: -0.5` = 30s) under a comment reading "a few seconds" — the
-  // seat caught the wording and the number disagreeing, which is the boundary a reader relies on.
+  // wording and the number disagreeing, which is the boundary a reader relies on.
   assert.equal(state(fresh(), { ageMin: -4 / 60 }), "receipted", "4s of filesystem granularity is fine");
   assert.equal(state(fresh(), { ageMin: -30 / 60 }), "future-dated", "30s ahead is NOT 'a few seconds'");
   assert.equal(state(fresh(), { ageMin: 29 }), "receipted", "…and 29 minutes is still fresh (both sides of the window)");
@@ -410,7 +410,7 @@ test("A SECOND DISPATCH CANNOT RIDE THE FIRST RITUAL — allow, then deny, same 
 });
 
 test("A CORRUPT kit.config FAILS CLOSED FOR THE ADOPTERS IT EXISTS TO PROTECT", () => {
-  // Found by the cross-family seat, reproduced before fixing. Evaluating a corrupt-config payload
+  // Evaluating a corrupt-config payload
   // against the DEFAULT brief dirs is not fail-closed — it only looks like it. An adopter who
   // configured `dispatches/` loses enforcement on exactly their brief directory at exactly the
   // moment their config broke: the branch fails OPEN for the only adopters it is for.
@@ -439,7 +439,7 @@ test("CONSUMPTION IS SERIALISED — six overlapping dispatches on one nonce yiel
   // Measured on this changeset BEFORE the lock existed: five of six allowed, five rows carrying the
   // same nonce. Atomicity of the ledger APPEND is not atomicity of the DECISION.
   //
-  // THIS TEST WAS DECORATIVE ON ITS FIRST CUT AND A REVIEW SEAT CAUGHT IT. It used `spawnSync`
+  // THIS TEST WAS DECORATIVE ON ITS FIRST CUT. It used `spawnSync`
   // inside `Array.from` — `spawnSync` BLOCKS, so the six ran strictly one after another and the
   // first spent the nonce before the second started. It reported "1 of 6" with the lock removed
   // just as happily as with it: a concurrency test containing no concurrency, asserting the
@@ -455,8 +455,8 @@ test("CONSUMPTION IS SERIALISED — six overlapping dispatches on one nonce yiel
     // A RELEASE BARRIER, not merely async spawning. The hook does nothing until its stdin closes, so
     // every child is started FIRST and only then are all six payloads released together. Without the
     // barrier the children can simply run to completion one after another on a busy scheduler, and
-    // the test would pass for the wrong reason — which is the sharper form of the defect a seat
-    // already caught here once. What this proves is OVERLAP, not a guaranteed interleaving: the
+    // the test would pass for the wrong reason — the sharper form of the decorative-test defect
+    // above. What this proves is OVERLAP, not a guaranteed interleaving: the
     // discriminating proof is the mutation that neuters adjudication, which reddens this test.
     const children = Array.from({ length: 6 }, () => spawn(process.execPath,
       [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir]));
@@ -511,7 +511,7 @@ test("THE CRASH RESIDUAL: a burned nonce denies, and the cure is ONE RITUAL — 
   } finally { cleanup(); }
 });
 
-test("an unreadable payload DENIES — the reference's exit(0) is the fail-open CS5b killed", () => {
+test("an unreadable payload DENIES — the reference's exit(0) is a fail-open", () => {
   const { dir, cleanup } = adopt();
   try {
     const r = spawnSync(process.execPath, [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],

@@ -9,7 +9,7 @@
 //   (3) init wiring for the three ritual skills (placement, shim resolution, idempotency, hermetic
 //       Codex dir);
 //   (4) the [P]-upgrade rule: a plain init re-run ships NONE of this release's edits to existing
-//       [P] files, so the v1.7 release note must say --force — executed both ways, note pinned.
+//       [P] files, so the v1.7 release note must say --force.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -48,8 +48,7 @@ test("the kit's own tree passes the budget checker, and npm test actually runs i
   }
   // EVERY GOVERNED CLASS contributes rows, INCLUDING the reference layer. A checker that governed
   // only `*/SKILL.md` would un-govern INVOKE.md/BULLET.md — the split the doctrine prefers — and
-  // the class-probe list above would not notice, because it named only bodies (found by a cold
-  // seat's mutation battery: that mutation SURVIVED).
+  // the class-probe list above would not notice, because it named only bodies.
   for (const probe of ["skills/frontier-review/INVOKE.md", "skills/humanize/BULLET.md",
     "commands/claude/thread-restart.md"]) {
     assert.match(r.stdout, new RegExp(probe.replace(/[/.]/g, "\\$&")), `${probe} is governed`);
@@ -183,8 +182,8 @@ test("the checker's exit code is provable BOTH ways on planted trees", () => {
     writeFileSync(path.join(dir, "agents", "seat.md"), "Small seat.\n");
 
     // --json mirrors the same verdicts machine-readably — BOTH ways. Asserting only the healthy
-    // direction leaves `process.exit(0)` hardcoded in the JSON branch fully green (a surviving
-    // mutation), so the failing direction is pinned too.
+    // direction leaves `process.exit(0)` hardcoded in the JSON branch fully green, so the failing
+    // direction is pinned too.
     r = checkerOn(dir, ["--json"]);
     assert.equal(r.status, 0, "healthy tree under --json passes");
     let parsed = JSON.parse(r.stdout);
@@ -204,7 +203,7 @@ test("the checker's exit code is provable BOTH ways on planted trees", () => {
 
     // A budget that is not a USABLE BOUND must not pass. `Number("9".repeat(400))` is Infinity and
     // every finite count is below it, so a marker-shaped line would satisfy the gate while
-    // bounding nothing — a fail-OPEN (found by the cross-family seat, reproduced here).
+    // bounding nothing — a fail-OPEN.
     for (const [bogus, label] of [["9".repeat(400), "an Infinity-valued budget"], ["0", "a zero budget"]]) {
       writeFileSync(path.join(dir, "skills", "x", "SKILL.md"), `Word budget: ${bogus}\n` + "word ".repeat(60) + "\n");
       r = checkerOn(dir);
@@ -213,8 +212,8 @@ test("the checker's exit code is provable BOTH ways on planted trees", () => {
     }
     writeFileSync(path.join(dir, "skills", "x", "SKILL.md"), "Word budget: 50\n" + "word ".repeat(20) + "\n");
 
-    // UNREADABLE is a FAILURE, both for a file and for a directory. Flipping either to ok:true was
-    // a surviving mutation: an unreadable artifact is UNGOVERNED, which must be loud.
+    // UNREADABLE is a FAILURE, both for a file and for a directory. Flipping either to ok:true
+    // goes unnoticed without these rows: an unreadable artifact is UNGOVERNED, which must be loud.
     const dangling = path.join(dir, "skills", "x", "GHOST.md");
     symlinkSync(path.join(dir, "skills", "x", "nothing-here.md"), dangling);
     r = checkerOn(dir);
@@ -224,7 +223,7 @@ test("the checker's exit code is provable BOTH ways on planted trees", () => {
     assert.equal(checkerOn(dir).status, 0, "…and removing it restores green (the row was the cause)");
 
     // An unreadable FILE is a different path from a dangling symlink: discovery SUCCEEDS and the
-    // read fails later, in checkDeclared. Flipping that branch to ok:true survived the battery
+    // read fails later, in checkDeclared. Nothing reddened when that branch was flipped to ok:true
     // until this case existed — an artifact the checker cannot read is UNGOVERNED, which must be
     // loud whichever layer notices.
     const unreadable = path.join(dir, "skills", "x", "SKILL.md");
@@ -286,7 +285,7 @@ test("the kit's own reference layers are reachable from their bodies", () => {
 test("the CLI runs when invoked through a symlink — isMain uses realpath, not resolve", () => {
   // `path.resolve` !== the realpath of a symlinked invocation, so main() would never run: the CLI
   // exits 0 printing NOTHING, a false green on a violating tree. The kit's own header calls this
-  // trap out; nothing pinned it (surviving mutation, cold seat).
+  // trap out; nothing pinned it.
   const dir = plantTree();
   const linkDir = mkdtempSync(path.join(os.tmpdir(), "kit-symlink-"));
   try {
@@ -327,7 +326,7 @@ test("the ratchet: recorded debt may hold or shrink, never grow, and exemptions 
     // Raising the declared number is the one-edit escape the ratchet pins. THE NUMBERS MATTER:
     // an earlier draft raised 50→90 with the file at 55 words, so disabling this very branch let
     // the NEXT branch (measured <= declared) return STALE-EXEMPTION anyway and the assertion
-    // passed for the wrong reason — the mutation SURVIVED (my own battery). Here the raise leaves
+    // passed for the wrong reason, with this branch disabled. Here the raise leaves
     // the file still OVER the new number and at exactly its recorded debt, so with the branch
     // disabled the result is KNOWN-OVER (a pass) and the assertion genuinely discriminates.
     writeFileSync(file, "Word budget: 58\n" + "word ".repeat(57) + "\n"); // 60 words, budget 58
@@ -369,8 +368,8 @@ function sliceBetween(text, startRe, endRe, label) {
 test("every boot-order enumeration agrees with the canon — and the extractor provably detects drift", () => {
   const read = (p) => readFileSync(path.join(KIT, p), "utf8");
   // EVERY enumeration in the kit, found by sweeping for the shape rather than by memory. The
-  // BINDINGS template was missed on the first pass — it carries a seventh enumeration under its
-  // own heading, and a reorder there survived the whole suite (cold seat, executed). It spells
+  // BINDINGS template is the one a sweep by memory misses — it carries a seventh enumeration under
+  // its own heading, and a reorder there reddens nothing else in the suite. It spells
   // the bindings slot as "this file", so its expected list omits BINDINGS and the slot is
   // asserted separately.
   const CANON_NO_BINDINGS = CANON.filter((n) => n !== "BINDINGS");
@@ -399,7 +398,7 @@ test("every boot-order enumeration agrees with the canon — and the extractor p
 
   // THE CANON MUST NAME FILES THAT EXIST. Six enumerations agreeing with each other says nothing
   // about whether they point at anything: renaming core/FOUNDATIONS.md left this test green while
-  // every enumeration in the kit named a missing file (cold seat, reproduced). Consistency and
+  // every enumeration in the kit named a missing file. Consistency and
   // resolvability are different properties and both are owed.
   for (const name of CANON) {
     const inCore = existsSync(path.join(KIT, "core", `${name}.md`));

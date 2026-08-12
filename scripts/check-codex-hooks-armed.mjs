@@ -58,8 +58,8 @@ import { fileURLToPath } from "node:url";
 const LEDGER_REL = path.join(".claude", "lane-ledger.jsonl");
 const PROBE_REL = "kit-armed-probe.mjs";   // gated as code, and inside Codex's writable project scope
 
-// Count COMPLETE rows ABOUT THIS PROBE'S OWN TARGET. Two separate reasons, and the second was a
-// false-green route found in review:
+// Count COMPLETE rows ABOUT THIS PROBE'S OWN TARGET. Two separate reasons, and the second is a
+// false-green route:
 //  · A partial trailing line is not a decision the guard finished recording, so only parseable rows
 //    count — otherwise a torn write reads as evidence the control ran.
 //  · Counting EVERY row means any unrelated guarded write happening in this repo at the same time
