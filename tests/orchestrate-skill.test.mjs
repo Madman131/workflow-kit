@@ -21,7 +21,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
@@ -99,7 +99,11 @@ test("the body states EXACTLY how much of it is enforced — one rung, and no mo
   const body = readFileSync(BODY, "utf8");
   // The kit's recurring shipped defect is prose claiming enforcement the machinery does not do.
   // This skill enforces NOTHING, and the sentence saying so is load-bearing.
-  pin(body, "**One rung on this page is enforced; the rest is honour-system.**", "enforcement honesty");
+  pin(body, "One rung on this page is enforced WHEN ITS HOOK IS ARMED", "enforcement honesty");
+  // The condition is load-bearing and shipped on the WRONG SURFACE once: it landed in PORTABILITY.md,
+  // which never installs, while the unconditioned claim shipped in this body, which installs verbatim.
+  // A pin on an unconditioned claim HARDENS it, so this pins the condition, not the claim.
+  pin(body, "TRUST-GATED", "the enforced rung is trust-gated");
   // The v2.4 correction's own honesty half. `guard-brief-rung` makes the old blanket "nothing is
   // enforced" false, and the replacement must not over-correct in the other direction: what ships
   // is a tripwire that proves a session- and dispatch-bound RECORD EXISTS — not that its commands
@@ -177,7 +181,15 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     // start anchor MOVED from the title line to its own heading, exactly as v2.5.0's did one release
     // earlier: the title now names v2.6.1, and leaving it would silently swallow the new section
     // into the old one's slice.
-    "README.md § v2.6.1": section(readme, "# workflow-kit — v2.6.1", "## What's new in v2.6.0", "README"),
+    // v2.7.0 re-pointed the CURRENT anchor and ADDED, per the rule above — and the v2.6.1 entry's
+    // start anchor MOVED from the title line to its own heading, exactly as v2.6.0's and v2.5.0's
+    // did before it. The title-line anchor is a MOVING REFERENCE by construction: it carries the
+    // version, so it breaks every release. It breaks LOUDLY (`section` hard-fails and says
+    // "re-point this test") rather than silently searching an empty string, which is the only
+    // reason it is tolerable — and this release's own note was caught by these pins immediately
+    // after the re-point, quoting a retracted spelling it was describing.
+    "README.md § v2.7.0": section(readme, "# workflow-kit — v2.7.0", "## What's new in v2.6.1", "README"),
+    "README.md § v2.6.1": section(readme, "## What's new in v2.6.1", "## What's new in v2.6.0", "README"),
     "README.md § v2.6.0": section(readme, "## What's new in v2.6.0", "## What's new in v2.5.0", "README"),
     "README.md § v2.5.0": section(readme, "## What's new in v2.5.0", "## What's new in v2.4.0", "README"),
     "README.md § v2.4.0": section(readme, "## What's new in v2.4.0", "## What's new in v2.3.0", "README"),
@@ -193,6 +205,11 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     [/loses nothing essential/i, "the degraded mode GUARANTEEING nothing essential is lost"],
     [/two (?:real )?controls (?:are|remain)/i, "naming two things the kit ENFORCES rather than ships controls for"],
     [/nothing on this page is enforced/i, "the blanket claim that NOTHING in /orchestrate is enforced — false since v2.4 shipped guard-brief-rung"],
+    // The SAME retraction in the mirror's own wording. v2.4 corrected the body and left PORTABILITY
+    // saying "Nothing in it is enforced" — the pattern above misses that by four words, so the
+    // claim went on shipping on the surface this test exists to bind. A retraction is not complete
+    // until every spelling of it is pinned, not just the one the author happened to be looking at.
+    [/nothing in it is enforced/i, "the same blanket claim in the mirror's wording — the spelling that survived the v2.4 correction"],
   ];
   for (const [file, text] of Object.entries(surfaces)) {
     for (const [re, what] of retracted) {
@@ -206,7 +223,8 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
   const decoys = ["a chip proves it is the sole writer by reading", "the sole-writer proof (lane declarations)",
     "one chip = one changeset = one version = one session", "a shared record, which loses nothing essential",
     "the kit's two real controls are still the task-lane declaration",
-    "⚠ Nothing on this page is enforced. No control counts rounds"];
+    "⚠ Nothing on this page is enforced. No control counts rounds",
+    "Nothing in it is enforced, and it says so. No control counts gate rounds"];
   for (const [i, [re, what]] of retracted.entries()) {
     assert.match(decoys[i], re, `the pattern for "${what}" must still match its own retracted spelling`);
   }
@@ -214,9 +232,12 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
 
 // ── (2) the reference layers, and the enumerations that must agree with the tree ────────────────
 
-test("both reference layers are named by the body and declare their own budgets", () => {
+// The list below is the tree's, not a habit: it was ["CHIP_BRIEF.md", "PROTOCOLS.md"] while a THIRD
+// layer shipped beside them, so a test named "both reference layers" governed two of three and the
+// new one's pointer and budget were unpinned. Add the file here when a layer is added.
+test("every reference layer is named by the body and declares its own budget", () => {
   const body = readFileSync(BODY, "utf8");
-  for (const sibling of ["CHIP_BRIEF.md", "PROTOCOLS.md"]) {
+  for (const sibling of ["CHIP_BRIEF.md", "PROTOCOLS.md", "RUNG_ZERO.md"]) {
     // Scoped to the LOADABLE PATH, not the bare filename. The body names each sibling twice — once
     // in the budget line, once in the pointer — so `includes("CHIP_BRIEF.md")` stays true after the
     // pointer is deleted, which is the mention surviving while the instruction to load it is gone.
@@ -289,9 +310,11 @@ test("a fresh adopt lands the /orchestrate body and BOTH lane shims, and every p
     for (const [label, p] of [["shared body", body], ["Claude shim", claudeShim], ["Codex prompt", codexShim]]) {
       assert.ok(existsSync(p), `${label} installed at ${p}`);
     }
-    // Both reference layers travel with the body — a shipped pointer to an uninstalled file is a
-    // dead end in the adopter even though it resolves in the kit tree.
-    for (const sibling of ["CHIP_BRIEF.md", "PROTOCOLS.md"]) {
+    // EVERY reference layer travels with the body — a shipped pointer to an uninstalled file is a
+    // dead end in the adopter even though it resolves in the kit tree. (This comment said "Both"
+    // while the list below it had grown to three: a count in prose beside the list it describes
+    // goes stale silently, which is why the list is the thing to read.)
+    for (const sibling of ["CHIP_BRIEF.md", "PROTOCOLS.md", "RUNG_ZERO.md"]) {
       assert.ok(existsSync(path.join(dir, ".agents", "skills", "orchestrate", sibling)),
         `${sibling} installs beside the body (the body points at it)`);
     }
@@ -312,7 +335,7 @@ test("a fresh adopt lands the /orchestrate body and BOTH lane shims, and every p
     const installed = readFileSync(body, "utf8");
     assert.equal(installed, readFileSync(BODY, "utf8"), "the installed body is byte-identical to the kit's");
     pin(installed, "**The GO is the Owner's alone**", "installed body keeps the GO rule");
-    pin(installed, "**One rung on this page is enforced; the rest is honour-system.**", "installed body keeps the enforcement honesty");
+    pin(installed, "One rung on this page is enforced WHEN ITS HOOK IS ARMED", "installed body keeps the enforcement honesty");
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(codexDir, { recursive: true, force: true });
@@ -333,4 +356,142 @@ test("the pin helper reports a DEAD pin instead of passing it", () => {
   assert.doesNotThrow(() => pin("alpha UNIQUE beta", "UNIQUE", "self-test"));
   // A phrase that is ABSENT fails as a missing pin, not as a dead one.
   assert.throws(() => pin("alpha beta", "MISSING", "self-test"), /must state/);
+});
+
+// ── (4) the mirrors this release added, each pinned ────────────────────────────────────────────
+// WHY: a v2.7.0 panel found SEVEN instances of one class — an enumeration completed in one place and
+// left short in another. Role table vs § Routing, the label forbid-list vs its cited source, the
+// release note vs the body. Every one was a HAND-MAINTAINED MIRROR with no mechanism holding it to
+// its source. The rule that came out of it: a mirror either goes, or it gets a pin. These are the
+// pins. § Routing and § Standing duties — the two sections this release exists for — had none.
+test("the reserved-decision list is FIVE wherever it is enumerated, and the role table does not restate it", () => {
+  const body = readFileSync(BODY, "utf8");
+  const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
+  for (const item of ["merge/push GO", "intent or risk acceptance", "tier\nratification", "wording sign-off", "WRITE-GO"]) {
+    assert.ok(body.includes(item.replace("\n", "\n")) || body.includes(item.replace("\n", " ")),
+      `§ Routing must name the reserved item ${JSON.stringify(item)} — an incomplete reserved list routes to the human by default`);
+  }
+  // PIN THE PROPERTY, NOT THE COUNT. A free pass found the count pinned while the CLOSURE was not:
+  // the carve-out was keyed to a closed list of five, three Owner decisions sat outside it, and the
+  // list being short had stopped meaning "ask the Owner" and started meaning "proceed without them".
+  // A portable file cannot enumerate an adopter.s reserved set, so the only safe form is the property.
+  assert.match(body, /EXAMPLES, not the closure/,
+    "§ Routing must state that the list is NOT closed — a closed list keyed to a timeout fails open");
+  assert.match(brief, /EXAMPLES, not a closed set/,
+    "CHIP_BRIEF must key the carve-out to what the TARGET REPO reserves, never to a shipped count");
+  // The role table is the mirror a reader meets FIRST. It must POINT, never re-enumerate: a second
+  // copy is the thing that went stale (it listed three of five, sixteen lines above the fix).
+  const roleRow = body.split("\n").find((l) => l.startsWith("| **Owner**"));
+  assert.ok(roleRow, "the role table has an Owner row");
+  assert.ok(/§ Routing/.test(roleRow),
+    "the Owner role row must POINT at § Routing rather than restate the reserved set — a restated list is a mirror that goes stale");
+});
+
+test("the Owner-facing label forbid-list carries every label its cited source defines", () => {
+  const body = readFileSync(BODY, "utf8");
+  const tmpl = readFileSync(path.join(KIT, "templates", "OWNER_COMMS.md.tmpl"), "utf8");
+  // Harvest from the SOURCE, not from a list here — this test must fail when rule 8 gains a label.
+  const defined = [...tmpl.matchAll(/`\*\*([A-Z][A-Z ]+):\*\*`/g)].map((m) => m[1]);
+  assert.ok(defined.length >= 3, `rule 8 defines at least 3 labels (found ${defined.join(", ")})`);
+  for (const label of defined) {
+    assert.ok(body.includes(`${label}:`),
+      `§ Routing forbids ${label}: chip→orchestrator — rule 8 defines it as Owner-facing, and a forbid-list short by one is the defect this release exists to close`);
+  }
+});
+
+test("§ Routing and § Standing duties exist in the body — the two sections this release added", () => {
+  const body = readFileSync(BODY, "utf8");
+  assert.match(body, /^### Routing — the Owner is not a queue$/m, "§ Routing is present");
+  assert.match(body, /^## Standing duties/m, "§ Standing duties is present");
+  assert.match(body, /an unsure consult never times out/,
+    "the consult timeout must fail CLOSED on an unsure classification — the tie-break otherwise routes the uncertain case into the bucket the timeout empties");
+});
+
+// ── (5) CROSS-SURFACE SENSOR — derived SURFACE set, ENUMERATED phrase set ──────────────────────
+// WHAT THIS IS, STATED AT ITS REAL SIZE. It walks the shipped docs from disk and asks each whether
+// it carries a claim's shape, so the SURFACE set is derived and a new file is covered without
+// editing this test. That half is real and it is why a closure hiding in CHIP_BRIEF was caught.
+//
+// ⚠ WHAT IT IS NOT. On the CONTENT axis it is a hand-maintained enumeration — a list of number
+// words and three closure phrasings — which is the very defect it was written to catch, one axis
+// over. It is a SENSOR (§ 0.3): it surfaces candidates and NEVER claims prevention. Do not read a
+// green run as "the class is closed."
+//
+// ⚠ AND IT UNDER-FIRES, which is the dangerous polarity: a miss is a SILENT GREEN that reads as
+// coverage to the next editor. The sibling check this repo already dropped over-fired, and a false
+// BLOCK is at least visible.
+//
+// DEFEATING INPUTS — EXECUTED against this pin, not reasoned about. Each returned GREEN:
+//   1. "The reserved set is now **seven items**."      alternation stops at six — and that miss is
+//                                                      itself an enumeration short by one.
+//   2. "The reserved set is now **5 items**."          digits are outside the alternation.
+//   3. "There are exactly five Owner-reserved
+//       decisions, and no others."                     gate fires, no shape matches.
+//   4. A doc saying "never use labeled leads when addressing the Owner" is never CHECKED at all —
+//      test 2's gate requires the "Owner-facing" spelling.
+//   5. t.includes("RECOMMENDATION:") is satisfied by the label appearing in an EXAMPLE of the
+//      forbidden usage. A grep proves a spelling, never a claim.
+//   6. The label harvest drops any label with a hyphen or digit — `FOLLOW-UP:` never matches,
+//      EXECUTED and confirmed — and the >= 3 floor stays green when a fourth fails to harvest.
+//      A derived set that can silently SHRINK is short-by-one waiting on the next label.
+//
+// THE HONEST CLASS-CLOSER IS BANKED, NOT BUILT: § 0.3's DECLARATION route — a doc discussing the
+// reserved set emits an author-written marker and the control enforces the marker mechanically.
+// Bounded input, not a fourth regex pass. The repo's own precondition forbids the fourth pass.
+//
+// AND ON THE MUTATION PROOFS BELOW: they re-insert phrasings ALREADY INSIDE the matcher, so they
+// prove SURFACE reach and say nothing about PHRASE reach. A mutation drawn from inside your own
+// matcher tests the matcher's plumbing, not its scope.
+//
+// (The walk skips a `docs/` directory that does not exist in this kit and is referenced nowhere in
+// bin/init.mjs — verified; the skip excludes nothing today.)
+function shippedDocs() {
+  const out = [];
+  const skip = new Set(["node_modules", ".git", "tests", "acceptance", "docs"]);
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(e.name)) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile() && (e.name.endsWith(".md") || e.name.endsWith(".tmpl"))) out.push(p);
+    }
+  };
+  walk(KIT);
+  return out;
+}
+
+test("cross-surface: no shipped doc asserts a CLOSED set of Owner-reserved decisions", () => {
+  // The carve-out that lets a worker proceed without an answer is keyed to this set. A closed list
+  // is short in every repo it is wrong about, and short stopped meaning "ask the Owner" the moment
+  // it was keyed to a timeout. So no surface may assert the closure — not even a release note.
+  const offenders = [];
+  for (const f of shippedDocs()) {
+    const t = flat(readFileSync(f, "utf8"));
+    if (!/Owner-reserved|reserved set|things are the Owner's|reserved to the Owner/i.test(t)) continue;
+    // A closure is a count asserted AS the set. A count offered as examples is fine and necessary.
+    const closes = /reserved set is now \*\*(two|three|four|five|six) items\*\*/i.test(t)
+      || /the (two|three|four|five|six) Owner-reserved items\b(?![^.]*example)/i.test(t)
+      || /Name the (TWO|THREE|FOUR|FIVE|SIX) items reserved to the Owner/i.test(t);
+    if (closes) offenders.push(path.relative(KIT, f));
+  }
+  assert.deepEqual(offenders, [],
+    `these surfaces assert a CLOSED Owner-reserved set: ${offenders.join(", ")}. The set is a ` +
+    `property of the TARGET repo; a portable file may give examples, never a closure. A count that ` +
+    `DESCRIBES is fine; a count that BINDS is a rule wearing a note's clothes.`);
+});
+
+test("cross-surface: every doc that forbids Owner-facing labels forbids ALL of them", () => {
+  // Harvest the labels from rule 8's own text, then find every surface that forbids them and check
+  // it names each one. Neither the label list nor the surface list is written here.
+  const tmpl = readFileSync(path.join(KIT, "templates", "OWNER_COMMS.md.tmpl"), "utf8");
+  const labels = [...tmpl.matchAll(/`\*\*([A-Z][A-Z ]+):\*\*`/g)].map((m) => m[1]);
+  assert.ok(labels.length >= 3, `rule 8 defines at least three labels (found: ${labels.join(", ")})`);
+  const gaps = [];
+  for (const f of shippedDocs()) {
+    const t = flat(readFileSync(f, "utf8"));
+    if (!/forbid.{0,60}Owner-facing|Owner-facing label/i.test(t)) continue;
+    for (const l of labels) if (!t.includes(`${l}:`)) gaps.push(`${path.relative(KIT, f)} omits ${l}:`);
+  }
+  assert.deepEqual(gaps, [],
+    `a surface forbidding Owner-facing labels must name every label rule 8 defines: ${gaps.join(" · ")}`);
 });

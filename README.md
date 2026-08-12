@@ -1,4 +1,93 @@
-# workflow-kit — v2.6.1
+# workflow-kit — v2.7.0
+
+## What's new in v2.7.0 — an incomplete reserved list routes to the human by default
+
+**`/orchestrate` named the Owner's reserved set as "the merge/push GO and risk acceptance" — and
+nothing else. But the method's own doctrine reserves three more to the Owner:** the tier ratification
+(`core/WORKFLOW.md` § Steer — *"Builder proposes the tier; Owner ratifies before any T2/T3 gate"*)
+and the wording sign-off on a core-document amendment, which also stands as that class's push-GO.
+**A worker meeting a rung that says "the Owner ratifies" therefore found no routing rule covering it,
+and did the only thing left: asked the Owner directly and stopped.** Three workers hit exactly those
+two rungs in a single day. The defect was never carelessness — **a list that does not name a decision
+routes that decision to whoever is standing closest, and that is the human.**
+
+**Completing the list is necessary and not sufficient, so this release ships four parts.** The
+reserved set grew from two to **five named EXAMPLES, explicitly non-exhaustive** — the merge/push GO · intent or risk acceptance · the tier
+ratification · the core-doc wording sign-off · and **the named WRITE-GO for each prod write, which a
+push-GO never covers**, the one whose omission routes a live production write. **Even those route
+THROUGH the orchestrator**, who takes them
+to the Owner and relays the answer — the Owner sees decisions, never a queue of clarifications.
+`DECISION NEEDED:` and `QUESTION:` are named as **Owner-facing labels** (`core/OWNER_COMMS.md`
+rule 8) and forbidden worker→orchestrator, because the Owner watches the worker's terminal and reads
+a labelled question as theirs; `CONSULT:` and `RULING NEEDED:` are the orchestrator-facing pair.
+**Ending a turn on a consult is forbidden** — send it, name what you are doing while you wait, and do
+it, because a stopped worker showing a labelled question is indistinguishable from one waiting on the
+Owner. And **the addressee is stated in visible output**, one line, so a human watching can tell whose
+question it is. The same completion lands in `CHIP_BRIEF.md` § 7, **written out rather than pointed
+at**: a worker reads its brief and may never load the body.
+
+**`RUNG_ZERO.md` — the six checks that run before any gate — ships for the first time.** It existed
+only outside the kit, so no adopter had it and no repo could inherit it: the tier is set in the brief
+and verified rather than re-derived · one changeset, one tier, split before gating **into
+separately-gated commits by default** · a control needing a judgment is a declaration or a sensor,
+never a predicate · the target repo's mandated rungs enumerated by citation · the packet dry-run and
+the neighbourhood sweep. **Two defects in it were fixed before landing:** it carried the same incomplete two-item reserved list this release exists to
+delete, and it asserted that the Owner sets the tier at spawn — which contradicts § Steer. The
+reconciliation is stated rather than resolved by deletion: **the brief carries a set tier, the worker
+verifies it and never derives it, and the Owner ratifies before any T2/T3 gate.**
+
+**§ Standing duties lands, and the deletion proof inside it was wrong.** It told the orchestrator to
+prove a branch merged by *"the form the merge TYPE requires, **zero unique commits**, and an occupancy
+check that REFUSES rather than reports."* **"Zero unique commits" is false for a squash — a fully
+merged squashed branch shows its commits as unique forever** — and the clause contradicted itself,
+naming a form that only fits a true merge one clause after saying the form depends on the type. It
+now cites `PROTOCOLS.md` § Shipping and merging, where both forms and the squash trap already live,
+**rather than restating them in a second place.** A proof that fails in the direction that looks safe
+is worse than no proof: it reports correctly-merged branches as unmerged.
+
+**"Fast-forward the primary clone" was stated unconditionally** and now carries the preconditions that
+make it safe — only when that clone is clean, on the target branch, and the update is a pure
+fast-forward; otherwise report and let the Owner decide. It is their live working copy, and another
+lane may be mid-flight in it.
+
+### ⚠ THIS RELEASE REQUIRES `--force`, and a plain re-run leaves you worse off than not upgrading
+
+**Derived from what the diff edits, and executed both directions against a real adopt.** `bin/init.mjs`
+installs skills through `copyGuarded`, which **keeps an existing file unless forced** while new files
+land regardless. This release **edits** two files you already have (`SKILL.md`, `CHIP_BRIEF.md`) and
+**adds** one (`RUNG_ZERO.md`).
+
+**So a plain re-run puts `RUNG_ZERO.md` on disk beside a body that never mentions it** — measured on a
+real upgrade: the pointer appears zero times and the old budget line survives. That is a reference
+layer nothing tells the executor to load, which is the exact dangling shape this release closes,
+arriving through the upgrade path instead of a bad citation. **Re-run with `--force`.**
+
+**Blast radius — read this before running it.** `copyGuarded` overwrites in place and writes **no `.bak`**; the backup path is wired only to the generated `[G]` templates. **Everything else the installer copies is exposed** — every `core/` doc, every hook, the pre-commit floor, the scripts, the agents and both shim lanes. If you hand-edited ANY of those, `--force` destroys it with no recovery. Move your versions aside first.
+
+### The budget number, raised and disclosed rather than quietly rewritten
+
+`skills/orchestrate/SKILL.md` moves **800 → 1400 (Owner-ratified)**. The evidence is worth stating
+because it is unflattering to the previous number: **no measurement, comprehension test or pilot
+derives any budget number anywhere in this kit.** Every governed file sits at or just under its
+declared number and three sit exactly on it — the signature of numbers fitted to the text after it
+was written, not chosen before. The decisive datum is that the copy in daily production use already
+measured within a handful of words of what this release lands, and had been working. **The honest
+limit: "it works at that length" is weaker evidence than a comprehension test, and nobody has run
+one. It is only better than a number nobody derived.** The cap still earns its place as a ratchet —
+it forced this to be a decision instead of a drift.
+
+### Three false claims in `PORTABILITY.md`, and the pin that missed by four words
+
+The count of reference layers was one short, and `PROTOCOLS.md`'s budget was described as author-set
+when it is Owner-ratified. **The third is the one worth the paragraph: the blanket claim that the
+skill enforces nothing had been false since v2.4.0 shipped `guard-brief-rung`.** That correction
+landed in the body and left the mirror standing, **because the cross-surface test pinned the body's
+spelling and the mirror's differs by four words.** Both spellings are pinned now, each with its own
+canary. **A cross-surface pin that misses by four words leaves the old claim shipping on every
+surface it did not name.**
+The v2.3.0 note in this file still gives the old count and is **deliberately untouched** — it is a
+true statement about what v2.3.0 shipped, and rewriting history to match the present turns a true
+claim false.
 
 ## What's new in v2.6.1 — the kit could not review itself
 

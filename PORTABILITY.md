@@ -626,12 +626,17 @@ for how an ask to the Owner is formatted, and that file is generated per repo �
 the skill's Owner-facing half is a procedure over a contract you still owe. The dependency runs one
 way only: nothing in `core/OWNER_COMMS.md` depends on `/orchestrate`.
 
-**Nothing in it is enforced, and it says so.** No control counts gate rounds, reads a freeze, or
-checks who gave a GO; the controls the kit does ship are the task-lane declaration and the commit
-floor, each with the limits recorded above (§ The enforcement asymmetry, § FM1). Treat the skill as doctrine your agents follow because you told them to, exactly like the
-gate ladder in `core/WORKFLOW.md` — not as a mechanism. Its two reference layers (`CHIP_BRIEF.md`,
-`PROTOCOLS.md`) are loaded on demand from the body; `PROTOCOLS.md` is a **bank of incidents**, so it
-is expected to grow, and its word budget is author-set rather than Owner-ratified.
+**ONE rung in it is enforced WHEN THE HOOK IS ARMED, and the rest is not.** No control counts gate rounds,
+reads a freeze, or checks who gave a GO; the exception is `guard-brief-rung`, which denies a brief
+write or cross-session send lacking a fresh, session- and target-bound, single-use record of executed
+checks — and proves such a record EXISTS, never that its commands were run. **It is TRUST-GATED: `init --force` marks a hook CHANGED and DISARMS it until re-approved, and an untrusted hook is skipped SILENTLY — so this release, which mandates `--force`, turns it off in the Codex lane until you approve it again.** The other controls the
+kit ships are the task-lane declaration and the commit floor, each with the limits recorded above
+(§ The enforcement asymmetry, § FM1). Treat the rest as doctrine your agents follow because you told
+them to, exactly like the gate ladder in `core/WORKFLOW.md` — not as a mechanism. Its **three**
+reference layers (`CHIP_BRIEF.md`, `PROTOCOLS.md`, `RUNG_ZERO.md`) are loaded on demand from the
+body; `PROTOCOLS.md` is a **bank of incidents**, so it is expected to grow. **Every budget in this
+skill is Owner-ratified — read each number and its date from the file's own head rather than from
+here**, which is the surface that goes stale.
 
 ## Cosmetic origin naming in the gate runners (`--with-gate-runners`)
 
