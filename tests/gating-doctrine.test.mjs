@@ -557,6 +557,34 @@ test("the seat definitions claim a bounded REACH, never a proven INPUT SET", () 
   assert.match(p2, /not a packet-only guarantee/i, "…and denies the one that is not");
 });
 
+test("the packet rules bar the one flag that would ship the whole review history", () => {
+  // The subject-vs-body discipline CREATES this hole: once findings are deliberately moved out of
+  // subjects into bodies, the bodies hold everything a seat must not see — so `git log -p` at
+  // packet-build time defeats the control at the last step. Pinned in REVIEW because it is a rule
+  // about what a packet may contain, which is REVIEW's subject.
+  const r = read("core/REVIEW.md");
+  assert.match(r, /A PACKET THAT SHIPS\s+COMMIT BODIES SHIPS THE REVIEW HISTORY/i);
+  assert.match(r, /`git diff`, never `git log -p`/,
+    "…and it must name the command, or it is an aspiration");
+  // The reason has to travel, or a later editor reads it as a style preference and drops it.
+  assert.match(r, /the failure mode the subject-vs-body discipline CREATES/i);
+});
+
+test("the fail-open family is stated as a COUNT, with the rule left in one place", () => {
+  // A rule stated twice is a mirror. The rule lives in WORKFLOW; GATES carries the instances,
+  // because four instances on four surfaces in one day is the argument, and the argument is what
+  // makes anyone apply the rule to a step they did not think of as a control.
+  const g = read("core/GATES.md");
+  assert.match(g, /THE FAILURE STATE PRODUCING THE SAME ARTIFACT AS SUCCESS/);
+  assert.match(g, /Four instances surfaced in a single day/i);
+  // The generalising question is the actionable half — without it this is a war story.
+  assert.match(g, /if this had silently failed, would its output be distinguishable from success\?/i);
+  // ⚠ ANTI-MIRROR: GATES must carry the instances and POINT at the rule, never restate it.
+  assert.match(g, /The governing rule is `core\/WORKFLOW\.md` § Gate/);
+  assert.doesNotMatch(g, /A BLIND VERIFICATION TOOL RETURNS SUCCESS/,
+    "GATES must not carry a second copy of WORKFLOW's rule");
+});
+
 test("the manifest's pre-loaded field is named by the BINDING contract, not only by the seat", () => {
   // A seat emitting a field its contract does not name is a doc/behaviour divergence, and where a
   // doc and a behaviour disagree the doc is what the next reader obeys. Both surfaces or neither.

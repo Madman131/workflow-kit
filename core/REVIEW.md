@@ -20,7 +20,13 @@ diff itself**, the pre-change text of anything deleted, and the **outputs** of c
 otherwise have to predict against — a reviewer holds no shell, so an unshipped `git show` is an
 unanswerable question, and a seat left to excavate the change spends its round re-deriving what could
 have been handed over. The packet **excludes append-only review artifacts** (a review log): a diff
-containing one ships prior verdicts to a seat that must not see them. **At a design gate the spec IS
+containing one ships prior verdicts to a seat that must not see them. ⚠ **AND A PACKET THAT SHIPS
+COMMIT BODIES SHIPS THE REVIEW HISTORY — build the diff with `git diff`, never `git log -p`.** This
+is the failure mode the subject-vs-body discipline CREATES: once findings are deliberately moved out
+of subjects and into bodies, the bodies are where every measurement, verdict and residual lives, so
+one convenience flag hands a seat the entire record at the last step and defeats the control that
+put them there. **The SUBJECT is injected and the BODY is not — that asymmetry only holds while the
+packet respects it.** **At a design gate the spec IS
 the artifact** (§ Cross-family lens, artifact-mode (a)), so a spec narrating its own review history
 folds every seat that reads it — ship a redacted contract with no round narration. **A filename
 blocklist is not exclusion; only packet CONTENTS are** — a seat's own `grep` defeats a blocklist, so
