@@ -32,6 +32,15 @@
 // concept seam (and record the split) or push detail to docs/journal/ — never cut a rule to hit a
 // number. Raising a cap is an Owner decision, not a build-time convenience.
 //
+// CAP DECISIONS ON RECORD:
+//   2026-08-12 · `method` 20480 → 21504 B · Owner-authorised ("do the byte raise").
+//   REASON, and it is measured rather than argued: at 12 bytes of headroom the v2.9.0 gate repair
+//   could only be paid for by deleting a qualifier from the rule beside it, and that deletion
+//   produced a contradiction its own bookend caught — "the fix paid for itself by deleting a
+//   load-bearing qualifier." Headroom in a method doc is a CONTROL against that mechanism, not a
+//   convenience. An earlier raise on a different premise was authorised and RETIRED UNUSED when
+//   the premise dissolved; this one replaces it on fresh facts.
+//
 // Usage: node scripts/check-doc-size.mjs [--json]
 // Exit 0 = every governed doc passes. Exit 1 = at least one FAIL.
 
@@ -51,7 +60,7 @@ export const ROLE_CAPS = {
   entry: 8 * 1024,
   // Bounded by the BOOT CONTEXT BUDGET (~72 KB / ~27K tokens spent before any work begins),
   // not by truncation — the Read cap is 25,000 tokens ~= 66 KB of this prose class.
-  method: 20 * 1024,
+  method: 21 * 1024,
   // Cat'd into EVERY Gemini gate payload. Two constraints bind here and both are tighter than
   // `method`: the 80 KiB INLINE ingestion ceiling, and signal-to-noise — on a small design gate
   // these files are ~97% of the payload, so every wasted byte displaces the artifact under review.

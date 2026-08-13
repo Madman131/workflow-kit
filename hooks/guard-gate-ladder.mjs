@@ -197,7 +197,8 @@ const CONTRACT =
   `  <finding> — <severity>\n` +
   `    HARM?     does this hurt (1) the Owner/user, (2) the usability of the product, or\n` +
   `              (3) the FUNCTIONALITY of the code — and by what mechanism?\n` +
-  `              Blank => NOTE (but Precedence screens FIRST: its classes never exit here).\n` +
+  `              Blank => NOTE — but Precedence AND the carve-outs (irreversible, prod write,\n` +
+  `              gate-ran-lighter-than-mandate) screen FIRST; none of those exit here.\n` +
   `              A NOTE is RECORDED here and ships with the change. Dropping is not noting.\n` +
   `    REAL?     does it occur in the DECLARED threat model? No => DEFER + the failed trigger.\n` +
   `    SCOPE?    the FEATURE asked for, or machinery you wrote about yourself? A self-authored\n` +
@@ -206,8 +207,10 @@ const CONTRACT =
   `    → REMEDIATE | DEFER | DECLINE | ESCALATE (+ reason)\n` +
   `  LADDER: continue | STOP-AND-ESCALATE\n\n` +
   `Questions run IN ORDER, first exit wins. RULE #1: a finding BLOCKS only if it names harm to one\n` +
-  `of those three targets plus the mechanism reaching it; everything else is a NOTE — recorded,\n` +
-  `shipped, never chased. Dropping a harmless finding is FREE; chasing one owes the work. Every\n` +
+  `of those three targets plus the mechanism reaching it. Everything NOT screened out above is a\n` +
+  `NOTE — recorded, shipped, never chased. Dropping a harmless finding is FREE; chasing one owes the\n` +
+  `work. A NOTE on a reviewer-rated BLOCKER/HIGH owes the FAILED HARM: which targets you tested and\n` +
+  `why each does not reach. Every\n` +
   `REMEDIATE — CODE, PROSE, DOCTRINE, EVERY class — carries HARM: and TRIGGER:.\n\n` +
   `No emission ⇒ no fix; an undispositioned fix is out-of-process. DECLINE and DEFER are first-class:\n` +
   `a ladder where everything was REMEDIATE means the PM never engaged. A ladder ends on a JUDGMENT,\n` +

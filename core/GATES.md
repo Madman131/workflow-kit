@@ -275,12 +275,13 @@ more of the leaned-on family than it did; the verdict records the active binding
   round "contested" — the PM MUST either (a) request escalation (Owner-approved) or (b) stop-and-escalate
   the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE —
   a finding-class that survived its remediation — or on an Owner-called second round.**
-  *(Re-keyed at v2.9.0: this said "on round 3, inside the soft stop", and under ONE remediation round
-  that trigger can never occur — a rung that cannot fire is a control that silently never runs.)* That firing is **EXEMPT from the one-per-changeset cap** below and needs no
+  *(Re-keyed at v2.9.0: this said "on round 3, inside the soft stop". Rounds past the first are no
+  longer automatic, so keying a rung to a fixed round number leaves it unreachable in the ordinary
+  case — a control that silently never runs.)* That firing is **EXEMPT from the one-per-changeset cap** below and needs no
   Owner GO — the cap's default consumer, the fold-check, has already spent the changeset's
   discretionary firing on the round-1 delta, so without the exemption this rung could never fire. The
   trigger is mechanical, not discretionary, which is what bounds it: **worst case two firings, and only
-  where one finding-class has failed twice.** ⚠ **Read that bound honestly: the trigger is mechanical
+  on same-class recurrence or an Owner-called later round.** ⚠ **Read that bound honestly: the trigger is mechanical
   in FORM and self-reported in FACT.** Its input is the round count, and § Retired before shipping
   below records why nothing observes that — round count is a conversation fact, not a tree fact. So
   the worst case above is what the rule *authorises*, not what any mechanism *enforces*; what actually

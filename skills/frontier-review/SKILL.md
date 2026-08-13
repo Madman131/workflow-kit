@@ -1,6 +1,6 @@
 ---
 name: frontier-review
-description: Spend the changeset's one frontier firing on a single distilled decision question. The workhorse builds a sufficiency-tested packet; the frontier seat judges only that packet; the workhorse stays decider. Use when the Owner types /frontier-review, or before a fold-check, design gate, or escalation past a soft stop.
+description: Spend the changeset's one frontier firing on a single distilled decision question. The workhorse builds a sufficiency-tested packet; the frontier seat judges only that packet; the workhorse stays decider. Use when the Owner types /frontier-review, or before a fold-check, design gate, or a same-class-recurrence escalation.
 ---
 
 # /frontier-review — packet in, judgment out
