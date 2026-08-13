@@ -41,6 +41,26 @@
 //   convenience. An earlier raise on a different premise was authorised and RETIRED UNUSED when
 //   the premise dissolved; this one replaces it on fresh facts.
 //
+//   2026-08-13 · `method` 21504 → 23040 B (+1536) · Owner-authorised ("a", ruling on KO15's facts).
+//   REASON: the ENTRY RULE (a change is born ungated; four doors earn it a ladder) lands at
+//   core/WORKFLOW.md § Steer step 0, and it did not fit — 33 bytes of headroom against ~1258 for
+//   the four doors stated at full fidelity. The three options were priced: raise the cap, split the
+//   rule into its own file behind a pointer, or compress to ~838 B by cutting doctrine.
+//   THE SPLIT WAS REFUSED ON EVIDENCE, and it is the reason this is a raise and not a new file: a
+//   pointer AT THE DECISION POINT is precisely the pattern this repo has measured failing — a review
+//   seat reduced to a pointer to fit a word cap left every panel seat with one available definition
+//   of harm, the superseded one, because a fresh context does not follow the pointer. Compression
+//   was DECLINED on the record: a cap may never force deleting doctrine (see the paragraph above).
+//   Corroborated externally the same night: a sibling lane refused to adopt the entry rule because
+//   it could not read it in the files it was told were canonical. Fidelity beats compression here
+//   because the failure mode is a reader who never leaves the page.
+//   SCOPE, stated precisely because the role name is broader than the need: this raises the cap for
+//   every BINDING/method doc, not only core/WORKFLOW.md — that is what a ROLE cap means. The
+//   authorisation was granted on WORKFLOW's facts, so the other five inherit headroom they did not
+//   ask for; treat that as slack for the next editor, never as licence to grow. The skill budgets
+//   (RUNG_ZERO, cold-reviewer) are a DIFFERENT control (scripts/check-skill-budgets.mjs) and are
+//   untouched by this.
+//
 // Usage: node scripts/check-doc-size.mjs [--json]
 // Exit 0 = every governed doc passes. Exit 1 = at least one FAIL.
 
@@ -60,7 +80,9 @@ export const ROLE_CAPS = {
   entry: 8 * 1024,
   // Bounded by the BOOT CONTEXT BUDGET (~72 KB / ~27K tokens spent before any work begins),
   // not by truncation — the Read cap is 25,000 tokens ~= 66 KB of this prose class.
-  method: 21 * 1024,
+  // 22.5 KiB since 2026-08-13; both raises are recorded under CAP DECISIONS above, with the
+  // measured reason each was granted. Still ~3x inside the truncation threshold.
+  method: 23040,
   // Cat'd into EVERY Gemini gate payload. Two constraints bind here and both are tighter than
   // `method`: the 80 KiB INLINE ingestion ceiling, and signal-to-noise — on a small design gate
   // these files are ~97% of the payload, so every wasted byte displaces the artifact under review.
