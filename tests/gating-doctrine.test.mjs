@@ -36,8 +36,7 @@ const read = (rel) => raw(rel).replace(/^\s*>\s?/gm, "").replace(/\s+/g, " ");
 //
 // ⚠ KO15 REPAIR (H1-H4): this used to regex `raw(rel)` for a `const CONTRACT =…;\n` declaration and
 // extract backtick segments — a SOURCE-TEXT approximation of what the hook prints, and it broke four
-// independent ways, each proven by mutation and preserved as a permanent trigger in the repair
-// package (`triggers.mjs`, KO15-R):
+// independent ways:
 //   H1 — it only ever looked inside the CONTRACT declaration. The hook also prints `SELF_REPORT`
 //        (550 characters) ahead of it; that text sat outside every assertion built on this helper.
 //   H2 — the declaration-end regex (`;\n`) stopped at the FIRST such pair anywhere in the slice,
@@ -192,6 +191,27 @@ test("the entry rule (step 0) is a real ADMISSION test, and the doors do not set
     "the invented 'per-round audit' name must not return — no such control is defined anywhere");
   assert.match(w, /There is no audit and no cadence — this is the only catch/);
   assert.match(w, /gate-ran-lighter-than-mandate carve-out's case, raised when someone next reviews it, never a firing you can wait for/);
+});
+
+// ⚠ KO15 REPAIR (H8/H9, § 4's cross-surface check): the hook's SELF_REPORT floor line —
+// "anything touching live-path, chain/stateful, schema, or deploy code is at least T2" —
+// CONTRADICTED the pre-repair step 0: a reversible live-path/chain-stateful change could answer NO
+// to all four doors and ship with zero seats, while this line promised at least T2. Door 1 now
+// catches that case (live-behavior-path/chain-stateful is a YES), so an admitted change reaches
+// the decision tree's row 2 (T2) or higher — the floor line and step 0 now agree. Pinned via
+// `printed()`, the same mechanism H1-H4 fixed: what an agent acts on is what the hook PRINTS, not
+// the doc, so the check reads the real runtime string.
+test("the hook's floor line agrees with step 0 — both catch the same live-path/chain-stateful case", () => {
+  const hookPrinted = printed("hooks/guard-gate-ladder.mjs");
+  assert.match(hookPrinted,
+    /anything touching live-path, chain\/stateful, schema, or deploy code is at least T2/,
+    "the hook's printed floor line must survive — it is what an agent actually reads at decision time");
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /live-behavior-path or chain\/stateful logic/,
+    "step 0's door 1 must catch the same live-path/chain-stateful case the hook's floor line promises");
+  // The decision tree's own T2 row is what makes the floor line TRUE once step 0 admits the case —
+  // without this row an admitted live-path change would still have no depth to land at.
+  assert.match(w, /changes \*\*live-behavior-path\*\* code, OR changes \*\*chain\/stateful control logic\*\* → \*\*T2 Major\*\*/);
 });
 
 // ---------------------------------------------------------------- rung order (WORKFLOW)
@@ -420,6 +440,19 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // them by a deliberate edit HERE, which is the point: the conversion is what a reviewer should
   // have to see.
   //
+  // The RETIRED shapes of the rounds rule — kept post-split, because these are not the banked
+  // CURRENT policy, they are dead spellings from a rule retired before the Owner's own root-cause
+  // controller even existed. A NEITHER surface owes the same absence a STATES surface owes: holding
+  // the OLD rule is not "carrying no component", it is carrying the WRONG one, silently, on a
+  // surface nothing checks. Scoped to the two multi-word phrases unique to a live restatement of
+  // the retired rule — "BOUNDED?"/"PAST-SOFT-STOP" alone are too broad: core/GATES.md § Retired
+  // legitimately quotes "REAL?/SCOPE?/BOUNDED?/WORTH IT?" as HISTORY (this repo's own rule: history
+  // does not go stale), and a bare-word ban would redden that narrative rather than a live drift.
+  const RETIRED_ROUNDS_SHAPES = [
+    /ONE remediation round; a second is the Owner's call/i,
+    /Soft stop after 3 NO-GO rounds/i,
+  ];
+  //
   // NOT derived from the tree, deliberately. A list computed by scanning for surfaces that mention
   // the rule would go VACUOUS the moment a surface lost it entirely — the surface drops out of its
   // own denominator and the pin passes by finding nothing, which is this repo's named fail-open
@@ -476,6 +509,13 @@ test("the round controller is stated in one shape everywhere it is stated at all
   };
   for (const [rel, reason] of Object.entries(NEITHER)) {
     assert.ok(reason && reason.length > 10, `${rel}: a NEITHER entry needs a real reason or it is the same silent omission`);
+    // A NEITHER surface must be silent on the RETIRED shape — a surface holding the old, dead rule
+    // is not "carrying no component", it is carrying the WRONG one, silently, where nothing checks.
+    const t = raw(rel).replace(/\s+/g, " ");
+    for (const retired of RETIRED_ROUNDS_SHAPES) {
+      assert.doesNotMatch(t, retired,
+        `${rel} is classified NEITHER but carries a RETIRED rounds shape — an unlisted surface is exactly where this goes unnoticed`);
+    }
   }
   // Completeness: every gate-doctrine surface this repair named must be accounted for SOMEWHERE —
   // STATES, POINTS, or NEITHER-with-a-reason — never silently absent from all three.
