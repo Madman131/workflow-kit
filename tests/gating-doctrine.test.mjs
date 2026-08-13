@@ -18,8 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { governedFiles } from "../scripts/check-skill-budgets.mjs";
-import { CONTRACT as HOOK_CONTRACT, SELF_REPORT as HOOK_SELF_REPORT }
-  from "../hooks/guard-gate-ladder.mjs";
+import { buildAdditionalContext } from "../hooks/guard-gate-ladder.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Whitespace-FLATTENED on purpose. A clause that wraps across a line still matches, so these pins
@@ -46,19 +45,28 @@ const read = (rel) => raw(rel).replace(/^\s*>\s?/gm, "").replace(/\s+/g, " ");
 //   H4 — `${TOKEN}` interpolation extracted the literal source characters `${TOKEN}`, never the
 //        runtime value substituted in.
 // The honest fix per the repair brief: stop regexing source, and assert on the STRING THE HOOK
-// ACTUALLY EMITS. `hooks/guard-gate-ladder.mjs` now exports `CONTRACT` and `SELF_REPORT` as real
-// values (imported above) rather than only building them inline — no regex, no truncation, no
-// comment-vs-literal ambiguity, and `${}` is already resolved because these are the RUNTIME
-// strings, not their source text. `printed()` now only makes sense for the hook itself (the one
-// surface whose "prints" claim this file pins); it returns the flattened DOCTRINE text a confirmed
-// PM is actually handed — `SELF_REPORT` + `CONTRACT`, joined exactly as
-// `buildAdditionalContext(true, head, body)` joins them (`head`/`body` are per-session tier/task
-// announcements, not doctrine, so they carry nothing this file needs to pin).
+// ACTUALLY EMITS. `hooks/guard-gate-ladder.mjs` now exports `buildAdditionalContext(isDeclaredPM,
+// head, body)` — the exact function the hook's own runtime path calls to build what it writes to
+// stdout — and `printed()` CALLS it and reads its return value.
+//
+// ⚠ KO15 ROUND 3 (B1, custodian order): a first cut here imported `CONTRACT`/`SELF_REPORT` and
+// RECONSTRUCTED `${SELF_REPORT}\n${CONTRACT}` by hand instead of calling the builder — a THIRD
+// MIRROR of the emission, the exact defect class (a hand-kept copy of what a `.mjs` surface prints,
+// free to drift from what it actually prints) this whole changeset exists to delete, reintroduced
+// by the fix meant to cure it. Proven by mutation: a retired rule planted INSIDE
+// `buildAdditionalContext`'s own body was invisible to the reconstruction, which only ever read the
+// two constants and never the function — suite green, 35/35, while the builder's real output
+// carried the retired text. Calling the builder directly closes that gap by construction: there is
+// no second path left to drift from the first, because there is only one path.
+//
+// `head`/`body` are per-session tier/task announcements, not doctrine, so they carry nothing this
+// file needs to pin — passed as empty strings, which is a legitimate call shape (the hook's own
+// runtime path supplies real ones; this file cares about the DOCTRINE half only).
 const printed = (rel) => {
   if (!rel.endsWith("guard-gate-ladder.mjs")) {
     throw new Error(`printed(${rel}): only the gate-ladder hook exports what it prints`);
   }
-  return `${HOOK_SELF_REPORT}\n${HOOK_CONTRACT}`.replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  return buildAdditionalContext(true, "", "").replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
 };
 
 // ---------------------------------------------------------------- routing reversal
@@ -488,19 +496,39 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // authority AND restated both components, so the v2.9.0 amendment left it contradicting canon
   // while every test stayed green. Citing an authority is not pointing at it.
   //
-  // ⚠ KO15 REPAIR (H6, banked at the rebase — see the header note above): the component bans this
-  // spot once carried (numeric ceiling near round/ceiling vocabulary; warrant condition via
-  // further/another/additional+round+justification-word) derived their ceiling from the now-banked
-  // canon ROUND. Two spelling bans that do NOT depend on it remain below; the component-ban shape
-  // is superseded by the FORM check further down this file's own history (KO15 round 3).
+  // ⚠ KO15 ROUND 3 (H6/B2a/B2b, custodian order — a FORM check replaces THREE successive CONTENT
+  // checks that each fell to a fresh paraphrase). History: a ban on three exact spellings ("hard
+  // stop", "round <n>", "rounds continue only while") fell to a paraphrase restating both
+  // components in different words. Two COMPONENT bans (numeric ceiling near round/ceiling
+  // vocabulary; warrant condition via further/another/additional+round+justification-word) fell to
+  // a THIRD: "no more than a triplet of gate-review passes is allowed; a later pass needs fresh
+  // blocking evidence" re-acquires both concepts in vocabulary neither ban's word list covered.
+  // Enumeration cannot close a paraphrase space — a grep proves a spelling, never a claim (this
+  // file's own header) — so the fix stops enumerating: **a POINTS surface carries its citation and
+  // nothing else — prose beyond the citation is itself the violation, whatever it says.**
+  //
+  // This is a FORM check, not a content check: it reads WHERE the pointer's bold span ends relative
+  // to its citation, never WHAT any trailing prose means. The discriminator that proves it: an
+  // innocuous, unrelated sentence inserted at the same spot ("the weather in Lisbon is agreeable
+  // this time of year") must redden exactly as readily as a re-acquiring paraphrase — if only the
+  // paraphrase catches, the check is still reading content and has only narrowed the paraphrase
+  // space, not closed it.
   for (const rel of POINTS) {
     const t = read(rel);
     assert.match(t, /`core\/WORKFLOW\.md` § Gate/,
       `${rel} must name WHERE the round policy lives`);
-    assert.doesNotMatch(t, /hard stop/i,
-      `${rel} points at the rounds rule and must not restate its stop`);
-    assert.doesNotMatch(t, /rounds continue only while/i,
-      `${rel} must not restate the warrant condition either`);
+    // The pointer's own bold span, captured whole — `[^*]*` cannot cross a `**` boundary, so this
+    // is exactly the bold run the citation sits inside, never the paragraph around it (which may
+    // legitimately discuss unrelated things, like OPERATE's own neighbouring 3-attempt cap).
+    const span = /\*\*([^*]*`core\/WORKFLOW\.md` § Gate[^*]*)\*\*/.exec(t);
+    assert.ok(span,
+      `${rel}: the citation must sit inside its own bold pointer span, or there is nothing to check the FORM of`);
+    const afterCitation = span[1].slice(span[1].indexOf("§ Gate") + "§ Gate".length);
+    // "and not restated here" is this repo's own spelling of "nothing else lives here" — the
+    // citation names the rule's home; this clause names that the pointer carries no more of it.
+    // Anything beyond it, in ANY wording, is a component restated — form, not content.
+    assert.match(afterCitation, /^\s*and not restated here\s*$/,
+      `${rel}: nothing may follow "and not restated here" inside the bold pointer span — any trailing prose, on ANY topic, restates a component of the rule this surface must only point at`);
   }
 
   // ⚠ KO15 REPAIR (H7): STATES + POINTS is a hand-maintained ALLOW-list (deliberately — see the
