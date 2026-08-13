@@ -18,6 +18,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { governedFiles } from "../scripts/check-skill-budgets.mjs";
+import { CONTRACT as HOOK_CONTRACT, SELF_REPORT as HOOK_SELF_REPORT }
+  from "../hooks/guard-gate-ladder.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Whitespace-FLATTENED on purpose. A clause that wraps across a line still matches, so these pins
@@ -32,22 +34,32 @@ const read = (rel) => raw(rel).replace(/^\s*>\s?/gm, "").replace(/\s+/g, " ");
 
 // What a `.mjs` decision-time surface PRINTS, as opposed to how it is TYPED.
 //
-// ⚠ WHY THIS EXISTS, and it is the same reflow trap `read()` closes for docs — left open on `.mjs`
-// because that was read raw. The hook's contract is a CONCATENATION of template literals, so a
-// sentence wrapping across two of them ("…Soft stop after 3 NO-GO\n` + `rounds…") is not a
-// substring of the source at all. An ABSENCE pin over the raw text therefore passes while the
-// retired rule still reaches the agent — fail-OPEN, the dangerous direction. PROVEN BY MUTATION:
-// a retired soft-stop rule planted across two literals printed at decision time with every
-// absence pin green. A presence pin has the mirror defect and fails closed (a spurious red), which
-// this file's header records as a measured false alarm.
-//
-// Segments are joined edge-to-edge, `\n` escapes are resolved the way the runtime resolves them,
-// and whitespace is flattened — the same normalisation `read()` applies to prose, so both surface
-// classes are now pinned on their MEANING rather than on their typography.
+// ⚠ KO15 REPAIR (H1-H4): this used to regex `raw(rel)` for a `const CONTRACT =…;\n` declaration and
+// extract backtick segments — a SOURCE-TEXT approximation of what the hook prints, and it broke four
+// independent ways, each proven by mutation and preserved as a permanent trigger in the repair
+// package (`triggers.mjs`, KO15-R):
+//   H1 — it only ever looked inside the CONTRACT declaration. The hook also prints `SELF_REPORT`
+//        (550 characters) ahead of it; that text sat outside every assertion built on this helper.
+//   H2 — the declaration-end regex (`;\n`) stopped at the FIRST such pair anywhere in the slice,
+//        including one inside a `//` comment — a `;`-terminated comment line truncated extraction.
+//   H3 — backtick-delimited text inside a `/* … */` comment is not different, to a regex, from a
+//        live template literal — a retired rule quoted in a comment satisfied every presence pin.
+//   H4 — `${TOKEN}` interpolation extracted the literal source characters `${TOKEN}`, never the
+//        runtime value substituted in.
+// The honest fix per the repair brief: stop regexing source, and assert on the STRING THE HOOK
+// ACTUALLY EMITS. `hooks/guard-gate-ladder.mjs` now exports `CONTRACT` and `SELF_REPORT` as real
+// values (imported above) rather than only building them inline — no regex, no truncation, no
+// comment-vs-literal ambiguity, and `${}` is already resolved because these are the RUNTIME
+// strings, not their source text. `printed()` now only makes sense for the hook itself (the one
+// surface whose "prints" claim this file pins); it returns the flattened DOCTRINE text a confirmed
+// PM is actually handed — `SELF_REPORT` + `CONTRACT`, joined exactly as
+// `buildAdditionalContext(true, head, body)` joins them (`head`/`body` are per-session tier/task
+// announcements, not doctrine, so they carry nothing this file needs to pin).
 const printed = (rel) => {
-  const decl = /const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "";
-  return [...decl.matchAll(/`([^`]*)`/g)].map((m) => m[1]).join("")
-    .replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  if (!rel.endsWith("guard-gate-ladder.mjs")) {
+    throw new Error(`printed(${rel}): only the gate-ladder hook exports what it prints`);
+  }
+  return `${HOOK_SELF_REPORT}\n${HOOK_CONTRACT}`.replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
 };
 
 // ---------------------------------------------------------------- routing reversal
@@ -134,6 +146,54 @@ test("the model·effort matrix names capability TIERS, not vendor model ids", ()
   assert.match(g, /\*\*Irreversible prod write.*\|\s*\*\*frontier · xhigh\*\*\s*\|\s*\*\*frontier · xhigh\*\*\s*\|/);
 });
 
+// ---------------------------------------------------------------- the entry rule (§ Steer step 0)
+
+// ⚠ KO15 REPAIR (H13): the entry rule shipped with ZERO assertion coverage — the only major
+// doctrine block in core/WORKFLOW.md with no pin at all, including its fail-closed clause and its
+// write-GO guard — and H10 (above) proves a byte-hunt deletion in this exact file is not
+// hypothetical. This test also lands the Owner ruling on H8/H9 (the step-0-vs-decision-tree
+// conflict, and door 2's scope), verbatim-class.
+test("the entry rule (step 0) is a real ADMISSION test, and the doors do not set their own depth", () => {
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /a change is born UNGATED and earns its ladder/);
+  assert.match(w, /Four questions, before any gate is assumed/);
+
+  // ⚠ H8/H9 RULING, LANDED VERBATIM-CLASS (Owner-ruled 2026-08-13, delivered through the
+  // orchestrator to this repair session): the doors decide ADMISSION only; the decision tree sets
+  // DEPTH for an admitted change. "enter the ladder at that class's row" was retired because no
+  // class→tier mapping table exists — the only reachable path under the old wording sent a
+  // class-4 skill/template edit to T0.
+  assert.match(w, /The doors decide ADMISSION; the decision tree sets DEPTH for admitted changes — it is not an entry test/);
+  assert.match(w, /any YES ⇒ ADMITTED — the tree's matching row is the depth/);
+  assert.doesNotMatch(w, /enter the ladder at that class's row/i,
+    "the retired 'class's row' wording must not survive — no class→tier table exists to enter");
+
+  // Door 1 (H8): named IRREVERSIBLE / LIVE but the old wording tested only reversibility, so a
+  // REVERSIBLE live-behavior-path or chain/stateful change answered NO to all four doors and built
+  // with zero seats — while the decision tree's own row 2 calls exactly that case T2. Re-cut to
+  // test what its name promises.
+  assert.match(w, /live-behavior-path or chain\/stateful logic/);
+  assert.match(w, /can I \*\*not\*\* revert my way out, or is it live regardless/);
+
+  // Door 2 (H8/H9 ruling, verbatim-class): widened beyond named instruments to any failure that
+  // would not announce itself, including state/chain logic — not just controls/gates/checks/alarms.
+  assert.match(w, /could this ship broken while looking fine\? A failure that would not announce itself: controls, gates, checks, alarms, state\/chain logic/);
+
+  // The fail-closed clause and the write-GO guard (H13's two explicitly-named gaps).
+  assert.match(w, /The four doors are the ONLY doors — nobody re-derives their own entry test, and unsure whether a class applies ⇒ that IS a yes/);
+  assert.match(w, /The write-GO does not move, ever/);
+  assert.match(w, /The answer is RECORDED — one line in the commit body/);
+  assert.match(w, /`entry: none` \/ `entry: class-N`/);
+
+  // H11: "the per-round audit" named a control defined nowhere else in the corpus. Fixed by
+  // dropping the invented proper noun and stating plainly what actually catches an ungated change
+  // that should have gated — a later human reading the record, never a mechanism you can wait for.
+  assert.doesNotMatch(w, /the \*\*per-round audit\*\*/i,
+    "the invented 'per-round audit' name must not return — no such control is defined anywhere");
+  assert.match(w, /There is no audit and no cadence — this is the only catch/);
+  assert.match(w, /gate-ran-lighter-than-mandate carve-out's case, raised when someone next reviews it, never a firing you can wait for/);
+});
+
 // ---------------------------------------------------------------- rung order (WORKFLOW)
 
 test("rung ORDER binds, and says WHICH of its two rules is mechanically checkable", () => {
@@ -172,6 +232,12 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
 
   // The ladder's emission is where the rule is actually EXECUTED, so the funnel and its ratio pin here.
   const w = read("core/WORKFLOW.md");
+  // ⚠ KO15 REPAIR (H10): this guard clause was deleted from § Steer's own RULE #1 restatement to buy
+  // bytes, and the ONLY pin on it was bound to core/FOUNDATIONS.md above — so the deletion shipped
+  // with every test green (see scripts/check-doc-size.mjs's 2026-08-13 cap-record entry for the
+  // full incident, corrected alongside this pin). Restored in § Steer, and now pinned on BOTH
+  // surfaces that carry it, not only the one that happened to already have a pin.
+  assert.match(w, /cutting REPAIRS, never review DEPTH — cutting seats is the misreading/);
   assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
   assert.match(w, /\*\*Blank ⇒ NOTE\*\* \*\(Precedence below and the carve-outs — irreversible · prod write · gate-ran-lighter-than-mandate — screen FIRST; none exit here\)\*: recorded here/);
   assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
@@ -376,6 +442,12 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // wearing the cure's name. core/OPERATE.md is the measured instance: it cited § Gate as its
   // authority AND restated both components, so the v2.9.0 amendment left it contradicting canon
   // while every test stayed green. Citing an authority is not pointing at it.
+  //
+  // ⚠ KO15 REPAIR (H6, banked at the rebase — see the header note above): the component bans this
+  // spot once carried (numeric ceiling near round/ceiling vocabulary; warrant condition via
+  // further/another/additional+round+justification-word) derived their ceiling from the now-banked
+  // canon ROUND. Two spelling bans that do NOT depend on it remain below; the component-ban shape
+  // is superseded by the FORM check further down this file's own history (KO15 round 3).
   for (const rel of POINTS) {
     const t = read(rel);
     assert.match(t, /`core\/WORKFLOW\.md` § Gate/,
@@ -384,6 +456,33 @@ test("the round controller is stated in one shape everywhere it is stated at all
       `${rel} points at the rounds rule and must not restate its stop`);
     assert.doesNotMatch(t, /rounds continue only while/i,
       `${rel} must not restate the warrant condition either`);
+  }
+
+  // ⚠ KO15 REPAIR (H7): STATES + POINTS is a hand-maintained ALLOW-list (deliberately — see the
+  // comment above, "NOT derived from the tree"), and an allow-list's unlisted complement is an
+  // UNDECLARED NARROWING unless the complement is made loud (`allow-list-is-an-undeclared-narrowing`
+  // — scan everything and declare every disposition). Five gate-doctrine surfaces sat on neither
+  // list with no signal at all — three of which ("the rule's surfaces DERIVE from its canonical
+  // home", above) this same file already treats as surfaces a fresh context cannot be assumed to
+  // leave. NEITHER is now a third, explicit, REASONED list — and each reason is verified, not just
+  // asserted: a NEITHER surface must actually carry no component of the rounds rule, or it is
+  // misclassified, not merely undocumented.
+  const NEITHER = {
+    "core/REVIEW.md": "governs how a review is BUILT and judged, never the round-count policy that gates it",
+    "skills/orchestrate/RUNG_ZERO.md": "the budget-free PRE-gate rungs; round count is a Gate-time fact this rung set never reaches",
+    "agents/cold-reviewer.md": "a reviewer seat definition — it is handed a round number by the PM, never the rule that sets one",
+    "templates/codex-cold-reviewer.toml.tmpl": "generated seat instructions — same reason as agents/cold-reviewer.md above",
+    "core/GATES.md": "CLASS: REFERENCE (invocation only, never a rule per its own header); its one \"hard stop\" mention is the escalation-rung's own trigger, not this rule, and carries neither the round number nor the warrant condition",
+  };
+  for (const [rel, reason] of Object.entries(NEITHER)) {
+    assert.ok(reason && reason.length > 10, `${rel}: a NEITHER entry needs a real reason or it is the same silent omission`);
+  }
+  // Completeness: every gate-doctrine surface this repair named must be accounted for SOMEWHERE —
+  // STATES, POINTS, or NEITHER-with-a-reason — never silently absent from all three.
+  for (const rel of ["core/REVIEW.md", "skills/orchestrate/RUNG_ZERO.md", "agents/cold-reviewer.md",
+                     "templates/codex-cold-reviewer.toml.tmpl", "core/GATES.md"]) {
+    assert.ok(STATES.includes(rel) || POINTS.includes(rel) || rel in NEITHER,
+      `${rel} is a named gate-doctrine surface and must be classified STATES, POINTS, or NEITHER — never silently absent from all three`);
   }
   // core/REVIEW.md must not re-assert the seat count the tier split replaced.
   assert.doesNotMatch(read("core/REVIEW.md"), /which since v2\.9\.0 is every core-doc amendment/,

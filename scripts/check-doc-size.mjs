@@ -21,7 +21,8 @@
 // At 20 KiB each they would eat half of it before any diff. Keep that pair well under this cap.
 //
 // SO THE CAP KEYS ON ACCESS PATTERN, NOT ON SIZE, and the access pattern is DECLARED, never inferred:
-//   CLASS: BINDING    → read whole; missing a section means violating a rule → hard cap (20 KiB).
+//   CLASS: BINDING    → read whole; missing a section means violating a rule → hard cap, ROLE-DEPENDENT
+//                       (see ROLE_CAPS below — e.g. 24064 B for `method`, 8 KiB for `entry`/`payload`/`snapshot`).
 //   CLASS: REFERENCE  → looked up; missing a section just means you look it up later → no size cap,
 //                       but it MUST carry the lookup-only marker and a table of contents.
 //

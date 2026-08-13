@@ -77,8 +77,9 @@
 //    known and deferred to a joint changeset: a future mtime never goes stale, and a symlinked
 //    declaration is honoured.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 // ONE answer to "which tree am I looking at", shared with the two write guards rather than a third
 // hand-kept copy. This sensor registers in BOTH lanes (Codex normalizes its shell tool to the name
 // `Bash` and passes `tool_input.command`, so its matcher and its command read work unchanged), and
@@ -190,7 +191,15 @@ function resolveTier(projectRoot, sessionId) {
   return { tier: decl.tier, taskId: decl.taskId };
 }
 
-const CONTRACT =
+// EXPORTED (KO15 repair): a source-text regex over this declaration was the mechanism tests used to
+// pin "what the hook prints", and it broke four independent ways — it never looked past this
+// constant at all (SELF_REPORT's printed text sat outside every assertion), it truncated at the
+// first `;` ending a line (a `;`-terminated comment inside the declaration cut the extraction
+// short), a backtick INSIDE a JS comment read as live printed text, and `${}` interpolation
+// extracted the source token rather than its resolved value. Exporting the real values and a real
+// assembly function (`buildAdditionalContext` below) retires the regex entirely: a test now asserts
+// on the actual string the hook emits, not a source-text approximation of it.
+export const CONTRACT =
   `PM DISPOSITION CONTRACT (core/WORKFLOW.md § Gate) — after EVERY verdict and BEFORE any edit,\n` +
   `the changeset's PM record must carry this complete block:\n\n` +
   `GATE ROUND <n> · changeset <name> · verdict <GO|NO-GO> · HARM-PASSING <h> · NOTES <k>\n` +
@@ -228,7 +237,7 @@ const CONTRACT =
 // The self-report caveat. The hook's only input for "is this the right tier?" is the answer to that
 // very question, so it must surface the question rather than answer it (IO). Without this line the
 // emission reads as corroboration of a classification nothing checked.
-const SELF_REPORT =
+export const SELF_REPORT =
   `This tier is the declaration's SELF-REPORT, not a verified fact — this hook cannot tell a\n` +
   `correctly-tiered changeset from a mis-tiered one. Re-derive it against core/WORKFLOW.md § Steer\n` +
   `before relying on the row above: anything touching live-path, chain/stateful, schema, or deploy\n` +
@@ -236,6 +245,15 @@ const SELF_REPORT =
   `be escalated mid-task at any time; lowering one mid-task needs the Owner's confirmation (§ Steer's\n` +
   `reversibility handle) and belongs in the PM disposition record.\n`;
 
+// The pure assembly step — what the hook actually WRITES to stdout, given the resolved state.
+// Exported so a test can import and call it directly instead of regexing this file's source (see
+// the export comment on CONTRACT above). Behaviourally identical to the inline ternary this
+// replaces; the only change is that the string is now reachable without piping stdin.
+export function buildAdditionalContext(isDeclaredPM, head, body) {
+  return isDeclaredPM ? `${head}${body}\n${SELF_REPORT}\n${CONTRACT}` : `${head}${body}`;
+}
+
+function main() {
 let input = "";
 process.stdin.on("data", (d) => (input += d));
 process.stdin.on("end", () => {
@@ -296,7 +314,7 @@ process.stdin.on("end", () => {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
-      additionalContext: isDeclaredPM ? `${head}${body}\n${SELF_REPORT}\n${CONTRACT}` : `${head}${body}`,
+      additionalContext: buildAdditionalContext(isDeclaredPM, head, body),
     },
   }));
   console.error(failClosed
@@ -304,3 +322,20 @@ process.stdin.on("end", () => {
     : `GATE LADDER: declared tier ${tier} · task ${taskId} — required ladder surfaced.`);
   process.exit(0);                                                     // continue normal permission flow
 });
+}
+
+// realpathSync, not a bare argv[1]/import.meta.url string compare: a symlinked invocation path
+// (e.g. macOS /tmp -> /private/tmp) would otherwise make this hook silently never run when invoked
+// through the symlink — the same trap scripts/check-doc-size.mjs documents on its own isMain(). Run
+// ONLY as the hook script; importing this module (a test pulling in CONTRACT/SELF_REPORT/
+// buildAdditionalContext) must never wire up stdin listeners — a closed/EOF'd stdin in that context
+// would reach the `catch { process.exit(0); }` above and kill the whole importing process.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+if (isMain()) main();
