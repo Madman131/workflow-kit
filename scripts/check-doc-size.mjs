@@ -54,6 +54,18 @@
 //   Corroborated externally the same night: a sibling lane refused to adopt the entry rule because
 //   it could not read it in the files it was told were canonical. Fidelity beats compression here
 //   because the failure mode is a reader who never leaves the page.
+//
+//   2026-08-13 (same day, superseding the entry above) · `method` 23040 → 24064 B · Owner-authorised
+//   ("24064", on KO15's facts). +1536 was granted against an estimate of ~1258 B for the entry rule;
+//   written faithfully it costs ~2288, so the raise was sized to a wrong number — the builder's
+//   measurement error, corrected here rather than absorbed by shaving the rule to fit.
+//   ⚠ THE EVIDENCE THAT SETTLED IT, and it is the regression above REPRODUCING INSIDE THE CHANGESET
+//   BUILT TO CURE IT: hunting the last ~100 bytes, the builder trimmed what looked like framing off
+//   the RULE #1 sentence in § Steer and a pin went RED — the deleted words were "it does NOT touch
+//   the EXECUTION gate", i.e. a licence to loosen a DATA gate, paid for a byte count. Restored at
+//   zero cost. THE DIFFERENCE WORTH RECORDING IS WHO CAUGHT IT: a control, in the same minute, not
+//   four review rounds. That is the whole point of the pins, observed working.
+//   Leaves ~380 B of headroom; that is the NEXT editor's, by the headroom-as-control argument above.
 //   SCOPE, stated precisely because the role name is broader than the need: this raises the cap for
 //   every BINDING/method doc, not only core/WORKFLOW.md — that is what a ROLE cap means. The
 //   authorisation was granted on WORKFLOW's facts, so the other five inherit headroom they did not
@@ -80,9 +92,9 @@ export const ROLE_CAPS = {
   entry: 8 * 1024,
   // Bounded by the BOOT CONTEXT BUDGET (~72 KB / ~27K tokens spent before any work begins),
   // not by truncation — the Read cap is 25,000 tokens ~= 66 KB of this prose class.
-  // 22.5 KiB since 2026-08-13; both raises are recorded under CAP DECISIONS above, with the
-  // measured reason each was granted. Still ~3x inside the truncation threshold.
-  method: 23040,
+  // 23.5 KiB since 2026-08-13; all three raises are recorded under CAP DECISIONS above, with
+  // the measured reason each was granted. Still ~2.8x inside the truncation threshold.
+  method: 24064,
   // Cat'd into EVERY Gemini gate payload. Two constraints bind here and both are tighter than
   // `method`: the 80 KiB INLINE ingestion ceiling, and signal-to-noise — on a small design gate
   // these files are ~97% of the payload, so every wasted byte displaces the artifact under review.
