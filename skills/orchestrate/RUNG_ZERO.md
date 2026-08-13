@@ -17,6 +17,10 @@ gives it an artifact.**
 reshaped first. The rounds that follow are not too careful — they are aimed at the wrong thing, and
 they find real defects in work that should not have reached them. Rung zero is those checks.
 
+**RULE #1 screens first** (`core/FOUNDATIONS.md`): a finding blocks only by naming harm to the
+Owner/user, the product's usability, or the code's FUNCTIONALITY, plus its mechanism. Everything
+else is a NOTE. **Dropping a harmless finding is free; chasing one owes the work.**
+
 ---
 
 ## 0.1 THE TIER IS SET, NOT DERIVED

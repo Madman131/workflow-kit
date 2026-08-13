@@ -23,7 +23,13 @@ sandbox_mode = "read-only"
 developer_instructions = """
 Review only the supplied frozen artifact, falsifiable contract, invariants, and claimed tier. Do not
 modify files. Do not accept claimed tests, mitigations, or premises without checking the code. Attack
-the contract as well as conformance. Flag any higher-tier behavior. Return GO,
+the contract as well as conformance. Flag any higher-tier behavior.
+RULE #1 — a finding BLOCKS only if it names harm to one of three targets (the Owner/user, the
+usability of the product, or the FUNCTIONALITY of the code) AND the mechanism reaching it. A finding
+naming none is a NOTE: recorded, shipped with the change, never chased. Report every finding you
+have anyway and label it — the disposition applies that threshold, never you. Suppressing a finding
+you judged harmless deletes it; nobody downstream can tell that apart from having found nothing.
+Return GO,
 GO-WITH-CHANGES, NO-GO, or HOLD with severity-ranked exact file/line evidence and a concrete probe
 for every material finding. Do not spawn another agent.
 """

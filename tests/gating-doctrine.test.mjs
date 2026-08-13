@@ -131,6 +131,68 @@ test("rung ORDER binds, and says WHICH of its two rules is mechanically checkabl
   assert.match(w, /\*\*T1\*\*\s*\|\s*pre-flight → one blind cold reviewer \(\*\*cross-family by default\*\*\)/);
 });
 
+// ---------------------------------------------------------------- RULE #1 (the harm screen)
+
+test("RULE #1 ships with all THREE harm targets, on every surface that applies it", () => {
+  // WHY THIS IS PINNED THREE-WAYS. The rule was first relayed with ONE target ("harm to the user"),
+  // and under that narrow form a crash nobody is watching hits nothing and banks. The Owner's own
+  // wording carries three, and the third is the one that keeps crashes blocking. A pin on "harm"
+  // alone would pass against the narrow form — which is the exact regression that matters — so each
+  // assertion names the code-functionality target explicitly.
+  const f = read("core/FOUNDATIONS.md");
+  assert.match(f, /RULE #1 — no harm to the end product ⇒ no NO-GO, no chase/);
+  assert.match(f, /\(1\) the Owner\/user · \(2\) the usability of the product · \(3\) the FUNCTIONALITY of the code/);
+  assert.match(f, /a crash nobody is currently watching harms target 3 and \*\*BLOCKS\*\*/,
+    "the narrow-form regression must be named, not merely avoided");
+  // Instruction artifacts are the class this kit IS, so its own harm mapping must ship.
+  assert.match(f, /an ambiguity admitting a harmful reading counts, because the implementer picks/);
+  // The misreading that would make this rule harmful: cutting seats instead of repairs.
+  assert.match(f, /It reduces the number of REPAIRS, never the DEPTH of review — cutting seats is the misreading/);
+
+  // The ladder's emission is where the rule is actually EXECUTED, so the funnel and its ratio pin here.
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
+  assert.match(w, /\*\*Blank ⇒ NOTE:\*\* recorded here, ships with the change, no round, no justification owed/);
+  assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
+  // The RATIO is the self-policing half — a principle without a reported number is not checkable.
+  assert.match(w, /HARM-PASSING <h> · NOTES <k>/);
+  assert.match(w, /The ratio is part of the emission: a round reporting no NOTE count is unscreened/);
+  // HARM+TRIGGER must bind EVERY artifact class — binding only CODE is the defect that let every
+  // prose nit through the old contract owing nothing.
+  assert.match(w, /Every `REMEDIATE` — CODE, PROSE, DOCTRINE, EVERY class — carries `HARM:` \*and\* `TRIGGER:`/);
+  assert.match(w, /for prose \*\*who reads it and what wrong action follows\*\*/);
+  // A self-authored invariant costs a sentence, not a round — three of four NO-GOs in the measured
+  // instance were the changeset breaking invariants it had written about itself.
+  assert.match(w, /fix the SENTENCE, never the code/);
+
+  // ⚠ THE EXECUTION AXIS. Without this sentence the chip ships a licence to loosen a DATA gate:
+  // some readers hold no code/data separation, and "gates got cheaper" reads as "all gates".
+  assert.match(w, /it does NOT touch the EXECUTION gate — per-write Owner authorization at the moment of a live-data write is unchanged/);
+
+  // The seat contract must apply the threshold WITHOUT inviting seats to self-censor: a suppressed
+  // finding is deleted, not noted, and under-reporting is the failure mode this rule creates.
+  const r = read("core/REVIEW.md");
+  assert.match(r, /a finding that blocks must name the harm — to the Owner\/user, to the usability of the product, or to the FUNCTIONALITY of the code/);
+  assert.match(r, /Report everything you find anyway: the DISPOSITION applies the threshold, not the seat/);
+  assert.match(r, /under-reporting is the failure mode this rule creates/);
+});
+
+test("the retired chase machinery is GONE, not merely contradicted", () => {
+  // A ladder doc that carries BOTH contracts is worse than one carrying the old one: the reader
+  // meets whichever comes first. These are absence pins, so each names a spelling the OLD text
+  // actually used — an absence pin whose phrase never appeared would be green by construction.
+  const w = read("core/WORKFLOW.md");
+  assert.doesNotMatch(w, /Soft stop after 3 NO-GO rounds/i, "the 3-round soft stop is retired");
+  assert.doesNotMatch(w, /PAST-SOFT-STOP/, "the round-4 justification emission is retired");
+  assert.doesNotMatch(w, /GATE ROUND <n>\/3/, "the emission header no longer promises three rounds");
+  assert.doesNotMatch(w, /BOUNDED\?/, "BOUNDED? is retired — HARM? screens before it");
+  assert.doesNotMatch(w, /what breaks if you DECLINE\?/i,
+    "the open-referent WORTH IT? is retired: it let the process answer about itself");
+  // …and the replacement is present, or the assertions above pass on a gutted file.
+  assert.match(w, /\*\*ONE remediation round\.\*\*/);
+  assert.match(w, /A second exists \*\*only\*\* if round 1's own fixes created \*\*new HARM-passing\*\* findings, \*\*and it is the Owner's call, not the gate's\.\*\*/);
+});
+
 test("WORKFLOW describes the gate-ladder sensor as it ACTUALLY behaves since v2.1", () => {
   const w = read("core/WORKFLOW.md");
   // Two claims that were stale: the exempt tier, and "Claude lane only".
