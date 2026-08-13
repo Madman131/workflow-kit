@@ -240,10 +240,11 @@ export const CONTRACT =
 export const SELF_REPORT =
   `This tier is the declaration's SELF-REPORT, not a verified fact — this hook cannot tell a\n` +
   `correctly-tiered changeset from a mis-tiered one. Re-derive it against core/WORKFLOW.md § Steer\n` +
-  `before relying on the row above: anything touching live-path, chain/stateful, schema, or deploy\n` +
-  `code is at least T2, and a T2/T3 tier is only settled once the Owner has RATIFIED it. The tier may\n` +
-  `be escalated mid-task at any time; lowering one mid-task needs the Owner's confirmation (§ Steer's\n` +
-  `reversibility handle) and belongs in the PM disposition record.\n`;
+  `before relying on the row above: an ADMITTED change touching live-path, chain/stateful, schema,\n` +
+  `or deploy code is at least T2 — admission itself is § Steer step 0's four doors — and a T2/T3\n` +
+  `tier is only settled once the Owner has RATIFIED it. The tier may be escalated mid-task at any\n` +
+  `time; lowering one mid-task needs the Owner's confirmation (§ Steer's reversibility handle) and\n` +
+  `belongs in the PM disposition record.\n`;
 
 // The pure assembly step — what the hook actually WRITES to stdout, given the resolved state.
 // Exported so a test can import and call it directly instead of regexing this file's source (see

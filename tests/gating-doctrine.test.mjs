@@ -200,22 +200,24 @@ test("the entry rule (step 0) is a real ADMISSION test, and the doors do not set
   assert.match(w, /gate-ran-lighter-than-mandate carve-out's case, raised when someone next reviews it, never a firing you can wait for/);
 });
 
-// ⚠ KO15 REPAIR (H8/H9, § 4's cross-surface check, CORRECTED per the orchestrator's round-3
-// ruling): the hook's SELF_REPORT floor line — "anything touching live-path, chain/stateful,
-// schema, or deploy code is at least T2" — is now checked for what the RULED (b-lite) step 0
-// actually closes, which is narrower than the floor line's own wording. The durable brief's own §4
-// text attributes the fix to DOOR 2's widening, not door 1: "Under the widened door 2 it answers
-// YES ⇒ admitted ⇒ the tree sets T2." A chain/stateful touch is caught (door 2 names "state/chain
-// logic" explicitly, and the tree's row 2 assigns it T2 once admitted); a merely live-path change
-// with no silent-failure and no chain/stateful component is NOT guaranteed a door hit under the
-// ruled form — that gap is the Owner-declined floor's own shape, left as-is by this repair. Pinned
-// via `printed()`, the same mechanism H1-H4 fixed: what an agent acts on is what the hook PRINTS,
-// not the doc, so the check reads the real runtime string.
-test("the hook's floor line and door 2 (not door 1) agree on the chain/stateful case", () => {
+// ⚠ KO15 REPAIR (H8/H9, § 4's cross-surface check, TWICE-CORRECTED — orchestrator's second
+// round-3 message). The first fix here widened WORKFLOW's door 1 to match the hook's old floor
+// line, achieving "agreement" by moving the wrong surface: H8 required the hook's floor line to
+// AGREE WITH THE RULED STEP 0 — the doc it cites may not refute it — not the other way round. The
+// hook now defers to the doors on ADMISSION and states its floor only for an ADMITTED change:
+// "an ADMITTED change touching live-path, chain/stateful, schema, or deploy code is at least T2 —
+// admission itself is § Steer step 0's four doors." That is agreement in the ruled direction. Door
+// 2's widening (not door 1) is what admits a chain/stateful touch — the tree's row 2 then sets its
+// T2 depth. Pinned via `printed()`, the same mechanism H1-H4 fixed: what an agent acts on is what
+// the hook PRINTS, not the doc, so the check reads the real runtime string.
+test("the hook's floor line defers to the doors on admission, and agrees with the RULED step 0", () => {
   const hookPrinted = printed("hooks/guard-gate-ladder.mjs");
   assert.match(hookPrinted,
-    /anything touching live-path, chain\/stateful, schema, or deploy code is at least T2/,
-    "the hook's printed floor line must survive — it is what an agent actually reads at decision time");
+    /an ADMITTED change touching live-path, chain\/stateful, schema, or deploy code is at least T2/,
+    "the hook must state its floor for an ADMITTED change, not for any touch — admission is the doors' call");
+  assert.match(hookPrinted,
+    /admission itself is § Steer step 0's four doors/,
+    "the hook must name WHERE admission is decided, or the deferral is only implied");
   const w = read("core/WORKFLOW.md");
   assert.match(w, /state\/chain logic/,
     "door 2's widening — not a door-1 change — is what admits a chain/stateful touch under the ruled form");
