@@ -27,7 +27,7 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Vary the installed LAYOUT too.** A sensor was inert in every adopted repo — it resolved a sibling
   path existing only in the source tree. Four rounds missed it: every observer stood in the one tree
   where the bug is invisible.
-- **A bounded continuation past a soft stop needs BOTH halves:** pre-commit that round N is the last
+- **A bounded continuation past the last round needs BOTH halves:** pre-commit that round N is the last
   whatever it says (which stops verdict-chasing), AND carve out the one severity that can never ship
   under that bound — a fail-open in a shipped control stops the PR and escalates (which stops the
   bound becoming a loophole). **The bound binds the artifact JUDGED, not the changeset forever:**

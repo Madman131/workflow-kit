@@ -1,9 +1,9 @@
 # RUNG ZERO — the six checks that run before any gate
 
-Word budget: 2900 (**Owner-ratified 2026-08-12**, raised from an author-set 2650; its own number,
+Word budget: 2925 (**Owner-ratified 2026-08-12**, twice: from an author-set 2650, then 2900; its own number,
 never summed with the body's. **Why:** the first number was set before any reviewer had run and gate
 findings cost words to fix; after eight cuts the only material left was the incident bank, and **a cap
-may never force deleting doctrine.** Headroom is for the editor after you.)
+may never force deleting doctrine.** Headroom is for the editor after you. *2900→2925 bought the screen below.*)
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. **Run this BEFORE the deterministic rungs
 and before any seat is spawned.**
@@ -16,6 +16,12 @@ gives it an artifact.**
 **Why it exists.** Deep gates get spent on artifacts a five-minute check would have rejected or
 reshaped first. The rounds that follow are not too careful — they are aimed at the wrong thing, and
 they find real defects in work that should not have reached them. Rung zero is those checks.
+
+**RULE #1 screens first** (`core/FOUNDATIONS.md`): a finding blocks only by naming harm to the
+Owner/user, the product's usability, or the code's FUNCTIONALITY, plus its mechanism. Precedence and the
+carve-outs (irreversible · prod write · gate-ran-lighter-than-mandate) screen FIRST and never exit as
+a NOTE. Everything else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the
+work.**
 
 ---
 

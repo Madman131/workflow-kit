@@ -99,8 +99,8 @@ done" is the failure this heading exists to prevent.*
 ## PM disposition — riders on a DEFER
 
 *Two riders on the PM `DEFER` disposition, read at disposition time — what a legitimate `DEFER`
-additionally owes. The disposition **doctrine** (the rubric, **Precedence**, the 3-round soft stop) is
-`core/WORKFLOW.md` § Gate. Distinct from **Precedence** — which forbids `DEFER`ring a *confirmed
+additionally owes. The disposition **doctrine** — the rubric, **Precedence**, the round policy — is
+`core/WORKFLOW.md` § Gate, in full and without a copy here. Distinct from **Precedence** — which forbids `DEFER`ring a *confirmed
 material* failure at all; these two fire on a `DEFER` that is individually legitimate.*
 
 - **Self-contradiction ESCALATEs — never a silent PM-DEFER.** Before finalizing any `DEFER`, ask:
@@ -273,17 +273,21 @@ more of the leaned-on family than it did; the verdict records the active binding
   retired — round count is a conversation fact, not a tree fact): **after 2 NO-GO rounds that touch the
   same finding-class** — counted by the *recurrence of the finding*, not by whether the PM labels the
   round "contested" — the PM MUST either (a) request escalation (Owner-approved) or (b) stop-and-escalate
-  the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high`, on round 3,
-  inside the soft stop.** That firing is **EXEMPT from the one-per-changeset cap** below and needs no
+  the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE —
+  a finding-class that survived its remediation — or on an Owner-called round past the hard stop.**
+  *(Re-keyed at v2.9.0: this said "on round 3, inside the soft stop". Keying a rung to a fixed round
+  number ties it to a round count the ladder no longer guarantees reaching — a control that silently
+  never runs. The live round policy is `core/WORKFLOW.md` § Gate; this file does not restate it.)* That firing is **EXEMPT from the one-per-changeset cap** below and needs no
   Owner GO — the cap's default consumer, the fold-check, has already spent the changeset's
   discretionary firing on the round-1 delta, so without the exemption this rung could never fire. The
   trigger is mechanical, not discretionary, which is what bounds it: **worst case two firings, and only
-  where one finding-class has failed twice.** ⚠ **Read that bound honestly: the trigger is mechanical
+  on same-class recurrence or an Owner-called later round.** ⚠ **Read that bound honestly: the trigger is mechanical
   in FORM and self-reported in FACT.** Its input is the round count, and § Retired before shipping
   below records why nothing observes that — round count is a conversation fact, not a tree fact. So
   the worst case above is what the rule *authorises*, not what any mechanism *enforces*; what actually
   bounds it is the recorded firing count and the Owner's spot-check of it. Never silently grind at
-  the floor — and the WORKFLOW soft-stop (round 4+) is the backstop when the judgment control is dodged.
+  the floor — and the backstop when the judgment control is dodged is the Owner, on the terms
+  `core/WORKFLOW.md` § Gate sets.
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
   costs less.)*

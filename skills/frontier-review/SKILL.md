@@ -1,6 +1,6 @@
 ---
 name: frontier-review
-description: Spend the changeset's one frontier firing on a single distilled decision question. The workhorse builds a sufficiency-tested packet; the frontier seat judges only that packet; the workhorse stays decider. Use when the Owner types /frontier-review, or before a fold-check, design gate, or escalation past a soft stop.
+description: Spend the changeset's one frontier firing on a single distilled decision question. The workhorse builds a sufficiency-tested packet; the frontier seat judges only that packet; the workhorse stays decider. Use when the Owner types /frontier-review, or before a fold-check, design gate, or a same-class-recurrence escalation.
 ---
 
 # /frontier-review — packet in, judgment out
@@ -13,7 +13,7 @@ effort matrix. Roles bind in `core/BINDINGS.md`; alias the command to your model
 **One firing per changeset, and the Owner holds the second.** Default consumer: the **fold-check**
 on a remediation delta, before the cross-family bookend. A discretionary consumer — a design gate,
 a rare-cell gate — **spends that same firing**. A second needs an Owner GO; **requesting one is not
-authorizing it.** **Outside the cap:** the escalation past the soft stop, an Owner-typed
+authorizing it.** **Outside the cap:** the same-class-recurrence escalation, an Owner-typed
 `/frontier-review`, the pinned decider seat (P3).
 
 ⚠ This cap is a rule of THIS skill, not of `core/`, and **nothing counts it** — round count is a

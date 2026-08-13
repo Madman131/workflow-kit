@@ -20,8 +20,11 @@
 //      CONVERSATION fact (a verdict the PM dispositioned); an invocation is a TREE fact, including
 //      --dry-run probes and reviewer subagents' probes. It read "ROUND 11/3" against a real ladder
 //      of two. A hook cannot observe reviewer verdicts, so it must not assert a number. The required
-//      emission FORMAT is still surfaced below — including the `GATE ROUND <n>/3` line, because that
-//      line is the contract — but <n> is left to the PM, and the text says so.
+//      emission FORMAT is still surfaced below — including the `GATE ROUND <n>` header, because that
+//      line is the contract — but <n> is left to the PM, and the text says so. (The `/3` is gone from
+//      the header itself: rounds are warrant-gated with a hard stop at 3 since v2.9.0. The sentence above keeps
+//      the old spelling deliberately — it is describing the retired counter, and history does not go
+//      stale. What must track the doc is the CONTRACT string, and a test now pins that it does.)
 //
 //   2. A TIER PIN that denied a mid-task tier downgrade (built and removed in the same changeset,
 //      2026-07-19, on a 4-seat NO-GO). It kept $HOME-global state keyed by taskId. Measured
@@ -190,19 +193,32 @@ function resolveTier(projectRoot, sessionId) {
 const CONTRACT =
   `PM DISPOSITION CONTRACT (core/WORKFLOW.md § Gate) — after EVERY verdict and BEFORE any edit,\n` +
   `the changeset's PM record must carry this complete block:\n\n` +
-  `GATE ROUND <n>/3 · changeset <name> · verdict <GO|NO-GO>\n` +
+  `GATE ROUND <n> · changeset <name> · verdict <GO|NO-GO> · HARM-PASSING <h> · NOTES <k>\n` +
   `  <finding> — <severity>\n` +
-  `    REAL?     does this failure actually occur, in the STATED threat model? reachable?\n` +
-  `    SCOPE?    is this the FEATURE asked for, or machinery introduced along the way?\n` +
-  `    BOUNDED?  small and final — or does it mint new surface to review?\n` +
-  `    WORTH IT? what breaks if it is DECLINEd? who would ever hit it?\n` +
+  `    HARM?     does this hurt (1) the Owner/user, (2) the usability of the product, or\n` +
+  `              (3) the FUNCTIONALITY of the code — and by what mechanism?\n` +
+  `              Blank => NOTE — but Precedence AND the carve-outs (irreversible, prod write,\n` +
+  `              gate-ran-lighter-than-mandate) screen FIRST; none of those exit here.\n` +
+  `              A NOTE is RECORDED here and ships with the change. Dropping is not noting.\n` +
+  `    REAL?     does it occur in the DECLARED threat model? No => DEFER + the failed trigger.\n` +
+  `    SCOPE?    the FEATURE asked for, or machinery you wrote about yourself? A self-authored\n` +
+  `              invariant => fix the SENTENCE, never the code.\n` +
+  `    WORTH IT? does the harm named above outweigh the cost of chasing it?\n` +
   `    → REMEDIATE | DEFER | DECLINE | ESCALATE (+ reason)\n` +
   `  LADDER: continue | STOP-AND-ESCALATE\n\n` +
+  `Questions run IN ORDER, first exit wins. RULE #1: a finding BLOCKS only if it names harm to one\n` +
+  `of those three targets plus the mechanism reaching it. Everything NOT screened out above is a\n` +
+  `NOTE — recorded, shipped, never chased. Dropping a harmless finding is FREE; chasing one owes the\n` +
+  `work. A NOTE on a reviewer-rated BLOCKER/HIGH owes the FAILED HARM: which targets you tested and\n` +
+  `why each does not reach. Every\n` +
+  `REMEDIATE — CODE, PROSE, DOCTRINE, EVERY class — carries HARM: and TRIGGER:.\n\n` +
   `No emission ⇒ no fix; an undispositioned fix is out-of-process. DECLINE and DEFER are first-class:\n` +
   `a ladder where everything was REMEDIATE means the PM never engaged. A ladder ends on a JUDGMENT,\n` +
   `never on reviewer silence — an adversarial reviewer never runs out of findings, so "no findings\n` +
-  `left" is not reachable. Soft stop after 3 NO-GO rounds per CHANGESET; round 4+ additionally emits\n` +
-  `PAST-SOFT-STOP: CONTINUE | STOP-AND-ESCALATE + a specific JUSTIFICATION.\n\n` +
+  `left" is not reachable. Rounds continue only while each new one is warranted by NEW harm-passing\n` +
+  `findings; ROUND 3 IS A HARD STOP and continuing past it is the Owner's, with no self-justification\n` +
+  `path. A REMEDIATE discharges only when the finding's OWN trigger is re-run and no longer fires —\n` +
+  `a new test passing is not discharge; the ORIGINAL reproduction, dead, is.\n\n` +
   `<n> is a CONVERSATION fact — the number of reviewer verdicts dispositioned for this changeset.\n` +
   `This hook does not observe it and deliberately does not supply it.\n`;
 

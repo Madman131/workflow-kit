@@ -80,12 +80,19 @@ test("the one-frontier-firing cap names its default consumer, its carve-outs, an
   assert.match(g, /A cap with no recorded count is not a control/);
 });
 
-test("round-3 escalation is ONE rung, exempt from the cap, and bounded by a mechanical trigger", () => {
+test("same-class escalation is ONE rung, exempt from the cap, and bounded by a mechanical trigger", () => {
   const g = read("core/GATES.md");
-  assert.match(g, /Escalation is ONE rung: the seat moves to the frontier tier at `high`, on round 3/);
+  // RE-KEYED at v2.9.0. This pinned "on round 3, inside the soft stop" — a trigger that cannot
+  // occur under ONE remediation round, i.e. a rung that silently never fires. The rung's PURPOSE
+  // survives the ladder change, so it was re-keyed rather than deleted.
+  assert.match(g, /Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE/);
+  // NO absence pin on the old trigger: the re-key parenthetical QUOTES it ("this said \"on round 3,\n  // inside the soft stop\"") so the reader knows what changed, and an absence pin cannot tell a
+  // retirement narrative from a live rule. Same call as core/GATES.md's retired-counter section:
+  // history does not go stale. The presence pin above is what guards the trigger.
   // Without the exemption this rung could never fire — the fold-check has already spent the budget.
   assert.match(g, /EXEMPT from the one-per-changeset cap/);
-  assert.match(g, /worst case two firings, and only where one finding-class has failed twice/);
+  assert.match(g, /worst case two firings, and only on same-class recurrence or an Owner-called later round/,
+    "the stated BOUND must track the re-keyed trigger — it described the narrow one after the widening");
   // Escalation must not become approval-shopping.
   assert.match(g, /Escalation is a FOLDED ADJUDICATION, not a blind re-review/);
 });
@@ -129,6 +136,245 @@ test("rung ORDER binds, and says WHICH of its two rules is mechanically checkabl
   // The tier table must actually carry the rungs the block governs, or the rule points at nothing.
   assert.match(w, /\*\*T2\*\*\s*\|\s*pre-flight → \*\*contract lens, PRE-CODE\*\* → cold panel/);
   assert.match(w, /\*\*T1\*\*\s*\|\s*pre-flight → one blind cold reviewer \(\*\*cross-family by default\*\*\)/);
+});
+
+// ---------------------------------------------------------------- RULE #1 (the harm screen)
+
+test("RULE #1 ships with all THREE harm targets, on every surface that applies it", () => {
+  // WHY THIS IS PINNED THREE-WAYS. The rule was first relayed with ONE target ("harm to the user"),
+  // and under that narrow form a crash nobody is watching hits nothing and banks. The Owner's own
+  // wording carries three, and the third is the one that keeps crashes blocking. A pin on "harm"
+  // alone would pass against the narrow form — which is the exact regression that matters — so each
+  // assertion names the code-functionality target explicitly.
+  const f = read("core/FOUNDATIONS.md");
+  assert.match(f, /RULE #1 — no harm to the end product ⇒ no NO-GO, no chase/);
+  assert.match(f, /\(1\) the Owner\/user · \(2\) the usability of the product · \(3\) the FUNCTIONALITY of the code/);
+  assert.match(f, /a crash nobody is currently watching harms target 3 and \*\*BLOCKS\*\*/,
+    "the narrow-form regression must be named, not merely avoided");
+  // Instruction artifacts are the class this kit IS, so its own harm mapping must ship.
+  assert.match(f, /an ambiguity admitting a harmful reading counts, because the implementer picks/);
+  // The misreading that would make this rule harmful: cutting seats instead of repairs.
+  assert.match(f, /It reduces the number of REPAIRS, never the DEPTH of review — cutting seats is the misreading/);
+
+  // The ladder's emission is where the rule is actually EXECUTED, so the funnel and its ratio pin here.
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
+  assert.match(w, /\*\*Blank ⇒ NOTE\*\* \*\(Precedence below and the carve-outs — irreversible · prod write · gate-ran-lighter-than-mandate — screen FIRST; none exit here\)\*: recorded here/);
+  assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
+  // The RATIO is the self-policing half — a principle without a reported number is not checkable.
+  assert.match(w, /HARM-PASSING <h> · NOTES <k>/);
+  assert.match(w, /The ratio is not optional — a round without it is unscreened/);
+  // HARM+TRIGGER must bind EVERY artifact class — binding only CODE is the defect that let every
+  // prose nit through the old contract owing nothing.
+  assert.match(w, /Every `REMEDIATE` — CODE, PROSE, DOCTRINE, EVERY class — carries `HARM:` \*and\* `TRIGGER:`/);
+  assert.match(w, /for prose \*\*who reads it and what wrong action follows\*\*/);
+  // A self-authored invariant costs a sentence, not a round — three of four NO-GOs in the measured
+  // instance were the changeset breaking invariants it had written about itself.
+  assert.match(w, /fix the SENTENCE, never the code/);
+
+  // ⚠ THE EXECUTION AXIS. Without this sentence the chip ships a licence to loosen a DATA gate:
+  // some readers hold no code/data separation, and "gates got cheaper" reads as "all gates".
+  assert.match(w, /it does NOT touch the EXECUTION gate — per-write Owner authorization at the moment of a live-data write is unchanged/);
+
+  // The seat contract must apply the threshold WITHOUT inviting seats to self-censor: a suppressed
+  // finding is deleted, not noted, and under-reporting is the failure mode this rule creates.
+  const r = read("core/REVIEW.md");
+  assert.match(r, /a finding that blocks must name the harm — to the Owner\/user, to the usability of the product, or to the FUNCTIONALITY of the code/);
+  assert.match(r, /Report everything you find anyway: the DISPOSITION applies the threshold, not the seat/);
+  assert.match(r, /under-reporting is the failure mode this rule creates/);
+});
+
+test("the retired chase machinery is GONE, not merely contradicted", () => {
+  // A ladder doc that carries BOTH contracts is worse than one carrying the old one: the reader
+  // meets whichever comes first. These are absence pins, so each names a spelling the OLD text
+  // actually used — an absence pin whose phrase never appeared would be green by construction.
+  const w = read("core/WORKFLOW.md");
+  assert.doesNotMatch(w, /Soft stop after 3 NO-GO rounds/i, "the 3-round soft stop is retired");
+  assert.doesNotMatch(w, /PAST-SOFT-STOP/, "the round-4 justification emission is retired");
+  assert.doesNotMatch(w, /GATE ROUND <n>\/3/, "the emission header no longer promises three rounds");
+  assert.doesNotMatch(w, /BOUNDED\?/, "BOUNDED? is retired — HARM? screens before it");
+  assert.doesNotMatch(w, /what breaks if you DECLINE\?/i,
+    "the open-referent WORTH IT? is retired: it let the process answer about itself");
+  // …and the replacement is present, or the assertions above pass on a gutted file.
+  // AMENDED at v2.9.0 (Owner: "agree hard stop at 3"). The flat one-round rule sent every
+  // imperfect first fix to the Owner; rounds now continue while NEW harm-passing findings warrant
+  // them, with a HARD stop at 3. The hard stop is the load-bearing half — the retired soft stop
+  // let a ladder justify its own continuation, which is how an ~18-round gate happened.
+  assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
+  assert.match(w, /ROUND 3 IS A HARD STOP: continuing past it requires the Owner, and there is no self-justification path/);
+  // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
+  // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
+  // whether anything is built from the text — so pin both halves, not the prose around them.
+  assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ Owner wording sign-off/);
+  assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
+  // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
+  // HARD. Pinned in the amended test above — this older pin named the retired sentence.
+});
+
+test("Precedence screens BEFORE the NOTE exit, and the carve-outs survive the rule", () => {
+  // WHY THIS EXISTS, and it is the defect the panel caught. Making HARM? the first question with
+  // "first exit wins" created a FOURTH exit — NOTE — that owes nothing. Every brake the design kept
+  // is keyed to a disposition NAME (DEFER/DECLINE for the symmetric brake and Precedence,
+  // all-REMEDIATE for the self-audit), and NOTE is none of them. Precedence protects ten classes;
+  // the carve-out list names three. Left unscreened, "the deploy script prints the API token"
+  // is blank on all three targets and ships as a NOTE. The repair is a SCREEN, not a longer list:
+  // a list has to be maintained at ten and drifts; a screen composes.
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /Precedence below and the carve-outs — irreversible · prod write · gate-ran-lighter-than-mandate — screen FIRST; none exit here/,
+    "the NOTE exit must not outrank Precedence OR the carve-outs — the credential-leak hole and its second key");
+  // THE KEYSTONE of round 2: the brake binds to the NOTE exit itself. Round 1 patched surfaces;
+  // this binds the exit once, so a reviewer-rated BLOCKER screened to NOTE leaves an auditable
+  // record instead of nothing. It is also what reconciles the funnel with the final-gate rule.
+  assert.match(w, /Symmetric brake — a `NOTE`, `DEFER` or `DECLINE` of a reviewer-rated BLOCKER\/HIGH owes the failed case: for a NOTE the FAILED HARM/);
+  // The carve-outs are acceptance-critical and were entirely unpinned until now.
+  const f = read("core/FOUNDATIONS.md");
+  assert.match(f, /anything \*\*irreversible\*\*, any\s*\*\*prod write\*\*, and any \*\*gate-ran-lighter-than-its-mandate\*\* finding escalates to the Owner regardless/,
+    "RULE #1 must not swallow the escalation path");
+  // The self-audit must fire on an all-NOTE round too. It previously triggered only on
+  // over-blocking (all-REMEDIATE, >1 finding), so the direction this rule actually creates —
+  // under-blocking — was the one direction nothing watched, and single-finding rounds were exempt.
+  // "a round with NO notes" caught the clean round too, taxing the success path in a changeset
+  // built to cut gate cost. It must mean "found things, screened them all out".
+  assert.match(w, /a round with findings but NO notes, or whose findings are \*every\* `REMEDIATE`, pauses the ladder/);
+});
+
+test("the rule's surfaces DERIVE from its canonical home, so drift reddens instead of accumulating", () => {
+  // WHY THIS SHAPE. Round 1 repaired the NOTE-exit hole by patching prose on two surfaces, and the
+  // bookend found the identical hole on four more — because a rule stated in six places with
+  // nothing binding them regenerates the defect faster than patching removes it. That is this
+  // repo's own invariant ("a rule lives in one place and other files point at it") arriving as a
+  // measured cost. Until the restatements are reduced, this test is the binding.
+  const canon = read("core/FOUNDATIONS.md");
+  // ⚠ THIS BLOCK ONCE LIED, AND THE LIE IS WHY IT IS WRITTEN THIS WAY NOW. The previous cut
+  // captured the canonical enumeration into a variable, NEVER USED IT, and checked a hand-written
+  // list — under a comment claiming it derived. A bookend proved it by renaming the targets in the
+  // canon and watching this test stay GREEN, which is worse than not deriving: after a rename it
+  // would have enforced the RETIRED names against the new canon. The mutation battery missed it
+  // because it mutated the SURFACES and never the CANON. Mutate the source of truth, not only its
+  // copies. The keys below are now COMPUTED from the capture groups — rename a target in
+  // FOUNDATIONS and this list changes with it, which is the entire point.
+  const m = /\(1\) ([^·]+) · \(2\) ([^·]+) · \(3\) ([^*]+)\*\*/.exec(canon);
+  assert.ok(m, "the canonical three-target enumeration must be findable in FOUNDATIONS");
+  const keys = [1, 2, 3].map((i) =>
+    m[i].replace(/[*_`]/g, "").split(/[^A-Za-z/]+/).filter(Boolean)
+        .sort((x, y) => y.length - x.length)[0]);
+  assert.equal(keys.length, 3, `expected three derived target keys, got ${keys.join(", ")}`);
+  assert.ok(keys.every((k) => k && k.length > 3),
+    `each target must yield a distinctive noun, got: ${keys.join(", ")}`);
+
+  // (a) Every surface that STATES the rule carries all three targets.
+  for (const surface of ["core/WORKFLOW.md", "core/REVIEW.md", "agents/cold-reviewer.md",
+                         "templates/codex-cold-reviewer.toml.tmpl",
+                         "skills/orchestrate/RUNG_ZERO.md", "hooks/guard-gate-ladder.mjs"]) {
+    const t = read(surface);
+    for (const k of keys) {
+      assert.ok(new RegExp(k.replace(/[/]/g, "\\/"), "i").test(t),
+        `${surface} states rule #1 and must carry the canonical target "${k}"`);
+    }
+  }
+
+  // (b) Every surface that describes the NOTE EXIT carries the SCREEN. A seat file describes a
+  // REPORTING threshold and already tells the seat to report regardless, so it owes no screen —
+  // that distinction is deliberate, and collapsing it would demand text those files cannot hold.
+  for (const surface of ["core/WORKFLOW.md", "core/FOUNDATIONS.md",
+                         "skills/orchestrate/RUNG_ZERO.md", "hooks/guard-gate-ladder.mjs"]) {
+    const t = read(surface);
+    assert.match(t, /screen(s)? (FIRST|BEFORE)/i,
+      `${surface} describes the NOTE exit, so it must carry the screen — an unscreened exit is the hole`);
+    assert.match(t, /gate-ran-lighter-than/i,
+      `${surface} must name the carve-out that no Precedence class covers — it was the second key`);
+  }
+});
+
+test("the ROUNDS rule is stated in one shape everywhere it is stated at all", () => {
+  // THIRD RECURRENCE OF ONE CLASS, and this pin is the answer to it. The rounds rule was amended
+  // in core/WORKFLOW.md and left standing in its retired form on three other surfaces — the hook
+  // (printed at decision time), core/OPERATE.md (BINDING, citing § Gate as its authority) and
+  // core/REVIEW.md. All three AGREED before the amendment; the amendment broke the agreement and
+  // 161 green tests shipped over it. Patching the statements is what kept regenerating this; the
+  // rule still lives on too many surfaces (banked as its own chip), so until that is fixed THIS
+  // is the binding that makes drift red instead of silent.
+  // ⚠ For the hook, pin what it PRINTS, not the file. A first cut of this pin checked the whole
+  // file and passed while the printed contract had lost the rule entirely — the hook's HISTORY
+  // COMMENT also says "hard stop", and that is the decorative-pin trap this file opens by warning
+  // about: a phrase that occurs innocently elsewhere in scope proves nothing about the clause.
+  const contractOf = (rel) => rel.endsWith(".mjs")
+    ? (/const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "")
+    : read(rel);
+  const surfaces = ["core/WORKFLOW.md", "core/OPERATE.md", "hooks/guard-gate-ladder.mjs"];
+  for (const rel of surfaces) {
+    const t = contractOf(rel);
+    assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
+    assert.match(t, /hard stop/i, `${rel} states the rounds rule and must carry the hard stop`);
+    // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
+    assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
+      `${rel} still prints the retired rounds rule`);
+  }
+  // core/REVIEW.md must not re-assert the seat count the tier split replaced.
+  assert.doesNotMatch(read("core/REVIEW.md"), /which since v2\.9\.0 is every core-doc amendment/,
+    "REVIEW.md restored the seat cut the tier split closed");
+  // The discharge clause, on both the capped doc (short) and the uncapped decision-time surface (full).
+  assert.match(read("core/WORKFLOW.md"),
+    /A REMEDIATE discharges only when the finding's OWN trigger is re-run and no longer fires/);
+  assert.ok(raw("hooks/guard-gate-ladder.mjs").includes("the ORIGINAL reproduction, dead, is"),
+    "the decision-time surface carries the full discharge sentence — it is uncapped, so it can");
+});
+
+test("the hook's printed contract tracks WORKFLOW's emission block, or drift reddens", () => {
+  // WHY. This string is what an agent is HANDED at gate time — the LOUDER surface, because the doc
+  // is read when someone opens it and the hook arrives unprompted at the moment of decision. It is
+  // a hand-maintained mirror of core/WORKFLOW.md § Gate and NOTHING kept the two synchronised: it
+  // had already gone stale, printing a retired funnel and a retired round count while the doc said
+  // otherwise, and every existing hook test checks registration or firing, never the text. The
+  // staleness was the symptom; the unpinned mirror was the defect. Fixing the text without pinning
+  // it re-arms the identical failure for whoever changes the contract next.
+  const hook = raw("hooks/guard-gate-ladder.mjs");
+  const w = read("core/WORKFLOW.md");
+  // DERIVED from the doc rather than hand-listed here — a hand-listed copy would be a third mirror.
+  const emission = /GATE ROUND[\s\S]*?LADDER: continue/.exec(w)?.[0] ?? "";
+  assert.ok(emission, "the emission block must be findable in core/WORKFLOW.md — re-point this test");
+  const questions = [...emission.matchAll(/\*\*([A-Z][A-Z ]*\?)\*\*/g)].map((m) => m[1]);
+  assert.ok(questions.length >= 4,
+    `expected the funnel's questions in the emission line, parsed: ${questions.join(", ")}`);
+  for (const q of questions) {
+    assert.ok(hook.includes(q),
+      `the hook must print "${q}" — an agent acts on what the hook hands it, not on the doc`);
+  }
+  for (const t of ["the Owner/user", "the usability of the product", "the FUNCTIONALITY of the code"]) {
+    assert.ok(hook.includes(t), `the hook's contract must name the harm target "${t}"`);
+  }
+  assert.ok(hook.includes("A NOTE on a reviewer-rated BLOCKER/HIGH owes the FAILED HARM"),
+    "the decision-time surface must carry the brake binding, or the NOTE exit prints as free");
+  assert.ok(/Precedence AND the carve-outs[\s\S]*?screen FIRST/.test(hook),
+    "the decision-time surface must carry the Precedence screen, or it prints the hole");
+  // The retired contract must be GONE from what the hook PRINTS. Both shipping is worse than
+  // either alone: the reader meets whichever arrives first, and the hook arrives first.
+  const contract = /const CONTRACT =[\s\S]*?;\n/.exec(hook)?.[0] ?? "";
+  assert.ok(contract, "the CONTRACT constant must be findable — re-point this test");
+  for (const dead of ["GATE ROUND <n>/3", "Soft stop after 3 NO-GO rounds", "PAST-SOFT-STOP", "BOUNDED?"]) {
+    assert.ok(!contract.includes(dead), `the hook must not print the retired "${dead}"`);
+  }
+});
+
+test("every surface that APPLIES rule #1 states all three targets, not a pointer", () => {
+  // The three-target pin previously covered FOUNDATIONS/WORKFLOW/REVIEW while the test claimed
+  // "every surface that applies it". Three more apply it. This gap was not theoretical: to fit a
+  // 500-word cap the Claude-lane seat had been reduced to a pointer, and all three panel seats
+  // reported the harness injecting the SUPERSEDED one-target form — so a seat that did not follow
+  // the pointer had exactly one available definition of harm and it was the regression.
+  for (const surface of ["agents/cold-reviewer.md",
+                         "templates/codex-cold-reviewer.toml.tmpl",
+                         "skills/orchestrate/RUNG_ZERO.md"]) {
+    const t = read(surface);
+    assert.match(t, /Owner\/user/, `${surface} must name harm target 1`);
+    assert.match(t, /usability of the product|product's usability/i, `${surface} must name harm target 2`);
+    assert.match(t, /FUNCTIONALITY of the code|code's FUNCTIONALITY/i,
+      `${surface} must name target 3 — the one the narrow form drops, and the one that keeps crashes blocking`);
+  }
+  // A NOTE is RECORDED. Compression once cut that word here to save four words against the cap,
+  // leaving "dropping is free" on the one surface that runs before any gate record exists —
+  // where a dropped finding is deleted, not noted, and nobody downstream can tell the difference.
+  assert.match(read("skills/orchestrate/RUNG_ZERO.md"), /\*\*recorded\*\*, never dropped/);
 });
 
 test("WORKFLOW describes the gate-ladder sensor as it ACTUALLY behaves since v2.1", () => {
