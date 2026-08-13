@@ -429,13 +429,6 @@ gate_pid=$!; wait "$gate_pid"; gate_rc=$?   # rc 0 AND receipt in OUT = verdict;
   degradation to another family — a hijacked companion review holds real tools and cites outside
   evidence perfectly. That failure is caught by attribution (the guarded site and the banner), never
   by this clause; two failure modes, two checks, and neither substitutes for the other.
-  **ASK FOR THE RECEIPT, NOT THE SUMMARY.** The general form of this whole check, and the cheapest
-  control on the page: **demand the evidence a claim rests on, and the gap between what was measured
-  and what was concluded appears on its own** — no suspicion required and nobody has to be clever.
-  It is why the clause above asks the seat to produce something only looking could produce, and it
-  applies upward too: **a reviewer, a lane or an orchestrator relaying a finding owes the receipt on
-  request.** *This clause exists because a peer lane asked for one instead of accepting a paraphrase,
-  and the paraphrase turned out to be an inference wearing a measurement's voice.*
 - **Thread id capture:** a FULL pass runs `--json`, reads the `thread.started` event, and writes the
   id to `OUT.thread` — cleared before every run, so **that path's** sidecar is never stale: it names
   the thread of the run that produced *that* `OUT`, or is absent. (Sidecars beside *other* `-o` paths

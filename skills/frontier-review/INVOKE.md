@@ -22,7 +22,8 @@ seat's limits entirely, which is the failure both signals are mistaken for.
 ## Codex lane — running the gate runner
 
 The body states the load-bearing fact: that lane is **not packet-only**, so it is a cross-family
-gate on your question rather than this seat. Mechanics for running it:
+gate on your question rather than this seat. *(Nor is the Claude lane: its cage bounds REACH, never
+inputs.)* Mechanics for running it:
 
 - It ships only with `init --with-gate-runners` and needs the `codex` CLI at runtime
   (`PORTABILITY.md` § External tool dependencies).

@@ -440,9 +440,14 @@ test("GATES' traps entry gives the SYMPTOM, the detection, and the caveat that m
   // The bound travels with the claim or the claim over-reaches.
   assert.match(g, /proves the CAPABILITY is gone, not that blinding harms a review with no planted defect/i);
 
-  // The general control the experiment bought — cheaper than any reviewer, and it caught two errors.
-  assert.match(g, /ASK FOR THE RECEIPT, NOT THE SUMMARY/);
-  assert.match(g, /owes the receipt on request/i, "…and it binds upward, not only the seat");
+  // ⚠ A RULE WAS REMOVED FROM HERE, DELIBERATELY. An earlier cut of this changeset added an
+  // "ask for the receipt" obligation binding reviewers, lanes and orchestrators — a RULE, in a file
+  // whose own header declares CLASS: REFERENCE, "never a rule", with one enumerated exception.
+  // A cold seat caught it as an invariant FAIL and was right: pre-existing class doctrine outranks
+  // a good addition. Relocating it was not available either — core/WORKFLOW.md has 93 bytes of
+  // headroom. So it was deleted rather than moved or softened, and this asserts it stays deleted.
+  assert.doesNotMatch(g, /owes the receipt on request/i,
+    "core/GATES.md is CLASS: REFERENCE — it must not re-acquire a rule binding people");
 
   // ⚠ THE ANTI-INSTRUCTION. The measured hedging behaviour makes "look for hedging" an actively
   // WRONG reading of this trap, and it is the reading a hurried editor will reach for. Stating the
@@ -549,6 +554,19 @@ test("the seat definitions claim a bounded REACH, never a proven INPUT SET", () 
   // PORTABILITY carried the identical formula — "…so 'judge only the packet' is mechanical, not a
   // promise" — inside a section whose own subject is honesty notes. Four surfaces carried one false
   // mechanism claim; correcting three of them is what leaves it shipping.
+  // ⚠ A FIFTH SURFACE, found by a cold seat after four had been corrected — and it was the worst
+  // placed of the five: skills/frontier-review/SKILL.md is the file that SEATS the agent, the file
+  // frontier-consult.md points every orchestrator to, and a [P] asset installed into every adopter.
+  // It said "packet-only is verifiable" — the retracted claim in a stronger form than the four that
+  // were fixed. My dependency sweep did not reach it because I did not put it on the file list:
+  // a dry-run cannot find what is not on your list. Correcting n−1 surfaces is what leaves a claim
+  // shipping, and that sentence is this changeset's own thesis.
+  const fr = read("skills/frontier-review/SKILL.md");
+  assert.doesNotMatch(fr, /packet-only is verifiable/i,
+    "the seating skill must not assert packet-only is verifiable — it is the fifth surface");
+  assert.match(fr, /a cage on REACH, \*\*not a packet-only guarantee/i, "…it states what the cage bounds");
+  assert.match(fr, /nothing bounds what the harness PRE-LOADS/i, "…and what it does not");
+
   const p2 = read("PORTABILITY.md");
   assert.doesNotMatch(p2, /"judge only the packet" is mechanical, not a\s*promise/i,
     "PORTABILITY must not still ship the retracted mechanism claim");
@@ -625,12 +643,16 @@ test("what a seat RETURNS is left alone — only what a verifier ACCEPTS was cha
   // second is the defect. The output-spec sites sit close to text this changeset does edit —
   // frontier-consult's is nine lines from the mechanism claim above — so proximity, not analysis,
   // is what would edit them. This asserts they still ship UNCHANGED.
-  for (const site of [
-    "agents/cold-reviewer.md",
-    "agents/frontier-consult.md",
-    "templates/codex-cold-reviewer.toml.tmpl",
+  // ⚠ PIN THE SENTENCE, NOT THE TOKEN. An earlier cut asserted only /severity-ranked/ — a presence
+  // check on one hyphenated word — while this comment claimed it asserted unchangedness. A rewrite
+  // that gutted the output spec and kept the word would have passed green. A cold seat caught it:
+  // "a grep proves a SPELLING, never a claim", committed inside the pin written to prevent it.
+  for (const [site, spec] of [
+    ["agents/cold-reviewer.md", /`GO` \| `GO-WITH-CHANGES` \| `NO-GO` \| `HOLD`, with severity-ranked findings, each carrying evidence/],
+    ["agents/frontier-consult.md", /\*\*Return\*\*: severity-ranked findings, each tied to specific packet content, and ONE recommendation/],
+    ["templates/codex-cold-reviewer.toml.tmpl", /GO-WITH-CHANGES, NO-GO, or HOLD with severity-ranked exact file\/line evidence/],
   ]) {
-    assert.match(read(site), /severity-ranked/,
-      `${site} carries an OUTPUT SPEC, not the sufficiency test — it must not be swept up by a grep-driven fix`);
+    assert.match(read(site), spec,
+      `${site}'s OUTPUT SPEC must survive VERBATIM — it says what a seat RETURNS, not what a verifier ACCEPTS`);
   }
 });
