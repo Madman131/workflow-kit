@@ -245,10 +245,22 @@ test("the rule's surfaces DERIVE from its canonical home, so drift reddens inste
   // repo's own invariant ("a rule lives in one place and other files point at it") arriving as a
   // measured cost. Until the restatements are reduced, this test is the binding.
   const canon = read("core/FOUNDATIONS.md");
-  // DERIVED, not hand-listed: pull the three targets out of the canonical enumeration itself.
-  const enumeration = /\(1\) the Owner\/user · \(2\) ([^·]+) · \(3\) ([^*]+)\*\*/.exec(canon);
-  assert.ok(enumeration, "the canonical three-target enumeration must be findable in FOUNDATIONS");
-  const keys = [/owner\/user/i, /usability/i, /functionality/i];
+  // ⚠ THIS BLOCK ONCE LIED, AND THE LIE IS WHY IT IS WRITTEN THIS WAY NOW. The previous cut
+  // captured the canonical enumeration into a variable, NEVER USED IT, and checked a hand-written
+  // list — under a comment claiming it derived. A bookend proved it by renaming the targets in the
+  // canon and watching this test stay GREEN, which is worse than not deriving: after a rename it
+  // would have enforced the RETIRED names against the new canon. The mutation battery missed it
+  // because it mutated the SURFACES and never the CANON. Mutate the source of truth, not only its
+  // copies. The keys below are now COMPUTED from the capture groups — rename a target in
+  // FOUNDATIONS and this list changes with it, which is the entire point.
+  const m = /\(1\) ([^·]+) · \(2\) ([^·]+) · \(3\) ([^*]+)\*\*/.exec(canon);
+  assert.ok(m, "the canonical three-target enumeration must be findable in FOUNDATIONS");
+  const keys = [1, 2, 3].map((i) =>
+    m[i].replace(/[*_`]/g, "").split(/[^A-Za-z/]+/).filter(Boolean)
+        .sort((x, y) => y.length - x.length)[0]);
+  assert.equal(keys.length, 3, `expected three derived target keys, got ${keys.join(", ")}`);
+  assert.ok(keys.every((k) => k && k.length > 3),
+    `each target must yield a distinctive noun, got: ${keys.join(", ")}`);
 
   // (a) Every surface that STATES the rule carries all three targets.
   for (const surface of ["core/WORKFLOW.md", "core/REVIEW.md", "agents/cold-reviewer.md",
@@ -256,7 +268,8 @@ test("the rule's surfaces DERIVE from its canonical home, so drift reddens inste
                          "skills/orchestrate/RUNG_ZERO.md", "hooks/guard-gate-ladder.mjs"]) {
     const t = read(surface);
     for (const k of keys) {
-      assert.match(t, k, `${surface} states rule #1 and must carry the target ${k}`);
+      assert.ok(new RegExp(k.replace(/[/]/g, "\\/"), "i").test(t),
+        `${surface} states rule #1 and must carry the canonical target "${k}"`);
     }
   }
 
@@ -271,6 +284,40 @@ test("the rule's surfaces DERIVE from its canonical home, so drift reddens inste
     assert.match(t, /gate-ran-lighter-than/i,
       `${surface} must name the carve-out that no Precedence class covers — it was the second key`);
   }
+});
+
+test("the ROUNDS rule is stated in one shape everywhere it is stated at all", () => {
+  // THIRD RECURRENCE OF ONE CLASS, and this pin is the answer to it. The rounds rule was amended
+  // in core/WORKFLOW.md and left standing in its retired form on three other surfaces — the hook
+  // (printed at decision time), core/OPERATE.md (BINDING, citing § Gate as its authority) and
+  // core/REVIEW.md. All three AGREED before the amendment; the amendment broke the agreement and
+  // 161 green tests shipped over it. Patching the statements is what kept regenerating this; the
+  // rule still lives on too many surfaces (banked as its own chip), so until that is fixed THIS
+  // is the binding that makes drift red instead of silent.
+  // ⚠ For the hook, pin what it PRINTS, not the file. A first cut of this pin checked the whole
+  // file and passed while the printed contract had lost the rule entirely — the hook's HISTORY
+  // COMMENT also says "hard stop", and that is the decorative-pin trap this file opens by warning
+  // about: a phrase that occurs innocently elsewhere in scope proves nothing about the clause.
+  const contractOf = (rel) => rel.endsWith(".mjs")
+    ? (/const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "")
+    : read(rel);
+  const surfaces = ["core/WORKFLOW.md", "core/OPERATE.md", "hooks/guard-gate-ladder.mjs"];
+  for (const rel of surfaces) {
+    const t = contractOf(rel);
+    assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
+    assert.match(t, /hard stop/i, `${rel} states the rounds rule and must carry the hard stop`);
+    // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
+    assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
+      `${rel} still prints the retired rounds rule`);
+  }
+  // core/REVIEW.md must not re-assert the seat count the tier split replaced.
+  assert.doesNotMatch(read("core/REVIEW.md"), /which since v2\.9\.0 is every core-doc amendment/,
+    "REVIEW.md restored the seat cut the tier split closed");
+  // The discharge clause, on both the capped doc (short) and the uncapped decision-time surface (full).
+  assert.match(read("core/WORKFLOW.md"),
+    /A REMEDIATE discharges only when the finding's OWN trigger is re-run and no longer fires/);
+  assert.ok(raw("hooks/guard-gate-ladder.mjs").includes("the ORIGINAL reproduction, dead, is"),
+    "the decision-time surface carries the full discharge sentence — it is uncapped, so it can");
 });
 
 test("the hook's printed contract tracks WORKFLOW's emission block, or drift reddens", () => {

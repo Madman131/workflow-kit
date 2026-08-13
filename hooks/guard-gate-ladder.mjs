@@ -22,7 +22,7 @@
 //      of two. A hook cannot observe reviewer verdicts, so it must not assert a number. The required
 //      emission FORMAT is still surfaced below — including the `GATE ROUND <n>` header, because that
 //      line is the contract — but <n> is left to the PM, and the text says so. (The `/3` is gone from
-//      the header itself: the ladder is ONE remediation round since v2.9.0. The sentence above keeps
+//      the header itself: rounds are warrant-gated with a hard stop at 3 since v2.9.0. The sentence above keeps
 //      the old spelling deliberately — it is describing the retired counter, and history does not go
 //      stale. What must track the doc is the CONTRACT string, and a test now pins that it does.)
 //
@@ -215,7 +215,10 @@ const CONTRACT =
   `No emission ⇒ no fix; an undispositioned fix is out-of-process. DECLINE and DEFER are first-class:\n` +
   `a ladder where everything was REMEDIATE means the PM never engaged. A ladder ends on a JUDGMENT,\n` +
   `never on reviewer silence — an adversarial reviewer never runs out of findings, so "no findings\n` +
-  `left" is not reachable. ONE remediation round; a second is the Owner's call, not the gate's.\n\n` +
+  `left" is not reachable. Rounds continue only while each new one is warranted by NEW harm-passing\n` +
+  `findings; ROUND 3 IS A HARD STOP and continuing past it is the Owner's, with no self-justification\n` +
+  `path. A REMEDIATE discharges only when the finding's OWN trigger is re-run and no longer fires —\n` +
+  `a new test passing is not discharge; the ORIGINAL reproduction, dead, is.\n\n` +
   `<n> is a CONVERSATION fact — the number of reviewer verdicts dispositioned for this changeset.\n` +
   `This hook does not observe it and deliberately does not supply it.\n`;
 
