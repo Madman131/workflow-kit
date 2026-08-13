@@ -30,6 +30,26 @@ const raw = (rel) => readFileSync(path.join(ROOT, rel), "utf8");
 // "Do > not read it…".
 const read = (rel) => raw(rel).replace(/^\s*>\s?/gm, "").replace(/\s+/g, " ");
 
+// What a `.mjs` decision-time surface PRINTS, as opposed to how it is TYPED.
+//
+// ⚠ WHY THIS EXISTS, and it is the same reflow trap `read()` closes for docs — left open on `.mjs`
+// because that was read raw. The hook's contract is a CONCATENATION of template literals, so a
+// sentence wrapping across two of them ("…Soft stop after 3 NO-GO\n` + `rounds…") is not a
+// substring of the source at all. An ABSENCE pin over the raw text therefore passes while the
+// retired rule still reaches the agent — fail-OPEN, the dangerous direction. PROVEN BY MUTATION:
+// a retired soft-stop rule planted across two literals printed at decision time with every
+// absence pin green. A presence pin has the mirror defect and fails closed (a spurious red), which
+// this file's header records as a measured false alarm.
+//
+// Segments are joined edge-to-edge, `\n` escapes are resolved the way the runtime resolves them,
+// and whitespace is flattened — the same normalisation `read()` applies to prose, so both surface
+// classes are now pinned on their MEANING rather than on their typography.
+const printed = (rel) => {
+  const decl = /const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "";
+  return [...decl.matchAll(/`([^`]*)`/g)].map((m) => m[1]).join("")
+    .replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+};
+
 // ---------------------------------------------------------------- routing reversal
 
 test("GATES routes Gemini to DESIGNS and states the coverage REDUCTION instead of glossing it", () => {
@@ -295,10 +315,18 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // 161 green tests shipped over it. Patching the statements is what kept regenerating this; the
   // rule still lives on too many surfaces (banked as its own chip), so until that is fixed THIS
   // is the binding that makes drift red instead of silent.
-  // For the hook, pin what it PRINTS, not its history comments.
-  const contractOf = (rel) => rel.endsWith(".mjs")
-    ? (/const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "")
-    : read(rel);
+  // ⚠ KO15 REBASE (Owner ruling (b), base-drift split, custodian order): the rounds-specific
+  // derive-pin that lived here (canon-derived stop number, `atRound` proximity, the warrant/
+  // harm-passing component checks) is BANKED to a follow-on chip — its subject left this changeset
+  // when the Owner's own root-cause controller replaced the hard-stop rounds policy on main. What
+  // survives the split is the READING MECHANISM, which is non-rounds: for the hook, pin what it
+  // PRINTS via `printed()` (the real `buildAdditionalContext()` output), never a source-text regex
+  // extraction — the exact defect class (H1-H4) this changeset exists to delete. Main's own
+  // `contractOf` still used the old regex extraction below, because the controller was authored
+  // from the pre-repair base, not because anyone re-decided the extraction question — a naive
+  // "rounds content wins" would have silently reverted the extraction fix along with the banked
+  // policy text, so the mechanism is kept and only the rounds-specific assertions are banked.
+  const contractOf = (rel) => rel.endsWith(".mjs") ? printed(rel) : read(rel);
   const surfaces = ["core/WORKFLOW.md", "core/OPERATE.md", "hooks/guard-gate-ladder.mjs"];
   for (const rel of surfaces) {
     const t = contractOf(rel);
@@ -314,7 +342,7 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // The discharge clause, on both the capped doc (short) and the uncapped decision-time surface (full).
   assert.match(read("core/WORKFLOW.md"),
     /A REMEDIATE discharges only when the finding's OWN trigger is re-run and no longer fires/);
-  assert.ok(raw("hooks/guard-gate-ladder.mjs").includes("the ORIGINAL reproduction, dead, is"),
+  assert.ok(printed("hooks/guard-gate-ladder.mjs").includes("the ORIGINAL reproduction, dead, is"),
     "the decision-time surface carries the full discharge sentence — it is uncapped, so it can");
 });
 
@@ -326,7 +354,17 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
   // otherwise, and every existing hook test checks registration or firing, never the text. The
   // staleness was the symptom; the unpinned mirror was the defect. Fixing the text without pinning
   // it re-arms the identical failure for whoever changes the contract next.
-  const hook = raw("hooks/guard-gate-ladder.mjs");
+  // ⚠ SCOPED TO WHAT THE HOOK PRINTS, on both counts, and the previous cut was scoped to neither.
+  //   (1) These presence checks read the WHOLE FILE — the exact defect the sibling ROUNDS test
+  //       warns about two tests above ("a first cut checked the whole file and passed while the
+  //       printed contract had lost the rule entirely"). The hook's comments discuss the funnel and
+  //       name the harm targets, so every assertion below could have been satisfied by the file's
+  //       own history narrative while the CONTRACT shipped without them.
+  //   (2) Raw text is reflow-blind: this contract is concatenated template literals, so a clause
+  //       wrapping across two of them is not a substring of the source. See `printed()`.
+  // The agent acts on the printed string, so the printed string is what must be pinned.
+  const hook = printed("hooks/guard-gate-ladder.mjs");
+  assert.ok(hook, "the CONTRACT constant must be findable — re-point this test");
   const w = read("core/WORKFLOW.md");
   // DERIVED from the doc rather than hand-listed here — a hand-listed copy would be a third mirror.
   const emission = /GATE ROUND[\s\S]*?LADDER: continue/.exec(w)?.[0] ?? "";
@@ -347,11 +385,27 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
     "the decision-time surface must carry the Precedence screen, or it prints the hole");
   // The retired contract must be GONE from what the hook PRINTS. Both shipping is worse than
   // either alone: the reader meets whichever arrives first, and the hook arrives first.
-  const contract = /const CONTRACT =[\s\S]*?;\n/.exec(hook)?.[0] ?? "";
-  assert.ok(contract, "the CONTRACT constant must be findable — re-point this test");
+  // These are the ABSENCE pins, so they are the ones the reflow gap failed OPEN on — `printed()`
+  // is what makes a wrapped re-add visible to them.
   for (const dead of ["GATE ROUND <n>/3", "Soft stop after 3 NO-GO rounds", "PAST-SOFT-STOP", "BOUNDED?"]) {
-    assert.ok(!contract.includes(dead), `the hook must not print the retired "${dead}"`);
+    assert.ok(!hook.includes(dead), `the hook must not print the retired "${dead}"`);
   }
+
+  // …and the canary, because the four assertions above are decoration if the extractor cannot see
+  // a wrapped re-add. This is the planted mutation that proved the gap: the retired rule split
+  // across two template literals exactly as the surrounding contract is typed. It must be VISIBLE
+  // to `printed()` — if this ever stops matching, the extractor has regressed and the absence pins
+  // above are green for the wrong reason.
+  const wrapped = "const CONTRACT =\n"
+    + "  `Soft stop after 3 NO-GO\\n` +\n"
+    + "  `rounds applies.\\n`;\n";
+  const decl = /const CONTRACT =[\s\S]*?;\n/.exec(wrapped)?.[0] ?? "";
+  const flat = [...decl.matchAll(/`([^`]*)`/g)].map((m) => m[1]).join("")
+    .replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  assert.ok(flat.includes("Soft stop after 3 NO-GO rounds"),
+    "the extractor must see a retired rule wrapped across two literals — the fail-open this closes");
+  assert.ok(!wrapped.includes("Soft stop after 3 NO-GO rounds"),
+    "…and a RAW scan must NOT see it, or this canary is not reproducing the gap it documents");
 });
 
 test("every surface that APPLIES rule #1 states all three targets, not a pointer", () => {
