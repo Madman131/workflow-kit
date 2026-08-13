@@ -1581,8 +1581,13 @@ root `CLAUDE.md` / `AGENTS.md` entry stubs, `core/BINDINGS.md`, `core/REPO_INVAR
 
 **The agents** (`agents/`, `[P]` — reviewer seat definitions → `.claude/agents/`, Claude lane only):
 - `agents/cold-reviewer.md` — the blind cold seat (payload-only mandate; `tools: Read, Grep, Glob`).
-- `agents/frontier-consult.md` — the consult seat; its `tools: []` is the harness-enforced
-  packet-only cage the `/frontier-review` skill relies on. Never remove that line.
+- `agents/frontier-consult.md` — the consult seat; its `tools: []` is a harness-enforced cage on
+  what the seat can **REACH**, which the `/frontier-review` skill relies on. Never remove that line.
+  ⚠ **It is not a packet-only guarantee, and never was.** The cage bounds fetching; it does not bound
+  what the harness PRE-LOADS — measured 2026-08-12, a seat at `tools: []` with `tool_uses: 0` against
+  a paired control still received a repository memory index and recent commit subjects. **Bounded
+  reach, never a proven input set**, which is why the seat is asked to disclose what reached it
+  rather than certified as unframed.
 
 ## Adopt in three steps
 

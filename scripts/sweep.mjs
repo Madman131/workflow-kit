@@ -321,9 +321,15 @@ export function run(cfg, { stdout = process.stdout, stderr = process.stderr } = 
   const prompt = buildPrompt(cfg.question, readable, nonce);
   // One interleaved stream (2>&1 inside the shell): arrival order is what makes banner-first a
   // real property — concatenating stdout after stderr would let forged text precede the banner.
+  // The seat's code-mode file access is NEVER disabled here, and this is sharper than it is for a
+  // gate: buildPrompt hands the seat a list of PATHS, not contents, so a seat that cannot open a
+  // file has nothing at all to work from — yet it would still exit 0 and could still emit
+  // `COVERAGE: <file> :: scanned` for every file, which this wrapper cannot contradict (the status
+  // is the model's attestation, see the header). A blinded sweep is a vacuous clean report.
+  // Measured 2026-08-12 on codex-cli 0.147.0-alpha.6.5; core/GATES.md § Gotchas / traps.
   const cmd =
     ["codex", "exec", "-m", seat.model, "-c", `model_reasoning_effort=${seat.effort}`,
-     "-s", "read-only", "-C", repoAbs, "--disable", "code_mode_host"].map(shq).join(" ") + " 2>&1";
+     "-s", "read-only", "-C", repoAbs].map(shq).join(" ") + " 2>&1";
   const res = spawnSync("sh", ["-c", cmd],
     { input: prompt, encoding: "utf8", timeout: 900_000, maxBuffer: 32 * 1024 * 1024 });
 

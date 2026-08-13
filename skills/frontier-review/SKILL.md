@@ -51,9 +51,9 @@ folded seat reads as stronger than it is.
 ## 3. Invoke — per lane
 **Claude lane:** spawn ONE subagent via the Agent tool with `subagent_type: "frontier-consult"` —
 **never an inline frontier-model call**, which drops the seat's limits. Send the packet as the
-whole prompt. That definition holds `tools: []`, which the harness documents as *no tools at all*.
-**The kit ships and install-checks that declaration; it does not execute the enforcement** — so
-packet-only is verifiable, not seen firing here.
+whole prompt. That definition holds `tools: []` — a cage on REACH, **not a packet-only guarantee:
+nothing bounds what the harness PRE-LOADS.** The kit install-checks the declaration; it
+does not execute the enforcement.
 
 ⚠ The cage is **silent, not honest**: a caged seat can still fabricate tool calls. A confident
 answer is NOT evidence the packet sufficed — § 2 still binds.
