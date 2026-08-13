@@ -80,9 +80,15 @@ test("the one-frontier-firing cap names its default consumer, its carve-outs, an
   assert.match(g, /A cap with no recorded count is not a control/);
 });
 
-test("round-3 escalation is ONE rung, exempt from the cap, and bounded by a mechanical trigger", () => {
+test("same-class escalation is ONE rung, exempt from the cap, and bounded by a mechanical trigger", () => {
   const g = read("core/GATES.md");
-  assert.match(g, /Escalation is ONE rung: the seat moves to the frontier tier at `high`, on round 3/);
+  // RE-KEYED at v2.9.0. This pinned "on round 3, inside the soft stop" — a trigger that cannot
+  // occur under ONE remediation round, i.e. a rung that silently never fires. The rung's PURPOSE
+  // survives the ladder change, so it was re-keyed rather than deleted.
+  assert.match(g, /Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE/);
+  // NO absence pin on the old trigger: the re-key parenthetical QUOTES it ("this said \"on round 3,\n  // inside the soft stop\"") so the reader knows what changed, and an absence pin cannot tell a
+  // retirement narrative from a live rule. Same call as core/GATES.md's retired-counter section:
+  // history does not go stale. The presence pin above is what guards the trigger.
   // Without the exemption this rung could never fire — the fold-check has already spent the budget.
   assert.match(g, /EXEMPT from the one-per-changeset cap/);
   assert.match(g, /worst case two firings, and only where one finding-class has failed twice/);
@@ -152,7 +158,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   // The ladder's emission is where the rule is actually EXECUTED, so the funnel and its ratio pin here.
   const w = read("core/WORKFLOW.md");
   assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
-  assert.match(w, /\*\*Blank ⇒ NOTE:\*\* recorded here, ships with the change, no round, no justification owed/);
+  assert.match(w, /\*\*Blank ⇒ NOTE\*\* \*\(Precedence below screens FIRST — its classes never exit here\)\*: recorded here, ships with the change, no round, no justification owed/);
   assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
   // The RATIO is the self-policing half — a principle without a reported number is not checkable.
   assert.match(w, /HARM-PASSING <h> · NOTES <k>/);
@@ -191,6 +197,82 @@ test("the retired chase machinery is GONE, not merely contradicted", () => {
   // …and the replacement is present, or the assertions above pass on a gutted file.
   assert.match(w, /\*\*ONE remediation round\.\*\*/);
   assert.match(w, /A second exists \*\*only\*\* if round 1's own fixes created \*\*new HARM-passing\*\* findings, \*\*and it is the Owner's call, not the gate's\.\*\*/);
+});
+
+test("Precedence screens BEFORE the NOTE exit, and the carve-outs survive the rule", () => {
+  // WHY THIS EXISTS, and it is the defect the panel caught. Making HARM? the first question with
+  // "first exit wins" created a FOURTH exit — NOTE — that owes nothing. Every brake the design kept
+  // is keyed to a disposition NAME (DEFER/DECLINE for the symmetric brake and Precedence,
+  // all-REMEDIATE for the self-audit), and NOTE is none of them. Precedence protects ten classes;
+  // the carve-out list names three. Left unscreened, "the deploy script prints the API token"
+  // is blank on all three targets and ships as a NOTE. The repair is a SCREEN, not a longer list:
+  // a list has to be maintained at ten and drifts; a screen composes.
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /Precedence below screens FIRST — its classes never exit here/,
+    "the NOTE exit must not outrank Precedence — this is the credential-leak hole");
+  // The carve-outs are acceptance-critical and were entirely unpinned until now.
+  const f = read("core/FOUNDATIONS.md");
+  assert.match(f, /anything \*\*irreversible\*\*, any\s*\*\*prod write\*\*, and any \*\*gate-ran-lighter-than-its-mandate\*\* finding escalates to the Owner regardless/,
+    "RULE #1 must not swallow the escalation path");
+  // The self-audit must fire on an all-NOTE round too. It previously triggered only on
+  // over-blocking (all-REMEDIATE, >1 finding), so the direction this rule actually creates —
+  // under-blocking — was the one direction nothing watched, and single-finding rounds were exempt.
+  assert.match(w, /a round with NO notes, or whose findings are \*every\* `REMEDIATE`, pauses the ladder/);
+});
+
+test("the hook's printed contract tracks WORKFLOW's emission block, or drift reddens", () => {
+  // WHY. This string is what an agent is HANDED at gate time — the LOUDER surface, because the doc
+  // is read when someone opens it and the hook arrives unprompted at the moment of decision. It is
+  // a hand-maintained mirror of core/WORKFLOW.md § Gate and NOTHING kept the two synchronised: it
+  // had already gone stale, printing a retired funnel and a retired round count while the doc said
+  // otherwise, and every existing hook test checks registration or firing, never the text. The
+  // staleness was the symptom; the unpinned mirror was the defect. Fixing the text without pinning
+  // it re-arms the identical failure for whoever changes the contract next.
+  const hook = raw("hooks/guard-gate-ladder.mjs");
+  const w = read("core/WORKFLOW.md");
+  // DERIVED from the doc rather than hand-listed here — a hand-listed copy would be a third mirror.
+  const emission = /GATE ROUND[\s\S]*?LADDER: continue/.exec(w)?.[0] ?? "";
+  assert.ok(emission, "the emission block must be findable in core/WORKFLOW.md — re-point this test");
+  const questions = [...emission.matchAll(/\*\*([A-Z][A-Z ]*\?)\*\*/g)].map((m) => m[1]);
+  assert.ok(questions.length >= 4,
+    `expected the funnel's questions in the emission line, parsed: ${questions.join(", ")}`);
+  for (const q of questions) {
+    assert.ok(hook.includes(q),
+      `the hook must print "${q}" — an agent acts on what the hook hands it, not on the doc`);
+  }
+  for (const t of ["the Owner/user", "the usability of the product", "the FUNCTIONALITY of the code"]) {
+    assert.ok(hook.includes(t), `the hook's contract must name the harm target "${t}"`);
+  }
+  assert.ok(hook.includes("Precedence screens FIRST"),
+    "the decision-time surface must carry the Precedence screen, or it prints the hole");
+  // The retired contract must be GONE from what the hook PRINTS. Both shipping is worse than
+  // either alone: the reader meets whichever arrives first, and the hook arrives first.
+  const contract = /const CONTRACT =[\s\S]*?;\n/.exec(hook)?.[0] ?? "";
+  assert.ok(contract, "the CONTRACT constant must be findable — re-point this test");
+  for (const dead of ["GATE ROUND <n>/3", "Soft stop after 3 NO-GO rounds", "PAST-SOFT-STOP", "BOUNDED?"]) {
+    assert.ok(!contract.includes(dead), `the hook must not print the retired "${dead}"`);
+  }
+});
+
+test("every surface that APPLIES rule #1 states all three targets, not a pointer", () => {
+  // The three-target pin previously covered FOUNDATIONS/WORKFLOW/REVIEW while the test claimed
+  // "every surface that applies it". Three more apply it. This gap was not theoretical: to fit a
+  // 500-word cap the Claude-lane seat had been reduced to a pointer, and all three panel seats
+  // reported the harness injecting the SUPERSEDED one-target form — so a seat that did not follow
+  // the pointer had exactly one available definition of harm and it was the regression.
+  for (const surface of ["agents/cold-reviewer.md",
+                         "templates/codex-cold-reviewer.toml.tmpl",
+                         "skills/orchestrate/RUNG_ZERO.md"]) {
+    const t = read(surface);
+    assert.match(t, /Owner\/user/, `${surface} must name harm target 1`);
+    assert.match(t, /usability of the product|product's usability/i, `${surface} must name harm target 2`);
+    assert.match(t, /FUNCTIONALITY of the code|code's FUNCTIONALITY/i,
+      `${surface} must name target 3 — the one the narrow form drops, and the one that keeps crashes blocking`);
+  }
+  // A NOTE is RECORDED. Compression once cut that word here to save four words against the cap,
+  // leaving "dropping is free" on the one surface that runs before any gate record exists —
+  // where a dropped finding is deleted, not noted, and nobody downstream can tell the difference.
+  assert.match(read("skills/orchestrate/RUNG_ZERO.md"), /\*\*recorded\*\*, never dropped/);
 });
 
 test("WORKFLOW describes the gate-ladder sensor as it ACTUALLY behaves since v2.1", () => {

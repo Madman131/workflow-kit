@@ -19,7 +19,7 @@ they find real defects in work that should not have reached them. Rung zero is t
 
 **RULE #1 screens first** (`core/FOUNDATIONS.md`): a finding blocks only by naming harm to the
 Owner/user, the product's usability, or the code's FUNCTIONALITY, plus its mechanism. Everything
-else is a NOTE. **Dropping a harmless finding is free; chasing one owes the work.**
+else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the work.**
 
 ---
 

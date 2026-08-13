@@ -273,8 +273,10 @@ more of the leaned-on family than it did; the verdict records the active binding
   retired — round count is a conversation fact, not a tree fact): **after 2 NO-GO rounds that touch the
   same finding-class** — counted by the *recurrence of the finding*, not by whether the PM labels the
   round "contested" — the PM MUST either (a) request escalation (Owner-approved) or (b) stop-and-escalate
-  the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high`, on round 3,
-  inside the soft stop.** That firing is **EXEMPT from the one-per-changeset cap** below and needs no
+  the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE —
+  a finding-class that survived its remediation — or on an Owner-called second round.**
+  *(Re-keyed at v2.9.0: this said "on round 3, inside the soft stop", and under ONE remediation round
+  that trigger can never occur — a rung that cannot fire is a control that silently never runs.)* That firing is **EXEMPT from the one-per-changeset cap** below and needs no
   Owner GO — the cap's default consumer, the fold-check, has already spent the changeset's
   discretionary firing on the round-1 delta, so without the exemption this rung could never fire. The
   trigger is mechanical, not discretionary, which is what bounds it: **worst case two firings, and only
@@ -283,7 +285,8 @@ more of the leaned-on family than it did; the verdict records the active binding
   below records why nothing observes that — round count is a conversation fact, not a tree fact. So
   the worst case above is what the rule *authorises*, not what any mechanism *enforces*; what actually
   bounds it is the recorded firing count and the Owner's spot-check of it. Never silently grind at
-  the floor — and the WORKFLOW soft-stop (round 4+) is the backstop when the judgment control is dodged.
+  the floor — and the backstop when the judgment control is dodged is the Owner: a second round is his
+  call, not the gate's (`core/WORKFLOW.md` § Gate).
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
   costs less.)*
