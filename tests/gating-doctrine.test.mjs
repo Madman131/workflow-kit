@@ -167,15 +167,22 @@ test("the entry rule (step 0) is a real ADMISSION test, and the doors do not set
   assert.doesNotMatch(w, /enter the ladder at that class's row/i,
     "the retired 'class's row' wording must not survive — no class→tier table exists to enter");
 
-  // Door 1 (H8): named IRREVERSIBLE / LIVE but the old wording tested only reversibility, so a
-  // REVERSIBLE live-behavior-path or chain/stateful change answered NO to all four doors and built
-  // with zero seats — while the decision tree's own row 2 calls exactly that case T2. Re-cut to
-  // test what its name promises.
-  assert.match(w, /live-behavior-path or chain\/stateful logic/);
-  assert.match(w, /can I \*\*not\*\* revert my way out, or is it live regardless/);
+  // ⚠ CORRECTED (orchestrator ruling on the round-3 message): door 1 stays the RULED form — money
+  // moved, corpus written, a send sent; reversibility only. A first pass here widened door 1 to
+  // ALSO test live-behavior-path/chain-stateful directly, which reads as an improvement but is an
+  // UNRULED reversal of the Owner's explicit decline of a floor: "most production code is
+  // live-path, so a floor re-gates nearly everything and the rule's economics die." Under that
+  // widening, a loud, cheaply-revertible ranking tweak — the exact case the rule exists to free —
+  // would have re-entered the ladder at door 1. The b-lite ruling puts that case correctly on door 2
+  // instead: SUBTLY wrong ships broken looking fine (door 2 catches it); LOUDLY wrong is cheap to
+  // revert (no door catches it, by design). Pin the RULED text, not an improved one.
+  assert.match(w, /\*\*1 · IRREVERSIBLE \/ LIVE\*\* — money moved, corpus written, a send sent: can I \*\*not\*\* revert my way out\?/);
+  assert.doesNotMatch(w, /live-behavior-path or chain\/stateful logic/,
+    "door 1 must not test live-path/chain-stateful directly — that widening was ruled OUT, not in");
 
   // Door 2 (H8/H9 ruling, verbatim-class): widened beyond named instruments to any failure that
   // would not announce itself, including state/chain logic — not just controls/gates/checks/alarms.
+  // This is the ONLY door the ruling widened; it is what catches a chain/stateful change now.
   assert.match(w, /could this ship broken while looking fine\? A failure that would not announce itself: controls, gates, checks, alarms, state\/chain logic/);
 
   // The fail-closed clause and the write-GO guard (H13's two explicitly-named gaps).
@@ -193,24 +200,27 @@ test("the entry rule (step 0) is a real ADMISSION test, and the doors do not set
   assert.match(w, /gate-ran-lighter-than-mandate carve-out's case, raised when someone next reviews it, never a firing you can wait for/);
 });
 
-// ⚠ KO15 REPAIR (H8/H9, § 4's cross-surface check): the hook's SELF_REPORT floor line —
-// "anything touching live-path, chain/stateful, schema, or deploy code is at least T2" —
-// CONTRADICTED the pre-repair step 0: a reversible live-path/chain-stateful change could answer NO
-// to all four doors and ship with zero seats, while this line promised at least T2. Door 1 now
-// catches that case (live-behavior-path/chain-stateful is a YES), so an admitted change reaches
-// the decision tree's row 2 (T2) or higher — the floor line and step 0 now agree. Pinned via
-// `printed()`, the same mechanism H1-H4 fixed: what an agent acts on is what the hook PRINTS, not
-// the doc, so the check reads the real runtime string.
-test("the hook's floor line agrees with step 0 — both catch the same live-path/chain-stateful case", () => {
+// ⚠ KO15 REPAIR (H8/H9, § 4's cross-surface check, CORRECTED per the orchestrator's round-3
+// ruling): the hook's SELF_REPORT floor line — "anything touching live-path, chain/stateful,
+// schema, or deploy code is at least T2" — is now checked for what the RULED (b-lite) step 0
+// actually closes, which is narrower than the floor line's own wording. The durable brief's own §4
+// text attributes the fix to DOOR 2's widening, not door 1: "Under the widened door 2 it answers
+// YES ⇒ admitted ⇒ the tree sets T2." A chain/stateful touch is caught (door 2 names "state/chain
+// logic" explicitly, and the tree's row 2 assigns it T2 once admitted); a merely live-path change
+// with no silent-failure and no chain/stateful component is NOT guaranteed a door hit under the
+// ruled form — that gap is the Owner-declined floor's own shape, left as-is by this repair. Pinned
+// via `printed()`, the same mechanism H1-H4 fixed: what an agent acts on is what the hook PRINTS,
+// not the doc, so the check reads the real runtime string.
+test("the hook's floor line and door 2 (not door 1) agree on the chain/stateful case", () => {
   const hookPrinted = printed("hooks/guard-gate-ladder.mjs");
   assert.match(hookPrinted,
     /anything touching live-path, chain\/stateful, schema, or deploy code is at least T2/,
     "the hook's printed floor line must survive — it is what an agent actually reads at decision time");
   const w = read("core/WORKFLOW.md");
-  assert.match(w, /live-behavior-path or chain\/stateful logic/,
-    "step 0's door 1 must catch the same live-path/chain-stateful case the hook's floor line promises");
-  // The decision tree's own T2 row is what makes the floor line TRUE once step 0 admits the case —
-  // without this row an admitted live-path change would still have no depth to land at.
+  assert.match(w, /state\/chain logic/,
+    "door 2's widening — not a door-1 change — is what admits a chain/stateful touch under the ruled form");
+  // The decision tree's own T2 row is what makes the floor line true for the chain/stateful case
+  // once door 2 admits it — without this row an admitted chain/stateful change would land nowhere.
   assert.match(w, /changes \*\*live-behavior-path\*\* code, OR changes \*\*chain\/stateful control logic\*\* → \*\*T2 Major\*\*/);
 });
 
