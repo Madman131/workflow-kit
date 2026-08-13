@@ -326,15 +326,42 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // from the pre-repair base, not because anyone re-decided the extraction question — a naive
   // "rounds content wins" would have silently reverted the extraction fix along with the banked
   // policy text, so the mechanism is kept and only the rounds-specific assertions are banked.
+  //
+  // ⚠ THE TWO LISTS ARE THE CURE AND ITS BOUND. A surface either STATES the rule, or it POINTS and
+  // carries NO component of it. Those are the only two legal shapes, and a surface moves between
+  // them by a deliberate edit HERE, which is the point: the conversion is what a reviewer should
+  // have to see.
+  //
+  // NOT derived from the tree, deliberately. A list computed by scanning for surfaces that mention
+  // the rule would go VACUOUS the moment a surface lost it entirely — the surface drops out of its
+  // own denominator and the pin passes by finding nothing, which is this repo's named fail-open
+  // (a blind verification tool returns success). A maintained list cannot fail that way.
+  const STATES = ["core/WORKFLOW.md", "hooks/guard-gate-ladder.mjs"];
+  const POINTS = ["core/OPERATE.md"];
+
   const contractOf = (rel) => rel.endsWith(".mjs") ? printed(rel) : read(rel);
-  const surfaces = ["core/WORKFLOW.md", "core/OPERATE.md", "hooks/guard-gate-ladder.mjs"];
-  for (const rel of surfaces) {
+  for (const rel of STATES) {
     const t = contractOf(rel);
     assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
     assert.match(t, /root-cause/i, `${rel} states the round controller and must carry the root-cause boundary`);
     // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
     assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
       `${rel} still prints the retired rounds rule`);
+  }
+
+  // A POINTER NAMES WHERE THE RULE LIVES AND NO COMPONENT OF IT — that is the whole reason a
+  // pointer cannot go stale when the rule changes, and a pointer that restates is the defect
+  // wearing the cure's name. core/OPERATE.md is the measured instance: it cited § Gate as its
+  // authority AND restated both components, so the v2.9.0 amendment left it contradicting canon
+  // while every test stayed green. Citing an authority is not pointing at it.
+  for (const rel of POINTS) {
+    const t = read(rel);
+    assert.match(t, /`core\/WORKFLOW\.md` § Gate/,
+      `${rel} must name WHERE the round policy lives`);
+    assert.doesNotMatch(t, /hard stop/i,
+      `${rel} points at the rounds rule and must not restate its stop`);
+    assert.doesNotMatch(t, /rounds continue only while/i,
+      `${rel} must not restate the warrant condition either`);
   }
   // core/REVIEW.md must not re-assert the seat count the tier split replaced.
   assert.doesNotMatch(read("core/REVIEW.md"), /which since v2\.9\.0 is every core-doc amendment/,
