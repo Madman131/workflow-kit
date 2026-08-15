@@ -12,11 +12,8 @@ Doctrine:
 formatting).
 
 ## When
-A program too large for one thread, whose parts each deserve their own gate. Split it into
-**chips**: one chip = one changeset = one version, in its own session, in a stated ORDER. Each
-verifies the previous chip's version landed first.
-
-Never for: work one thread can gate, or two chips writing one repo at once (§ One writer per repo).
+For a multi-thread program whose parts need separate gates. One chip = one changeset = one version,
+in stated order; each verifies its predecessor landed. Never use two chips to write one repo at once.
 
 ## The three roles
 | Role | Owns | Never |
@@ -53,16 +50,10 @@ ORCHESTRATOR, who takes them to the Owner and relays the answer.** **Unsure whic
 **Everything else consults the orchestrator first**; it keeps working while it waits.
 
 ## Standing duties
-- **Offer the delegation at the right moment.** When a chip is APPROACHING push/merge-ready, ALERT the
-  Owner and **ASK them to delegate the push/merge authority for it** — do not wait to be asked and do
-  not assume it. A delegation is scoped to NAMED chips, conditioned on orchestrator satisfaction,
-  pinned to an artifact actually diligenced, and **VOID if the head moves.** Record it as an EXCEPTION
-  to "the GO is the Owner's alone", never as a new default.
-- **Surface housekeeping continuously.** Watch for stale worktrees, merged remote/local branches, and
-  chips whose work has landed. Report them as they appear and **ASK before removing or archiving
-  anything.** Proof before deletion is **the form that merge TYPE requires** — read
-  `.agents/skills/orchestrate/PROTOCOLS.md` § Shipping and merging, where the wrong form fails
-  safe-looking — plus an occupancy check that REFUSES rather than reports (§ Coordination).
+- Near merge readiness, ask the Owner to delegate named-chip push/merge authority. It is SHA-pinned,
+  conditioned on orchestrator diligence, void when head moves, and remains an exception.
+- Surface landed/stale worktrees and branches; ask before removal. Use the merge-type proof and
+  occupancy refusal in `.agents/skills/orchestrate/PROTOCOLS.md`.
 
 ## One writer per repo
 Before writing, a chip looks for competing writers in the repo's own **lane declarations** —
@@ -87,9 +78,18 @@ into a private worktree.
    receipt proves a reply COMPLETED, not that it judged** — demand a verdict and its inspected scope.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
-5. **One frontier firing per changeset**; default consumer is the orchestrator's **fold-check** on
-   the remediation delta (`/frontier-review`). Repeated NO-GO rounds on ONE class escalate, not
-   repeat.
+5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
+   fold-check (`/frontier-review`). Ledger every round by changeset. After Round 3 enter the
+   root-cause queue; Rounds 4–6 need no new Owner message. Enter earlier after two consecutive
+   author-declared same-class NO-GOs or a repair-introduced harm in the same ownership area. Resume
+   only from a root-cause exit packet. Before Round 7 run the Rule-1/gate/root-cause audit: PASS
+   unlocks Rounds 7–8 only; then return to the Owner. Refreezes never reset the count. Record round
+   events with `node scripts/record-repair-event.mjs --event <json>`. After writing a repair brief,
+   confirm its actual bytes with `node scripts/confirm-repair-brief.mjs --confirm <json>`; the worker
+   records `{"task_id":"…","repair_dispatch_event_id":"…","session_id":"<current hook session>"}`
+   and runs `node scripts/confirm-repair-brief.mjs --verify <json>` before writing. The registered
+   write guard rechecks that session, current candidate, brief bytes and every authorized path.
+   Direct status sends carry no repair authority; shell writes remain outside this tool-bound guard.
 6. **PR, then independent diligence.** The orchestrator re-runs the evidence on the final head, not
    the summary.
 7. **GO ask → merge → verify on merged main BY EXECUTION** → **fast-forward the primary clone ONLY
@@ -110,8 +110,8 @@ discipline of any shared checkout.
 
 ⚠ **One rung on this page is enforced WHEN ITS HOOK IS ARMED; the rest is honour-system. That rung
 is TRUST-GATED: upgrading a hook marks it CHANGED and DISARMS it until re-approved, and an untrusted
-hook is skipped SILENTLY — so an upgrade turns it off until you approve it again.** No control counts rounds
-(`core/WORKFLOW.md` § Gate), and none reads a freeze or checks who gave a GO — the exception is
+hook is skipped SILENTLY — so an upgrade turns it off until you approve it again.** The controller reads
+typed author-recorded rounds; no hook infers them, reads a freeze, or checks who gave a GO — except
 `guard-brief-rung`, which denies a brief WRITE lacking a fresh, session- and
 target-bound, SINGLE-USE record of executed checks — proving such a RECORD EXISTS, never that its
 commands were run or were the right ones. The kit ships controls for the declaration and the commit

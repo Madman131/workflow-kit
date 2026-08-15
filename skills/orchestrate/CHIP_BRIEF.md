@@ -24,10 +24,13 @@ correctly on its first turn is in the brief or in the shared program record it p
    scope as the worker understood it. **An unacknowledged brief is unconfirmed, not undelivered** —
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
    delivery failure that did not happen.
-4. **Scope** — what ships, and explicitly what does NOT. Name the artifacts.
-5. **Process** — the rungs in order (§ The chip cycle in the body), and which of them this chip's
-   gate may skip, decided in advance rather than at the moment the worker is tired.
-6. **Standing rules** — the ones binding every chip: surgical staging, the identity ritual,
+4. **Scope** — what ships and what does NOT. Name artifacts.
+5. **Process** — ordered rungs and pre-decided skips. Repair briefs declare task, changeset, candidate,
+   next round, findings/class/ownership/trigger/paths/flags, plus R4+/7+/9+ exit/audit/Owner event
+   IDs. After write, the orchestrator confirms its bytes with `confirm-repair-brief --confirm` and
+   sends only its receipt/path. The worker puts `session_id` in `--verify`; the write guard binds
+   each authorized path.
+6. **Standing rules** — binding every chip: surgical staging, the identity ritual,
    generalization rules (no Owner name, no model names, no absolute paths), read-only sources.
 7. **Consult protocol** — route questions to the orchestrator with stage, question, options with
    costs, and a recommendation. **Never end a turn on a consult:** name what you are doing while you

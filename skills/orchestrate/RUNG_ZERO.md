@@ -245,7 +245,7 @@ this whole method exists to delete:
   means landing these rules in a repo's own docs — **a controlling-document change owing its own
   tier.**
 - Nothing here is mechanically enforced. `core/WORKFLOW.md § Gate` says the rounds half outright —
-  *"No hook counts it; a round-counting hook was retired"*. **That no control reads a freeze or checks
+  *"No hook infers it; a round-counting hook was retired"*. **That no control reads a freeze or checks
   who gave a GO is an OBSERVATION about the shipped controls, not a clause you can cite** — check it
   against your own repo rather than inheriting it here. **Rung zero is cheap because it is honest
   about being a checklist, not a control.**

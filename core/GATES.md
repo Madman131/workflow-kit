@@ -4,7 +4,7 @@
 > runs** — grep to the section you need. It is not part of the boot read-set.
 >
 > **Read `## Non-negotiable gate contract` before any invocation below.** The gate *doctrine* — the
-> ladder, decorrelation, free-vs-folded passes, PM dispositions and the 3-round stop — is
+> ladder, decorrelation, free-vs-folded passes, PM dispositions and the round/root-cause controller — is
 > `core/WORKFLOW.md` § Gate and `core/REVIEW.md`, both BINDING. This file is **how to invoke**:
 > runners, flags, receipts, exit codes, traps. Missing a section here costs you an invocation
 > detail, never a rule — **except `## PM disposition — riders on a DEFER`: two binding riders kept
@@ -268,26 +268,13 @@ the DEFAULT-LOW ruling whose prose an all-`xhigh` matrix would contradict. A com
 leans on one family gets no reduced seat in the other — it uses these same cells, so that mode costs
 more of the leaned-on family than it did; the verdict records the active binding.*
 
-- **`max` and `ultra` are NOT standing defaults for any dev gate.** They are **escalation-only**, and
-  the trigger is concrete but is a **JUDGMENT control, not mechanical** (the round-counter hook was
-  retired — round count is a conversation fact, not a tree fact): **after 2 NO-GO rounds that touch the
-  same finding-class** — counted by the *recurrence of the finding*, not by whether the PM labels the
-  round "contested" — the PM MUST either (a) request escalation (Owner-approved) or (b) stop-and-escalate
-  the scope call. **Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE —
-  a finding-class that survived its remediation — or on an Owner-called round past the hard stop.**
-  *(Re-keyed at v2.9.0: this said "on round 3, inside the soft stop". Keying a rung to a fixed round
-  number ties it to a round count the ladder no longer guarantees reaching — a control that silently
-  never runs. The live round policy is `core/WORKFLOW.md` § Gate; this file does not restate it.)* That firing is **EXEMPT from the one-per-changeset cap** below and needs no
-  Owner GO — the cap's default consumer, the fold-check, has already spent the changeset's
-  discretionary firing on the round-1 delta, so without the exemption this rung could never fire. The
-  trigger is mechanical, not discretionary, which is what bounds it: **worst case two firings, and only
-  on same-class recurrence or an Owner-called later round.** ⚠ **Read that bound honestly: the trigger is mechanical
-  in FORM and self-reported in FACT.** Its input is the round count, and § Retired before shipping
-  below records why nothing observes that — round count is a conversation fact, not a tree fact. So
-  the worst case above is what the rule *authorises*, not what any mechanism *enforces*; what actually
-  bounds it is the recorded firing count and the Owner's spot-check of it. Never silently grind at
-  the floor — and the backstop when the judgment control is dodged is the Owner, on the terms
-  `core/WORKFLOW.md` § Gate sets.
+- **`max` and `ultra` are NOT standing defaults for any dev gate.** They are **Owner-invoked only**.
+  Same-class recurrence or a repair-introduced harm enters `core/WORKFLOW.md`'s root-cause queue; it
+  does **not** mint a frontier firing or fresh authority. The typed round ledger makes the declared
+  trigger and count spot-checkable while leaving semantic sameness to the PM. Never silently grind at
+  the floor: exit the queue only through its structured mechanism packet, then use the standing gate
+  seats for the authorized rounds. A frontier consult still consumes the cap below unless the Owner
+  explicitly invokes it.
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
   costs less.)*
@@ -307,8 +294,8 @@ more of the leaned-on family than it did; the verdict records the active binding
   one with a reason — requesting is not authorizing.** Discretionary consumers **compete for that one
   budget and are never additive**: a design gate spends the allowance *instead of* the fold-check; on an
   irreversible/money/auth change the rare-cell gate seat **is** the firing. **Outside the cap:** the
-  round-3 escalation above (mechanical trigger), an Owner-initiated frontier review (`/frontier-review`),
-  and **the pinned DECIDER seat — the cap governs REVIEW and CONSULT firings, and a decider is neither**
+  an Owner-initiated frontier review (`/frontier-review`), and **the pinned DECIDER seat — the cap
+  governs REVIEW and CONSULT firings, and a decider is neither**
   (`core/FOUNDATIONS.md` § Principles P3 pins the decider). **The verdict record stamps each firing**,
   which is what makes the cap a spot-checkable number rather than a claim. ⚠ **A cap with no recorded
   count is not a control** — if the firings are not stamped, nothing distinguishes one from four.
@@ -489,7 +476,7 @@ panels then **demonstrated** it. The decisive result: one permit of an `initial`
 schema forces to carry no findings — followed by **8 consecutive code commits, all accepted, 1 permit
 in history, zero dispositions recorded.** The originating incident reproduced **unchanged**. Counting
 permits counts *records the agent chose to write*, not verdicts, so no commit-boundary control closes
-it. **This is why `core/WORKFLOW.md` § Gate says no hook counts rounds** — that clause is a conclusion
+it. **This is why `core/WORKFLOW.md` § Gate says no hook infers rounds** — that clause is a conclusion
 from evidence, not a preference.
 
 **Two further lessons worth more than the code.**

@@ -80,21 +80,15 @@ test("the one-frontier-firing cap names its default consumer, its carve-outs, an
   assert.match(g, /A cap with no recorded count is not a control/);
 });
 
-test("same-class escalation is ONE rung, exempt from the cap, and bounded by a mechanical trigger", () => {
+test("same-class recurrence enters root cause and does not mint a frontier firing", () => {
   const g = read("core/GATES.md");
-  // RE-KEYED at v2.9.0. This pinned "on round 3, inside the soft stop" — a trigger that cannot
-  // occur under ONE remediation round, i.e. a rung that silently never fires. The rung's PURPOSE
-  // survives the ladder change, so it was re-keyed rather than deleted.
-  assert.match(g, /Escalation is ONE rung: the seat moves to the frontier tier at `high` on SAME-CLASS RECURRENCE/);
-  // NO absence pin on the old trigger: the re-key parenthetical QUOTES it ("this said \"on round 3,\n  // inside the soft stop\"") so the reader knows what changed, and an absence pin cannot tell a
-  // retirement narrative from a live rule. Same call as core/GATES.md's retired-counter section:
-  // history does not go stale. The presence pin above is what guards the trigger.
-  // Without the exemption this rung could never fire — the fold-check has already spent the budget.
-  assert.match(g, /EXEMPT from the one-per-changeset cap/);
-  assert.match(g, /worst case two firings, and only on same-class recurrence or an Owner-called later round/,
-    "the stated BOUND must track the re-keyed trigger — it described the narrow one after the widening");
-  // Escalation must not become approval-shopping.
-  assert.match(g, /Escalation is a FOLDED ADJUDICATION, not a blind re-review/);
+  const f = read("skills/frontier-review/SKILL.md");
+  assert.match(g, /Same-class recurrence or a repair-introduced harm enters `core\/WORKFLOW\.md`'s root-cause queue/);
+  assert.match(g, /does \*\*not\*\* mint a frontier firing or fresh authority/);
+  assert.match(g, /A frontier consult still consumes the cap below unless the Owner explicitly invokes it/);
+  assert.doesNotMatch(g, /same-class-recurrence firing per changeset/);
+  assert.match(f, /Same-class recurrence enters the root-cause queue; it never mints a firing/);
+  assert.doesNotMatch(f, /same-class-recurrence escalation/);
 });
 
 // ---------------------------------------------------------------- the alias-entitlement trap
@@ -184,7 +178,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(r, /under-reporting is the failure mode this rule creates/);
 });
 
-test("the retired chase machinery is GONE, not merely contradicted", () => {
+test("the retired chase machinery is gone and the bounded root-cause controller replaces it", () => {
   // A ladder doc that carries BOTH contracts is worse than one carrying the old one: the reader
   // meets whichever comes first. These are absence pins, so each names a spelling the OLD text
   // actually used — an absence pin whose phrase never appeared would be green by construction.
@@ -196,12 +190,11 @@ test("the retired chase machinery is GONE, not merely contradicted", () => {
   assert.doesNotMatch(w, /what breaks if you DECLINE\?/i,
     "the open-referent WORTH IT? is retired: it let the process answer about itself");
   // …and the replacement is present, or the assertions above pass on a gutted file.
-  // AMENDED at v2.9.0 (Owner: "agree hard stop at 3"). The flat one-round rule sent every
-  // imperfect first fix to the Owner; rounds now continue while NEW harm-passing findings warrant
-  // them, with a HARD stop at 3. The hard stop is the load-bearing half — the retired soft stop
-  // let a ladder justify its own continuation, which is how an ~18-round gate happened.
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
-  assert.match(w, /ROUND 3 IS A HARD STOP: continuing past it requires the Owner, and there is no self-justification path/);
+  assert.match(w, /Rounds 1–3 are ordinary/);
+  assert.match(w, /Rounds 4–6/);
+  assert.match(w, /PASS.*Rounds 7–8/);
+  assert.match(w, /Round 9 returns to the Owner/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -209,6 +202,14 @@ test("the retired chase machinery is GONE, not merely contradicted", () => {
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
   // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
   // HARD. Pinned in the amended test above — this older pin named the retired sentence.
+});
+
+test("failure-mode evidence promotes mechanisms instead of accumulating a diary", () => {
+  const o = read("core/OPERATE.md");
+  assert.match(o, /Log only demonstrated failures or near-misses/);
+  assert.match(o, /Count is a sensor, never an automatic rule/);
+  assert.match(o, /test\/control for mechanics, binding rule for behavior, architecture for product invariants/);
+  assert.match(o, /gitignored local log aids continuity but is never authority in a fresh clone/);
 });
 
 test("Precedence screens BEFORE the NOTE exit, and the carve-outs survive the rule", () => {
@@ -235,7 +236,7 @@ test("Precedence screens BEFORE the NOTE exit, and the carve-outs survive the ru
   // under-blocking — was the one direction nothing watched, and single-finding rounds were exempt.
   // "a round with NO notes" caught the clean round too, taxing the success path in a changeset
   // built to cut gate cost. It must mean "found things, screened them all out".
-  assert.match(w, /a round with findings but NO notes, or whose findings are \*every\* `REMEDIATE`, pauses the ladder/);
+  assert.match(w, /A round with findings but NO notes, or whose findings are \*every\* `REMEDIATE`, pauses/);
 });
 
 test("the rule's surfaces DERIVE from its canonical home, so drift reddens instead of accumulating", () => {
@@ -286,7 +287,7 @@ test("the rule's surfaces DERIVE from its canonical home, so drift reddens inste
   }
 });
 
-test("the ROUNDS rule is stated in one shape everywhere it is stated at all", () => {
+test("the round controller is stated in one shape everywhere it is stated at all", () => {
   // THIRD RECURRENCE OF ONE CLASS, and this pin is the answer to it. The rounds rule was amended
   // in core/WORKFLOW.md and left standing in its retired form on three other surfaces — the hook
   // (printed at decision time), core/OPERATE.md (BINDING, citing § Gate as its authority) and
@@ -294,10 +295,7 @@ test("the ROUNDS rule is stated in one shape everywhere it is stated at all", ()
   // 161 green tests shipped over it. Patching the statements is what kept regenerating this; the
   // rule still lives on too many surfaces (banked as its own chip), so until that is fixed THIS
   // is the binding that makes drift red instead of silent.
-  // ⚠ For the hook, pin what it PRINTS, not the file. A first cut of this pin checked the whole
-  // file and passed while the printed contract had lost the rule entirely — the hook's HISTORY
-  // COMMENT also says "hard stop", and that is the decorative-pin trap this file opens by warning
-  // about: a phrase that occurs innocently elsewhere in scope proves nothing about the clause.
+  // For the hook, pin what it PRINTS, not its history comments.
   const contractOf = (rel) => rel.endsWith(".mjs")
     ? (/const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "")
     : read(rel);
@@ -305,7 +303,7 @@ test("the ROUNDS rule is stated in one shape everywhere it is stated at all", ()
   for (const rel of surfaces) {
     const t = contractOf(rel);
     assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
-    assert.match(t, /hard stop/i, `${rel} states the rounds rule and must carry the hard stop`);
+    assert.match(t, /root-cause/i, `${rel} states the round controller and must carry the root-cause boundary`);
     // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
     assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
       `${rel} still prints the retired rounds rule`);
@@ -449,8 +447,8 @@ test("the retired commit-time adjudication control is recorded as DO NOT REBUILD
   // The generalisation that bounds what the kit's own commit floor may claim.
   assert.match(g, /A commit-time hook is a tripwire for \*forgetting\*, never a boundary/);
   // …and it must connect to the WORKFLOW clause it justifies, or the two drift apart.
-  assert.match(g, /This is why `core\/WORKFLOW\.md` § Gate says no hook counts rounds/);
-  assert.match(read("core/WORKFLOW.md"), /No hook counts it/);
+  assert.match(g, /This is why `core\/WORKFLOW\.md` § Gate says no hook infers rounds/);
+  assert.match(read("core/WORKFLOW.md"), /no hook infers it/);
 });
 
 test("the shipped gate runner's DEFAULT effort agrees with the matrix it serves", () => {

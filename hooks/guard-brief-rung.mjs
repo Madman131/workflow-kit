@@ -24,8 +24,9 @@
 //     with the cold seats. The stronger claim — "it proves the ritual ran" — is the one this control
 //     must not make about itself, being the exact over-claim class the rung exists to catch.
 //   · It is TOOL-BOUND. A shell redirection writes a brief without ever reaching a PreToolUse hook,
-//     the same accepted class as every sibling guard here. `.githooks/pre-commit` remains the only
-//     every-lane floor, and it does not bind dispatches at all.
+//     and a shell source edit bypasses the worker-admission check below, the same accepted class as
+//     every sibling guard here. `.githooks/pre-commit` remains the only every-lane floor, and it does
+//     not bind dispatches or worker receipt authority.
 //   · It is a TRIPWIRE, not a floor. Its purpose is to make an unverified dispatch visible at the
 //     point it is attempted — not to make one impossible.
 //   · CONSUMPTION'S RESIDUAL, named: a process killed AFTER its attempt row lands has BURNED that
@@ -48,10 +49,15 @@ import { fileURLToPath } from "node:url";
 // design invariant that closed a two-round recurrence in v2.2.0, and the reason this hook binds the
 // Codex lane's multi-target `apply_patch` envelopes without knowing what a patch looks like.
 import { extractTargets, resolvePatchBase, resolveProjectRoot, toRepoRelative } from "./payload-targets.mjs";
+import {
+  deriveRepairState, loadRepairEventsForProject, validateRepairDispatch, verifyRepairWorkerWrite,
+} from "./repair-dispatch-state.mjs";
 
 const SIDECAR = path.join(".claude", "brief-rung.json");
 const LEDGER = path.join(".claude", "lane-ledger.jsonl");
 const KIT_CONFIG = path.join(".claude", "kit.config.json");
+const TASK_LANE = path.join(".claude", "task-lane.json");
+const WRITE_BOOTSTRAP = new Set([SIDECAR, TASK_LANE]);
 
 // THE FRESHNESS WINDOW IS A CONSTANT, DELIBERATELY UNLIKE THE LANE DECLARATION'S `maxAgeHours`.
 // A sidecar that sets its own staleness window is self-certifying: the artifact whose freshness is
@@ -83,6 +89,33 @@ function isPlainObject(v) { return v !== null && typeof v === "object" && Object
 function isSegmentArray(v) {
   return Array.isArray(v) && v.every((s) => typeof s === "string" && s.length > 0 && !s.includes("/"));
 }
+function nonempty(v, max = 500) { return typeof v === "string" && v.trim().length > 0 && v.length <= max; }
+/** Mechanical dispatch declaration validation; semantic classifications remain author-owned. */
+export function repairDeclarationState(sidecar, { events, taskId, dispatch } = {}) {
+  if (!isPlainObject(sidecar) || !["status", "build", "repair"].includes(sidecar.dispatch_kind)) {
+    return { ok: false, state: "dispatch-kind-missing" };
+  }
+  if (sidecar.dispatch_kind === "status") {
+    if (sidecar.repair !== undefined || sidecar.class !== "status") return { ok: false, state: "dispatch-kind-conflict" };
+    return { ok: true, repair: null };
+  }
+  if (!nonempty(sidecar.task_id, 120) || sidecar.task_id !== taskId) return { ok: false, state: "dispatch-task-mismatch" };
+  if (!Array.isArray(events)) return { ok: false, state: "repair-ledger-unavailable" };
+  if (sidecar.dispatch_kind === "build") {
+    if (sidecar.repair !== undefined) return { ok: false, state: "dispatch-kind-conflict" };
+    const current = deriveRepairState(events, taskId);
+    if (!current.ok) return { ok: false, state: current.state };
+    if (current.latest?.verdict === "NO-GO") return { ok: false, state: "repair-dispatch-required" };
+    return { ok: true, repair: null };
+  }
+  if (!isPlainObject(sidecar.repair)) return { ok: false, state: "repair-declaration-malformed" };
+  const validated = validateRepairDispatch(sidecar.repair, {
+    events, taskId, targetKind: dispatch?.kind, target: dispatch?.target,
+  });
+  return validated.ok
+    ? { ok: true, repair: validated.repair, repairValidation: validated }
+    : { ok: false, state: validated.state };
+}
 
 // Absent config ⇒ portable defaults (a legitimate minimal state). Present-but-corrupt ⇒ ok:false, and
 // the caller DENIES a dispatch in scope: a corrupt brief-path set must never silently narrow the
@@ -107,6 +140,20 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   const dirs = parsed.briefPathDirs === undefined ? [] : parsed.briefPathDirs;
   if (!isSegmentArray(dirs)) return { ok: false };
   return { ok: true, briefPathDirs: dirs };
+}
+
+export function loadTaskId(projectRoot, { readTaskLane } = {}) {
+  const file = path.join(projectRoot, TASK_LANE);
+  let parsed;
+  try {
+    if (readTaskLane) parsed = readTaskLane(file);
+    else {
+      const st = lstatSync(file);
+      if (!st.isFile() || st.isSymbolicLink()) return null;
+      parsed = JSON.parse(readFileSync(file, "utf8"));
+    }
+  } catch { return null; }
+  return isPlainObject(parsed) && nonempty(parsed.taskId, 120) ? parsed.taskId : null;
 }
 
 /** Is this repo-relative path a BRIEF for the purposes of the rung? Pure. */
@@ -161,7 +208,7 @@ export function briefTargets(input, { root, patchBase, briefPathDirs, toRepoRela
  * forgery the binding exists to stop is performed by DELETING A FIELD. Absent is not "no opinion";
  * absent is unbound, and unbound is denied.
  */
-export function sidecarState(sidecar, { ageMin, sessionId, dispatch }) {
+export function sidecarState(sidecar, { ageMin, sessionId, dispatch, events = [], taskId = null }) {
   if (sidecar === undefined) return { state: "absent" };
   if (sidecar === null) return { state: "malformed" };
   if (!isPlainObject(sidecar)) return { state: "malformed" };
@@ -190,6 +237,11 @@ export function sidecarState(sidecar, { ageMin, sessionId, dispatch }) {
   // sidecar authorize this one. A sidecar names the ONE dispatch its checks were run for.
   if (typeof sidecar.target !== "string" || !sidecar.target) return { state: "target-missing" };
   if (sidecar.target !== dispatch.target) return { state: "target-mismatch", named: sidecar.target };
+
+  // Classify BEFORE the status escape. Otherwise repair metadata hidden behind `class:"status"`, or
+  // relabelled as `build`, bypasses the controller before it is even consulted.
+  const dispatchDeclaration = repairDeclarationState(sidecar, { events, taskId, dispatch });
+  if (!dispatchDeclaration.ok) return { state: dispatchDeclaration.state };
 
   // The DECLARED-STATUS route, sends only. A brief is load-bearing by definition — it is the artifact
   // the worker builds from — so there is nothing for a brief write to declare its way out of.
@@ -220,7 +272,8 @@ export function sidecarState(sidecar, { ageMin, sessionId, dispatch }) {
       typeof c.output === "string" && c.output.trim()
   );
   if (executed.length === 0) return { state: "no-executed-check" };
-  return { state: "receipted", checks: executed.length };
+  return { state: "receipted", checks: executed.length, repair: dispatchDeclaration.repair,
+    repairValidation: dispatchDeclaration.repairValidation };
 }
 
 export const ALLOW_STATES = new Set(["receipted", "status-declared"]);
@@ -231,7 +284,7 @@ export const ALLOW_STATES = new Set(["receipted", "status-declared"]);
 // `control` so the Owner's spot-check can tell this control's rows from the lane guard's. A
 // STATUS-DECLARED allow is the row that matters: it is the unfalsifiable route, so it must not also
 // be the invisible one. Ledger IO fails CLOSED — an allow that cannot record its trace is denied.
-export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce, attempt }) {
+export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce, attempt, repair }) {
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
@@ -267,6 +320,7 @@ export function writeLedger(projectRoot, { decision, state, kind, target, sessio
     // The spent nonce IS the consumption record — there is no second file to lose or forge apart
     // from the audit trail itself, and it is append-only and fsync'd for exactly that reason.
     if (nonce !== undefined) row.nonce = nonce;
+    if (repair !== undefined && repair !== null) row.repair = repair;
     // The ATTEMPT TOKEN is what makes first-occurrence adjudicable: without per-attempt identity two
     // near-simultaneous rows for one nonce are indistinguishable, and "first" collapses to "any".
     if (attempt !== undefined) row.attempt = attempt;
@@ -332,11 +386,13 @@ const RITUAL =
   `Before dispatching a brief, a ruling or a GO ask: OPEN every citation at its line and RECOMPUTE ` +
   `every number by execution (never by eye), then write \`${SIDECAR}\` as ` +
   `{"sessionId":"<this session>","target":"<the ONE dispatch these checks were run for>",` +
-  `"nonce":"<a value you have not used before>",` +
+  `"nonce":"<a value you have not used before>","dispatch_kind":"build|repair",` +
+  `"task_id":"<current task-lane taskId>",` +
   `"checks":[{"command":"<what you ran>","output":"<what it returned>"}]} and retry. ` +
   `The nonce is SPENT on the dispatch it authorizes: one ritual, one dispatch, so a second send or ` +
   `a re-edited brief owes its own — the repeat carries text the first ritual never saw. ` +
-  `A cross-session send that is NOT load-bearing may instead declare {"class":"status"} with the same ` +
+  `A cross-session send that is NOT load-bearing may instead declare ` +
+  `{"class":"status","dispatch_kind":"status"} with the same ` +
   `sessionId and target — that route is LEDGERED for the Owner's spot-check, and a brief write cannot ` +
   `take it. This guard proves such a RECORD EXISTS — not that its commands were run, nor that they ` +
   `were the right ones; a shell ` +
@@ -345,6 +401,8 @@ const RITUAL =
 export function denyReason(state, { dispatch, detail } = {}) {
   const what = dispatch?.kind === "send"
     ? `this cross-session send to ${dispatch.target}`
+    : dispatch?.kind === "source"
+      ? `the repair source write ${dispatch.target}`
     : `the brief write ${dispatch?.target ?? "<unknown-path>"}`;
   const head = `guard-brief-rung.mjs blocked ${what}: `;
   const why = {
@@ -357,11 +415,35 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "target-missing": `${SIDECAR} names no \`target\`. Freshness alone cannot bind receipts to a dispatch: copying a sidecar gives it a NEW mtime, and re-touching one clears staleness without re-running anything.`,
     "target-mismatch": `${SIDECAR} was written for ${detail}, not for this dispatch — one ritual authorizes one dispatch.`,
     "status-not-available": `${SIDECAR} declares {"class":"status"}, which is available only to a cross-session send. A brief is load-bearing by definition: it is the artifact a worker builds from, so there is nothing here to declare out of scope.`,
+    "dispatch-kind-missing": `${SIDECAR} does not explicitly declare \`dispatch_kind\` as status, build, or repair. Missing no longer defaults to build because that let a repair relabel itself out of the controller.`,
+    "dispatch-kind-conflict": `${SIDECAR}'s class/kind and repair metadata conflict. A status/build declaration cannot carry repair authority, and a repair cannot take the status escape.`,
+    "dispatch-task-mismatch": `${SIDECAR}'s \`task_id\` does not match the current task-lane declaration. Refreezing or relabelling a changeset cannot switch the task identity that owns its round history.`,
+    "repair-dispatch-required": `${SIDECAR} declares a new build while this task's durable controller ends on NO-GO. The next actionable brief is a repair and must bind the existing round history.`,
+    "repair-disposition-not-authorized": `${SIDECAR} tries to dispatch repair work for a finding disposition that is not REMEDIATE. NOTE, DEFER, DECLINE, and ESCALATE remain durable observations but mint no worker authority.`,
+    "repair-brief-required": `${SIDECAR} tries to carry repair authority in a cross-session send. Persist the actionable repair as a receipted brief first; later sends may be status-only pointers to that durable artifact.`,
+    "repair-brief-receipt-missing": `this gate result names no exact prior repair-brief receipt for the round it judges. A round cannot close unless the durable controller proves what authorized its candidate.`,
     "future-dated": `${SIDECAR} is dated ${detail} minutes in the FUTURE. A sidecar ahead of the clock is not fresh, it is unusable — and accepting one would hand the freshness window its own bypass, since a timestamp pushed forward never expires.`,
     "nonce-missing": `${SIDECAR} names no \`nonce\`. A rung is SPENT on the dispatch it authorizes, so it needs a value to spend; without one, a single ritual would authorize every dispatch inside the freshness window.`,
     "rung-already-spent": `${SIDECAR}'s nonce has ALREADY been spent — an earlier attempt (${detail}) claimed it first, and this attempt is recorded in the trail as a refused one. One ritual authorizes ONE dispatch: a repeat to the same target is exactly the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
     "adjudication-unreadable": `the dispatch's own attempt row could not be read back from ${LEDGER}, so it is not possible to tell whether this attempt claimed the nonce first. An unadjudicated consume is not a consume — the guard denies rather than guess. Fix that file, re-run the rung, and retry.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
+    "repair-declaration-malformed": `${SIDECAR} declares a repair dispatch but its repair record is incomplete or malformed. Supply the exact task, changeset, computed candidate digest, next round, finding ids/class, ownership area, original trigger, authorized paths, repair-introduced flag, new-scope flag, and required typed evidence event IDs. Semantic sameness remains author-declared.`,
+    "repair-history-mismatch": `${SIDECAR}'s repair declaration does not exactly match the latest durable round disposition for this task and changeset. Refreezes may change the candidate, but never reset or relabel the round history.`,
+    "repair-history-invalid": `the durable repair history is transition-invalid, so it cannot authorize another dispatch. Inspect the Git-common repair ledger; do not replace it with a fresh changeset.`,
+    "repair-changeset-reset": `this task already owns a different durable changeset id. A refreeze, finding split, or reviewer swap cannot mint a new round allowance.`,
+    "repair-scope-unapproved": `${SIDECAR} declares new repair scope without the exact typed Owner scope event ID. Scope expansion remains an Owner decision.`,
+    "repair-root-cause-exit-missing": `${SIDECAR} names Round 4 or later without the exact typed root-cause exit event ID. Rounds 4–6 are authorized only for the diagnosed replacement mechanism.`,
+    "repair-adherence-audit-missing": `${SIDECAR} names Round 7 or later without the exact typed passing adherence-audit event ID. The internal Rule-1/gate/root-cause audit is the boundary that unlocks Rounds 7–8.`,
+    "repair-owner-extension-missing": `${SIDECAR} names Round 9 or later without the exact typed Owner-extension event ID. Automatic round authority ends after Round 8.`,
+    "repair-ledger-unavailable": `the Git-common repair-event ledger is absent from a Git repository, corrupt, truncated, symlinked, non-regular, or unwritable. Durable history fails closed; fix the ledger rather than falling back to conversation memory.`,
+    "repair-worker-session-missing": `this repair write has no hook session identity. Run \`confirm-repair-brief.mjs --verify\` with the current session recorded as explicit \`session_id\`, then retry from that same session.`,
+    "repair-worker-verification-missing": `this session has no typed worker-verification event for the current repair receipt. Run \`confirm-repair-brief.mjs --verify\` on the persisted brief receipt before the first source write.`,
+    "repair-worker-candidate-stale": `this session verified a receipt for an older candidate or round. Verify the current repair brief receipt; refreezing never lets an earlier worker admission carry forward.`,
+    "repair-worker-path-unauthorized": `this source path is outside the exact authorized-path set carried by the current repair brief receipt. Stop and obtain an Owner-authorized scope event when the repair genuinely needs new scope.`,
+    "repair-task-relabel-path-owned": `this exact source path is owned by another active NO-GO repair program. Re-declare the task lane as that owning task and use its current verified worker session; relabelling the lane cannot abandon repair-path authority.`,
+    "repair-worker-path-owner-conflict": `this exact source path is claimed by multiple active NO-GO repair programs. The ownership conflict fails closed; reconcile those programs before any worker writes the path.`,
+    "repair-brief-changed": `the persisted repair brief no longer matches the bytes the worker verified. Restore or reconfirm the intended brief, then run \`--verify\` again before writing source.`,
+    "repair-dispatch-invalid": `the exact repair dispatch could not be appended to the durable controller after nonce adjudication. No worker authority was issued.`,
     "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, or \`briefPathDirs\` is not an array of non-empty path segments). This dispatch is BLOCKED (fail-closed) — a corrupt brief-path set must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
@@ -396,6 +478,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     const config = loadBriefConfig(root);
 
     const dispatches = [];
+    const sourceTargets = [];
     if (isSendTool(input?.tool_name)) {
       const dest = input?.tool_input?.session_id;
       // A send whose destination cannot be read still owes the rung — it is positively send-shaped.
@@ -403,8 +486,16 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       // correct direction for a dispatch this guard cannot identify.
       dispatches.push({ kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" });
     } else if (config.ok) {
-      for (const rel of briefTargets(input, { root, patchBase, briefPathDirs: config.briefPathDirs, toRepoRelative })) {
+      const briefs = new Set(briefTargets(input, { root, patchBase, briefPathDirs: config.briefPathDirs, toRepoRelative }));
+      for (const rel of briefs) {
         dispatches.push({ kind: "brief", target: rel });
+      }
+      const extracted = extractTargets(input);
+      if (extracted.ok && extracted.shape !== "none") {
+        for (const target of extracted.targets) {
+          const rel = toRepoRelative(target, root, patchBase);
+          if (rel !== null && !briefs.has(rel) && !WRITE_BOOTSTRAP.has(rel)) sourceTargets.push(rel);
+        }
       }
     } else {
       // A corrupt config cannot say a write is OUT of scope — and evaluating it against the DEFAULTS
@@ -418,14 +509,15 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       if (maybeBriefs.ok && maybeBriefs.shape !== "none") {
         for (const t of maybeBriefs.targets) {
           const rel = toRepoRelative(t, root, patchBase);
-          if (rel === null || INSTRUCTION_ROOT_RE.test(rel) || !/\.md$/i.test(rel)) continue;
-          emit(denyReason("kit-config-malformed", { dispatch: { kind: "brief", target: rel } }));
-          return exit(0);
+          if (rel === null) continue;
+          if (!INSTRUCTION_ROOT_RE.test(rel) && /\.md$/i.test(rel)) {
+            emit(denyReason("kit-config-malformed", { dispatch: { kind: "brief", target: rel } }));
+            return exit(0);
+          }
+          if (!WRITE_BOOTSTRAP.has(rel)) sourceTargets.push(rel);
         }
       }
     }
-
-    if (!dispatches.length) return exit(0);   // nothing here owes the rung
 
     let sidecar, ageMin;
     try {
@@ -443,10 +535,40 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       sidecar = e && e.code === "ENOENT" ? undefined : null;
     }
 
+    const taskId = loadTaskId(root);
+    const controller = loadRepairEventsForProject(root);
+
+    // A repair receipt becomes worker authority only after explicit `--verify` records this exact
+    // session. The already-registered write hook then rechecks the current candidate, persisted
+    // brief bytes, and EACH target against the receipt's authorized path set. Task-lane and sidecar
+    // writes are the two bootstraps: requiring an admission to create its own identity or input
+    // would be a circular control. Shell writes remain outside this tool-bound tripwire, disclosed
+    // in the header rather than hidden behind a universal claim.
+    if (sourceTargets.length) {
+      if (!controller.ok) {
+        emit(denyReason("repair-ledger-unavailable", { dispatch: { kind: "source", target: sourceTargets[0] } }));
+        return exit(0);
+      }
+      for (const target of sourceTargets) {
+        const admitted = verifyRepairWorkerWrite({
+          task_id: taskId, session_id: input?.session_id, target,
+        }, { projectRoot: root });
+        if (!admitted.ok) {
+          emit(denyReason(admitted.state, { dispatch: { kind: "source", target } }));
+          return exit(0);
+        }
+      }
+    }
+
+    if (!dispatches.length) return exit(0);   // no brief/send dispatch owes the verification rung
+
     // JUDGE THE SIDECAR FIRST — every dispatch, before anything touches the trail. A patch envelope
     // is applied as a unit, so deciding on the first match would let a second brief in the same
     // envelope ride the first one's sidecar.
-    const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, { ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d }) }));
+    const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, {
+      ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d,
+      events: controller.ok ? controller.events : null, taskId,
+    }) }));
     const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
     if (blocked) {
       emit(denyReason(blocked.v.state, {
@@ -479,7 +601,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
 
       if (!writeLedger(root, { decision: "attempt", state: v.state, kind: d.kind, target: d.target,
         sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
-        nonce: sidecar.nonce, attempt })) {
+        nonce: sidecar.nonce, attempt, repair: v.repair })) {
         emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
       }
 
@@ -501,7 +623,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       }
       if (!writeLedger(root, { decision: "allow", state: v.state, kind: d.kind, target: d.target,
         sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
-        nonce: sidecar.nonce, attempt })) {
+        nonce: sidecar.nonce, attempt, repair: v.repair })) {
         emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
       }
     }

@@ -1,6 +1,6 @@
 ---
 name: frontier-review
-description: Spend the changeset's one frontier firing on a single distilled decision question. The workhorse builds a sufficiency-tested packet; the frontier seat judges only that packet; the workhorse stays decider. Use when the Owner types /frontier-review, or before a fold-check, design gate, or a same-class-recurrence escalation.
+description: Spend the changeset's one frontier firing on a single distilled decision question. The workhorse builds a sufficiency-tested packet; the frontier seat judges only that packet; the workhorse stays decider. Use when the Owner types /frontier-review, or before a fold-check or design gate.
 ---
 
 # /frontier-review — packet in, judgment out
@@ -13,11 +13,11 @@ effort matrix. Roles bind in `core/BINDINGS.md`; alias the command to your model
 **One firing per changeset, and the Owner holds the second.** Default consumer: the **fold-check**
 on a remediation delta, before the cross-family bookend. A discretionary consumer — a design gate,
 a rare-cell gate — **spends that same firing**. A second needs an Owner GO; **requesting one is not
-authorizing it.** **Outside the cap:** the same-class-recurrence escalation, an Owner-typed
-`/frontier-review`, the pinned decider seat (P3).
+authorizing it.** **Outside the cap:** an Owner-typed `/frontier-review` and the pinned decider seat
+(P3). Same-class recurrence enters the root-cause queue; it never mints a firing.
 
-⚠ This cap is a rule of THIS skill, not of `core/`, and **nothing counts it** — round count is a
-conversation fact, no hook reads it (`core/WORKFLOW.md` § Gate). You are its only enforcement:
+⚠ This cap is a rule of THIS skill, not of `core/`, and **nothing counts it**: `it` means frontier
+firings, not rounds. The controller reads typed rounds; no hook infers a round or firing. Enforce it:
 name the exemption you claim, or you spend an unbudgeted seat.
 
 Never for: boot, gathering, mechanical work, or as a substitute for a cross-family seat — a consult
@@ -35,7 +35,7 @@ what is needed to **falsify** the claim, not merely state it:
 3. The contract clause allegedly violated + the invariants — **and, since the seat cannot read
    them, the doctrine excerpts it is judged against** (`free` vs `folded`, P2/P3).
 4. The test that should have caught it (or that none exists).
-5. On an escalation only: what the prior rounds concluded and why it recurred.
+5. For a contested prior decision: what earlier rounds concluded and why it recurred.
 6. The question, plus the live options with each option's cost.
 7. Any cheap-tier pre-pass output, as **advisory input** — it never gates whether this seat runs.
 

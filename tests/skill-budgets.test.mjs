@@ -64,6 +64,7 @@ test("the kit's own tree passes the budget checker, and npm test actually runs i
   // executing the runner from inside itself recurses.
   const runnerSrc = readFileSync(path.join(KIT, "scripts", "run-checks.mjs"), "utf8");
   assert.match(runnerSrc, /check-skill-budgets\.mjs/, "run-checks invokes the budget rung");
+  assert.match(runnerSrc, /sync-user-orchestrate-skill\.mjs/, "a present user install makes parity a local test rung");
   assert.match(pkg.scripts.test ?? "", /run-checks\.mjs/, "npm test is the runner (both rungs, combined exit)");
 });
 

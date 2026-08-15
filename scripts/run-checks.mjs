@@ -12,7 +12,8 @@
 // its output is at the top of the log where an author reads it, rather than buried under the suite.
 
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +34,15 @@ const RUNGS = [
   { name: "check-skill-budgets", argv: ["scripts/check-skill-budgets.mjs"] },
   { name: "kit control suite", argv: ["--test", ...testFiles] },
 ];
+// User-install parity is environment-owned, so clean CI hosts stay hermetic. On a developer host
+// where /orchestrate is installed, however, leaving this optional recreated the exact split this
+// check exists to detect: the source suite was green while the command agents actually loaded was
+// stale. Presence makes parity a required local rung.
+const userOrchestrate = path.join(os.homedir(), ".agents", "skills", "orchestrate");
+const syncScript = path.join(KIT, "scripts", "sync-user-orchestrate-skill.mjs");
+if (existsSync(userOrchestrate) && existsSync(syncScript)) {
+  RUNGS.push({ name: "orchestrate user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check"] });
+}
 
 const failed = [];
 for (const rung of RUNGS) {

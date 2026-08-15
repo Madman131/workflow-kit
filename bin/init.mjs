@@ -174,6 +174,8 @@ AGENTS.md prose are what bind every lane).`;
 
 const PACKAGE_SCRIPTS = {
   "doc:size": "node scripts/check-doc-size.mjs",
+  "confirm:repair-brief": "node scripts/confirm-repair-brief.mjs",
+  "record:repair-event": "node scripts/record-repair-event.mjs",
   "test:kit-controls": "node --test tests/*.test.mjs",
 };
 
@@ -475,8 +477,10 @@ function main() {
     warn(`${T} is not a git repo yet — after 'git init', run: git config core.hooksPath .githooks (FM1: unset ⇒ the pre-commit control is silently absent)`);
   }
 
-  // 4. scripts: the doc-size control (+ optional gate runners).
+  // 4. scripts: portable controls and the repair-event recorder (+ optional gate runners).
   copyGuarded(path.join(KIT_ROOT, "scripts", "check-doc-size.mjs"), path.join(T, "scripts", "check-doc-size.mjs"), force);
+  copyGuarded(path.join(KIT_ROOT, "scripts", "record-repair-event.mjs"), path.join(T, "scripts", "record-repair-event.mjs"), force);
+  copyGuarded(path.join(KIT_ROOT, "scripts", "confirm-repair-brief.mjs"), path.join(T, "scripts", "confirm-repair-brief.mjs"), force);
   if (args.withGateRunners) {
     const runners = ["codex-gate.sh", "cold-review-gemini.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs"];
     for (const r of runners) {
@@ -485,9 +489,9 @@ function main() {
     }
     const guard = path.join(T, "scripts", "codex-gate-guard", "claude");
     if (copyGuarded(path.join(KIT_ROOT, "scripts", "codex-gate-guard", "claude"), guard, force) === "written") chmodX(guard);
-    log(`  scripts/: check-doc-size.mjs + gate runners (need codex/agy at runtime — see PORTABILITY.md)`);
+    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + gate runners (need codex/agy at runtime — see PORTABILITY.md)`);
   } else {
-    log(`  scripts/: check-doc-size.mjs (gate runners skipped; pass --with-gate-runners to include them)`);
+    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs (gate runners skipped; pass --with-gate-runners to include them)`);
   }
 
   // 4b. Portable FM1 test → the adopter's tests/, so the adopter's CI goes RED if core.hooksPath is

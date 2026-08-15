@@ -45,7 +45,7 @@ current-state doc.** Every overflow is a violation of one of those three.
 | File | Class | Portable? | What it carries |
 |---|---|---|---|
 | `FOUNDATIONS.md` | BINDING | `[P]` | **Principles** (P1–P3 + threat-model calibration) · **Roles** — read first; the other five use these terms without redefining them |
-| `WORKFLOW.md` | BINDING | `[P]` | **Steer** (classify) · **Gate** (the ladder, PM dispositions, 3-round stop, shipping) |
+| `WORKFLOW.md` | BINDING | `[P]` | **Steer** (classify) · **Gate** (ladder, PM dispositions, root-cause controller, shipping) |
 | `REVIEW.md` | BINDING | `[P]` | cold-review payload contract · decorrelation · cross-family lens · external gate |
 | `ARTIFACT_CLASS.md` | BINDING | `[P]` | artifact-class review physics — how findings are **weighed and tiered** for CODE vs INSTRUCTION artifacts |
 | `OPERATE.md` | BINDING | `[P]` | execution protocol · Garden · Invariants · end-of-work closeout · working norms |

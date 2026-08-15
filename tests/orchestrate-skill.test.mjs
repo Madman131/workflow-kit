@@ -137,6 +137,31 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
   pin(body, "**evidence escalates them, appetite does not.**", "evidence not appetite");
 });
 
+test("the round controller pins ordinary, root-cause, audit, and Owner boundaries", () => {
+  const body = readFileSync(BODY, "utf8");
+  pin(body, "After Round 3 enter the root-cause queue", "root-cause entry after round 3");
+  pin(body, "Rounds 4–6 need no new Owner message", "standing root-cause authorization");
+  pin(body, "PASS unlocks Rounds 7–8 only", "audit extension is bounded");
+  pin(body, "Refreezes never reset the count", "round count cannot be reset by artifact churn");
+
+  const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
+  pin(brief, "Repair briefs declare task, changeset, candidate, next round, findings/class/ownership/trigger/paths/flags",
+    "repair dispatch declaration fields");
+  pin(brief, "R4+/7+/9+ exit/audit/Owner event IDs",
+    "repair dispatch typed threshold evidence");
+  pin(brief, "The worker puts `session_id` in `--verify`; the write guard binds",
+    "worker verifies the persisted brief receipt");
+  pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
+
+  const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");
+  assert.match(workflow, /Rounds 1–3 are ordinary/);
+  assert.match(workflow, /Rounds 4–6/);
+  assert.match(workflow, /Before Round 7, audit Rule #1, gate accounting, and root-cause discipline/);
+  assert.match(workflow, /Round 9 returns to the Owner/);
+  assert.match(workflow, /automation checks shape and surfaces candidates, never semantic sameness/,
+    "semantic finding classes remain declarations; automation is only a shape check and sensor");
+});
+
 test("a receipt is not a verdict — the rule lives in the body, not only in the bank", () => {
   // A seat's receipt proves its reply COMPLETED; it says nothing about whether a decision was
   // stated. Treating one as the other accepts a non-verdict as a pass, which is a correction of a

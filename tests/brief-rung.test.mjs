@@ -8,6 +8,7 @@
 // the two lies this kit has already shipped, one release apart.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,17 +18,50 @@ import assert from "node:assert/strict";
 
 import {
   ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, loadBriefConfig, sidecarState,
-  adjudicateFirst, ledgerRows,
+  adjudicateFirst, ledgerRows, repairDeclarationState, writeLedger,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
+import { deriveRepairState, loadRepairEventsForProject } from "../hooks/repair-dispatch-state.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SEND = { kind: "send", target: "local_dest" };
 const BRIEF = { kind: "brief", target: "briefs/cs1.md" };
 const OK_CHECK = [{ command: "wc -w PROTOCOLS.md", output: "1987" }];
-const fresh = (over = {}) => ({ sessionId: "s1", target: "briefs/cs1.md", nonce: "n1", checks: OK_CHECK, ...over });
+const FAKE_MANIFEST = [{ path: "src/x.mjs", oid: "1".repeat(40) }];
+const FAKE_CANDIDATE = createHash("sha256").update(`src/x.mjs\0${"1".repeat(40)}\n`).digest("hex");
+const stable = (v) => Array.isArray(v) ? `[${v.map(stable).join(",")}]`
+  : v !== null && typeof v === "object"
+    ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}`
+    : JSON.stringify(v);
+const fresh = (over = {}) => ({ sessionId: "s1", target: "briefs/cs1.md", nonce: "n1", checks: OK_CHECK,
+  dispatch_kind: "build", task_id: "task1", ...over });
+const validRepair = (over = {}) => ({
+  task_id: "task1",
+  changeset_id: "cs1",
+  candidate_sha: FAKE_CANDIDATE,
+  round: 2,
+  finding_ids: ["F1"],
+  finding_class: "writer-liveness",
+  ownership_area: "writer-authority",
+  original_trigger: "process death leaves a durable writer lease blocking successors",
+  authorized_paths: ["pil/operator/writer_authority.mjs"],
+  introduced_by_prior_repair: false,
+  new_scope: false,
+  ...over,
+});
+const verdictEvent = (over = {}) => {
+  const event = { type: "round_disposition", task_id: "task1", changeset_id: "cs1",
+    recorded_at: "2026-08-15T00:00:00.000Z", session_id: "s1", round: 1,
+    candidate_sha: FAKE_CANDIDATE, candidate_manifest: FAKE_MANIFEST, verdict: "NO-GO",
+    finding_ids: ["F1"], finding_class: "writer-liveness", ownership_area: "writer-authority",
+    original_trigger: "process death leaves a durable writer lease blocking successors",
+    authorized_paths: ["pil/operator/writer_authority.mjs"], introduced_by_prior_repair: false,
+    new_scope: false, disposition: "REMEDIATE", ...over };
+  return { event_id: createHash("sha256").update(stable(event)).digest("hex"), event };
+};
+const repairEvents = [verdictEvent()];
 const state = (sidecar, over = {}) =>
-  sidecarState(sidecar, { ageMin: 1, sessionId: "s1", dispatch: BRIEF, ...over }).state;
+  sidecarState(sidecar, { ageMin: 1, sessionId: "s1", dispatch: BRIEF, events: [], taskId: "task1", ...over }).state;
 
 // ---------------------------------------------------------------- scope: what owes the rung
 
@@ -142,12 +176,65 @@ test("a receipt must carry a command AND its captured output — a bare declarat
 test("the STATUS escape is available to a send and refused to a brief", () => {
   // Rule 1 binds LOAD-BEARING dispatches, not every status message — and a hook must not make that
   // semantic call itself (INVARIANTS rule 1), so the author declares it and the ledger records it.
-  const s = fresh({ class: "status", checks: undefined, target: "local_dest" });
+  const s = fresh({ class: "status", dispatch_kind: "status", task_id: undefined, checks: undefined, target: "local_dest" });
   assert.equal(state(s, { dispatch: SEND }), "status-declared", "a status send needs no receipts…");
-  assert.equal(state(fresh({ class: "status", checks: undefined }), { dispatch: BRIEF }), "status-not-available",
+  assert.equal(state(fresh({ class: "status", dispatch_kind: "status", task_id: undefined, checks: undefined }), { dispatch: BRIEF }), "status-not-available",
     "…and a brief cannot declare its way out: it is load-bearing by definition");
   // An explicit load-bearing class still owes receipts — the field cannot be used to skip them.
   assert.equal(state(fresh({ class: "load-bearing", checks: [] })), "no-executed-check");
+});
+
+test("repair dispatch declarations enforce the round controller mechanically, never semantically", () => {
+  assert.equal(repairDeclarationState({}).state, "dispatch-kind-missing");
+  assert.equal(state(fresh({ dispatch_kind: "repair", repair: validRepair() }), { events: repairEvents }), "receipted");
+  assert.equal(state(fresh({ dispatch_kind: "repair", repair: validRepair(), target: "local_dest" }),
+    { events: repairEvents, dispatch: SEND }), "repair-brief-required",
+    "repair authority cannot live only in a transport message");
+
+  const malformed = [
+    { changeset_id: "" },
+    { candidate_sha: "not-a-digest" },
+    { round: 0 },
+    { finding_ids: ["F1", "F1"] },
+    { authorized_paths: ["../outside.mjs"] },
+    { introduced_by_prior_repair: "no" },
+    { new_scope: "no" },
+  ];
+  assert.equal(repairDeclarationState({ dispatch_kind: "repair", task_id: "task1" },
+    { events: repairEvents, taskId: "task1", dispatch: BRIEF }).state, "repair-declaration-malformed");
+  for (const over of malformed) {
+    assert.equal(
+      repairDeclarationState({ dispatch_kind: "repair", task_id: "task1", repair: { ...validRepair(), ...over } },
+        { events: repairEvents, taskId: "task1", dispatch: BRIEF }).state,
+      "repair-declaration-malformed",
+    );
+  }
+  assert.equal(repairDeclarationState({ dispatch_kind: "status", class: "status", repair: validRepair() },
+    { events: repairEvents, taskId: "task1", dispatch: SEND }).state, "dispatch-kind-conflict");
+  assert.equal(repairDeclarationState({ dispatch_kind: "build", task_id: "task1", repair: validRepair() },
+    { events: repairEvents, taskId: "task1", dispatch: BRIEF }).state, "dispatch-kind-conflict");
+  assert.equal(repairDeclarationState({ dispatch_kind: "build", task_id: "task1" },
+    { events: repairEvents, taskId: "task1", dispatch: BRIEF }).state, "repair-dispatch-required");
+});
+
+test("the repair declaration is preserved in the durable dispatch ledger", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "brief-rung-repair-"));
+  try {
+    mkdirSync(path.join(dir, ".claude"));
+    const declared = repairDeclarationState({ dispatch_kind: "repair", task_id: "task1", repair: validRepair() },
+      { events: repairEvents, taskId: "task1", dispatch: BRIEF });
+    assert.equal(declared.ok, true);
+    assert.equal(writeLedger(dir, {
+      decision: "allow", state: "receipted", kind: "brief", target: "briefs/cs1.md",
+      sessionId: "s1", checks: 1, cls: "load-bearing", nonce: "n1", attempt: "a1",
+      repair: declared.repair,
+    }), true);
+    const row = JSON.parse(readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8"));
+    assert.deepEqual(row.repair, declared.repair);
+    assert.equal(row.repair.original_trigger, validRepair().original_trigger);
+    assert.deepEqual(row.repair.authorized_paths, validRepair().authorized_paths);
+    assert.equal(row.repair.candidate_sha, FAKE_CANDIDATE);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("CONSUME ON USE — one ritual, one dispatch, and the repeat is the dangerous case", () => {
@@ -159,8 +246,9 @@ test("CONSUME ON USE — one ritual, one dispatch, and the repeat is the dangero
   assert.equal(state(fresh()), "receipted", "a nonce-bearing sidecar passes the SIDECAR check…");
   // …and whether it may SPEND that nonce is adjudicated from the trail, not decided here.
   assert.equal(
-    sidecarState(fresh({ class: "status", checks: undefined, nonce: undefined, target: "local_dest" }),
-      { ageMin: 1, sessionId: "s1", dispatch: SEND }).state,
+    sidecarState(fresh({ class: "status", dispatch_kind: "status", task_id: undefined,
+      checks: undefined, nonce: undefined, target: "local_dest" }),
+      { ageMin: 1, sessionId: "s1", dispatch: SEND, events: [], taskId: "task1" }).state,
     "status-declared", "a status send needs no nonce because it spends nothing");
 });
 
@@ -205,6 +293,9 @@ test("every deny state produces a message that names the state's OWN remediation
     "target-missing": /copying a sidecar gives it a NEW mtime/,
     "target-mismatch": /one ritual authorizes one dispatch/,
     "status-not-available": /load-bearing by definition/,
+    "repair-disposition-not-authorized": /mint no worker authority/,
+    "repair-brief-required": /Persist the actionable repair as a receipted brief/,
+    "repair-brief-receipt-missing": /exact prior repair-brief receipt/,
     "future-dated": /ahead of the clock is not fresh/,
     "adjudication-unreadable": /An unadjudicated consume is not a consume/,
     "nonce-missing": /needs a value to spend/,
@@ -254,6 +345,9 @@ function adopt() {
   execFileSync("git", ["-C", dir, "remote", "add", "origin", "https://example.com/a.git"]);
   execFileSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
     "--owner-name", "T", "--codex-prompts-dir", codexDir], { stdio: "ignore" });
+  writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
+    mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T1",
+  }));
   return { dir, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
@@ -314,6 +408,7 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
     const sidecar = path.join(dir, ".claude", "brief-rung.json");
     writeFileSync(sidecar, JSON.stringify({
       sessionId: "s1", target: "briefs/cs1.md", nonce: "rung-1",
+      dispatch_kind: "build", task_id: "task1",
       checks: [{ command: "wc -w skills/orchestrate/PROTOCOLS.md", output: "1987" }],
     }));
     const allowed = run(briefWrite);
@@ -350,6 +445,153 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
   } finally { cleanup(); }
 });
 
+test("AN INSTALLED REPAIR SEND DENIES, and only a persisted confirmed brief records authority", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    mkdirSync(path.join(dir, "src"));
+    mkdirSync(path.join(dir, "briefs"));
+    writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+    const eventFile = path.join(dir, "round.json");
+    writeFileSync(eventFile, JSON.stringify({
+      type: "round_disposition", task_id: "task1", changeset_id: "cs1", round: 1,
+      candidate_paths: ["src/x.mjs"], verdict: "NO-GO", disposition: "REMEDIATE",
+      finding_ids: ["F1"], finding_class: "writer-liveness", ownership_area: "writer-authority",
+      original_trigger: "dead writer blocks successors", authorized_paths: ["src/x.mjs"],
+      introduced_by_prior_repair: false, new_scope: false,
+    }));
+    execFileSync(process.execPath, [path.join(dir, "scripts", "record-repair-event.mjs"), "--event", eventFile],
+      { cwd: dir, env: { ...process.env, WORKFLOW_KIT_SESSION_ID: "s1" } });
+    const loaded = loadRepairEventsForProject(dir);
+    const latest = deriveRepairState(loaded.events, "task1").latest;
+    const repair = {
+      task_id: "task1", changeset_id: "cs1", candidate_sha: latest.candidate_sha, round: 2,
+      finding_ids: latest.finding_ids, finding_class: latest.finding_class,
+      ownership_area: latest.ownership_area, original_trigger: latest.original_trigger,
+      authorized_paths: latest.authorized_paths, introduced_by_prior_repair: false, new_scope: false,
+    };
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (payload) => spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify(payload), encoding: "utf8",
+    });
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
+      sessionId: "s1", target: "worker-1", nonce: "send-1", checks: OK_CHECK,
+      dispatch_kind: "repair", task_id: "task1", repair,
+    }));
+    const denied = run({ session_id: "s1", tool_name: "send_message", tool_input: { session_id: "worker-1" } });
+    assert.match(denied.stdout, /repair authority in a cross-session send/);
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
+      sessionId: "s1", target: "briefs/fix.md", nonce: "brief-1", checks: OK_CHECK,
+      dispatch_kind: "repair", task_id: "task1", repair,
+    }));
+    const allowed = run({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, "briefs", "fix.md") } });
+    assert.equal(allowed.stdout, "");
+    let after = deriveRepairState(loadRepairEventsForProject(dir).events, "task1");
+    assert.equal(after.dispatches.length, 0, "PreToolUse admission is not proof that the write occurred");
+    writeFileSync(path.join(dir, "briefs", "fix.md"), "persisted repair brief\n");
+    const confirmFile = path.join(dir, "confirm.json");
+    writeFileSync(confirmFile, JSON.stringify({ declaration: repair, brief_path: "briefs/fix.md" }));
+    const confirmed = spawnSync(process.execPath,
+      [path.join(dir, "scripts", "confirm-repair-brief.mjs"), "--confirm", confirmFile],
+      { cwd: dir, encoding: "utf8", env: { ...process.env, WORKFLOW_KIT_SESSION_ID: "s1" } });
+    assert.equal(confirmed.status, 0, confirmed.stderr);
+    const receipt = JSON.parse(confirmed.stdout);
+    const beforeWorkerVerification = run({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
+    assert.match(beforeWorkerVerification.stdout, /no typed worker-verification event/,
+      "a persisted brief is not yet source-write authority for a worker session");
+    const taskLaneBootstrap = run({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, ".claude", "task-lane.json") } });
+    assert.equal(taskLaneBootstrap.stdout, "", "task-lane bootstrap must not require its own worker receipt");
+    const verifyFile = path.join(dir, "verify.json");
+    const { WORKFLOW_KIT_SESSION_ID: _ignoredSession, ...envWithoutSession } = process.env;
+    writeFileSync(verifyFile, JSON.stringify({
+      task_id: "task1", repair_dispatch_event_id: receipt.event_id,
+    }));
+    const missingSession = spawnSync(process.execPath,
+      [path.join(dir, "scripts", "confirm-repair-brief.mjs"), "--verify", verifyFile],
+      { cwd: dir, encoding: "utf8", env: envWithoutSession });
+    assert.equal(missingSession.status, 1);
+    assert.match(missingSession.stderr, /repair-worker-session-missing/);
+    assert.match(missingSession.stderr, /add the current hook session as "session_id"/);
+    writeFileSync(verifyFile, JSON.stringify({
+      task_id: "task1", repair_dispatch_event_id: receipt.event_id, session_id: "s1",
+    }));
+    const verified = spawnSync(process.execPath,
+      [path.join(dir, "scripts", "confirm-repair-brief.mjs"), "--verify", verifyFile],
+      { cwd: dir, encoding: "utf8", env: envWithoutSession });
+    assert.equal(verified.status, 0, verified.stderr);
+    after = deriveRepairState(loadRepairEventsForProject(dir).events, "task1");
+    assert.equal(after.dispatches.length, 1);
+    assert.equal(after.dispatches[0].target_kind, "brief");
+    assert.equal(after.worker_verifications.length, 1);
+    const allowedSource = run({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
+    assert.equal(allowedSource.stdout, "", "the verified worker session may write the exact authorized path");
+    const wrongSession = run({ session_id: "s2", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
+    assert.match(wrongSession.stdout, /no typed worker-verification event/);
+    const wrongPath = run({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, "src", "outside.mjs") } });
+    assert.match(wrongPath.stdout, /outside the exact authorized-path set/);
+    writeFileSync(path.join(dir, "briefs", "fix.md"), "changed after worker verification\n");
+    const changedBrief = run({ session_id: "s1", tool_name: "Write", cwd: dir,
+      tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
+    assert.match(changedBrief.stdout, /no longer matches the bytes/);
+  } finally { cleanup(); }
+});
+
+test("GLOBAL ACTIVE PATH OWNERSHIP survives lane relabel without freezing unrelated work", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    mkdirSync(path.join(dir, "src"));
+    writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (target, session = "s2") => spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify({ session_id: session, tool_name: "Write", cwd: dir,
+        tool_input: { file_path: path.join(dir, target) } }), encoding: "utf8",
+    });
+    const record = (name, event) => {
+      const eventFile = path.join(dir, `${name}.json`);
+      writeFileSync(eventFile, JSON.stringify(event));
+      return spawnSync(process.execPath,
+        [path.join(dir, "scripts", "record-repair-event.mjs"), "--event", eventFile],
+        { cwd: dir, encoding: "utf8", env: { ...process.env, WORKFLOW_KIT_SESSION_ID: "s1" } });
+    };
+    const base = {
+      type: "round_disposition", round: 1, candidate_paths: ["src/x.mjs"], verdict: "NO-GO",
+      disposition: "REMEDIATE", finding_ids: ["F1"], finding_class: "writer-liveness",
+      ownership_area: "writer-authority", original_trigger: "dead writer blocks successors",
+      authorized_paths: ["src/x.mjs"], introduced_by_prior_repair: false, new_scope: false,
+    };
+    const first = record("round-a", { ...base, task_id: "task1", changeset_id: "cs1" });
+    assert.equal(first.status, 0, first.stderr);
+
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
+      mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
+    }));
+    const relabelled = run("src/x.mjs");
+    assert.match(relabelled.stdout, /owned by another active NO-GO repair program/,
+      "a valid task-lane relabel cannot abandon the active path owner");
+    assert.equal(run("src/unrelated.mjs").stdout, "",
+      "a distinct task remains free to write an unrelated exact path");
+
+    rmSync(path.join(dir, ".claude", "task-lane.json"));
+    const undeclared = run("src/x.mjs");
+    assert.match(undeclared.stdout, /owned by another active NO-GO repair program/,
+      "an empty task declaration cannot erase global active-path ownership");
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
+      mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
+    }));
+
+    const second = record("round-b", { ...base, task_id: "task2", changeset_id: "cs2" });
+    assert.equal(second.status, 0, second.stderr);
+    const overlap = run("src/x.mjs");
+    assert.match(overlap.stdout, /claimed by multiple active NO-GO repair programs/,
+      "overlapping active owners fail closed instead of selecting one by lane label");
+  } finally { cleanup(); }
+});
+
 test("one sidecar authorizes ONE dispatch — a two-brief envelope cannot ride a single ritual", () => {
   // A patch envelope is applied as a unit, so deciding on the first match would let the second brief
   // ride the first one's sidecar. Every target is judged before anything is allowed.
@@ -357,7 +599,8 @@ test("one sidecar authorizes ONE dispatch — a two-brief envelope cannot ride a
   try {
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
     writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
-      sessionId: "s1", target: "briefs/a.md", nonce: "rung-1", checks: [{ command: "c", output: "o" }],
+      sessionId: "s1", target: "briefs/a.md", nonce: "rung-1", dispatch_kind: "build", task_id: "task1",
+      checks: [{ command: "c", output: "o" }],
     }));
     const r = spawnSync(process.execPath, [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
       input: JSON.stringify({
@@ -388,6 +631,7 @@ test("A SECOND DISPATCH CANNOT RIDE THE FIRST RITUAL — allow, then deny, same 
       { input: payload, encoding: "utf8" });
     const write = (nonce) => writeFileSync(sidecar, JSON.stringify({
       sessionId: "s1", target: "briefs/cs1.md", nonce,
+      dispatch_kind: "build", task_id: "task1",
       checks: [{ command: "wc -w x", output: "1987" }],
     }));
 
@@ -448,7 +692,8 @@ test("CONSUMPTION IS SERIALISED — six overlapping dispatches on one nonce yiel
   try {
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
     writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
-      sessionId: "s1", target: "briefs/cs1.md", nonce: "race", checks: [{ command: "c", output: "o" }],
+      sessionId: "s1", target: "briefs/cs1.md", nonce: "race", dispatch_kind: "build", task_id: "task1",
+      checks: [{ command: "c", output: "o" }],
     }));
     const payload = JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: "briefs/cs1.md" } });
@@ -493,7 +738,8 @@ test("THE CRASH RESIDUAL: a burned nonce denies, and the cure is ONE RITUAL — 
       [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
       { input: payload, encoding: "utf8" });
     const sidecar = (nonce) => writeFileSync(path.join(dir, ".claude", "brief-rung.json"),
-      JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", nonce, checks: [{ command: "c", output: "o" }] }));
+      JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", nonce, dispatch_kind: "build", task_id: "task1",
+        checks: [{ command: "c", output: "o" }] }));
 
     // A process that appended its attempt and then died: the row is there, the dispatch never was.
     writeFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"),
@@ -530,7 +776,8 @@ test("a SYMLINKED sidecar is malformed, not satisfied — and a stale one is ref
     mkdirSync(path.join(dir, "briefs"), { recursive: true });
     const sidecar = path.join(dir, ".claude", "brief-rung.json");
     const outside = path.join(dir, "elsewhere.json");
-    const good = JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", nonce: "rung-1", checks: [{ command: "c", output: "o" }] });
+    const good = JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md", nonce: "rung-1",
+      dispatch_kind: "build", task_id: "task1", checks: [{ command: "c", output: "o" }] });
     const run = () => spawnSync(process.execPath, [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
       input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir, tool_input: { file_path: "briefs/cs1.md" } }),
       encoding: "utf8",

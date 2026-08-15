@@ -10,6 +10,10 @@
   },
   "scripts": {
     "check:skill-budgets": "node scripts/check-skill-budgets.mjs",
+    "confirm:repair-brief": "node scripts/confirm-repair-brief.mjs",
+    "record:repair-event": "node scripts/record-repair-event.mjs",
+    "check:orchestrate-user": "node scripts/sync-user-orchestrate-skill.mjs --check",
+    "sync:orchestrate-user": "node scripts/sync-user-orchestrate-skill.mjs --install",
     "test": "node scripts/run-checks.mjs",
     "acceptance": "bash acceptance/plant-the-bug.sh"
   }
