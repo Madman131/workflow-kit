@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { governedFiles } from "../scripts/check-skill-budgets.mjs";
+import { buildAdditionalContext } from "../hooks/guard-gate-ladder.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Whitespace-FLATTENED on purpose. A clause that wraps across a line still matches, so these pins
@@ -29,6 +30,44 @@ const raw = (rel) => readFileSync(path.join(ROOT, rel), "utf8");
 // TYPED, not part of the rule, and a clause that wraps inside a blockquote would otherwise read as
 // "Do > not read it…".
 const read = (rel) => raw(rel).replace(/^\s*>\s?/gm, "").replace(/\s+/g, " ");
+
+// What a `.mjs` decision-time surface PRINTS, as opposed to how it is TYPED.
+//
+// ⚠ KO15 REPAIR (H1-H4): this used to regex `raw(rel)` for a `const CONTRACT =…;\n` declaration and
+// extract backtick segments — a SOURCE-TEXT approximation of what the hook prints, and it broke four
+// independent ways:
+//   H1 — it only ever looked inside the CONTRACT declaration. The hook also prints `SELF_REPORT`
+//        (550 characters) ahead of it; that text sat outside every assertion built on this helper.
+//   H2 — the declaration-end regex (`;\n`) stopped at the FIRST such pair anywhere in the slice,
+//        including one inside a `//` comment — a `;`-terminated comment line truncated extraction.
+//   H3 — backtick-delimited text inside a `/* … */` comment is not different, to a regex, from a
+//        live template literal — a retired rule quoted in a comment satisfied every presence pin.
+//   H4 — `${TOKEN}` interpolation extracted the literal source characters `${TOKEN}`, never the
+//        runtime value substituted in.
+// The honest fix per the repair brief: stop regexing source, and assert on the STRING THE HOOK
+// ACTUALLY EMITS. `hooks/guard-gate-ladder.mjs` now exports `buildAdditionalContext(isDeclaredPM,
+// head, body)` — the exact function the hook's own runtime path calls to build what it writes to
+// stdout — and `printed()` CALLS it and reads its return value.
+//
+// ⚠ KO15 ROUND 3 (B1, custodian order): a first cut here imported `CONTRACT`/`SELF_REPORT` and
+// RECONSTRUCTED `${SELF_REPORT}\n${CONTRACT}` by hand instead of calling the builder — a THIRD
+// MIRROR of the emission, the exact defect class (a hand-kept copy of what a `.mjs` surface prints,
+// free to drift from what it actually prints) this whole changeset exists to delete, reintroduced
+// by the fix meant to cure it. Proven by mutation: a retired rule planted INSIDE
+// `buildAdditionalContext`'s own body was invisible to the reconstruction, which only ever read the
+// two constants and never the function — suite green, 35/35, while the builder's real output
+// carried the retired text. Calling the builder directly closes that gap by construction: there is
+// no second path left to drift from the first, because there is only one path.
+//
+// `head`/`body` are per-session tier/task announcements, not doctrine, so they carry nothing this
+// file needs to pin — passed as empty strings, which is a legitimate call shape (the hook's own
+// runtime path supplies real ones; this file cares about the DOCTRINE half only).
+const printed = (rel) => {
+  if (!rel.endsWith("guard-gate-ladder.mjs")) {
+    throw new Error(`printed(${rel}): only the gate-ladder hook exports what it prints`);
+  }
+  return buildAdditionalContext(true, "", "").replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+};
 
 // ---------------------------------------------------------------- routing reversal
 
@@ -114,6 +153,87 @@ test("the model·effort matrix names capability TIERS, not vendor model ids", ()
   assert.match(g, /\*\*Irreversible prod write.*\|\s*\*\*frontier · xhigh\*\*\s*\|\s*\*\*frontier · xhigh\*\*\s*\|/);
 });
 
+// ---------------------------------------------------------------- the entry rule (§ Steer step 0)
+
+// ⚠ KO15 REPAIR (H13): the entry rule shipped with ZERO assertion coverage — the only major
+// doctrine block in core/WORKFLOW.md with no pin at all, including its fail-closed clause and its
+// write-GO guard — and H10 (above) proves a byte-hunt deletion in this exact file is not
+// hypothetical. This test also lands the Owner ruling on H8/H9 (the step-0-vs-decision-tree
+// conflict, and door 2's scope), verbatim-class.
+test("the entry rule (step 0) is a real ADMISSION test, and the doors do not set their own depth", () => {
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /a change is born UNGATED and earns its ladder/);
+  assert.match(w, /Four questions, before any gate is assumed/);
+
+  // ⚠ H8/H9 RULING, LANDED VERBATIM-CLASS (Owner-ruled 2026-08-13, delivered through the
+  // orchestrator to this repair session): the doors decide ADMISSION only; the decision tree sets
+  // DEPTH for an admitted change. "enter the ladder at that class's row" was retired because no
+  // class→tier mapping table exists — the only reachable path under the old wording sent a
+  // class-4 skill/template edit to T0.
+  assert.match(w, /The doors decide ADMISSION; the decision tree sets DEPTH for admitted changes — it is not an entry test/);
+  assert.match(w, /any YES ⇒ ADMITTED — the tree's matching row is the depth/);
+  assert.doesNotMatch(w, /enter the ladder at that class's row/i,
+    "the retired 'class's row' wording must not survive — no class→tier table exists to enter");
+
+  // ⚠ CORRECTED (orchestrator ruling on the round-3 message): door 1 stays the RULED form — money
+  // moved, corpus written, a send sent; reversibility only. A first pass here widened door 1 to
+  // ALSO test live-behavior-path/chain-stateful directly, which reads as an improvement but is an
+  // UNRULED reversal of the Owner's explicit decline of a floor: "most production code is
+  // live-path, so a floor re-gates nearly everything and the rule's economics die." Under that
+  // widening, a loud, cheaply-revertible ranking tweak — the exact case the rule exists to free —
+  // would have re-entered the ladder at door 1. The b-lite ruling puts that case correctly on door 2
+  // instead: SUBTLY wrong ships broken looking fine (door 2 catches it); LOUDLY wrong is cheap to
+  // revert (no door catches it, by design). Pin the RULED text, not an improved one.
+  assert.match(w, /\*\*1 · IRREVERSIBLE \/ LIVE\*\* — money moved, corpus written, a send sent: can I \*\*not\*\* revert my way out\?/);
+  assert.doesNotMatch(w, /live-behavior-path or chain\/stateful logic/,
+    "door 1 must not test live-path/chain-stateful directly — that widening was ruled OUT, not in");
+
+  // Door 2 (H8/H9 ruling, verbatim-class): widened beyond named instruments to any failure that
+  // would not announce itself, including state/chain logic — not just controls/gates/checks/alarms.
+  // This is the ONLY door the ruling widened; it is what catches a chain/stateful change now.
+  assert.match(w, /could this ship broken while looking fine\? A failure that would not announce itself: controls, gates, checks, alarms, state\/chain logic/);
+
+  // The fail-closed clause and the write-GO guard (H13's two explicitly-named gaps).
+  assert.match(w, /The four doors are the ONLY doors — nobody re-derives their own entry test, and unsure whether a class applies ⇒ that IS a yes/);
+  assert.match(w, /The write-GO does not move, ever/);
+  assert.match(w, /The answer is RECORDED — one line in the commit body/);
+  assert.match(w, /`entry: none` \/ `entry: class-N`/);
+
+  // H11: "the per-round audit" named a control defined nowhere else in the corpus. Fixed by
+  // dropping the invented proper noun and stating plainly what actually catches an ungated change
+  // that should have gated — a later human reading the record, never a mechanism you can wait for.
+  assert.doesNotMatch(w, /the \*\*per-round audit\*\*/i,
+    "the invented 'per-round audit' name must not return — no such control is defined anywhere");
+  assert.match(w, /There is no audit and no cadence — this is the only catch/);
+  assert.match(w, /gate-ran-lighter-than-mandate carve-out's case, raised when someone next reviews it, never a firing you can wait for/);
+});
+
+// ⚠ KO15 REPAIR (H8/H9, § 4's cross-surface check, TWICE-CORRECTED — orchestrator's second
+// round-3 message). The first fix here widened WORKFLOW's door 1 to match the hook's old floor
+// line, achieving "agreement" by moving the wrong surface: H8 required the hook's floor line to
+// AGREE WITH THE RULED STEP 0 — the doc it cites may not refute it — not the other way round. The
+// hook now defers to the doors on ADMISSION and states its floor only for an ADMITTED change:
+// "an ADMITTED change touching live-path, chain/stateful, schema, or deploy code is at least T2 —
+// admission itself is § Steer step 0's four doors." That is agreement in the ruled direction. Door
+// 2's widening (not door 1) is what admits a chain/stateful touch — the tree's row 2 then sets its
+// T2 depth. Pinned via `printed()`, the same mechanism H1-H4 fixed: what an agent acts on is what
+// the hook PRINTS, not the doc, so the check reads the real runtime string.
+test("the hook's floor line defers to the doors on admission, and agrees with the RULED step 0", () => {
+  const hookPrinted = printed("hooks/guard-gate-ladder.mjs");
+  assert.match(hookPrinted,
+    /an ADMITTED change touching live-path, chain\/stateful, schema, or deploy code is at least T2/,
+    "the hook must state its floor for an ADMITTED change, not for any touch — admission is the doors' call");
+  assert.match(hookPrinted,
+    /admission itself is § Steer step 0's four doors/,
+    "the hook must name WHERE admission is decided, or the deferral is only implied");
+  const w = read("core/WORKFLOW.md");
+  assert.match(w, /state\/chain logic/,
+    "door 2's widening — not a door-1 change — is what admits a chain/stateful touch under the ruled form");
+  // The decision tree's own T2 row is what makes the floor line true for the chain/stateful case
+  // once door 2 admits it — without this row an admitted chain/stateful change would land nowhere.
+  assert.match(w, /changes \*\*live-behavior-path\*\* code, OR changes \*\*chain\/stateful control logic\*\* → \*\*T2 Major\*\*/);
+});
+
 // ---------------------------------------------------------------- rung order (WORKFLOW)
 
 test("rung ORDER binds, and says WHICH of its two rules is mechanically checkable", () => {
@@ -152,6 +272,12 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
 
   // The ladder's emission is where the rule is actually EXECUTED, so the funnel and its ratio pin here.
   const w = read("core/WORKFLOW.md");
+  // ⚠ KO15 REPAIR (H10): this guard clause was deleted from § Steer's own RULE #1 restatement to buy
+  // bytes, and the ONLY pin on it was bound to core/FOUNDATIONS.md above — so the deletion shipped
+  // with every test green (see scripts/check-doc-size.mjs's 2026-08-13 cap-record entry for the
+  // full incident, corrected alongside this pin). Restored in § Steer, and now pinned on BOTH
+  // surfaces that carry it, not only the one that happened to already have a pin.
+  assert.match(w, /cutting REPAIRS, never review DEPTH — cutting seats is the misreading/);
   assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
   assert.match(w, /\*\*Blank ⇒ NOTE\*\* \*\(Precedence below and the carve-outs — irreversible · prod write · gate-ran-lighter-than-mandate — screen FIRST; none exit here\)\*: recorded here/);
   assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
@@ -263,6 +389,28 @@ test("the rule's surfaces DERIVE from its canonical home, so drift reddens inste
   assert.ok(keys.every((k) => k && k.length > 3),
     `each target must yield a distinctive noun, got: ${keys.join(", ")}`);
 
+  // ⚠ WHY THESE SURFACES KEEP FULL TEXT INSTEAD OF BECOMING POINTERS — the bound on the cure, and
+  // it is measured rather than chosen. The general fix for a rule on N surfaces is one canon and
+  // N−1 pointers. It does NOT apply to a surface whose reader is a FRESH CONTEXT, because a fresh
+  // context provably does not follow the pointer: the test below records that reducing the
+  // Claude-lane seat to a pointer to fit a word cap left every panel seat with exactly one
+  // available definition of harm — the SUPERSEDED one-target form, injected by the harness. The
+  // pointer did not fail to be read; it failed to be FOLLOWED, and the fallback was the regression.
+  //
+  // So each copy below is kept because something LOADS it into a context that cannot be assumed to
+  // leave, and each claim is verified rather than assumed:
+  //   core/WORKFLOW.md                       the ladder's own emission block — where the rule RUNS.
+  //   core/REVIEW.md                         agents/cold-reviewer.md tells the seat to read it FIRST.
+  //   agents/cold-reviewer.md                the Claude-lane cold seat's own definition.
+  //   templates/codex-cold-reviewer.toml.tmpl  generated by bin/init.mjs to
+  //                                          .codex/agents/cold-reviewer.toml as the seat's
+  //                                          developer_instructions (see init's install table).
+  //   skills/orchestrate/RUNG_ZERO.md        read before any gate, per skills/orchestrate/SKILL.md.
+  //   hooks/guard-gate-ladder.mjs            PRINTED at decision time by a PreToolUse hook
+  //                                          (registered in templates/settings.json).
+  // The copies are the concession; the DERIVATION above is what keeps them honest — every one of
+  // them is checked against canon's own words, so a copy that drifts reddens instead of shipping.
+  //
   // (a) Every surface that STATES the rule carries all three targets.
   for (const surface of ["core/WORKFLOW.md", "core/REVIEW.md", "agents/cold-reviewer.md",
                          "templates/codex-cold-reviewer.toml.tmpl",
@@ -295,12 +443,45 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // 161 green tests shipped over it. Patching the statements is what kept regenerating this; the
   // rule still lives on too many surfaces (banked as its own chip), so until that is fixed THIS
   // is the binding that makes drift red instead of silent.
-  // For the hook, pin what it PRINTS, not its history comments.
-  const contractOf = (rel) => rel.endsWith(".mjs")
-    ? (/const CONTRACT =[\s\S]*?;\n/.exec(raw(rel))?.[0] ?? "")
-    : read(rel);
-  const surfaces = ["core/WORKFLOW.md", "core/OPERATE.md", "hooks/guard-gate-ladder.mjs"];
-  for (const rel of surfaces) {
+  // ⚠ KO15 REBASE (Owner ruling (b), base-drift split, custodian order): the rounds-specific
+  // derive-pin that lived here (canon-derived stop number, `atRound` proximity, the warrant/
+  // harm-passing component checks) is BANKED to a follow-on chip — its subject left this changeset
+  // when the Owner's own root-cause controller replaced the hard-stop rounds policy on main. What
+  // survives the split is the READING MECHANISM, which is non-rounds: for the hook, pin what it
+  // PRINTS via `printed()` (the real `buildAdditionalContext()` output), never a source-text regex
+  // extraction — the exact defect class (H1-H4) this changeset exists to delete. Main's own
+  // `contractOf` still used the old regex extraction below, because the controller was authored
+  // from the pre-repair base, not because anyone re-decided the extraction question — a naive
+  // "rounds content wins" would have silently reverted the extraction fix along with the banked
+  // policy text, so the mechanism is kept and only the rounds-specific assertions are banked.
+  //
+  // ⚠ THE TWO LISTS ARE THE CURE AND ITS BOUND. A surface either STATES the rule, or it POINTS and
+  // carries NO component of it. Those are the only two legal shapes, and a surface moves between
+  // them by a deliberate edit HERE, which is the point: the conversion is what a reviewer should
+  // have to see.
+  //
+  // The RETIRED shapes of the rounds rule — kept post-split, because these are not the banked
+  // CURRENT policy, they are dead spellings from a rule retired before the Owner's own root-cause
+  // controller even existed. A NEITHER surface owes the same absence a STATES surface owes: holding
+  // the OLD rule is not "carrying no component", it is carrying the WRONG one, silently, on a
+  // surface nothing checks. Scoped to the two multi-word phrases unique to a live restatement of
+  // the retired rule — "BOUNDED?"/"PAST-SOFT-STOP" alone are too broad: core/GATES.md § Retired
+  // legitimately quotes "REAL?/SCOPE?/BOUNDED?/WORTH IT?" as HISTORY (this repo's own rule: history
+  // does not go stale), and a bare-word ban would redden that narrative rather than a live drift.
+  const RETIRED_ROUNDS_SHAPES = [
+    /ONE remediation round; a second is the Owner's call/i,
+    /Soft stop after 3 NO-GO rounds/i,
+  ];
+  //
+  // NOT derived from the tree, deliberately. A list computed by scanning for surfaces that mention
+  // the rule would go VACUOUS the moment a surface lost it entirely — the surface drops out of its
+  // own denominator and the pin passes by finding nothing, which is this repo's named fail-open
+  // (a blind verification tool returns success). A maintained list cannot fail that way.
+  const STATES = ["core/WORKFLOW.md", "hooks/guard-gate-ladder.mjs"];
+  const POINTS = ["core/OPERATE.md"];
+
+  const contractOf = (rel) => rel.endsWith(".mjs") ? printed(rel) : read(rel);
+  for (const rel of STATES) {
     const t = contractOf(rel);
     assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
     assert.match(t, /root-cause/i, `${rel} states the round controller and must carry the root-cause boundary`);
@@ -308,13 +489,106 @@ test("the round controller is stated in one shape everywhere it is stated at all
     assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
       `${rel} still prints the retired rounds rule`);
   }
+
+  // A POINTER NAMES WHERE THE RULE LIVES AND NO COMPONENT OF IT — that is the whole reason a
+  // pointer cannot go stale when the rule changes, and a pointer that restates is the defect
+  // wearing the cure's name. core/OPERATE.md is the measured instance: it cited § Gate as its
+  // authority AND restated both components, so the v2.9.0 amendment left it contradicting canon
+  // while every test stayed green. Citing an authority is not pointing at it.
+  //
+  // ⚠ KO15 ROUND 3 (H6/B2a/B2b, custodian order — a FORM check replaces THREE successive CONTENT
+  // checks that each fell to a fresh paraphrase). History: a ban on three exact spellings ("hard
+  // stop", "round <n>", "rounds continue only while") fell to a paraphrase restating both
+  // components in different words. Two COMPONENT bans (numeric ceiling near round/ceiling
+  // vocabulary; warrant condition via further/another/additional+round+justification-word) fell to
+  // a THIRD: "no more than a triplet of gate-review passes is allowed; a later pass needs fresh
+  // blocking evidence" re-acquires both concepts in vocabulary neither ban's word list covered.
+  // Enumeration cannot close a paraphrase space — a grep proves a spelling, never a claim (this
+  // file's own header) — so the fix stops enumerating: **a POINTS surface carries its citation and
+  // nothing else — prose beyond the citation is itself the violation, whatever it says.**
+  //
+  // This is a FORM check, not a content check: it reads WHERE the pointer's bold span begins and
+  // ends relative to its citation, never WHAT any surrounding prose means. The discriminator that
+  // proves it: an innocuous, unrelated sentence inserted at either spot ("the weather in Lisbon is
+  // agreeable this time of year") must redden exactly as readily as a re-acquiring paraphrase — if
+  // only the paraphrase catches, the check is still reading content and has only narrowed the
+  // paraphrase space, not closed it.
+  //
+  // ⚠ KO15 ROUND 4 (custodian order — the SAME fix, the HALF that was missed). The tail assertion
+  // below constrains what follows the citation; nothing constrained what PRECEDES it, so the head
+  // was wide open — proven by mutation (B2c/B2d): planting the SUPERSEDED rounds policy ("stop at
+  // round 3 unless the Owner authorises another…") immediately before "governed in full by" left
+  // the suite green, the exact defect class (a component restated where only a citation belongs)
+  // this check exists to close, just on the other side of the citation. core/OPERATE.md's own head
+  // — "use the root-cause controller, governed in full by" — was ALSO non-conforming under this
+  // chip's own criterion (a pointer names WHERE, never WHICH MECHANISM — naming the controller is a
+  // component that can go stale exactly as the round number did), so the fix is two-sided: the head
+  // is reduced to a citation lead-in with no named mechanism, AND the check constrains it exactly
+  // the way the tail is already constrained.
+  for (const rel of POINTS) {
+    const t = read(rel);
+    assert.match(t, /`core\/WORKFLOW\.md` § Gate/,
+      `${rel} must name WHERE the round policy lives`);
+    // The pointer's own bold span, captured whole — `[^*]*` cannot cross a `**` boundary, so this
+    // is exactly the bold run the citation sits inside, never the paragraph around it (which may
+    // legitimately discuss unrelated things, like OPERATE's own neighbouring 3-attempt cap).
+    const span = /\*\*([^*]*`core\/WORKFLOW\.md` § Gate[^*]*)\*\*/.exec(t);
+    assert.ok(span,
+      `${rel}: the citation must sit inside its own bold pointer span, or there is nothing to check the FORM of`);
+    const leadIn = "Gate-review rounds are a different quantity, governed in full by";
+    const beforeCitation = span[1].slice(0, span[1].indexOf("governed in full by") + "governed in full by".length);
+    // The HEAD: nothing may precede the fixed, mechanism-free lead-in — naming a controller, a
+    // stop condition, or anything else here is a component restated, in ANY wording.
+    assert.match(beforeCitation, new RegExp(`^\\s*${leadIn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`),
+      `${rel}: nothing may precede "governed in full by" beyond the fixed lead-in — any prose before the citation, on ANY topic, restates a component of the rule this surface must only point at`);
+    const afterCitation = span[1].slice(span[1].indexOf("§ Gate") + "§ Gate".length);
+    // The TAIL: "and not restated here" is this repo's own spelling of "nothing else lives here" —
+    // the citation names the rule's home; this clause names that the pointer carries no more of it.
+    // Anything beyond it, in ANY wording, is a component restated — form, not content.
+    assert.match(afterCitation, /^\s*and not restated here\s*$/,
+      `${rel}: nothing may follow "and not restated here" inside the bold pointer span — any trailing prose, on ANY topic, restates a component of the rule this surface must only point at`);
+  }
+
+  // ⚠ KO15 REPAIR (H7): STATES + POINTS is a hand-maintained ALLOW-list (deliberately — see the
+  // comment above, "NOT derived from the tree"), and an allow-list's unlisted complement is an
+  // UNDECLARED NARROWING unless the complement is made loud (`allow-list-is-an-undeclared-narrowing`
+  // — scan everything and declare every disposition). Five gate-doctrine surfaces sat on neither
+  // list with no signal at all — three of which ("the rule's surfaces DERIVE from its canonical
+  // home", above) this same file already treats as surfaces a fresh context cannot be assumed to
+  // leave. NEITHER is now a third, explicit, REASONED list — and each reason is verified, not just
+  // asserted: a NEITHER surface must actually carry no component of the rounds rule, or it is
+  // misclassified, not merely undocumented.
+  const NEITHER = {
+    "core/REVIEW.md": "governs how a review is BUILT and judged, never the round-count policy that gates it",
+    "skills/orchestrate/RUNG_ZERO.md": "the budget-free PRE-gate rungs; round count is a Gate-time fact this rung set never reaches",
+    "agents/cold-reviewer.md": "a reviewer seat definition — it is handed a round number by the PM, never the rule that sets one",
+    "templates/codex-cold-reviewer.toml.tmpl": "generated seat instructions — same reason as agents/cold-reviewer.md above",
+    "core/GATES.md": "CLASS: REFERENCE (invocation only, never a rule per its own header); its one \"hard stop\" mention is the escalation-rung's own trigger, not this rule, and carries neither the round number nor the warrant condition",
+  };
+  for (const [rel, reason] of Object.entries(NEITHER)) {
+    assert.ok(reason && reason.length > 10, `${rel}: a NEITHER entry needs a real reason or it is the same silent omission`);
+    // A NEITHER surface must be silent on the RETIRED shape — a surface holding the old, dead rule
+    // is not "carrying no component", it is carrying the WRONG one, silently, where nothing checks.
+    const t = raw(rel).replace(/\s+/g, " ");
+    for (const retired of RETIRED_ROUNDS_SHAPES) {
+      assert.doesNotMatch(t, retired,
+        `${rel} is classified NEITHER but carries a RETIRED rounds shape — an unlisted surface is exactly where this goes unnoticed`);
+    }
+  }
+  // Completeness: every gate-doctrine surface this repair named must be accounted for SOMEWHERE —
+  // STATES, POINTS, or NEITHER-with-a-reason — never silently absent from all three.
+  for (const rel of ["core/REVIEW.md", "skills/orchestrate/RUNG_ZERO.md", "agents/cold-reviewer.md",
+                     "templates/codex-cold-reviewer.toml.tmpl", "core/GATES.md"]) {
+    assert.ok(STATES.includes(rel) || POINTS.includes(rel) || rel in NEITHER,
+      `${rel} is a named gate-doctrine surface and must be classified STATES, POINTS, or NEITHER — never silently absent from all three`);
+  }
   // core/REVIEW.md must not re-assert the seat count the tier split replaced.
   assert.doesNotMatch(read("core/REVIEW.md"), /which since v2\.9\.0 is every core-doc amendment/,
     "REVIEW.md restored the seat cut the tier split closed");
   // The discharge clause, on both the capped doc (short) and the uncapped decision-time surface (full).
   assert.match(read("core/WORKFLOW.md"),
     /A REMEDIATE discharges only when the finding's OWN trigger is re-run and no longer fires/);
-  assert.ok(raw("hooks/guard-gate-ladder.mjs").includes("the ORIGINAL reproduction, dead, is"),
+  assert.ok(printed("hooks/guard-gate-ladder.mjs").includes("the ORIGINAL reproduction, dead, is"),
     "the decision-time surface carries the full discharge sentence — it is uncapped, so it can");
 });
 
@@ -326,7 +600,17 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
   // otherwise, and every existing hook test checks registration or firing, never the text. The
   // staleness was the symptom; the unpinned mirror was the defect. Fixing the text without pinning
   // it re-arms the identical failure for whoever changes the contract next.
-  const hook = raw("hooks/guard-gate-ladder.mjs");
+  // ⚠ SCOPED TO WHAT THE HOOK PRINTS, on both counts, and the previous cut was scoped to neither.
+  //   (1) These presence checks read the WHOLE FILE — the exact defect the sibling ROUNDS test
+  //       warns about two tests above ("a first cut checked the whole file and passed while the
+  //       printed contract had lost the rule entirely"). The hook's comments discuss the funnel and
+  //       name the harm targets, so every assertion below could have been satisfied by the file's
+  //       own history narrative while the CONTRACT shipped without them.
+  //   (2) Raw text is reflow-blind: this contract is concatenated template literals, so a clause
+  //       wrapping across two of them is not a substring of the source. See `printed()`.
+  // The agent acts on the printed string, so the printed string is what must be pinned.
+  const hook = printed("hooks/guard-gate-ladder.mjs");
+  assert.ok(hook, "the CONTRACT constant must be findable — re-point this test");
   const w = read("core/WORKFLOW.md");
   // DERIVED from the doc rather than hand-listed here — a hand-listed copy would be a third mirror.
   const emission = /GATE ROUND[\s\S]*?LADDER: continue/.exec(w)?.[0] ?? "";
@@ -347,11 +631,27 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
     "the decision-time surface must carry the Precedence screen, or it prints the hole");
   // The retired contract must be GONE from what the hook PRINTS. Both shipping is worse than
   // either alone: the reader meets whichever arrives first, and the hook arrives first.
-  const contract = /const CONTRACT =[\s\S]*?;\n/.exec(hook)?.[0] ?? "";
-  assert.ok(contract, "the CONTRACT constant must be findable — re-point this test");
+  // These are the ABSENCE pins, so they are the ones the reflow gap failed OPEN on — `printed()`
+  // is what makes a wrapped re-add visible to them.
   for (const dead of ["GATE ROUND <n>/3", "Soft stop after 3 NO-GO rounds", "PAST-SOFT-STOP", "BOUNDED?"]) {
-    assert.ok(!contract.includes(dead), `the hook must not print the retired "${dead}"`);
+    assert.ok(!hook.includes(dead), `the hook must not print the retired "${dead}"`);
   }
+
+  // …and the canary, because the four assertions above are decoration if the extractor cannot see
+  // a wrapped re-add. This is the planted mutation that proved the gap: the retired rule split
+  // across two template literals exactly as the surrounding contract is typed. It must be VISIBLE
+  // to `printed()` — if this ever stops matching, the extractor has regressed and the absence pins
+  // above are green for the wrong reason.
+  const wrapped = "const CONTRACT =\n"
+    + "  `Soft stop after 3 NO-GO\\n` +\n"
+    + "  `rounds applies.\\n`;\n";
+  const decl = /const CONTRACT =[\s\S]*?;\n/.exec(wrapped)?.[0] ?? "";
+  const flat = [...decl.matchAll(/`([^`]*)`/g)].map((m) => m[1]).join("")
+    .replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  assert.ok(flat.includes("Soft stop after 3 NO-GO rounds"),
+    "the extractor must see a retired rule wrapped across two literals — the fail-open this closes");
+  assert.ok(!wrapped.includes("Soft stop after 3 NO-GO rounds"),
+    "…and a RAW scan must NOT see it, or this canary is not reproducing the gap it documents");
 });
 
 test("every surface that APPLIES rule #1 states all three targets, not a pointer", () => {
