@@ -97,3 +97,41 @@ confirmation response is recovered by an idempotent retry.
 - Two declared same-class NO-GOs and a repair-introduced harm each enter root-cause-required; a
   different declared class does not get inferred as equivalent.
 - Real installed-package drift makes the local required rung red; synchronization makes it green.
+
+## 2026-08-18 · Doctrine moved to the circular cadence — enforcement reconciliation BANKED
+
+`core/WORKFLOW.md` § Gate and `skills/orchestrate/SKILL.md` now state the round/root-cause cadence as
+the canonical **circular method**: cycles of at most three harm-bearing rounds; a soft-stop root
+assessment plus one bounded remediation, whose NO-GO bookend is the next cycle's round 1; a process
+audit on the exact bytes after two completed cycles, whose GO buys one additional two-cycle window and
+whose NO-GO (or window exhaustion) returns to the Owner. The absolute round count still never resets.
+Authority is the canonical procedure (`docs/gates/ORCHESTRATOR_GATE_PROCEDURE.md`), reread live.
+
+The enforcement machinery this document specifies — `repair-dispatch-state.mjs`, `guard-brief-rung.mjs`
+deny strings, `record-repair-event.mjs` — is UNCHANGED here and still gates on the ABSOLUTE round-number
+model described above (round ≥ 4 exit, round ≥ 7 audit, round ≥ 9 extension). It remains live and
+internally accurate; doctrine and enforcement therefore diverge until the banked successor chip
+reconciles the machinery. That reconciliation is the immediate next chip and carries the **§ 7 split**:
+the cadence DENY/UNLOCK semantics (the round ≥ 4 / ≥ 7 / ≥ 9 gating) are DELETE candidates, because
+software must not encode the cadence; the SEQUENCE/ORDERING checks (one sequential round history,
+refreeze invalidates prior receipts, exact-reference and single-writer binding) are § 7-allowed and
+STAY. Until it lands, doctrine and enforcement diverge on ROUND POSITION. Two of the machinery's gates
+key on FIXED absolute rounds the circular cadence does not: the adherence audit hardcoded at after-round
+6 to reach round 7, and the Owner extension at round ≥ 9. The root-cause-exit gate is NOT purely fixed —
+it fires at `(nextRound >= 4 || triggerRound > 0)`, so whenever a root trigger has fired (even before
+round 4) its trigger-sensitive half TRACKS the cadence (root assessment on a mechanical trigger); only
+its round-≥4 floor is fixed. So the successor chip's § 7 split KEEPS that trigger-sensitive half and
+deletes the fixed round positions. Because the cadence's cycle and audit boundaries fall at a VARIABLE
+absolute round — a cycle can be shorter than three rounds on an early root trigger — the two fixed gates
+misalign, bounded and BIDIRECTIONAL. UNDER-enforce, in short cycles: two 2-round cycles complete by
+round 4, so the cadence's process audit is due around round 5, but the machinery requires none until
+round 7 — it permits a round 5→6 repair the cadence would have gated. OVER-gate, in full three-round
+cycles: the machinery demands an after-round-6 audit to reach round 7, which a cadence-following agent
+whose audit falls elsewhere can satisfy only by producing that after-round-6 audit — auditing bytes the
+cadence did not choose. There is no round-7 Owner-escalation escape: the extension gate is checked only
+at round 9, and that round-9 gate is itself fixed while the cadence's window-exhaustion return-to-Owner
+lands at a round that varies with cycle length, so the two align only incidentally. Neither direction
+lets a DEFECTIVE ARTIFACT reach GO — artifact GO is a separate human judgment the machinery never
+decides — but the process-audit and continuation TIMING are not strictly fail-safe until the successor
+chip removes these fixed round-number gates. This is the successor chip's motivating harm, not merely
+cleanup.

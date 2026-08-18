@@ -79,11 +79,12 @@ into a private worktree.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
-   fold-check (`/frontier-review`). Ledger every round by changeset. After Round 3 enter the
-   root-cause queue; Rounds 4–6 need no new Owner message. Enter earlier after two consecutive
-   author-declared same-class NO-GOs or a repair-introduced harm in the same ownership area. Resume
-   only from a root-cause exit packet. Before Round 7 run the Rule-1/gate/root-cause audit: PASS
-   unlocks Rounds 7–8 only; then return to the Owner. Refreezes never reset the count. Record round
+   fold-check (`/frontier-review`). Ledger every round by changeset. Rounds run in cycles of at most
+   three harm-bearing rounds; at each soft stop, one root assessment + one bounded remediation, whose
+   NO-GO bookend is the next cycle's round 1. Enter root assessment earlier on two consecutive
+   same-class Rule-1 harms or a repair-introduced harm. After two completed cycles, a process audit on
+   the exact bytes gates continuation — its GO buys one more two-cycle window, its NO-GO or window
+   exhaustion returns to the Owner. The absolute count never resets. Record round
    events with `node scripts/record-repair-event.mjs --event <json>`. After writing a repair brief,
    confirm its actual bytes with `node scripts/confirm-repair-brief.mjs --confirm <json>`; the worker
    records `{"task_id":"…","repair_dispatch_event_id":"…","session_id":"<current hook session>"}`

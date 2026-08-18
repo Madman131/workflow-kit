@@ -22,7 +22,7 @@
 //
 // SO THE CAP KEYS ON ACCESS PATTERN, NOT ON SIZE, and the access pattern is DECLARED, never inferred:
 //   CLASS: BINDING    → read whole; missing a section means violating a rule → hard cap, ROLE-DEPENDENT
-//                       (see ROLE_CAPS below — e.g. 24064 B for `method`, 8 KiB for `entry`/`payload`/`snapshot`).
+//                       (see ROLE_CAPS below — e.g. 25088 B for `method`, 8 KiB for `entry`/`payload`/`snapshot`).
 //   CLASS: REFERENCE  → looked up; missing a section just means you look it up later → no size cap,
 //                       but it MUST carry the lookup-only marker and a table of contents.
 //
@@ -74,6 +74,16 @@
 //   (RUNG_ZERO, cold-reviewer) are a DIFFERENT control (scripts/check-skill-budgets.mjs) and are
 //   untouched by this.
 //
+//   2026-08-18 · `method` 24064 → 25088 B (+1024) · Owner-authorised ("RAISE"), on KO16's facts.
+//   REASON: the round/root-cause controller was reconciled to the canonical CIRCULAR cadence — the
+//   per-cycle bound, the soft-stop root assessment, the two-cycle process-audit window, and the four
+//   companion conditions (root assessment on mechanical triggers, zoom-out control, rule #1 screening,
+//   KISS) — stated at full fidelity. Written faithfully the § Gate controller ¶ grew ~900 B and
+//   core/WORKFLOW.md reached 24961 B against the 24064 cap. Compression was DECLINED (a cap may never
+//   force deleting doctrine, per the paragraph above); the SPLIT was DECLINED because this controller
+//   is read AT the gate decision point — the pointer-at-the-decision-point failure the 2026-08-13
+//   entry records. Leaves 127 B of headroom; that is the next editor's. Disclosed in the release.
+//
 // Usage: node scripts/check-doc-size.mjs [--json]
 // Exit 0 = every governed doc passes. Exit 1 = at least one FAIL.
 
@@ -93,9 +103,9 @@ export const ROLE_CAPS = {
   entry: 8 * 1024,
   // Bounded by the BOOT CONTEXT BUDGET (~72 KB / ~27K tokens spent before any work begins),
   // not by truncation — the Read cap is 25,000 tokens ~= 66 KB of this prose class.
-  // 23.5 KiB since 2026-08-13; all three raises are recorded under CAP DECISIONS above, with
-  // the measured reason each was granted. Still ~2.8x inside the truncation threshold.
-  method: 24064,
+  // 24.5 KiB since 2026-08-18; all four raises are recorded under CAP DECISIONS above, with
+  // the measured reason each was granted. Still ~2.6x inside the truncation threshold.
+  method: 25088,
   // Cat'd into EVERY Gemini gate payload. Two constraints bind here and both are tighter than
   // `method`: the 80 KiB INLINE ingestion ceiling, and signal-to-noise — on a small design gate
   // these files are ~97% of the payload, so every wasted byte displaces the artifact under review.
