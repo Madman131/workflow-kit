@@ -507,12 +507,24 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // file's own header) — so the fix stops enumerating: **a POINTS surface carries its citation and
   // nothing else — prose beyond the citation is itself the violation, whatever it says.**
   //
-  // This is a FORM check, not a content check: it reads WHERE the pointer's bold span ends relative
-  // to its citation, never WHAT any trailing prose means. The discriminator that proves it: an
-  // innocuous, unrelated sentence inserted at the same spot ("the weather in Lisbon is agreeable
-  // this time of year") must redden exactly as readily as a re-acquiring paraphrase — if only the
-  // paraphrase catches, the check is still reading content and has only narrowed the paraphrase
-  // space, not closed it.
+  // This is a FORM check, not a content check: it reads WHERE the pointer's bold span begins and
+  // ends relative to its citation, never WHAT any surrounding prose means. The discriminator that
+  // proves it: an innocuous, unrelated sentence inserted at either spot ("the weather in Lisbon is
+  // agreeable this time of year") must redden exactly as readily as a re-acquiring paraphrase — if
+  // only the paraphrase catches, the check is still reading content and has only narrowed the
+  // paraphrase space, not closed it.
+  //
+  // ⚠ KO15 ROUND 4 (custodian order — the SAME fix, the HALF that was missed). The tail assertion
+  // below constrains what follows the citation; nothing constrained what PRECEDES it, so the head
+  // was wide open — proven by mutation (B2c/B2d): planting the SUPERSEDED rounds policy ("stop at
+  // round 3 unless the Owner authorises another…") immediately before "governed in full by" left
+  // the suite green, the exact defect class (a component restated where only a citation belongs)
+  // this check exists to close, just on the other side of the citation. core/OPERATE.md's own head
+  // — "use the root-cause controller, governed in full by" — was ALSO non-conforming under this
+  // chip's own criterion (a pointer names WHERE, never WHICH MECHANISM — naming the controller is a
+  // component that can go stale exactly as the round number did), so the fix is two-sided: the head
+  // is reduced to a citation lead-in with no named mechanism, AND the check constrains it exactly
+  // the way the tail is already constrained.
   for (const rel of POINTS) {
     const t = read(rel);
     assert.match(t, /`core\/WORKFLOW\.md` § Gate/,
@@ -523,9 +535,15 @@ test("the round controller is stated in one shape everywhere it is stated at all
     const span = /\*\*([^*]*`core\/WORKFLOW\.md` § Gate[^*]*)\*\*/.exec(t);
     assert.ok(span,
       `${rel}: the citation must sit inside its own bold pointer span, or there is nothing to check the FORM of`);
+    const leadIn = "Gate-review rounds are a different quantity, governed in full by";
+    const beforeCitation = span[1].slice(0, span[1].indexOf("governed in full by") + "governed in full by".length);
+    // The HEAD: nothing may precede the fixed, mechanism-free lead-in — naming a controller, a
+    // stop condition, or anything else here is a component restated, in ANY wording.
+    assert.match(beforeCitation, new RegExp(`^\\s*${leadIn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`),
+      `${rel}: nothing may precede "governed in full by" beyond the fixed lead-in — any prose before the citation, on ANY topic, restates a component of the rule this surface must only point at`);
     const afterCitation = span[1].slice(span[1].indexOf("§ Gate") + "§ Gate".length);
-    // "and not restated here" is this repo's own spelling of "nothing else lives here" — the
-    // citation names the rule's home; this clause names that the pointer carries no more of it.
+    // The TAIL: "and not restated here" is this repo's own spelling of "nothing else lives here" —
+    // the citation names the rule's home; this clause names that the pointer carries no more of it.
     // Anything beyond it, in ANY wording, is a component restated — form, not content.
     assert.match(afterCitation, /^\s*and not restated here\s*$/,
       `${rel}: nothing may follow "and not restated here" inside the bold pointer span — any trailing prose, on ANY topic, restates a component of the rule this surface must only point at`);
