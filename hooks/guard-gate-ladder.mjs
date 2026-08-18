@@ -225,10 +225,12 @@ export const CONTRACT =
   `a ladder where everything was REMEDIATE means the PM never engaged. A ladder ends on a JUDGMENT,\n` +
   `never on reviewer silence — an adversarial reviewer never runs out of findings, so "no findings\n` +
   `left" is not reachable. Rounds continue only while each new one is warranted by NEW harm-passing\n` +
-  `findings. Rounds 1–3 are ordinary; after Round 3 enter the root-cause queue — earlier after two\n` +
-  `declared same-class NO-GOs or a repair-introduced harm. Rounds 4–6 require its exit packet. Before\n` +
-  `Round 7 an adherence-audit PASS unlocks Rounds 7–8 only; beyond 8 returns\n` +
-  `to the Owner. Refreezes do not reset the count. A REMEDIATE discharges only when the finding's\n` +
+  `findings. Rounds run in cycles of at most three harm-bearing rounds; at each soft stop, one\n` +
+  `root-cause assessment plus one bounded remediation, whose NO-GO bookend is the next cycle's round\n` +
+  `1. Enter root-cause assessment earlier on two consecutive same-class Rule-1 harms or a\n` +
+  `repair-introduced harm; at latest by the third. After two completed cycles a process audit on the\n` +
+  `exact bytes gates continuation — its GO buys one more two-cycle window, its NO-GO or window\n` +
+  `exhaustion returns to the Owner. The absolute count never resets. A REMEDIATE discharges only when the finding's\n` +
   `OWN trigger is re-run and no longer fires —\n` +
   `a new test passing is not discharge; the ORIGINAL reproduction, dead, is.\n\n` +
   `<n> is a CONVERSATION fact — the number of reviewer verdicts dispositioned for this changeset.\n` +

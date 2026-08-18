@@ -139,10 +139,10 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
 
 test("the round controller pins ordinary, root-cause, audit, and Owner boundaries", () => {
   const body = readFileSync(BODY, "utf8");
-  pin(body, "After Round 3 enter the root-cause queue", "root-cause entry after round 3");
-  pin(body, "Rounds 4–6 need no new Owner message", "standing root-cause authorization");
-  pin(body, "PASS unlocks Rounds 7–8 only", "audit extension is bounded");
-  pin(body, "Refreezes never reset the count", "round count cannot be reset by artifact churn");
+  pin(body, "Rounds run in cycles of at most three harm-bearing rounds", "circular per-cycle bound");
+  pin(body, "at each soft stop, one root assessment + one bounded remediation", "soft-stop root assessment + bounded remediation");
+  pin(body, "a process audit on the exact bytes gates continuation — its GO buys one more two-cycle window", "two-cycle process-audit window is the bounded extension");
+  pin(body, "The absolute count never resets", "round count cannot be reset by artifact churn");
 
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
   pin(brief, "Repair briefs declare task, changeset, candidate, next round, findings/class/ownership/trigger/paths/flags",
@@ -154,10 +154,10 @@ test("the round controller pins ordinary, root-cause, audit, and Owner boundarie
   pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
 
   const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");
-  assert.match(workflow, /Rounds 1–3 are ordinary/);
-  assert.match(workflow, /Rounds 4–6/);
-  assert.match(workflow, /Before Round 7, audit Rule #1, gate accounting, and root-cause discipline/);
-  assert.match(workflow, /Round 9 returns to the Owner/);
+  assert.match(workflow, /A cycle is at most three harm-bearing rounds/);
+  assert.match(workflow, /at latest by the third harm-bearing round/);
+  assert.match(workflow, /After two completed cycles the first continuing harm-bearing bookend takes its normal review, then a \*\*process audit on those exact bytes\*\*/);
+  assert.match(workflow, /audit NO-GO or window exhaustion returns to the Owner/);
   assert.match(workflow, /automation checks shape and surfaces candidates, never semantic sameness/,
     "semantic finding classes remain declarations; automation is only a shape check and sensor");
 });
