@@ -317,10 +317,11 @@ test("the retired chase machinery is gone and the bounded root-cause controller 
     "the open-referent WORTH IT? is retired: it let the process answer about itself");
   // …and the replacement is present, or the assertions above pass on a gutted file.
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
-  assert.match(w, /Rounds 1–3 are ordinary/);
-  assert.match(w, /Rounds 4–6/);
-  assert.match(w, /PASS.*Rounds 7–8/);
-  assert.match(w, /Round 9 returns to the Owner/);
+  assert.match(w, /A cycle is at most three harm-bearing rounds/);
+  assert.match(w, /at the soft stop, one root assessment \+ one bounded root remediation/);
+  assert.match(w, /After two completed cycles the first continuing harm-bearing bookend takes its normal review, then a \*\*process audit on those exact bytes\*\*/);
+  assert.match(w, /Audit `GO` buys one more \*\*two-cycle window\*\*/);
+  assert.match(w, /audit NO-GO or window exhaustion returns to the Owner/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -471,6 +472,12 @@ test("the round controller is stated in one shape everywhere it is stated at all
   const RETIRED_ROUNDS_SHAPES = [
     /ONE remediation round; a second is the Owner's call/i,
     /Soft stop after 3 NO-GO rounds/i,
+    // Retired by KO16: the LINEAR absolute-round ladder the circular cadence replaced. Verified
+    // absent from every NEITHER surface at retarget time; these are unique to a live restatement of
+    // that ladder, not the enforcement's own round-threshold deny strings (guard-brief-rung), whose
+    // reconciliation the successor chip owns.
+    /Rounds 1[–-]3 are ordinary/i,
+    /unlocks Rounds 7[–-]8/i,
   ];
   //
   // NOT derived from the tree, deliberately. A list computed by scanning for surfaces that mention
@@ -652,6 +659,50 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
     "the extractor must see a retired rule wrapped across two literals — the fail-open this closes");
   assert.ok(!wrapped.includes("Soft stop after 3 NO-GO rounds"),
     "…and a RAW scan must NOT see it, or this canary is not reproducing the gap it documents");
+});
+
+test("the round controller's CADENCE agrees between the surfaces that STATE it, or drift reddens", () => {
+  // WHY THIS IS ITS OWN PIN. "the round controller is stated in one shape everywhere" (above) checks
+  // each STATES surface IN ISOLATION — carries /root-cause/, lacks a retired spelling — but never
+  // that the doc and the hook AGREE on the cadence. That is exactly the gap the KO16 reconciliation
+  // could have shipped through: a circular § Gate beside a still-linear hook, each individually
+  // fine, silently handing the agent two different walls. This binds the agreement itself.
+  // printed(), because the hook is concatenated template literals and a token wrapping a seam is not
+  // a source substring — the reflow-blind fail-open its sibling two tests up documents.
+  const w = read("core/WORKFLOW.md");
+  const hook = printed("hooks/guard-gate-ladder.mjs");
+  // Derive the controller ¶ from the doc rather than re-listing it here — a hand-listed copy would
+  // be the third mirror this file exists to delete. `[\s\S]*?` stops at the first sentence end so
+  // the capture is the cadence body, not the zoom-out/KISS tail that follows it.
+  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?never inherit this authority\./.exec(w)?.[0] ?? "";
+  assert.ok(ctrl, "the controller ¶ must be findable in core/WORKFLOW.md — re-point this test");
+  // The circular cadence as CONCEPTS, hand-maintained for the SAME reason the sibling one-shape
+  // lists are (a tree-derived list goes vacuous the moment a surface drops the rule). Each must
+  // appear in the doc AND in what the hook prints, or the two hand the agent divergent cadences.
+  const CIRCULAR_CADENCE = [
+    /at most three harm-bearing rounds/i, // the per-cycle bound
+    /two-cycle window/i,                  // what an audit GO buys — the widest divergence from the linear unlock
+    /process audit/i,                     // the after-two-completed-cycles gate
+    /returns to the Owner/i,              // the escalation boundary
+  ];
+  for (const tok of CIRCULAR_CADENCE) {
+    assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the circular cadence token ${tok}`);
+    assert.match(hook, tok, `the hook must PRINT the same circular cadence token ${tok}, or it hands a divergent wall`);
+  }
+  // The retired LINEAR ladder must be GONE from BOTH — a reader/agent meets whichever they get, and
+  // both shipping is worse than either. These are the shapes THIS chip retired.
+  const RETIRED_LINEAR = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /unlocks Rounds 7[–-]8/i, /Round 9 returns to the Owner/i];
+  for (const dead of RETIRED_LINEAR) {
+    assert.doesNotMatch(ctrl, dead, `core/WORKFLOW.md still states the retired linear ladder ${dead}`);
+    assert.doesNotMatch(hook, dead, `the hook still prints the retired linear ladder ${dead}`);
+  }
+  // Canary: an absence check is decoration unless its regex can actually match the thing it forbids.
+  // Prove each against the exact retired spelling, so a regex that silently never matches (the
+  // fail-open) is caught HERE instead of passing the absence checks above for free.
+  const RETIRED_SAMPLE = "Rounds 1–3 are ordinary; Rounds 4–6 require its exit packet; PASS unlocks Rounds 7–8 only; Round 9 returns to the Owner.";
+  for (const dead of RETIRED_LINEAR) {
+    assert.match(RETIRED_SAMPLE, dead, `the retired-ladder regex ${dead} must match the spelling it forbids, or it is a dead absence pin`);
+  }
 });
 
 test("every surface that APPLIES rule #1 states all three targets, not a pointer", () => {
