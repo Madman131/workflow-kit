@@ -472,7 +472,10 @@ test("§ Routing and § Standing duties exist in the body — the two sections t
 // bin/init.mjs — verified; the skip excludes nothing today.)
 function shippedDocs() {
   const out = [];
-  const skip = new Set(["node_modules", ".git", "tests", "acceptance", "docs"]);
+  // `.claude` holds a lane's WORKING files — gate records, findings, sidecars — not shipped
+  // doctrine. Walking it made every lane's own notes answerable to the cross-surface pins below,
+  // so a gate record that merely QUOTED a rule could redden a suite it was only reporting on.
+  const skip = new Set(["node_modules", ".git", ".claude", "tests", "acceptance", "docs"]);
   const walk = (dir) => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       if (skip.has(e.name)) continue;

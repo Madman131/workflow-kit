@@ -83,7 +83,7 @@ its class in a marker on line 3**, and `scripts/check-doc-size.mjs` reads that m
   | Role | Docs | Cap | Derived from |
   |---|---|---|---|
   | **entry** | `CLAUDE.md` · `AGENTS.md` | **8 KiB** | read at the start of every session |
-  | **method** | `FOUNDATIONS` · `WORKFLOW` · `REVIEW` · `ARTIFACT_CLASS` · `OPERATE` · `MULTI_AGENT` · `BINDINGS` · `OWNER_COMMS` | **20 KiB** | the boot budget (~72 KB / ~27K tokens) |
+  | **method** | `FOUNDATIONS` · `WORKFLOW` · `REVIEW` · `ARTIFACT_CLASS` · `OPERATE` · `MULTI_AGENT` · `BINDINGS` · `OWNER_COMMS` | **24.5 KiB** | the boot budget (~72 KB / ~27K tokens) |
   | **payload** | `INVARIANTS` · `REPO_INVARIANTS` | **8 KiB** | the Gemini 80 KiB INLINE ceiling + signal-to-noise |
   | **snapshot** | `SYSTEM_MAP.md` | **8 KiB** | a boot-read architecture snapshot; keep it tight so boot stays cheap |
 
@@ -102,7 +102,7 @@ never inferred, and an undeclared file **fails the check** rather than being ski
 concept seam and record the split, or push detail to `docs/journal/` — never cut a rule to hit a
 number.
 
-**What 20 KiB is, and is NOT — measured 2026-07-18, full data in
+**What the method cap is, and is NOT — measured 2026-07-18, full data in
 `docs/journal/read_limit_measurements.md`.** It is **not** a truncation threshold. The `Read` tool's
 real cap is **25,000 TOKENS**, which for this prose class (~2.64 bytes/token) is ≈ **66 KB** — so the
 cap carries ~3× headroom. Bytes do not predict truncation at all: a 48,913 B file read whole in the
@@ -118,8 +118,9 @@ So the cap exists for two *other* reasons, and they are the ones to weigh before
 
 **The tightest reader wins, and it is not always `Read`.** `INVARIANTS.md` + `REPO_INVARIANTS.md` are
 cat'd into the Gemini gate payload, whose INLINE ceiling is **80 KiB for the whole payload**. Today
-they use 14% of it; at the 20 KiB cap they would use 50% before any diff. **Their real budget comes
-from that ceiling, not from this cap** — treat 20 KiB as an upper bound they should stay far below.
+they use 14% of it; at the method cap they would use 61% before any diff. **Their real budget comes
+from that ceiling, not from this cap** — treat the method cap as an upper bound they should stay far
+below.
 
 ## Versioning and dating
 

@@ -571,14 +571,14 @@ test("GLOBAL ACTIVE PATH OWNERSHIP survives lane relabel without freezing unrela
       mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
     }));
     const relabelled = run("src/x.mjs");
-    assert.match(relabelled.stdout, /owned by another active NO-GO repair program/,
+    assert.match(relabelled.stdout, /owned by another ACTIVE repair program/,
       "a valid task-lane relabel cannot abandon the active path owner");
     assert.equal(run("src/unrelated.mjs").stdout, "",
       "a distinct task remains free to write an unrelated exact path");
 
     rmSync(path.join(dir, ".claude", "task-lane.json"));
     const undeclared = run("src/x.mjs");
-    assert.match(undeclared.stdout, /owned by another active NO-GO repair program/,
+    assert.match(undeclared.stdout, /owned by another ACTIVE repair program/,
       "an empty task declaration cannot erase global active-path ownership");
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
@@ -797,4 +797,99 @@ test("a SYMLINKED sidecar is malformed, not satisfied — and a stale one is ref
     assert.match(stale.stdout, /"permissionDecision":"deny"/, "…and 31 minutes old is refused by real mtime");
     assert.match(stale.stdout, /belong to another dispatch's ritual/);
   } finally { cleanup(); }
+});
+
+// ── KO17 round 1: what the cold panel said the tests did not cover ─────────────────────────────
+
+test("THE INSTALLED GUARD, in a tree with no Git subject: it ANNOUNCES that it is blind and admits the write", () => {
+  // The controller-level classification was tested; the panel pointed out that proves nothing about
+  // what the registered hook DOES with it. This runs the installed hook. It would fail if the guard
+  // still denied here, and equally if it had turned every controller failure into a notice.
+  const { dir, cleanup } = adopt();
+  try {
+    rmSync(path.join(dir, ".git"), { recursive: true, force: true });   // no subject can exist here
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (target) => spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify({ session_id: "s2", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: path.join(dir, target) } }), encoding: "utf8",
+      env: { ...process.env, GIT_DIR: "", GIT_COMMON_DIR: "", GIT_WORK_TREE: "" },
+    });
+    const out = run("src/x.mjs");
+    assert.doesNotMatch(out.stdout, /"permissionDecision":"deny"/,
+      "a tree that cannot hold a repair ledger cannot hold a repair program — denying every write there is a false positive");
+    assert.match(out.stdout, /BLIND/,
+      "and the relief is ANNOUNCED — a control that quietly stops checking is indistinguishable from one that passed");
+  } finally { cleanup(); }
+});
+
+test("POLARITY: the installed guard still DENIES a source write when the ledger exists and cannot be read", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const ledgerDir = path.join(dir, ".git", "workflow-kit");
+    mkdirSync(ledgerDir, { recursive: true });
+    writeFileSync(path.join(ledgerDir, "repair-events-v1.jsonl"), "{not json at all\n");
+    const out = spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify({ session_id: "s2", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: path.join(dir, "src/x.mjs") } }), encoding: "utf8",
+    });
+    assert.match(out.stdout, /"permissionDecision":"deny"/,
+      "a ledger that EXISTS and cannot be read is a subject this control cannot see — that must deny");
+    assert.match(out.stdout, /PRESERVE it and repair it/,
+      "and the remedy must be preservation, never the deletion that discards every round's history");
+    assert.match(out.stdout, /could not be RUN|git rev-parse/,
+      "the message must also name the OTHER cause of this state — git unavailable — since repairing a healthy ledger would not fix that");
+  } finally { cleanup(); }
+});
+
+test("a build brief is gated by the ACTIVE program, not by the bare verdict", () => {
+  // Found by a cold seat: the source-write path learned the new predicate and this one did not, so a
+  // DEFER or a closed program released its paths while ORDINARY brief writing stayed trapped — the
+  // same lockout, one surface over. This is the guard's own sidecar contract, not the controller's.
+  assert.equal(state(fresh({ dispatch_kind: "build" }), { events: [verdictEvent()] }),
+    "repair-dispatch-required",
+    "a LIVE repair still refuses an ordinary build brief — it must be dispatched as a repair");
+  for (const disposition of ["DEFER", "DECLINE", "ESCALATE", "NOTE"]) {
+    assert.equal(state(fresh({ dispatch_kind: "build" }), { events: [verdictEvent({ disposition })] }),
+      "receipted",
+      `a NO-GO dispositioned ${disposition} authorizes no repair, so ordinary work stays ordinary`);
+  }
+  assert.equal(state(fresh({ dispatch_kind: "build" }), { events: [verdictEvent({ verdict: "GO", disposition: "NOTE",
+    finding_ids: [], finding_class: null, original_trigger: null, authorized_paths: [] })] }),
+    "receipted", "and a GO was never a repair program at all");
+});
+
+test("every deny that asks for a RECORDED event names the command that records it", () => {
+  // This chip exists because a deny message sent a blocked worker to a command that failed on the
+  // state it was printed for. The close route then repeated the shape more quietly: it described
+  // two events correctly and named nothing runnable, so the reader still had to go find HOW. A
+  // remedy the reader cannot execute is not a remedy.
+  //
+  // Driven from the message TABLE, not from a list written here, so a state added later with an
+  // unrunnable remedy goes red on its own.
+  const RECORDED_EVENT = /`?(owner_extension|repair_close|root-cause exit|adherence_audit)`?/;
+  const RECORDER = /record-repair-event\.mjs|confirm-repair-brief\.mjs/;
+  const states = [
+    "repair-worker-verification-missing", "repair-close-invalid", "repair-close-self-authorized",
+    "repair-close-unauthorized", "repair-root-cause-exit-missing", "repair-worker-candidate-stale",
+    "repair-worker-path-unauthorized", "repair-brief-changed", "repair-worker-session-missing",
+  ];
+  const gaps = [];
+  for (const state of states) {
+    const message = denyReason(state, { dispatch: { kind: "source", target: "src/x.mjs" } });
+    assert.doesNotMatch(message, /sidecar state is /,
+      `${state} has no message of its own — it would deny with a bare token`);
+    if (RECORDED_EVENT.test(message) && !RECORDER.test(message)) gaps.push(state);
+  }
+  assert.deepEqual(gaps, [],
+    `these denials ask the reader to record a typed event but name no command that records one: ` +
+    `${gaps.join(", ")}. Name \`record-repair-event.mjs\` (or the brief confirmer) in the message — ` +
+    `the reader is standing in a denial, not in the docs.`);
+
+  // CANARY — the pin is decoration unless it can catch the shape it forbids.
+  const planted = "record an `owner_extension` with the close authority, then a `repair_close`.";
+  assert.ok(RECORDED_EVENT.test(planted) && !RECORDER.test(planted),
+    "the detector must flag a remedy that names events but nothing runnable");
+  const cured = `${planted} Record both with \`node scripts/record-repair-event.mjs --event <json>\`.`;
+  assert.ok(RECORDER.test(cured), "…and must clear once the command is named");
 });

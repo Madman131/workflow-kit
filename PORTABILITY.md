@@ -400,7 +400,7 @@ is a judgment no flag can supply — `{{OWNER_PROFILE}}` (who they are and how t
 `{{IRREVERSIBLE_ASSET}}` (the thing in *your* repo that cannot be restored, which is what makes rule 4
 concrete), and `{{OWNER_SHORTHAND}}` (the tokens they actually type). `init` names each in its
 post-run checklist. The generated file declares `CLASS: BINDING`, so `check-doc-size` governs it
-automatically at the 20 KiB method cap along with every other `core/*.md`.
+automatically at the method cap along with every other `core/*.md`.
 
 ### The skills are `[P]`, but they depend on that `[G]` doc
 

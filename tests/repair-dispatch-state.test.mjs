@@ -1,15 +1,16 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  activeRepairPathOwners, confirmRepairBrief, deriveRepairState, loadRepairEventsForProject, readRepairEvents,
-  recordAdherenceAudit, recordOwnerExtension, recordRootCauseExit, recordRoundDisposition,
-  recordWorkerVerification, repairLedgerPath, validateRepairDispatch, verifyRepairBriefReceipt,
-  verifyRepairWorkerWrite,
+  activeRepairPathOwners, confirmRepairBrief, deriveRepairState, gitSubjectPresent,
+  loadRepairEventsForProject, readRepairEvents, recordAdherenceAudit, recordOwnerExtension,
+  recordRepairClose, recordRootCauseExit, recordRoundDisposition, recordWorkerVerification,
+  repairLedgerPath, validateRepairDispatch, verifyRepairBriefReceipt, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
 
 function repo() {
@@ -32,7 +33,22 @@ const round = (n, over = {}) => ({
   original_trigger: `trigger-${n}`, authorized_paths: ["src/x.mjs"],
   introduced_by_prior_repair: false, new_scope: false, ...over,
 });
+// The controller's own event-id rule, restated here ON PURPOSE: a test that forges a ledger row must
+// forge it the way the format demands, or it proves only that a malformed row is rejected.
+const forgedId = (event) => {
+  const stable = (v) => Array.isArray(v) ? `[${v.map(stable).join(",")}]`
+    : (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype)
+      ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}`
+      : JSON.stringify(v);
+  return createHash("sha256").update(stable(event)).digest("hex");
+};
 const mutate = (dir, n) => writeFileSync(path.join(dir, "src", "x.mjs"), `export const x = ${n};\n`);
+// Distinct classes per round, EXCEPT that round 3 repeats round 2's — which fires the mechanical
+// recurrence trigger (two consecutive NO-GOs sharing a finding class) and makes a root exit owed
+// after round 3. Tests below need a history where the root exit is legitimately required; they used
+// to get there because the controller triggered on the round NUMBER, and that positional trigger is
+// gone. The subject of those tests is concurrency and first-wins, not how the trigger fired.
+const recurringClass = (n) => (n === 3 ? "class-2" : `class-${n}`);
 
 function state(dir) {
   const loaded = loadRepairEventsForProject(dir);
@@ -379,17 +395,69 @@ test("candidate manifest and digest must agree inside durable history", () => {
   } finally { cleanup(); }
 });
 
-test("root-cause exit, R7 audit, and R9 Owner extension are exact typed evidence", () => {
+test("the root-cause exit follows the TRIGGER, and no round NUMBER gates anything", () => {
+  const { dir, cleanup } = repo();
+  try {
+    let authority = {};
+    // POLARITY ONE — the deleted gate. Three NO-GO rounds of DISTINCT finding classes, none
+    // repair-introduced. Under the linear ladder this reached "round 3 is the soft stop" and owed a
+    // root exit; the cadence is circular now, a cycle boundary falls at a round number this module
+    // cannot know, and deciding it here gated repos by a shape they had stopped having.
+    for (let n = 1; n <= 3; n += 1) {
+      mutate(dir, n);
+      assert.equal(recordRoundDisposition(round(n, { finding_class: `class-${n}`, ...authority }), options(dir)).ok, true);
+      authority = dispatchNext(dir);
+    }
+    assert.equal(state(dir).derived.root_cause_required, false,
+      "a round NUMBER must not owe a root-cause exit — that is the procedure's cadence call, not this module's");
+    mutate(dir, 4);
+    assert.equal(recordRoundDisposition(round(4, { finding_class: "class-4", ...authority }), options(dir)).ok, true,
+      "round 4 proceeds on an untriggered history with no root-cause exit anywhere");
+    // ...and no round number gates the far end either: reach round 9 with no adherence audit and no
+    // Owner extension in the ledger. Those two gates keyed on absolute 7 and 9.
+    for (let n = 5; n <= 9; n += 1) {
+      authority = dispatchNext(dir);
+      mutate(dir, n);
+      assert.equal(recordRoundDisposition(round(n, { finding_class: `class-${n}`, ...authority }), options(dir)).ok, true,
+        `round ${n} must not be gated by an absolute round number`);
+    }
+    const far = state(dir).derived;
+    assert.equal(far.latest.round, 9);
+    assert.equal(far.audit, null, "no adherence audit was ever minted, and none was demanded");
+    assert.equal(far.round_extension, null, "no Owner round-extension was ever minted, and none was demanded");
+  } finally { cleanup(); }
+});
+
+test("POLARITY: each MECHANICAL root-cause trigger still fires, and its exit is exact typed evidence", () => {
+  const { dir, cleanup } = repo();
+  try {
+    let authority = {};
+    // A repair-INTRODUCED harm is a mechanical trigger on its own, at whatever round it lands.
+    mutate(dir, 1);
+    assert.equal(recordRoundDisposition(round(1, { finding_class: "class-1" }), options(dir)).ok, true);
+    authority = dispatchNext(dir);
+    mutate(dir, 2);
+    assert.equal(recordRoundDisposition(round(2, {
+      finding_class: "class-2", introduced_by_prior_repair: true, ...authority,
+    }), options(dir)).ok, true);
+    assert.equal(state(dir).derived.root_cause_required, true,
+      "a repair-introduced harm owes a root-cause exit — a MECHANICAL trigger, kept");
+    assert.equal(state(dir).derived.trigger_round, 2, "the trigger is dated to the round that fired it");
+  } finally { cleanup(); }
+});
+
+test("the recurrence trigger fires on two consecutive same-class NO-GOs, and its exit is exact typed evidence", () => {
   const { dir, cleanup } = repo();
   try {
     let authority = {};
     for (let n = 1; n <= 3; n += 1) {
       mutate(dir, n);
-      assert.equal(recordRoundDisposition(round(n, { finding_class: `class-${n}`, ...authority }), options(dir)).ok, true);
+      assert.equal(recordRoundDisposition(round(n, { finding_class: recurringClass(n), ...authority }), options(dir)).ok, true);
       if (n < 3) authority = dispatchNext(dir);
     }
     let current = state(dir).derived;
-    assert.equal(current.root_cause_required, true, "Round 3 triggers the soft stop even without class recurrence");
+    assert.equal(current.root_cause_required, true,
+      "two consecutive NO-GOs sharing a finding class owe a root-cause exit — the other MECHANICAL trigger");
     mutate(dir, 4);
     assert.equal(recordRoundDisposition(round(4, { repair_dispatch_event_id: "invented" }), options(dir)).state,
       "repair-root-cause-exit-missing");
@@ -421,34 +489,34 @@ test("root-cause exit, R7 audit, and R9 Owner extension are exact typed evidence
       assert.equal(recordRoundDisposition(round(n, { finding_class: `root-${n}`, ...authority }), options(dir)).ok, true);
       if (n < 6) authority = dispatchNext(dir, { root_cause_exit_event_id: exit.event_id });
     }
+    // The audit and the Owner extension are still RECORDABLE — they are evidence the procedure
+    // chose to leave — but they no longer unlock a round, so they are minted where the cadence
+    // actually put them rather than at a number this module picked. Round 7 needs neither.
+    authority = dispatchNext(dir, { root_cause_exit_event_id: exit.event_id });
     mutate(dir, 7);
-    assert.equal(recordRoundDisposition(round(7, {
-      root_cause_exit_event_id: exit.event_id, repair_dispatch_event_id: "invented",
-    }), options(dir)).state, "repair-adherence-audit-missing");
+    assert.equal(recordRoundDisposition(round(7, { finding_class: "root-7", ...authority }), options(dir)).ok, true,
+      "round 7 no longer demands an after-round-6 audit — a position the circular cadence does not use");
     const audit = recordAdherenceAudit({
-      type: "adherence_audit", task_id: "task-1", changeset_id: "changeset-1", after_round: 6,
+      type: "adherence_audit", task_id: "task-1", changeset_id: "changeset-1", after_round: 7,
       rule1: "pass", gate_accounting: "pass", root_cause_discipline: "pass",
     }, options(dir));
-    assert.equal(audit.ok, true);
-    authority = dispatchNext(dir, { root_cause_exit_event_id: exit.event_id, adherence_audit_event_id: audit.event_id });
-    mutate(dir, 7);
-    assert.equal(recordRoundDisposition(round(7, { finding_class: "root-7", ...authority }), options(dir)).ok, true);
+    assert.equal(audit.ok, true, "an audit is recordable at the round the cadence chose, not only after round 6");
     authority = dispatchNext(dir, { root_cause_exit_event_id: exit.event_id, adherence_audit_event_id: audit.event_id });
     mutate(dir, 8);
     assert.equal(recordRoundDisposition(round(8, { finding_class: "root-8", ...authority }), options(dir)).ok, true);
-    mutate(dir, 9);
-    assert.equal(recordRoundDisposition(round(9, {
-      root_cause_exit_event_id: exit.event_id, adherence_audit_event_id: audit.event_id,
-      repair_dispatch_event_id: "invented",
-    }), options(dir)).state, "repair-owner-extension-missing");
     const extension = recordOwnerExtension({
       type: "owner_extension", task_id: "task-1", changeset_id: "changeset-1", after_round: 8,
       authority_kind: "rounds", owner_evidence: "Owner authorized two further rounds after the internal audit",
     }, options(dir));
     assert.equal(extension.ok, true);
+    authority = dispatchNext(dir, { root_cause_exit_event_id: exit.event_id, adherence_audit_event_id: audit.event_id });
+    mutate(dir, 9);
+    assert.equal(recordRoundDisposition(round(9, { finding_class: "root-9", ...authority }), options(dir)).ok, true,
+      "round 9 no longer demands an Owner extension — when the rounds stop is the procedure's call");
     current = state(dir).derived;
-    assert.equal(current.audit.event_id, audit.event_id);
-    assert.equal(current.round_extension.event_id, extension.event_id);
+    assert.equal(current.audit.event_id, audit.event_id, "the audit is still surfaced as evidence");
+    assert.equal(current.exits[0].event_id, exit.event_id);
+    assert.equal(current.extensions.some((e) => e.event_id === extension.event_id), true);
   } finally { cleanup(); }
 });
 
@@ -458,7 +526,7 @@ test("concurrent incompatible root exits are first-wins and a losing replay stay
     let authority = {};
     for (let n = 1; n <= 3; n += 1) {
       mutate(dir, n);
-      assert.equal(recordRoundDisposition(round(n, { finding_class: `class-${n}`, ...authority }), options(dir)).ok, true);
+      assert.equal(recordRoundDisposition(round(n, { finding_class: recurringClass(n), ...authority }), options(dir)).ok, true);
       if (n < 3) authority = dispatchNext(dir);
     }
     const makeInput = (mechanism) => ({
@@ -497,7 +565,7 @@ test("concurrent audits converge and incompatible Owner extensions remain first-
     let authority = {};
     for (let n = 1; n <= 3; n += 1) {
       mutate(dir, n);
-      assert.equal(recordRoundDisposition(round(n, { finding_class: `class-${n}`, ...authority }), options(dir)).ok, true);
+      assert.equal(recordRoundDisposition(round(n, { finding_class: recurringClass(n), ...authority }), options(dir)).ok, true);
       if (n < 3) authority = dispatchNext(dir);
     }
     const exit = recordRootCauseExit({
@@ -559,7 +627,7 @@ test("repair dispatch must match the latest verdict and every required authority
     let authority = {};
     for (let n = 1; n <= 3; n += 1) {
       mutate(dir, n);
-      assert.equal(recordRoundDisposition(round(n, { ...authority, finding_class: `class-${n}` }), options(dir)).ok, true);
+      assert.equal(recordRoundDisposition(round(n, { ...authority, finding_class: recurringClass(n) }), options(dir)).ok, true);
       if (n < 3) authority = dispatchNext(dir);
     }
     const exit = recordRootCauseExit({
@@ -805,5 +873,374 @@ test("truncated, corrupt, and symlinked ledgers fail closed", () => {
     symlinkSync(outside, file);
     assert.equal(readRepairEvents(file), null);
     assert.equal(recordRoundDisposition(round(1), options(dir)).state, "repair-round-malformed");
+  } finally { cleanup(); }
+});
+
+// ── KO17: the write-lockout, its in-band exit, and the blind posture ────────────────────────────
+
+test("A NON-REMEDIATE disposition holds NOTHING open — the reproduced repo lockout, cured", () => {
+  // THE BUG, exactly as reproduced at v2.12.0: one recorded round-1 NO-GO whose disposition was
+  // DEFER — a first-class disposition the PM contract encourages — denied EVERY source write in the
+  // lane, including paths the repair never claimed, and denied the claimed path even from a lane
+  // that had been relabelled or never declared at all. The only exit was deleting the ledger.
+  for (const disposition of ["DEFER", "DECLINE", "ESCALATE", "NOTE"]) {
+    const { dir, cleanup } = repo();
+    try {
+      assert.equal(recordRoundDisposition(round(1, { disposition }), options(dir)).ok, true);
+      const derived = state(dir).derived;
+      assert.equal(derived.latest.verdict, "NO-GO", `${disposition}: the verdict is still NO-GO`);
+      assert.equal(derived.active, false,
+        `${disposition} authorizes no repair, so it binds no worker and owns no path`);
+      // The claimed path, from the lane that recorded it.
+      assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
+        { projectRoot: dir }).ok, true, `${disposition}: the lane's own write must not be denied`);
+      // A path the repair never claimed — denied too, before the fix.
+      assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/unrelated.mjs" },
+        { projectRoot: dir }).ok, true, `${disposition}: an unclaimed path was never this control's business`);
+      // No lane declared, and a relabelled lane: both were denied by global path ownership.
+      assert.equal(verifyRepairWorkerWrite({ session_id: "s9", target: "src/x.mjs" },
+        { projectRoot: dir }).ok, true, `${disposition}: an undeclared lane must not be locked out`);
+      assert.equal(verifyRepairWorkerWrite({ task_id: "other-task", session_id: "s9", target: "src/x.mjs" },
+        { projectRoot: dir }).ok, true, `${disposition}: another task must not be locked out`);
+      assert.deepEqual(activeRepairPathOwners(state(dir).loaded.events, "src/x.mjs").owners, [],
+        `${disposition}: a program that authorized no repair owns no path globally`);
+    } finally { cleanup(); }
+  }
+});
+
+test("POLARITY: a REMEDIATE program still binds every write until the worker is admitted", () => {
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);   // disposition REMEDIATE
+    assert.equal(state(dir).derived.active, true);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
+      { projectRoot: dir }).state, "repair-worker-verification-missing",
+      "an authorized repair still demands a verified worker admission — the control must not have been gutted");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "other-task", session_id: "s9", target: "src/x.mjs" },
+      { projectRoot: dir }).state, "repair-task-relabel-path-owned",
+      "and its claimed path is still globally owned against a lane relabel");
+    assert.equal(activeRepairPathOwners(state(dir).loaded.events, "src/x.mjs").owners.length, 1);
+  } finally { cleanup(); }
+});
+
+test("THE REMEDY THE DENY NAMES ACTUALLY WORKS — confirm, verify, write, executed end to end", () => {
+  // The shipped guard named `confirm-repair-brief --verify` as the way out of
+  // repair-worker-verification-missing, and that command FAILED on the state it was printed for.
+  // A remedy is a claim about the system; this executes it.
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const blocked = verifyRepairWorkerWrite({ task_id: "task-1", session_id: "worker-7", target: "src/x.mjs" },
+      { projectRoot: dir });
+    assert.equal(blocked.state, "repair-worker-verification-missing");
+
+    const authority = dispatchNext(dir);                       // orchestrator: --confirm
+    const admitted = recordWorkerVerification({                // worker: --verify, THIS session
+      task_id: "task-1", repair_dispatch_event_id: authority.repair_dispatch_event_id,
+    }, { projectRoot: dir, sessionId: "worker-7" });
+    assert.equal(admitted.ok, true, admitted.state);
+
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "worker-7", target: "src/x.mjs" },
+      { projectRoot: dir }).ok, true, "the named remedy must actually admit the write it promised");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "worker-7", target: "src/other.mjs" },
+      { projectRoot: dir }).state, "repair-worker-path-unauthorized",
+      "and it admits ONLY the exact authorized path — the remedy works without becoming a bypass");
+  } finally { cleanup(); }
+});
+
+test("an abandoned REMEDIATE program is closed IN BAND, on a recorded authorization, never by deleting history", () => {
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
+      { projectRoot: dir }).ok, false, "the program is active, so the write is bound");
+
+    // A close naming no close-authorization row is refused. The conditions it must satisfy are the
+    // ELIGIBLE CLOSE definition in the controller; they are not restated here.
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoning this repair",
+      owner_close_event_id: "f".repeat(64),
+    }, options(dir)).state, "repair-close-unauthorized");
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoning this repair",
+    }, options(dir)).state, "repair-close-invalid", "a close with no authorization ID at all is malformed");
+
+    const authorization = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner: this repair is abandoned, release the paths",
+    }, options(dir));
+    assert.equal(authorization.ok, true, authorization.state);
+
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 2, reason: "wrong round",
+      owner_close_event_id: authorization.event_id,
+    }, options(dir)).state, "repair-close-invalid", "a close must name the CURRENT round");
+
+    const closed = recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoning this repair",
+      owner_close_event_id: authorization.event_id,
+    }, options(dir));
+    assert.equal(closed.ok, true, closed.state);
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoning this repair",
+      owner_close_event_id: authorization.event_id,
+    }, options(dir)).idempotent, true, "an uncertain close can be retried safely");
+
+    const derived = state(dir).derived;
+    assert.equal(derived.active, false, "a closed program binds no writes");
+    assert.equal(derived.close.reason, "abandoning this repair", "and the ledger keeps WHY, which deleting it destroyed");
+    assert.equal(derived.verdicts.length, 1, "the history the old recovery would have destroyed is still here");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
+      { projectRoot: dir }).ok, true);
+    assert.deepEqual(activeRepairPathOwners(state(dir).loaded.events, "src/x.mjs").owners, []);
+  } finally { cleanup(); }
+});
+
+test("a closed program REOPENS on the next recorded round — a close ends a repair, not a changeset", () => {
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const authorization = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner: pause this repair",
+    }, options(dir));
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "paused",
+      owner_close_event_id: authorization.event_id,
+    }, options(dir)).ok, true);
+    assert.equal(state(dir).derived.active, false);
+
+    const authority = dispatchNext(dir);
+    mutate(dir, 2);
+    assert.equal(recordRoundDisposition(round(2, authority), options(dir)).ok, true);
+    assert.equal(state(dir).derived.active, true,
+      "the close named round 1; a round 2 result is a live repair again and binds writes again");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
+      { projectRoot: dir }).ok, false);
+  } finally { cleanup(); }
+});
+
+test("NO SUBJECT is not the same failure as NO ACCESS — and only the first may relieve a write", () => {
+  // Shipped behavior: ANY git-resolution failure denied every source write, even where no ledger
+  // could exist. A control that cannot see must say so; it must not deny-all silently.
+  const outside = mkdtempSync(path.join(os.tmpdir(), "repair-no-subject-"));
+  try {
+    assert.equal(gitSubjectPresent(outside, { env: {} }), false);
+    assert.equal(loadRepairEventsForProject(outside, { env: {} }).state, "repair-ledger-no-subject");
+
+    const { dir, cleanup } = repo();
+    try {
+      // A real repository. Git is unavailable to the hook, but a ledger COULD exist here.
+      const brokenGit = () => { throw new Error("git: command not found"); };
+      assert.equal(gitSubjectPresent(dir, { env: {} }), true, "a `.git` above the root is a subject");
+      assert.equal(loadRepairEventsForProject(dir, { execGit: brokenGit, env: {} }).state,
+        "repair-ledger-unavailable", "git off the PATH inside a real repo still DENIES — the subject may exist");
+
+      // THE ENVIRONMENT OVERRIDE. `git rev-parse` honours GIT_DIR, so a work tree can have its
+      // Git-common directory selected with no `.git` under the walk root at all. A filesystem-only
+      // test would call that "no subject" and hand back a write it had not checked.
+      for (const name of ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"]) {
+        assert.equal(gitSubjectPresent(outside, { env: { [name]: path.join(dir, ".git") } }), true,
+          `${name} selects a repository elsewhere — that is a subject, so it must not be relieved`);
+        assert.equal(loadRepairEventsForProject(outside, { execGit: brokenGit, env: { [name]: path.join(dir, ".git") } }).state,
+          "repair-ledger-unavailable", `${name} set must DENY, never fall through to no-subject`);
+      }
+      assert.equal(gitSubjectPresent(outside, { env: { GIT_DIR: "   " } }), false,
+        "an empty-but-present override is not a repository selection");
+    } finally { cleanup(); }
+  } finally { rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("POLARITY: a corrupt ledger inside a real repo still DENIES, and says how to repair it", () => {
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const ledger = repairLedgerPath(dir);
+    writeFileSync(ledger, `${readFileSync(ledger, "utf8")}{"event_id":"nonsense"}\n`);
+    const loaded = loadRepairEventsForProject(dir);
+    assert.equal(loaded.state, "repair-ledger-unavailable",
+      "a ledger that EXISTS and cannot be trusted is a subject this control cannot read — deny");
+    assert.notEqual(loaded.state, "repair-ledger-no-subject",
+      "corruption must never be mistaken for absence: that is the one confusion that would hand back an unchecked write");
+  } finally { cleanup(); }
+});
+
+test("THE CONSTRAINED SESSION CANNOT CLOSE ITS OWN PROGRAM — the panel's bypass, shut", () => {
+  // Found by a cold seat on round 1: the first close design took a close-authorization row by exact
+  // event ID and checked nothing about WHO recorded it, so the admitted worker could mint the
+  // authorization itself, close the program, and write the path it had just been refused. The
+  // ledger's admitted worker sessions are the one identity signal that is actually IN the ledger,
+  // so a close may come from neither the authorizing nor the closing side of an admitted session.
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const authority = dispatchNext(dir);
+    assert.equal(recordWorkerVerification({
+      task_id: "task-1", repair_dispatch_event_id: authority.repair_dispatch_event_id,
+    }, { projectRoot: dir, sessionId: "worker-7" }).ok, true);
+
+    // The worker mints its own close-authorization row and tries to release itself.
+    const selfMinted = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner approved (claimed by the worker)",
+    }, { projectRoot: dir, sessionId: "worker-7" });
+    assert.equal(selfMinted.state, "repair-close-self-authorized",
+      "the session the program constrains cannot mint its own release");
+    assert.equal(state(dir).derived.active, true, "and the program is still live");
+
+    // The legitimate shape: an authorization from a session that holds no worker admission.
+    const owner = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner: abandon this repair",
+    }, options(dir));
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoned",
+      owner_close_event_id: owner.event_id,
+    }, options(dir)).ok, true);
+    assert.equal(state(dir).derived.active, false);
+
+    assert.equal(state(dir).derived.close.reason, "abandoned");
+  } finally { cleanup(); }
+});
+
+test("a closed program stops gating ORDINARY work, not just source writes", () => {
+  // The panel found the build-brief path still reasoning from the bare verdict, so a closed program
+  // released its paths while ordinary brief writing stayed trapped — the same lockout, one surface
+  // over. Asserted through the sidecar contract the guard actually evaluates.
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1, { disposition: "DEFER" }), options(dir)).ok, true);
+    const { derived } = state(dir);
+    assert.equal(derived.latest.verdict, "NO-GO");
+    assert.equal(derived.active, false,
+      "a DEFER authorizes no repair, so an ordinary build brief is ordinary work — the guard keys on this");
+  } finally { cleanup(); }
+});
+
+test("a hand-appended close from the constrained session is INERT — not authority, and not a brick", () => {
+  // The authority check is a post-pass rather than an in-loop rejection for one reason: a
+  // `repair_close` row is something any caller can append. If an unauthorized one FAILED the
+  // history closed, appending a single row would seal the exit permanently — the lockout shape this
+  // event exists to remove, rebuilt on the way out. So it must be ignored, and only ignored.
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const authority = dispatchNext(dir);
+    assert.equal(recordWorkerVerification({
+      task_id: "task-1", repair_dispatch_event_id: authority.repair_dispatch_event_id,
+    }, { projectRoot: dir, sessionId: "worker-7" }).ok, true);
+    const latest = state(dir).derived.latest;
+
+    const stamp = (event) => ({ event_id: forgedId(event), event });
+    const auth = { type: "owner_extension", task_id: "task-1", changeset_id: "changeset-1",
+      recorded_at: "2026-08-19T00:00:00.000Z", session_id: "worker-7", after_round: 1,
+      candidate_sha: latest.candidate_sha, authority_kind: "close",
+      owner_evidence: "Owner approved (forged by the worker)" };
+    const ledger = repairLedgerPath(dir);
+    appendFileSync(ledger, `${JSON.stringify(stamp(auth))}\n`);
+    const close = { type: "repair_close", task_id: "task-1", changeset_id: "changeset-1",
+      recorded_at: "2026-08-19T00:00:01.000Z", session_id: "worker-7", after_round: 1,
+      candidate_sha: latest.candidate_sha, reason: "releasing myself",
+      owner_close_event_id: forgedId(auth) };
+    appendFileSync(ledger, `${JSON.stringify(stamp(close))}\n`);
+
+    // A close from a NON-admitted session resting on the worker's forged authorization — this
+    // isolates the AUTHORIZATION half of the check, which the paired case above would mask.
+    const launderedClose = { type: "repair_close", task_id: "task-1", changeset_id: "changeset-1",
+      recorded_at: "2026-08-19T00:00:02.000Z", session_id: "an-innocent-session", after_round: 1,
+      candidate_sha: latest.candidate_sha, reason: "closing on their behalf",
+      owner_close_event_id: forgedId(auth) };
+    appendFileSync(ledger, `${JSON.stringify(stamp(launderedClose))}\n`);
+
+    const loaded = loadRepairEventsForProject(dir);
+    assert.equal(loaded.ok, true, "the ledger stays readable — a forged row is data, not corruption");
+    const derived = deriveRepairState(loaded.events, "task-1");
+    assert.equal(derived.ok, true, "and derivation stays alive: an inert row must never brick a repo");
+    assert.equal(derived.close, null,
+      "neither forged close carries authority: not the one from the constrained session, and not the " +
+      "laundered one resting on an authorization that session minted for itself");
+    assert.equal(derived.active, true, "so the program is still live and still binds its paths");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
+      { projectRoot: dir }).ok, false);
+
+    // ...and the slot it tried to squat is still available to a real authorization.
+    const real = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner: abandon it",
+    }, options(dir));
+    assert.equal(real.ok, true, real.state);
+    // ...and the OTHER half in isolation: a close from the constrained session resting on a
+    // perfectly legitimate authorization is still refused.
+    const workerClose = { type: "repair_close", task_id: "task-1", changeset_id: "changeset-1",
+      recorded_at: "2026-08-19T00:00:03.000Z", session_id: "worker-7", after_round: 1,
+      candidate_sha: latest.candidate_sha, reason: "using the real authorization",
+      owner_close_event_id: real.event_id };
+    appendFileSync(ledger, `${JSON.stringify(stamp(workerClose))}\n`);
+    assert.equal(state(dir).derived.close, null,
+      "a real authorization does not let the constrained session close its own program");
+    assert.equal(state(dir).derived.active, true);
+    const reclose = recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoned",
+      owner_close_event_id: real.event_id,
+    }, options(dir));
+    assert.equal(reclose.ok, true, `one appended row must not be able to seal the exit (got ${reclose.state})`);
+    assert.equal(state(dir).derived.active, false);
+  } finally { cleanup(); }
+});
+
+test("THE RESIDUAL, PINNED: an alias defeats the close check, and the code says so", () => {
+  // Two cold seats walked this and were right both times. `session_id` is caller-supplied, so an
+  // admitted worker that passes a name it has not used satisfies both session checks and closes the
+  // program constraining it. This test asserts the HOLE, deliberately: the kit's rule is that a
+  // residual is named rather than implied, and a limitation nobody executes is a limitation nobody
+  // believes. If a later change closes this for real, THIS TEST GOES RED — which is the moment to
+  // rewrite it and the comments that disclose it, together.
+  //
+  // ⚠ A GREEN RUN HERE MEANS THE HOLE IS STILL OPEN AND STILL DISCLOSED. It is not a security
+  // property, and a suite summary that says "214 passing" says nothing about this one being safe.
+  // One fresh alias is enough for both events; two are used below only to keep the sequence legible.
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const authority = dispatchNext(dir);
+    assert.equal(recordWorkerVerification({
+      task_id: "task-1", repair_dispatch_event_id: authority.repair_dispatch_event_id,
+    }, { projectRoot: dir, sessionId: "worker-7" }).ok, true);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "worker-7", target: "src/other.mjs" },
+      { projectRoot: dir }).ok, false, "the worker is constrained to its authorized path set");
+
+    // The same actor, a name it has not used before.
+    const alias = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner approved (in fact the worker, under another name)",
+    }, { projectRoot: dir, sessionId: "worker-7-alias-a" });
+    assert.equal(alias.ok, true, "an unadmitted NAME is accepted — nothing here authenticates anyone");
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "closing under an alias",
+      owner_close_event_id: alias.event_id,
+    }, { projectRoot: dir, sessionId: "worker-7-alias-b" }).ok, true);
+    assert.equal(state(dir).derived.active, false, "and the program really is released — this is the residual");
+
+    // What the design buys, stated at exactly its strength. A cold seat corrected an earlier version
+    // of this comment, and the correction matters: the surviving row does NOT make an improper
+    // release detectable. The alias here is self-revealing because a test wrote it; a real one would
+    // read `owner-approver` and nothing in the ledger would contradict it. What survives is an
+    // UNAUTHENTICATED CLAIM plus the history around it — better for recovery and for audit than a
+    // deleted file, and not evidence of who did it.
+    const derived = state(dir).derived;
+    assert.equal(derived.close.reason, "closing under an alias");
+    assert.equal(derived.close.session_id, "worker-7-alias-b",
+      "the row records the name the release CLAIMED, which is all a caller-supplied id can ever be");
+    assert.equal(derived.verdicts.length, 1, "every round of history survives an improper close");
+    assert.equal(derived.dispatches.length, 1);
+    assert.equal(derived.worker_verifications.length, 1,
+      "and the admission survives too — recoverable context, NOT attribution: it does not tie the alias to the worker");
+
+    // And the disclosure is IN THE SOURCE, not only in a review transcript.
+    const source = readFileSync(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url), "utf8");
+    assert.match(source, /THE RESIDUAL, NAMED/,
+      "the module must disclose this limitation where the next reader will meet it");
+    assert.match(source, /THE LEDGER RECORDS; IT DOES NOT DETER/,
+      "and must not describe the check as an authorization boundary");
   } finally { cleanup(); }
 });

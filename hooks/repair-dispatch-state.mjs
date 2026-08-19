@@ -14,8 +14,9 @@ import path from "node:path";
 export const REPAIR_LEDGER_REL = path.join("workflow-kit", "repair-events-v1.jsonl");
 const EVENT_TYPES = new Set([
   "round_disposition", "root_cause_exit", "adherence_audit", "owner_extension", "repair_dispatch",
-  "worker_verification",
+  "worker_verification", "repair_close",
 ]);
+const AUTHORITY_KINDS = ["rounds", "scope", "close"];
 const DISPOSITIONS = new Set(["REMEDIATE", "DEFER", "DECLINE", "ESCALATE", "NOTE"]);
 
 function plain(v) { return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype; }
@@ -58,6 +59,32 @@ function validManifest(records, digest) {
   if (!records.every((r) => plain(r) && strings([r.path], { paths: true }) && /^[0-9a-f]{40,64}$/.test(r.oid || "")) ||
       new Set(paths).size !== paths.length || !same(paths, [...paths].sort())) return false;
   return manifestDigest(records) === digest;
+}
+
+// Git's own location overrides. `git rev-parse` honours these, so a real work tree can have its
+// Git-common directory selected with NO `.git` anywhere under the project root — which is exactly
+// what makes a filesystem-only "is there a subject here" test unsafe on its own.
+const GIT_LOCATION_ENV = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"];
+
+/**
+ * Could a repair ledger exist for this tree AT ALL? This is the question that separates "the
+ * control has no subject" from "the control cannot read its subject", and only the first one may
+ * ever relieve a write. It answers WITHOUT running git, because the case it exists for is the one
+ * where git could not be run. Every uncertainty resolves to TRUE (a subject may be present), so the
+ * relief is granted only when a subject is provably impossible.
+ */
+export function gitSubjectPresent(projectRoot, { env = process.env } = {}) {
+  if (GIT_LOCATION_ENV.some((name) => typeof env?.[name] === "string" && env[name].trim() !== "")) return true;
+  let dir;
+  try { dir = realpathSync(projectRoot); } catch { return true; }
+  for (;;) {
+    // lstat, not stat: a SYMLINKED `.git` is a subject that may be present, and it is also the
+    // tamper shape the ledger reader already fails closed on. Both reasons point the same way.
+    try { lstatSync(path.join(dir, ".git")); return true; } catch {}
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
 }
 
 export function resolveGitCommon(projectRoot, { execGit = execFileSync } = {}) {
@@ -186,16 +213,20 @@ function identityConflict(events, taskId, changesetId, eventId = null) {
   return null;
 }
 
-function transitionWinner(events, event, key) {
+function transitionWinner(events, event, key, eligible = null) {
   return events.find((row) => row.event.type === event.type && row.event.task_id === event.task_id &&
-    row.event.changeset_id === event.changeset_id && key(row.event) === key(event)) || null;
+    row.event.changeset_id === event.changeset_id && key(row.event) === key(event) &&
+    (!eligible || eligible(row))) || null;
 }
 
-function finishExclusiveTransition(file, appended, event, key, equivalent, conflictState) {
+function finishExclusiveTransition(file, appended, event, key, equivalent, conflictState, eligible = null) {
   if (!appended.ok) return appended;
   const after = readRepairEventsSettled(file);
   if (after === null) return { ok: false, state: "repair-ledger-unavailable" };
-  const winner = transitionWinner(after, event, key);
+  // The SAME eligibility the pre-check used. Adjudicating the winner without it would re-admit the
+  // row the pre-check just ruled out, and the caller would read a conflict against an event that
+  // was never authority in the first place.
+  const winner = transitionWinner(after, event, key, eligible);
   if (!winner) return { ok: false, state: "repair-ledger-unavailable" };
   if (winner.event_id === appended.event_id) return appended;
   return equivalent(winner.event, event)
@@ -203,11 +234,17 @@ function finishExclusiveTransition(file, appended, event, key, equivalent, confl
     : { ok: false, state: conflictState, winner_event_id: winner.event_id };
 }
 
+// The MECHANICAL triggers, and only those. A root assessment is owed when a repair introduced the
+// harm, or when two consecutive NO-GOs share a finding class — conditions the events themselves
+// declare. What is NOT here, deliberately: the round's POSITION. A trigger that fires because the
+// absolute count reached some number is software deciding the cadence, which is the procedure's
+// call and not this module's; the cadence is also circular now, so a fixed position tracks it only
+// by coincidence. Removing the position leaves the two triggers that still mean what they say.
 function rootTriggerRound(verdicts) {
   let triggerRound = 0;
   for (let i = 0; i < verdicts.length; i += 1) {
     const v = verdicts[i];
-    if (v.verdict === "NO-GO" && (v.round === 3 || v.introduced_by_prior_repair ||
+    if (v.verdict === "NO-GO" && (v.introduced_by_prior_repair ||
         (i > 0 && verdicts[i - 1].verdict === "NO-GO" && v.finding_class === verdicts[i - 1].finding_class))) {
       triggerRound = v.round;
     }
@@ -239,7 +276,7 @@ function normalizedExactPathSet(value) {
   return [...value].sort();
 }
 
-function nextRoundAuthority({ verdicts, exits, audits, extensions, dispatches }, nextRound, evidence = {},
+function nextRoundAuthority({ verdicts, exits, extensions, dispatches }, nextRound, evidence = {},
   { requireDispatch = false } = {}) {
   const latest = verdicts.at(-1) || null;
   if (nextRound === 1) return latest ? { ok: false, state: "repair-round-nonsequential" } : { ok: true };
@@ -249,8 +286,6 @@ function nextRoundAuthority({ verdicts, exits, audits, extensions, dispatches },
   if (latest.disposition !== "REMEDIATE") return { ok: false, state: "repair-disposition-not-authorized" };
   const triggerRound = rootTriggerRound(verdicts);
   const rootExit = [...exits].reverse().find((e) => e.after_round >= triggerRound && e.after_round <= latest.round) || null;
-  const audit = [...audits].reverse().find((e) => e.after_round === 6) || null;
-  const roundExtension = [...extensions].reverse().find((e) => e.after_round === latest.round && e.authority_kind === "rounds") || null;
   // A round result may expand the exact repair-path set only after the preceding accepted round's
   // Owner scope extension. Dispatch revalidates the same event carried by that accepted result;
   // otherwise a forged `new_scope:false` row could become worker authority on the following round.
@@ -262,14 +297,14 @@ function nextRoundAuthority({ verdicts, exits, audits, extensions, dispatches },
   const scopeExtension = addedPaths.length > 0
     ? [...extensions].reverse().find((e) => e.after_round === preceding.round && e.authority_kind === "scope") || null
     : null;
-  if ((nextRound >= 4 || triggerRound > 0) && (!rootExit || evidence.root_cause_exit_event_id !== rootExit.event_id)) {
+  // THE ONE ROUND-THRESHOLD GATE LEFT, and it is not a threshold: a root exit is owed once a
+  // MECHANICAL trigger has fired, at whatever round that happened. The round >= 4 / >= 7 / >= 9
+  // walls that used to stand here decided the cadence, which is the procedure's call — they were
+  // written against a linear ladder the procedure no longer runs, so they gated a repo by a shape
+  // it had stopped having. Sequence, exact-reference binding and refreeze invalidation stay: those
+  // enforce that the history is intact, never how long it may get.
+  if (triggerRound > 0 && (!rootExit || evidence.root_cause_exit_event_id !== rootExit.event_id)) {
     return { ok: false, state: "repair-root-cause-exit-missing" };
-  }
-  if (nextRound >= 7 && (!audit || evidence.adherence_audit_event_id !== audit.event_id)) {
-    return { ok: false, state: "repair-adherence-audit-missing" };
-  }
-  if (nextRound >= 9 && (!roundExtension || evidence.owner_extension_event_id !== roundExtension.event_id)) {
-    return { ok: false, state: "repair-owner-extension-missing" };
   }
   if (addedPaths.length > 0 && (expansion.new_scope !== true || !scopeExtension ||
       !same(addedPaths, scopeExtension.added_paths) ||
@@ -282,9 +317,9 @@ function nextRoundAuthority({ verdicts, exits, audits, extensions, dispatches },
       d.source_round === latest.round && d.next_round === nextRound && d.target_kind === "brief" &&
       d.candidate_sha === latest.candidate_sha && same(d.finding_ids, latest.finding_ids));
     if (!brief) return { ok: false, state: "repair-brief-receipt-missing" };
-    return { ok: true, rootExit, audit, roundExtension, scopeExtension, brief };
+    return { ok: true, rootExit, scopeExtension, brief };
   }
-  return { ok: true, rootExit, audit, roundExtension, scopeExtension };
+  return { ok: true, rootExit, scopeExtension };
 }
 
 export function deriveRepairState(events, taskId) {
@@ -309,6 +344,7 @@ export function deriveRepairState(events, taskId) {
   const audits = [];
   const extensions = [];
   const dispatches = [];
+  const closes = [];
   const workerVerifications = [];
   const transitionKeys = new Set();
   let changesetId = null;
@@ -353,11 +389,18 @@ export function deriveRepairState(events, taskId) {
     } else if (row.type === "owner_extension") {
       const at = verdicts.find((v) => v.round === row.after_round);
       const addedPaths = row.authority_kind === "scope" ? normalizedExactPathSet(row.added_paths) : null;
-      if (!at || row.candidate_sha !== at.candidate_sha || !["rounds", "scope"].includes(row.authority_kind) ||
+      if (!at || row.candidate_sha !== at.candidate_sha || !AUTHORITY_KINDS.includes(row.authority_kind) ||
           !text(row.owner_evidence, 1000) ||
           (row.authority_kind === "scope" ? !addedPaths || !same(row.added_paths, addedPaths) : row.added_paths !== undefined)) {
         return { ok: false, state: "repair-history-invalid" };
       }
+      // CLOSE authorizations are deliberately exempt from the first-wins transition key. Whether one
+      // carries authority depends on the admitted worker sessions, which are not all known until
+      // this loop ends — so keying the slot here would let the FIRST row take it and an
+      // unauthorized row could then squat the exit for that round permanently. They are all kept;
+      // the post-pass below picks the first ELIGIBLE one. `rounds` and `scope` keep first-wins,
+      // because nothing about their validity depends on rows that come later.
+      if (row.authority_kind === "close") { extensions.push(row); continue; }
       const key = `extension:${row.after_round}:${row.authority_kind}`;
       if (!transitionKeys.has(key)) { transitionKeys.add(key); extensions.push(row); }
     } else if (row.type === "repair_dispatch") {
@@ -367,9 +410,25 @@ export function deriveRepairState(events, taskId) {
           row.target_kind !== "brief" || !strings([row.target], { paths: true, itemMax: 500 }) ||
           !/^[0-9a-f]{64}$/.test(row.brief_sha256 || "") ||
           !Number.isSafeInteger(row.brief_size) || row.brief_size < 0) return { ok: false, state: "repair-history-invalid" };
-      const authority = nextRoundAuthority({ verdicts, exits, audits, extensions, dispatches }, row.next_round, row);
+      const authority = nextRoundAuthority({ verdicts, exits, extensions, dispatches }, row.next_round, row);
       if (!authority.ok) return { ok: false, state: "repair-history-invalid" };
       if (!dispatches.some((existing) => sameRepairDispatch(existing, row))) dispatches.push(row);
+    } else if (row.type === "repair_close") {
+      // A close names the round it ends and the close-authorization row it rests on. Both are exact
+      // references, which is the only kind of authority this module has ever accepted.
+      // SHAPE only. Whether this close is ELIGIBLE (the term is defined once, at the post-pass
+      // below) is decided AFTER the loop, once every worker admission in the ledger is known — and
+      // an ineligible close is INERT rather than history-breaking, because a row anyone can append
+      // must never be able to brick a repo.
+      const at = verdicts.find((v) => v.round === row.after_round);
+      if (!at || row.candidate_sha !== at.candidate_sha || !text(row.reason, 1000) ||
+          !/^[0-9a-f]{64}$/.test(row.owner_close_event_id || "")) {
+        return { ok: false, state: "repair-history-invalid" };
+      }
+      // Kept unkeyed for the same reason as the authorization above: eligibility is not knowable
+      // until every worker admission has been read, so first-wins here would let an ineligible row
+      // take the slot. First ELIGIBLE wins, decided below.
+      closes.push(row);
     } else if (row.type === "worker_verification") {
       const receipt = dispatches.find((d) => d.event_id === row.repair_dispatch_event_id);
       if (!receipt || row.candidate_sha !== receipt.candidate_sha ||
@@ -391,15 +450,50 @@ export function deriveRepairState(events, taskId) {
   const latest = verdicts.at(-1) || null;
   const triggerRound = rootTriggerRound(verdicts);
   const rootExit = [...exits].reverse().find((e) => e.after_round >= triggerRound && e.after_round <= (latest?.round || 0)) || null;
-  // One audit is run after Round 6 and unlocks the two standing extension rounds, 7 and 8. It is
-  // evidence about the six-round program, not a per-round tax that must be re-minted after Round 7.
-  const audit = [...audits].reverse().find((e) => e.after_round === 6) || null;
+  // The audit is EVIDENCE the procedure chose to record, at whatever round its own cadence put it.
+  // It used to be looked up at `after_round === 6` because it unlocked round 7 — it no longer
+  // unlocks anything, so pinning the lookup to a round would only hide audits taken elsewhere from
+  // anyone reading this state.
+  const audit = audits.at(-1) || null;
   const roundExtension = [...extensions].reverse().find((e) => e.after_round === latest?.round && e.authority_kind === "rounds") || null;
   const scopeExtension = [...extensions].reverse().find((e) => e.after_round === latest?.round && e.authority_kind === "scope") || null;
+  // ⚠ ELIGIBLE CLOSE — THE ONE DEFINITION. Every other surface in this kit points at this term
+  // instead of restating it, because four review rounds were spent on surfaces that each spelled
+  // the idea slightly stronger than the code.
+  //
+  // A close is ELIGIBLE when it names a `close`-kind `owner_extension` at the same round and
+  // candidate, and NEITHER row carries a session id the program has admitted as a worker. That is
+  // the whole test. It compares SESSION IDS, which are supplied by the caller — so it refuses the
+  // admitted id, never the actor behind it, and it is not Owner attribution. See the residual block
+  // above `recordRepairClose`.
+  //
+  // Decided in one post-pass against every admission in the ledger, so pre-minting before verifying
+  // as a worker gains nothing. An INELIGIBLE close is INERT: it neither ends the program nor
+  // invalidates the history, and it does not consume the round's slot, so an eligible one can still
+  // be recorded. (Failing it closed here would hand any caller a fresh lockout: append one bogus
+  // row and the exit is sealed. That is the defect this event exists to remove.)
+  const admittedSessions = new Set(workerVerifications.map((row) => row.worker_session_id));
+  const authorizedClose = (candidate) => {
+    if (!candidate || admittedSessions.has(candidate.session_id)) return null;
+    const authorization = extensions.find((e) => e.event_id === candidate.owner_close_event_id &&
+      e.authority_kind === "close" && e.after_round === candidate.after_round &&
+      e.candidate_sha === candidate.candidate_sha && !admittedSessions.has(e.session_id));
+    return authorization ? candidate : null;
+  };
+  // A program is ACTIVE — and so owns writes — only while a repair is actually authorized: the
+  // latest verdict is NO-GO, its disposition is REMEDIATE, and no ELIGIBLE close has ended it. A
+  // NO-GO dispositioned DEFER/DECLINE/ESCALATE/NOTE authorizes no repair, mints no brief, and binds
+  // no worker, so there is nothing for it to hold open.
+  // FIRST eligible close wins, matching every other transition in this file: an ELIGIBLE close
+  // cannot be superseded by a later one, and an ineligible one cannot displace it.
+  const close = latest
+    ? closes.filter((e) => e.after_round === latest.round).map(authorizedClose).find(Boolean) || null
+    : null;
+  const active = Boolean(latest && latest.verdict === "NO-GO" && latest.disposition === "REMEDIATE" && !close);
   return { ok: true, task_id: taskId, changeset_id: changesetId, verdicts, latest, trigger_round: triggerRound,
     root_cause_required: triggerRound > 0 && !rootExit, root_exit: rootExit, audit, round_extension: roundExtension,
     scope_extension: scopeExtension, dispatches, worker_verifications: workerVerifications,
-    exits, audits, extensions };
+    close, active, exits, audits, extensions, closes };
 }
 
 function normalizedRoundFields(input) {
@@ -564,22 +658,98 @@ export function recordOwnerExtension(input, { projectRoot, sessionId, now = new 
   const state = events === null ? null : deriveRepairState(events, input?.task_id);
   const addedPaths = input?.authority_kind === "scope" ? normalizedExactPathSet(input.added_paths) : null;
   if (!base || !state?.ok || !state.latest || input.after_round !== state.latest.round ||
-      !["rounds", "scope"].includes(input.authority_kind) || !text(input.owner_evidence, 1000) ||
+      !AUTHORITY_KINDS.includes(input.authority_kind) || !text(input.owner_evidence, 1000) ||
       (input.authority_kind === "scope" ? !addedPaths : input.added_paths !== undefined)) {
     return { ok: false, state: "repair-owner-extension-invalid" };
   }
   const event = { ...base, after_round: input.after_round, candidate_sha: state.latest.candidate_sha,
     authority_kind: input.authority_kind, owner_evidence: input.owner_evidence,
     ...(addedPaths ? { added_paths: addedPaths } : {}) };
+  const admitted = new Set(state.worker_verifications.map((row) => row.worker_session_id));
+  if (input.authority_kind === "close" && admitted.has(sessionId)) {
+    return { ok: false, state: "repair-close-self-authorized" };
+  }
   const key = (e) => `${e.after_round}:${e.authority_kind}`;
   const equivalent = (a, b) => a.candidate_sha === b.candidate_sha && a.owner_evidence === b.owner_evidence &&
     same(a.added_paths, b.added_paths);
-  const prior = transitionWinner(events, event, key);
+  // First-wins is per (round, kind) — but a CLOSE authorization recorded by a session the program
+  // has admitted as a worker carries no authority, so it must not win the slot either. Letting it
+  // would turn one appended row into a permanent seal on the exit: the very lockout shape being
+  // removed, rebuilt on the way out.
+  const eligible = input.authority_kind === "close" ? (row) => !admitted.has(row.event.session_id) : null;
+  const prior = transitionWinner(events, event, key, eligible);
   if (prior) return equivalent(prior.event, event)
     ? { ok: true, event_id: prior.event_id, idempotent: true }
     : { ok: false, state: "repair-owner-extension-conflict", winner_event_id: prior.event_id };
   const appended = appendRepairEvent(file, event);
-  return finishExclusiveTransition(file, appended, event, key, equivalent, "repair-owner-extension-conflict");
+  return finishExclusiveTransition(file, appended, event, key, equivalent, "repair-owner-extension-conflict", eligible);
+}
+
+/**
+ * End an authorized repair program IN BAND. Without this the only exit from an abandoned REMEDIATE
+ * program was deleting the ledger — destroying every round's history to unblock one write.
+ *
+ * It requires an ELIGIBLE CLOSE — the term is defined in one place, at the post-pass in
+ * `deriveRepairState`, and this comment deliberately does not restate its conditions. Releasing a
+ * program also releases its global path ownership, and the party most motivated to release it is
+ * the one the program constrains, which is what that test is shaped around.
+ *
+ * ⚠ THE RESIDUAL, NAMED — read this before relying on that check. `session_id` is SUPPLIED BY THE
+ * CALLER (`scripts/record-repair-event.mjs` takes it from the input or the environment), so an
+ * admitted worker that passes a NAME IT HAS NOT USED BEFORE satisfies both checks and closes the
+ * program constraining it. Two cold review seats walked exactly that sequence. So the check stops
+ * the LITERAL case — a session releasing itself, which is what a careless agent actually does — and
+ * stops nothing that picks a new string. It is not an authorization boundary and this comment will
+ * not call it one: THE LEDGER RECORDS; IT DOES NOT DETER, the sentence the nonce trail already
+ * applies to itself.
+ *
+ * The comparison that decides whether this event belongs here is not close-versus-perfect-authority,
+ * it is close-versus-the-alternative. Before it, an abandoned repair could be escaped only by
+ * DELETING the ledger — available to the same caller, needing no alias, and destroying every round
+ * of history on the way out. A forged close leaves a row naming the round, the reason, and the
+ * authorization it claims to rest on, and it leaves the rest of the history standing.
+ *
+ * Be exact about what that is worth, because the obvious overstatement is wrong: it does NOT make an
+ * improper release DETECTABLE. An alias can be any string — `owner-approver` reads as credible — and
+ * nothing in the ledger ties it back to the admitted worker. What survives is an unauthenticated
+ * CLAIM plus the surrounding history, which is better for recovery and for audit than a deleted
+ * file, and is not evidence of who did it. That, and nothing more, is the claim.
+ */
+export function recordRepairClose(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
+  if (!text(sessionId, 200)) return { ok: false, state: "repair-session-missing" };
+  const base = baseEvent("repair_close", input, sessionId, now);
+  const file = repairLedgerPath(projectRoot, { execGit });
+  const events = readRepairEventsSettled(file);
+  const state = events === null ? null : deriveRepairState(events, input?.task_id);
+  if (!base || !state?.ok || !state.latest || input.after_round !== state.latest.round ||
+      !text(input.reason, 1000) || !/^[0-9a-f]{64}$/.test(input.owner_close_event_id || "")) {
+    return { ok: false, state: "repair-close-invalid" };
+  }
+  const authorization = state.extensions.find((e) => e.event_id === input.owner_close_event_id &&
+    e.authority_kind === "close" && e.after_round === state.latest.round &&
+    e.candidate_sha === state.latest.candidate_sha);
+  if (!authorization) return { ok: false, state: "repair-close-unauthorized" };
+  const admitted = new Set(state.worker_verifications.map((row) => row.worker_session_id));
+  if (admitted.has(authorization.session_id) || admitted.has(sessionId)) {
+    return { ok: false, state: "repair-close-self-authorized" };
+  }
+  const event = { ...base, after_round: input.after_round, candidate_sha: state.latest.candidate_sha,
+    reason: input.reason, owner_close_event_id: input.owner_close_event_id };
+  const key = (e) => String(e.after_round);
+  const equivalent = (a, b) => a.candidate_sha === b.candidate_sha && a.reason === b.reason &&
+    a.owner_close_event_id === b.owner_close_event_id;
+  // A close row that carries no authority does not win the slot either — same reason as the
+  // authorization above. Otherwise one hand-appended row seals the exit for that round, which is
+  // the lockout being removed, rebuilt one layer down.
+  const eligible = (row) => !admitted.has(row.event.session_id) && state.extensions.some((e) =>
+    e.event_id === row.event.owner_close_event_id && e.authority_kind === "close" &&
+    !admitted.has(e.session_id));
+  const prior = transitionWinner(events, event, key, eligible);
+  if (prior) return equivalent(prior.event, event)
+    ? { ok: true, event_id: prior.event_id, idempotent: true }
+    : { ok: false, state: "repair-close-conflict", winner_event_id: prior.event_id };
+  const appended = appendRepairEvent(file, event);
+  return finishExclusiveTransition(file, appended, event, key, equivalent, "repair-close-conflict", eligible);
 }
 
 export function validateRepairDispatch(declaration, { events, taskId, targetKind, target }) {
@@ -708,7 +878,7 @@ export function activeRepairPathOwners(events, target) {
   for (const identity of accepted) {
     const state = deriveRepairState(events, identity.event.task_id);
     if (!state.ok) return { ok: false, state: state.state, owners: [] };
-    if (state.latest?.verdict === "NO-GO" && state.latest.authorized_paths.includes(target)) owners.push(state);
+    if (state.active && state.latest.authorized_paths.includes(target)) owners.push(state);
   }
   return { ok: true, state: "repair-path-owners-derived", owners };
 }
@@ -733,7 +903,7 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   if (!text(taskId, 120)) return { ok: true, state: "not-repair-write" };
   const state = owner || deriveRepairState(loaded.events, taskId);
   if (!state.ok) return state;
-  if (!state.latest || state.latest.verdict !== "NO-GO") return { ok: true, state: "not-repair-write" };
+  if (!state.active) return { ok: true, state: "not-repair-write" };
   if (!text(sessionId, 200)) return { ok: false, state: "repair-worker-session-missing" };
   const admissions = state.worker_verifications.filter((row) => row.worker_session_id === sessionId);
   const admission = [...admissions].reverse().find((row) => row.candidate_sha === state.latest.candidate_sha &&
@@ -754,6 +924,14 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
 
 export function loadRepairEventsForProject(projectRoot, options = {}) {
   const file = repairLedgerPath(projectRoot, options);
-  const events = readRepairEventsSettled(file);
-  return events === null ? { ok: false, state: "repair-ledger-unavailable", events: null } : { ok: true, file, events };
+  const events = file === null ? null : readRepairEventsSettled(file);
+  if (events !== null) return { ok: true, file, events };
+  // TWO different failures wearing one name until now. A ledger that exists and cannot be trusted
+  // is a control that cannot READ ITS SUBJECT — deny. A tree that cannot hold a ledger at all is a
+  // control with NO SUBJECT: no repair program can exist there, so there is nothing to enforce and
+  // denying every write is a pure false positive. Both still fail; only the second may be relieved,
+  // and only by a consumer that says out loud that it is blind. `gitSubjectPresent` resolves every
+  // uncertainty toward "a subject may be present", so the relief needs a provable absence.
+  const subject = file !== null || gitSubjectPresent(projectRoot, options);
+  return { ok: false, state: subject ? "repair-ledger-unavailable" : "repair-ledger-no-subject", events: null };
 }

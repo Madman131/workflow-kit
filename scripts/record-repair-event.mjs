@@ -14,7 +14,8 @@ const controllerPath = [
 ].find((candidate) => existsSync(candidate));
 if (!controllerPath) throw new Error("repair controller is not installed beside this recorder");
 const {
-  recordAdherenceAudit, recordOwnerExtension, recordRootCauseExit, recordRoundDisposition,
+  recordAdherenceAudit, recordOwnerExtension, recordRepairClose, recordRootCauseExit,
+  recordRoundDisposition,
 } = await import(pathToFileURL(controllerPath).href);
 
 function readInput(file) {
@@ -30,6 +31,7 @@ export function recordEvent(input, options) {
   if (input.type === "root_cause_exit") return recordRootCauseExit(input, options);
   if (input.type === "adherence_audit") return recordAdherenceAudit(input, options);
   if (input.type === "owner_extension") return recordOwnerExtension(input, options);
+  if (input.type === "repair_close") return recordRepairClose(input, options);
   return { ok: false, state: "repair-event-type-unsupported" };
 }
 
@@ -51,9 +53,11 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
         sessionId,
       });
       if (!result.ok) {
-        const action = result.state === "repair-session-missing"
-          ? ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`
-          : "";
+        const action = {
+          "repair-session-missing": ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`,
+          "repair-close-self-authorized": " — this close is not eligible: an eligible close names a close-kind owner_extension at the CURRENT round and candidate, and NEITHER that row NOR the close itself may carry a session id this program admitted as a worker. One of yours does. The check compares supplied session IDS, not actors",
+          "repair-close-unauthorized": ' — record an owner_extension with "authority_kind":"close" at the CURRENT round and candidate, from a session this program has not admitted as a worker, then name its exact event_id as "owner_close_event_id"',
+        }[result.state] ?? "";
         console.error(`repair event rejected: ${result.state}${result.expected ? ` (expected ${result.expected})` : ""}${action}`);
         process.exitCode = 1;
       } else {

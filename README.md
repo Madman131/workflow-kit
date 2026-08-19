@@ -488,6 +488,20 @@ may declare `{"class":"status"}` instead, and that declaration is LEDGERED for t
 spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
 must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
+**The same guard also gates SOURCE writes** once a repair program is live — a scope worth stating
+plainly, because it is the half most likely to block you. While a gate round stands at NO-GO with
+disposition REMEDIATE and no eligible recorded close, a write to a path that repair claimed is
+admitted only from a session holding a verified worker receipt. Every other disposition holds
+nothing: a NO-GO dispositioned DEFER, DECLINE, ESCALATE or NOTE authorizes no repair, so it binds no
+worker and owns no path. When a repair is abandoned, it is CLOSED by an **eligible close** — a pair of ledger rows whose
+conditions are defined in exactly one place, beside `deriveRepairState`'s post-pass in
+`hooks/repair-dispatch-state.mjs`. Read them there; summarising them here is how six review rounds
+were spent. Never unstuck by deleting the ledger, which throws away the history that says what was
+authorized. What this level should carry instead of a summary is the LIMIT: the eligibility test
+reads ledger rows, and nothing in this kit authenticates the actor behind one. The ledger records,
+it does not deter — what a close buys over a deleted ledger is a row naming the round, the reason,
+and the authorization it claims.
+
 **One ritual authorizes one dispatch**, because freshness and target-binding together still let a
 SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,
 carrying text the original checks never saw. Consumption is a property of the AUDIT TRAIL: each
@@ -1452,7 +1466,8 @@ and a sensor that notices the most common miss.
 
 **v1.3 adds no `core/` method doc changes.** The existing method docs are untouched; `core/OWNER_COMMS.md`
 is new and generated, and (like every `core/*.md`) is automatically governed by `doc:size` at the
-20 KiB BINDING-method cap.
+BINDING-method cap.
+
 
 ### Upgrading an existing adopter to v1.3
 
