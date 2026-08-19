@@ -1,6 +1,7 @@
 node_modules
 .DS_Store
 # if the kit is ever self-adopted:
+.claude/FAILURE_MODES.md
 .claude/task-lane.json
 .claude/lane-ledger.jsonl
 .claude/brief-rung.json
