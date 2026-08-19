@@ -858,3 +858,38 @@ test("a build brief is gated by the ACTIVE program, not by the bare verdict", ()
     finding_ids: [], finding_class: null, original_trigger: null, authorized_paths: [] })] }),
     "receipted", "and a GO was never a repair program at all");
 });
+
+test("every deny that asks for a RECORDED event names the command that records it", () => {
+  // This chip exists because a deny message sent a blocked worker to a command that failed on the
+  // state it was printed for. The close route then repeated the shape more quietly: it described
+  // two events correctly and named nothing runnable, so the reader still had to go find HOW. A
+  // remedy the reader cannot execute is not a remedy.
+  //
+  // Driven from the message TABLE, not from a list written here, so a state added later with an
+  // unrunnable remedy goes red on its own.
+  const RECORDED_EVENT = /`?(owner_extension|repair_close|root-cause exit|adherence_audit)`?/;
+  const RECORDER = /record-repair-event\.mjs|confirm-repair-brief\.mjs/;
+  const states = [
+    "repair-worker-verification-missing", "repair-close-invalid", "repair-close-self-authorized",
+    "repair-close-unauthorized", "repair-root-cause-exit-missing", "repair-worker-candidate-stale",
+    "repair-worker-path-unauthorized", "repair-brief-changed", "repair-worker-session-missing",
+  ];
+  const gaps = [];
+  for (const state of states) {
+    const message = denyReason(state, { dispatch: { kind: "source", target: "src/x.mjs" } });
+    assert.doesNotMatch(message, /sidecar state is /,
+      `${state} has no message of its own — it would deny with a bare token`);
+    if (RECORDED_EVENT.test(message) && !RECORDER.test(message)) gaps.push(state);
+  }
+  assert.deepEqual(gaps, [],
+    `these denials ask the reader to record a typed event but name no command that records one: ` +
+    `${gaps.join(", ")}. Name \`record-repair-event.mjs\` (or the brief confirmer) in the message — ` +
+    `the reader is standing in a denial, not in the docs.`);
+
+  // CANARY — the pin is decoration unless it can catch the shape it forbids.
+  const planted = "record an `owner_extension` with the close authority, then a `repair_close`.";
+  assert.ok(RECORDED_EVENT.test(planted) && !RECORDER.test(planted),
+    "the detector must flag a remedy that names events but nothing runnable");
+  const cured = `${planted} Record both with \`node scripts/record-repair-event.mjs --event <json>\`.`;
+  assert.ok(RECORDER.test(cured), "…and must clear once the command is named");
+});
