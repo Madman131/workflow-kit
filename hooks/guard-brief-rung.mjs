@@ -432,15 +432,15 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "repair-history-invalid": `the durable repair history is transition-invalid, so it cannot authorize another dispatch. Inspect the Git-common repair ledger; do not replace it with a fresh changeset.`,
     "repair-changeset-reset": `this task already owns a different durable changeset id. A refreeze, finding split, or reviewer swap cannot mint a new round allowance.`,
     "repair-scope-unapproved": `${SIDECAR} declares new repair scope without the exact typed Owner scope event ID. Scope expansion remains an Owner decision.`,
-    "repair-root-cause-exit-missing": `${SIDECAR} names Round 4 or later without the exact typed root-cause exit event ID. Rounds 4–6 are authorized only for the diagnosed replacement mechanism.`,
-    "repair-adherence-audit-missing": `${SIDECAR} names Round 7 or later without the exact typed passing adherence-audit event ID. The internal Rule-1/gate/root-cause audit is the boundary that unlocks Rounds 7–8.`,
-    "repair-owner-extension-missing": `${SIDECAR} names Round 9 or later without the exact typed Owner-extension event ID. Automatic round authority ends after Round 8.`,
-    "repair-ledger-unavailable": `the Git-common repair-event ledger is absent from a Git repository, corrupt, truncated, symlinked, non-regular, or unwritable. Durable history fails closed; fix the ledger rather than falling back to conversation memory.`,
+    "repair-root-cause-exit-missing": `a root-cause trigger has FIRED in this history — a repair introduced the harm, or two consecutive NO-GOs shared a finding class — and ${SIDECAR} names no exact typed root-cause exit event ID. Record the exit for the diagnosed replacement mechanism with \`record-repair-event.mjs\`, then declare its event ID. (This gate follows the TRIGGER, not the round number; how many rounds a cycle runs is the procedure's call, not this hook's.)`,
+    "repair-ledger-unavailable": `the Git-common repair-event ledger is corrupt, truncated, symlinked, non-regular, or unwritable — it EXISTS as a subject this control cannot read, so it fails closed. PRESERVE it and repair it: copy the file aside, find the row that will not parse or whose transition is out of order (it is append-only JSONL, one event per line), and fix that row. Do NOT delete the ledger to unblock a write — that discards every round's history to clear one message, and the history is the only thing that can tell you what was authorized.`,
+    "repair-close-invalid": `the repair close does not name the CURRENT round, carries no reason, or names no Owner close-authorization event ID. A close ends an authorized repair program in band; it must say which round it ends and why.`,
+    "repair-close-unauthorized": `this repair close names no matching Owner authorization. Record an \`owner_extension\` with \`"authority_kind":"close"\` at this round, then have the close name that exact event ID. Closing releases the program's global path ownership, so the release is attributable to the Owner — not to the session the program constrains.`,
     "repair-worker-session-missing": `this repair write has no hook session identity. Run \`confirm-repair-brief.mjs --verify\` with the current session recorded as explicit \`session_id\`, then retry from that same session.`,
-    "repair-worker-verification-missing": `this session has no typed worker-verification event for the current repair receipt. Run \`confirm-repair-brief.mjs --verify\` on the persisted brief receipt before the first source write.`,
+    "repair-worker-verification-missing": `this session has no typed worker-verification event for the current repair receipt. TWO routes out, and both work from here: to CONTINUE the repair, have the orchestrator persist the brief and run \`confirm-repair-brief.mjs --confirm\` to mint the receipt, then run \`--verify\` from THIS session before the first source write; to ABANDON it, record an \`owner_extension\` with \`"authority_kind":"close"\` at the current round and then a \`repair_close\` naming that event ID, which ends the program and releases its paths. A repair that is going nowhere is closed, never left holding the repo.`,
     "repair-worker-candidate-stale": `this session verified a receipt for an older candidate or round. Verify the current repair brief receipt; refreezing never lets an earlier worker admission carry forward.`,
     "repair-worker-path-unauthorized": `this source path is outside the exact authorized-path set carried by the current repair brief receipt. Stop and obtain an Owner-authorized scope event when the repair genuinely needs new scope.`,
-    "repair-task-relabel-path-owned": `this exact source path is owned by another active NO-GO repair program. Re-declare the task lane as that owning task and use its current verified worker session; relabelling the lane cannot abandon repair-path authority.`,
+    "repair-task-relabel-path-owned": `this exact source path is owned by another ACTIVE repair program — one whose latest verdict is NO-GO, whose disposition is REMEDIATE, and which no Owner-authorized close has ended. Re-declare the task lane as that owning task and use its current verified worker session; relabelling the lane cannot abandon repair-path authority.`,
     "repair-worker-path-owner-conflict": `this exact source path is claimed by multiple active NO-GO repair programs. The ownership conflict fails closed; reconcile those programs before any worker writes the path.`,
     "repair-brief-changed": `the persisted repair brief no longer matches the bytes the worker verified. Restore or reconfirm the intended brief, then run \`--verify\` again before writing source.`,
     "repair-dispatch-invalid": `the exact repair dispatch could not be appended to the durable controller after nonce adjudication. No worker authority was issued.`,
@@ -458,7 +458,17 @@ function emitDeny(reason) {
 
 // ------------------------------------------------------------------ entry
 
-export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDeny, exit = (c) => process.exit(c) } = {}) {
+// A NOTICE is not a deny. It rides the same PreToolUse channel `guard-gate-ladder` uses to speak
+// without blocking, and it exists for exactly one case: this control admitting, in the transcript,
+// that it could not see. A relief taken silently is indistinguishable from a control that passed.
+function emitNotice(reason) {
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: reason },
+  }));
+}
+
+export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDeny,
+  notice = emitNotice, exit = (c) => process.exit(c) } = {}) {
   let raw = "";
   stdin.on("data", (d) => (raw += d));
   stdin.on("end", () => {
@@ -545,17 +555,30 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     // would be a circular control. Shell writes remain outside this tool-bound tripwire, disclosed
     // in the header rather than hidden behind a universal claim.
     if (sourceTargets.length) {
-      if (!controller.ok) {
-        emit(denyReason("repair-ledger-unavailable", { dispatch: { kind: "source", target: sourceTargets[0] } }));
+      // THE ONE SANCTIONED RELIEF, and it is stated out loud rather than taken quietly. A tree that
+      // cannot hold a repair ledger — no `.git` anywhere above it and no Git location override set —
+      // cannot hold a repair PROGRAM either, so this control has no subject here and denying every
+      // write would be a pure false positive. It is the consumer, not the controller, that takes the
+      // relief: `loadRepairEventsForProject` still fails closed, and this is the single visible place
+      // that reads its verdict as "blind" instead of "violated". Anything else — a ledger that exists
+      // and cannot be read, git off the PATH inside a real repo — still denies.
+      if (controller.state === "repair-ledger-no-subject") {
+        notice(`the repair-round control is BLIND here: no Git repository was found at or above ` +
+          `${root}, so no repair ledger can exist and no repair program can be enforced. ` +
+          `${sourceTargets.length} source write(s) proceeded UNCHECKED by it. If you expected this ` +
+          `tree to be governed, the hook is running somewhere you did not intend.`);
+      } else if (!controller.ok) {
+        emit(denyReason(controller.state, { dispatch: { kind: "source", target: sourceTargets[0] } }));
         return exit(0);
-      }
-      for (const target of sourceTargets) {
-        const admitted = verifyRepairWorkerWrite({
-          task_id: taskId, session_id: input?.session_id, target,
-        }, { projectRoot: root });
-        if (!admitted.ok) {
-          emit(denyReason(admitted.state, { dispatch: { kind: "source", target } }));
-          return exit(0);
+      } else {
+        for (const target of sourceTargets) {
+          const admitted = verifyRepairWorkerWrite({
+            task_id: taskId, session_id: input?.session_id, target,
+          }, { projectRoot: root });
+          if (!admitted.ok) {
+            emit(denyReason(admitted.state, { dispatch: { kind: "source", target } }));
+            return exit(0);
+          }
         }
       }
     }

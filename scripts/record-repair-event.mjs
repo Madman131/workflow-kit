@@ -14,7 +14,8 @@ const controllerPath = [
 ].find((candidate) => existsSync(candidate));
 if (!controllerPath) throw new Error("repair controller is not installed beside this recorder");
 const {
-  recordAdherenceAudit, recordOwnerExtension, recordRootCauseExit, recordRoundDisposition,
+  recordAdherenceAudit, recordOwnerExtension, recordRepairClose, recordRootCauseExit,
+  recordRoundDisposition,
 } = await import(pathToFileURL(controllerPath).href);
 
 function readInput(file) {
@@ -30,6 +31,7 @@ export function recordEvent(input, options) {
   if (input.type === "root_cause_exit") return recordRootCauseExit(input, options);
   if (input.type === "adherence_audit") return recordAdherenceAudit(input, options);
   if (input.type === "owner_extension") return recordOwnerExtension(input, options);
+  if (input.type === "repair_close") return recordRepairClose(input, options);
   return { ok: false, state: "repair-event-type-unsupported" };
 }
 

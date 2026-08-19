@@ -571,14 +571,14 @@ test("GLOBAL ACTIVE PATH OWNERSHIP survives lane relabel without freezing unrela
       mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
     }));
     const relabelled = run("src/x.mjs");
-    assert.match(relabelled.stdout, /owned by another active NO-GO repair program/,
+    assert.match(relabelled.stdout, /owned by another ACTIVE repair program/,
       "a valid task-lane relabel cannot abandon the active path owner");
     assert.equal(run("src/unrelated.mjs").stdout, "",
       "a distinct task remains free to write an unrelated exact path");
 
     rmSync(path.join(dir, ".claude", "task-lane.json"));
     const undeclared = run("src/x.mjs");
-    assert.match(undeclared.stdout, /owned by another active NO-GO repair program/,
+    assert.match(undeclared.stdout, /owned by another ACTIVE repair program/,
       "an empty task declaration cannot erase global active-path ownership");
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
