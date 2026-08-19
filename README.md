@@ -493,13 +493,14 @@ plainly, because it is the half most likely to block you. While a gate round sta
 disposition REMEDIATE and no eligible recorded close, a write to a path that repair claimed is
 admitted only from a session holding a verified worker receipt. Every other disposition holds
 nothing: a NO-GO dispositioned DEFER, DECLINE, ESCALATE or NOTE authorizes no repair, so it binds no
-worker and owns no path. When a repair is abandoned, it is CLOSED — an `owner_extension` with
-`"authority_kind":"close"` and a `repair_close` naming it, **both recorded from a session the
-program has not admitted as a worker** — never unstuck by deleting the ledger, which throws away the
-history that says what was authorized. That session check stops a worker releasing itself by name;
-it does not stop one that supplies a name it has not used, because `session_id` is caller-supplied.
-The ledger records, it does not deter — what a close buys over a deleted ledger is a row naming the
-round, the reason, and the authorization it claims.
+worker and owns no path. When a repair is abandoned, it is CLOSED by an **eligible close** — a pair of ledger rows whose
+conditions are defined in exactly one place, beside `deriveRepairState`'s post-pass in
+`hooks/repair-dispatch-state.mjs`. Read them there; a summary of them here is how four review rounds
+were spent. Never unstuck by deleting the ledger, which throws away the history that says what was
+authorized. And know what the eligibility test is: it compares supplied session ids, not actors, so
+it stops a worker releasing itself by name and does not stop one that supplies a name it has not
+used. The ledger records, it does not deter — what a close buys over a deleted ledger is a row
+naming the round, the reason, and the authorization it claims.
 
 **One ritual authorizes one dispatch**, because freshness and target-binding together still let a
 SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,

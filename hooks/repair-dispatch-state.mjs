@@ -689,10 +689,10 @@ export function recordOwnerExtension(input, { projectRoot, sessionId, now = new 
  * End an authorized repair program IN BAND. Without this the only exit from an abandoned REMEDIATE
  * program was deleting the ledger — destroying every round's history to unblock one write.
  *
- * It takes an Owner authorization (`owner_extension` with `authority_kind: "close"`) named by its
- * exact event ID, and refuses both events from any session the program has ADMITTED AS A WORKER —
- * releasing a program also releases its global path ownership, and the party most motivated to
- * release it is the one the program constrains.
+ * It requires an ELIGIBLE CLOSE — the term is defined in one place, at the post-pass in
+ * `deriveRepairState`, and this comment deliberately does not restate its conditions. Releasing a
+ * program also releases its global path ownership, and the party most motivated to release it is
+ * the one the program constrains, which is what that test is shaped around.
  *
  * ⚠ THE RESIDUAL, NAMED — read this before relying on that check. `session_id` is SUPPLIED BY THE
  * CALLER (`scripts/record-repair-event.mjs` takes it from the input or the environment), so an

@@ -70,12 +70,13 @@ in a denial, and note that it has TWO halves with different trigger conditions.
 - **Live only during a repair:** source writes. This half is dormant until a gate round is recorded
   — and dormancy is a state with an instructed exit, never a property. Once a round stands at NO-GO
   with disposition REMEDIATE and no ELIGIBLE recorded close, writes to the paths that repair claimed need a
-  verified worker receipt from the writing session. Every other disposition holds nothing. **What a
-  close is, stated exactly:** a `repair_close` naming an `owner_extension` that authorizes it, both
-  refused from a session the program admitted as a worker. That check refuses the admitted session
-  ID, not the actor — session ids are supplied by the caller, so a close records who it SAYS it came
-  from. It buys a legible row over the alternative it replaced, which was deleting the ledger; it is
-  not an authorization boundary, and nothing here should be read as one.
+  verified worker receipt from the writing session. Every other disposition holds nothing. A repair is ended by an
+  **eligible close** — a pair of ledger rows whose conditions are defined in one place, beside
+  `deriveRepairState`'s post-pass in `repair-dispatch-state.mjs`; read them there rather than from a
+  summary. What matters at this level: the test compares SUPPLIED SESSION IDS, not actors, so a
+  close records who it says it came from. It buys a legible row over the alternative it replaced,
+  which was deleting the ledger. It is not an authorization boundary, and nothing here should be
+  read as one.
 
 It has one relief and it announces itself: in a tree that cannot hold a repair ledger at all, the
 guard says it is blind and lets the source write through. A ledger it cannot READ is a different
