@@ -5,7 +5,7 @@
 // core.hooksPath is unset).
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const { ROLE_CAPS } = await import(new URL("../scripts/check-doc-size.mjs", import.meta.url).href);
 
 // A nested `node --test` inherits the parent runner's env (NODE_TEST_CONTEXT / NODE_OPTIONS) and then
 // reports up over IPC instead of exiting non-zero — so a failing inner run would look green. Strip
@@ -1538,4 +1539,56 @@ test("removed-flag `=` spelling, the hooks DETECTOR, and an honest skip message"
       "a re-run with the skip flag says the .codex/ is still there rather than implying it is absent");
     assert.ok(existsSync(path.join(reran, ".codex", "config.toml")), "…and it genuinely is still there");
   } finally { rmSync(reran, { recursive: true, force: true }); }
+});
+
+// ── KO17: two numbers that drifted because prose restated them ─────────────────────────────────
+
+test("the shipped version is DERIVED from VERSION, never hand-kept beside it", () => {
+  // package.json said 2.6.1 against a VERSION of 2.12.0 — six releases of silent drift, because
+  // nothing compared them. Whoever bumps VERSION now learns immediately if they missed the mirror.
+  const version = readFileSync(path.join(KIT, "VERSION"), "utf8").trim();
+  const pkg = JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8"));
+  assert.match(version, /^\d+\.\d+\.\d+$/, "VERSION is the source of truth and must be a plain semver line");
+  assert.equal(pkg.version, version,
+    `package.json says ${pkg.version} and VERSION says ${version}. One of them is lying to every reader ` +
+    `and every tool that resolves the package.`);
+});
+
+test("no shipped doc restates a method-cap number that disagrees with the checker", () => {
+  // The cap moved 20480 -> 21504 -> 23040 -> 24064 -> 25088 while three docs still said "20 KiB".
+  // A number copied into prose has no way to learn it changed, so the durable cure is this pin:
+  // state the cap in ONE place, and let any other spelling of a KiB figure near cap vocabulary
+  // answer to the checker's own value.
+  const capBytes = ROLE_CAPS.method;
+  const capKiB = capBytes / 1024;
+  const offenders = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (["node_modules", ".git", ".claude", "tests", "acceptance"].includes(e.name)) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile() && (e.name.endsWith(".md") || e.name.endsWith(".tmpl"))) {
+        const text = readFileSync(p, "utf8");
+        for (const m of text.matchAll(/(\d+(?:\.\d+)?)\s*KiB[^.\n]{0,60}?(method|BINDING-method)\s*cap/gi)) {
+          if (Number(m[1]) !== capKiB) offenders.push(`${path.relative(KIT, p)}: "${m[0].trim()}"`);
+        }
+        for (const m of text.matchAll(/(method|BINDING-method)\s*cap[^.\n]{0,60}?(\d+(?:\.\d+)?)\s*KiB/gi)) {
+          if (Number(m[2]) !== capKiB) offenders.push(`${path.relative(KIT, p)}: "${m[0].trim()}"`);
+        }
+      }
+    }
+  };
+  walk(KIT);
+  assert.deepEqual(offenders, [],
+    `these surfaces state a method cap other than ${capKiB} KiB (${capBytes} B), which is what ` +
+    `scripts/check-doc-size.mjs actually enforces: ${offenders.join(" · ")}`);
+
+  // CANARY — an absence pin is decoration unless its regex can match the thing it forbids. Prove it
+  // against the exact stale spellings this chip removed, in both word orders.
+  const stale = ["governed at the 20 KiB method cap along with", "the BINDING-method cap of 20 KiB."];
+  for (const sample of stale) {
+    const hits = [...sample.matchAll(/(\d+(?:\.\d+)?)\s*KiB[^.\n]{0,60}?(method|BINDING-method)\s*cap/gi),
+                  ...sample.matchAll(/(method|BINDING-method)\s*cap[^.\n]{0,60}?(\d+(?:\.\d+)?)\s*KiB/gi)];
+    assert.ok(hits.length > 0, `the cap-drift regex must match the spelling it forbids: ${sample}`);
+  }
 });

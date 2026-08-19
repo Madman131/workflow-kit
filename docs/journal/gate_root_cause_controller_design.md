@@ -135,3 +135,38 @@ lets a DEFECTIVE ARTIFACT reach GO — artifact GO is a separate human judgment 
 decides — but the process-audit and continuation TIMING are not strictly fail-safe until the successor
 chip removes these fixed round-number gates. This is the successor chip's motivating harm, not merely
 cleanup.
+
+## Postscript — what the successor chip found when it tested the divergence
+
+The paragraph above was written from a reading of the code. The successor chip executed it, and the
+record is corrected here rather than left for the next reader to re-derive.
+
+**The over-gate direction reproduces.** `recordAdherenceAudit` accepted an audit only at
+`after_round === latest.round`, and only an `after_round === 6` audit unlocked round 7. A repo whose
+cycle boundary fell elsewhere had its own audit refused outright — `audit@4` and `audit@5` both
+returned `repair-audit-invalid` against a latest round of 6 — and could reach round 7 only by
+minting an audit over bytes its cadence had not chosen. That is the harm this note named, and it is
+real.
+
+**A stronger reading was tested and did NOT reproduce.** A review panel escalated the divergence to
+a DEADLOCK: that once `latest.round` reached 7 the required audit became unmintable and rounds 8+
+were refused forever. Walked by execution — r1–r3, root exit, r4–r6, audit@6, r7, audit@7, r8,
+Owner extension@8, r9 — every step passed. The `after_round === 6` audit persisted in derived state
+and was never re-demanded after round 7, exactly as the code comment beside the lookup claimed. The
+premise cannot be constructed either, because round 7 was unreachable WITHOUT that audit: the state
+the deadlock needs could only be arrived at through the event that resolves it. A cross-family
+review confirmed this independently, walking the concurrency, idempotent-replay and task-relabel
+paths as well.
+
+So **"bounded and bidirectional" stands as written** — the divergence mis-timed the process audit
+and the continuation gate; it did not strand a repo. The credit still belongs to the panel: the
+claim was wrong and the instinct was right. It forced the walk that produced this evidence, and the
+walk found the defect that mattered more than either reading — `rootTriggerRound` fired on
+`v.round === 3`, a fixed absolute position sitting inside the trigger this note had described as the
+cadence-tracking half. That one was invisible to a reading of the gates alone.
+
+**All of it is now moot by deletion, which is the point.** The fixed round positions are gone: no
+round number gates a repair, the audit and the Owner extension remain recordable as evidence and
+unlock nothing, and the root-cause exit follows only the two mechanical triggers. A divergence
+between a doctrine's cadence and a machine's arithmetic cannot mis-time what the machine no longer
+counts.

@@ -49,15 +49,25 @@ section names the concrete seats for THIS repo.*
 *(This is the canonical statement of the PM-portability caveat. Since kit v2.1 the PreToolUse guards
 register in the Codex lane too — but read the qualifier in that column as part of the value: a Codex
 hook does not run until a human grants hook trust in an INTERACTIVE session, and an untrusted hook is
-skipped SILENTLY. `node scripts/check-codex-hooks-armed.mjs` is what settles it. All three bind write
-TOOLS only: a file rewritten by a plain shell command is invisible to them in either lane.)*
+skipped SILENTLY. `node scripts/check-codex-hooks-armed.mjs` is what settles it. Every PreToolUse row
+binds write TOOLS only: a file rewritten by a plain shell command is invisible to them in either
+lane.)*
 
 | Control | Claude lane | {{OTHER_LANE}} lane | Human by hand |
 |---|---|---|---|
 | `guard-cross-repo-writes` (writes outside repo blocked) | enforced | **enforced — only once hook trust is granted** | ❌ |
 | `guard-lane-authoring` (declaration before a code write) | enforced | **enforced — only once hook trust is granted** | ❌ |
 | `guard-gate-ladder` (surfaces the tier's ladder) | enforced (sensor) | **enforced (sensor) — only once hook trust is granted** | ❌ |
+| `guard-brief-rung` (brief writes, cross-session sends, **and source writes while a repair is live**) | enforced | **enforced — only once hook trust is granted** | ❌ |
 | `.githooks/pre-commit` (declaration at commit) | enforced | **enforced** | **enforced** |
+
+`guard-brief-rung` is the row most likely to stop you, so read its shape here rather than meeting it
+in a denial. It is DORMANT until a repair round is recorded — dormancy is a state with an instructed
+exit, never a property. Once a round stands at NO-GO with disposition REMEDIATE and no
+Owner-authorized close, writes to the paths that repair claimed need a verified worker receipt from
+the writing session. It has one relief and it announces itself: in a tree that cannot hold a repair
+ledger at all, the guard says it is blind and lets the write through. A ledger it cannot READ is a
+different answer — that denies.
 
 **What binds every lane** is prose (this file + `AGENTS.md` + the required PM-disposition emission)
 **plus the harness-agnostic `pre-commit` hook** — the one layer no harness routes around, because all

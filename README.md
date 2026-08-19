@@ -488,6 +488,15 @@ may declare `{"class":"status"}` instead, and that declaration is LEDGERED for t
 spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
 must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
+**The same guard also gates SOURCE writes** once a repair program is live — a scope worth stating
+plainly, because it is the half most likely to block you. While a gate round stands at NO-GO with
+disposition REMEDIATE and no Owner-authorized close, a write to a path that repair claimed is
+admitted only from a session holding a verified worker receipt. Every other disposition holds
+nothing: a NO-GO dispositioned DEFER, DECLINE, ESCALATE or NOTE authorizes no repair, so it binds no
+worker and owns no path. When a repair is abandoned, it is CLOSED — an `owner_extension` with
+`"authority_kind":"close"` and a `repair_close` naming it — never unstuck by deleting the ledger,
+which throws away the history that says what was authorized.
+
 **One ritual authorizes one dispatch**, because freshness and target-binding together still let a
 SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,
 carrying text the original checks never saw. Consumption is a property of the AUDIT TRAIL: each
@@ -1452,7 +1461,8 @@ and a sensor that notices the most common miss.
 
 **v1.3 adds no `core/` method doc changes.** The existing method docs are untouched; `core/OWNER_COMMS.md`
 is new and generated, and (like every `core/*.md`) is automatically governed by `doc:size` at the
-20 KiB BINDING-method cap.
+BINDING-method cap.
+
 
 ### Upgrading an existing adopter to v1.3
 
