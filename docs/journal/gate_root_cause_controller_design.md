@@ -28,6 +28,13 @@ not infer those semantic judgments.
    finding IDs, declared class/ownership/trigger, disposition, and repair-introduced/new-scope flags.
    Round 2+ also binds the exact preceding repair-brief receipt and every threshold authority event.
    A new candidate may not lower, reset, or close a round that was never authorized.
+> ⚠ **Items 2–5 below describe the ORIGINAL design and are superseded on their round positions.**
+> Every fixed round number here — Round 3 as a trigger, the Rounds 4–6 unlock, the after-round-6
+> audit, the Round 9+ extension — was DELETED when the cadence became circular. Read them as the
+> record of what was built; the postscript at the end of this file has what replaced them. This
+> notice sits HERE, beside the claims, because a correction at the tail does not reach a reader who
+> stops at item 5.
+
 2. Two consecutive declared same-class NO-GOs, Round 3, or a declared repair-introduced harm in the same
    ownership area, moves the derived state to `root_cause_required`. The sensor compares declared
    fields exactly; semantic near-matches remain the PM's judgment.

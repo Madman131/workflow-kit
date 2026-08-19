@@ -73,10 +73,10 @@ in a denial, and note that it has TWO halves with different trigger conditions.
   verified worker receipt from the writing session. Every other disposition holds nothing. A repair is ended by an
   **eligible close** — a pair of ledger rows whose conditions are defined in one place, beside
   `deriveRepairState`'s post-pass in `repair-dispatch-state.mjs`; read them there rather than from a
-  summary. What matters at this level: the test compares SUPPLIED SESSION IDS, not actors, so a
-  close records who it says it came from. It buys a legible row over the alternative it replaced,
-  which was deleting the ledger. It is not an authorization boundary, and nothing here should be
-  read as one.
+  summary. What belongs at this level is the LIMIT rather than the test: nothing in this
+  kit authenticates the actor behind a ledger row, so a close records who it SAYS it came from. It
+  buys a legible row over the alternative it replaced, which was deleting the ledger. It is not an
+  authorization boundary, and nothing here should be read as one.
 
 It has one relief and it announces itself: in a tree that cannot hold a repair ledger at all, the
 guard says it is blind and lets the source write through. A ledger it cannot READ is a different

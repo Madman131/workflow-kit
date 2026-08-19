@@ -484,8 +484,8 @@ export function deriveRepairState(events, taskId) {
   // latest verdict is NO-GO, its disposition is REMEDIATE, and no ELIGIBLE close has ended it. A
   // NO-GO dispositioned DEFER/DECLINE/ESCALATE/NOTE authorizes no repair, mints no brief, and binds
   // no worker, so there is nothing for it to hold open.
-  // FIRST eligible close wins, matching every other transition in this file: an authorized close
-  // cannot be superseded by a later one, and an unauthorized one cannot displace it.
+  // FIRST eligible close wins, matching every other transition in this file: an ELIGIBLE close
+  // cannot be superseded by a later one, and an ineligible one cannot displace it.
   const close = latest
     ? closes.filter((e) => e.after_round === latest.round).map(authorizedClose).find(Boolean) || null
     : null;

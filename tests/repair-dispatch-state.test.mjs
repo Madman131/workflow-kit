@@ -955,8 +955,8 @@ test("an abandoned REMEDIATE program is closed IN BAND, on a recorded authorizat
     assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
       { projectRoot: dir }).ok, false, "the program is active, so the write is bound");
 
-    // A close naming no close-authorization row is refused. (What the eligibility test compares is
-    // session IDS, not actors — see the ELIGIBLE CLOSE definition in the controller.)
+    // A close naming no close-authorization row is refused. The conditions it must satisfy are the
+    // ELIGIBLE CLOSE definition in the controller; they are not restated here.
     assert.equal(recordRepairClose({
       task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoning this repair",
       owner_close_event_id: "f".repeat(64),

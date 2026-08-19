@@ -495,12 +495,12 @@ admitted only from a session holding a verified worker receipt. Every other disp
 nothing: a NO-GO dispositioned DEFER, DECLINE, ESCALATE or NOTE authorizes no repair, so it binds no
 worker and owns no path. When a repair is abandoned, it is CLOSED by an **eligible close** — a pair of ledger rows whose
 conditions are defined in exactly one place, beside `deriveRepairState`'s post-pass in
-`hooks/repair-dispatch-state.mjs`. Read them there; a summary of them here is how four review rounds
+`hooks/repair-dispatch-state.mjs`. Read them there; summarising them here is how six review rounds
 were spent. Never unstuck by deleting the ledger, which throws away the history that says what was
-authorized. And know what the eligibility test is: it compares supplied session ids, not actors, so
-it stops a worker releasing itself by name and does not stop one that supplies a name it has not
-used. The ledger records, it does not deter — what a close buys over a deleted ledger is a row
-naming the round, the reason, and the authorization it claims.
+authorized. What this level should carry instead of a summary is the LIMIT: the eligibility test
+reads ledger rows, and nothing in this kit authenticates the actor behind one. The ledger records,
+it does not deter — what a close buys over a deleted ledger is a row naming the round, the reason,
+and the authorization it claims.
 
 **One ritual authorizes one dispatch**, because freshness and target-binding together still let a
 SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,
