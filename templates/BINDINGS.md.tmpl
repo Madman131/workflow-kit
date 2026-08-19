@@ -69,7 +69,7 @@ in a denial, and note that it has TWO halves with different trigger conditions.
   hook is registered.
 - **Live only during a repair:** source writes. This half is dormant until a gate round is recorded
   — and dormancy is a state with an instructed exit, never a property. Once a round stands at NO-GO
-  with disposition REMEDIATE and no recorded close, writes to the paths that repair claimed need a
+  with disposition REMEDIATE and no ELIGIBLE recorded close, writes to the paths that repair claimed need a
   verified worker receipt from the writing session. Every other disposition holds nothing. **What a
   close is, stated exactly:** a `repair_close` naming an `owner_extension` that authorizes it, both
   refused from a session the program admitted as a worker. That check refuses the admitted session

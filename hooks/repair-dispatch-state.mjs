@@ -414,11 +414,12 @@ export function deriveRepairState(events, taskId) {
       if (!authority.ok) return { ok: false, state: "repair-history-invalid" };
       if (!dispatches.some((existing) => sameRepairDispatch(existing, row))) dispatches.push(row);
     } else if (row.type === "repair_close") {
-      // A close names the round it ends and the Owner authorization that permits it. Both are exact
+      // A close names the round it ends and the close-authorization row it rests on. Both are exact
       // references, which is the only kind of authority this module has ever accepted.
-      // SHAPE only. Whether this close carries real authority is decided AFTER the loop, once every
-      // worker admission in the ledger is known — and an unauthorized close is INERT rather than
-      // history-breaking, because a row anyone can append must never be able to brick a repo.
+      // SHAPE only. Whether this close is ELIGIBLE (the term is defined once, at the post-pass
+      // below) is decided AFTER the loop, once every worker admission in the ledger is known — and
+      // an ineligible close is INERT rather than history-breaking, because a row anyone can append
+      // must never be able to brick a repo.
       const at = verdicts.find((v) => v.round === row.after_round);
       if (!at || row.candidate_sha !== at.candidate_sha || !text(row.reason, 1000) ||
           !/^[0-9a-f]{64}$/.test(row.owner_close_event_id || "")) {
@@ -456,14 +457,21 @@ export function deriveRepairState(events, taskId) {
   const audit = audits.at(-1) || null;
   const roundExtension = [...extensions].reverse().find((e) => e.after_round === latest?.round && e.authority_kind === "rounds") || null;
   const scopeExtension = [...extensions].reverse().find((e) => e.after_round === latest?.round && e.authority_kind === "scope") || null;
-  // WHO MAY END A PROGRAM. The sessions the ledger has admitted as workers are the one identity
-  // signal actually present here, and a close may rest on neither of them: not the closing session,
-  // and not the session that recorded its authorization. Decided in one post-pass, against every
-  // admission in the ledger, so pre-minting an authorization before verifying as a worker gains
-  // nothing. A close that fails this is INERT — it neither ends the program nor invalidates the
-  // history, and critically it does not consume the round's authorization slot, so an Owner can
-  // still record a real one. (Failing it closed here would hand any caller a fresh lockout: append
-  // one bogus row, and the exit is sealed. That is the defect this event exists to remove.)
+  // ⚠ ELIGIBLE CLOSE — THE ONE DEFINITION. Every other surface in this kit points at this term
+  // instead of restating it, because four review rounds were spent on surfaces that each spelled
+  // the idea slightly stronger than the code.
+  //
+  // A close is ELIGIBLE when it names a `close`-kind `owner_extension` at the same round and
+  // candidate, and NEITHER row carries a session id the program has admitted as a worker. That is
+  // the whole test. It compares SESSION IDS, which are supplied by the caller — so it refuses the
+  // admitted id, never the actor behind it, and it is not Owner attribution. See the residual block
+  // above `recordRepairClose`.
+  //
+  // Decided in one post-pass against every admission in the ledger, so pre-minting before verifying
+  // as a worker gains nothing. An INELIGIBLE close is INERT: it neither ends the program nor
+  // invalidates the history, and it does not consume the round's slot, so an eligible one can still
+  // be recorded. (Failing it closed here would hand any caller a fresh lockout: append one bogus
+  // row and the exit is sealed. That is the defect this event exists to remove.)
   const admittedSessions = new Set(workerVerifications.map((row) => row.worker_session_id));
   const authorizedClose = (candidate) => {
     if (!candidate || admittedSessions.has(candidate.session_id)) return null;
@@ -473,7 +481,7 @@ export function deriveRepairState(events, taskId) {
     return authorization ? candidate : null;
   };
   // A program is ACTIVE — and so owns writes — only while a repair is actually authorized: the
-  // latest verdict is NO-GO, its disposition is REMEDIATE, and no authorized close has ended it. A
+  // latest verdict is NO-GO, its disposition is REMEDIATE, and no ELIGIBLE close has ended it. A
   // NO-GO dispositioned DEFER/DECLINE/ESCALATE/NOTE authorizes no repair, mints no brief, and binds
   // no worker, so there is nothing for it to hold open.
   // FIRST eligible close wins, matching every other transition in this file: an authorized close

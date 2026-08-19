@@ -955,8 +955,8 @@ test("an abandoned REMEDIATE program is closed IN BAND, on a recorded authorizat
     assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "s9", target: "src/x.mjs" },
       { projectRoot: dir }).ok, false, "the program is active, so the write is bound");
 
-    // A close with no Owner authorization is refused — the party a program constrains is exactly the
-    // party most motivated to release it, so releasing it cannot be its own decision.
+    // A close naming no close-authorization row is refused. (What the eligibility test compares is
+    // session IDS, not actors — see the ELIGIBLE CLOSE definition in the controller.)
     assert.equal(recordRepairClose({
       task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "abandoning this repair",
       owner_close_event_id: "f".repeat(64),
@@ -1066,7 +1066,7 @@ test("POLARITY: a corrupt ledger inside a real repo still DENIES, and says how t
 });
 
 test("THE CONSTRAINED SESSION CANNOT CLOSE ITS OWN PROGRAM — the panel's bypass, shut", () => {
-  // Found by a cold seat on round 1: the first close design took an Owner authorization by exact
+  // Found by a cold seat on round 1: the first close design took a close-authorization row by exact
   // event ID and checked nothing about WHO recorded it, so the admitted worker could mint the
   // authorization itself, close the program, and write the path it had just been refused. The
   // ledger's admitted worker sessions are the one identity signal that is actually IN the ledger,
@@ -1079,7 +1079,7 @@ test("THE CONSTRAINED SESSION CANNOT CLOSE ITS OWN PROGRAM — the panel's bypas
       task_id: "task-1", repair_dispatch_event_id: authority.repair_dispatch_event_id,
     }, { projectRoot: dir, sessionId: "worker-7" }).ok, true);
 
-    // The worker mints its own "Owner" authorization and tries to release itself.
+    // The worker mints its own close-authorization row and tries to release itself.
     const selfMinted = recordOwnerExtension({
       task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
       owner_evidence: "Owner approved (claimed by the worker)",
