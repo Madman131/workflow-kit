@@ -798,3 +798,63 @@ test("a SYMLINKED sidecar is malformed, not satisfied — and a stale one is ref
     assert.match(stale.stdout, /belong to another dispatch's ritual/);
   } finally { cleanup(); }
 });
+
+// ── KO17 round 1: what the cold panel said the tests did not cover ─────────────────────────────
+
+test("THE INSTALLED GUARD, in a tree with no Git subject: it ANNOUNCES that it is blind and admits the write", () => {
+  // The controller-level classification was tested; the panel pointed out that proves nothing about
+  // what the registered hook DOES with it. This runs the installed hook. It would fail if the guard
+  // still denied here, and equally if it had turned every controller failure into a notice.
+  const { dir, cleanup } = adopt();
+  try {
+    rmSync(path.join(dir, ".git"), { recursive: true, force: true });   // no subject can exist here
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (target) => spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify({ session_id: "s2", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: path.join(dir, target) } }), encoding: "utf8",
+      env: { ...process.env, GIT_DIR: "", GIT_COMMON_DIR: "", GIT_WORK_TREE: "" },
+    });
+    const out = run("src/x.mjs");
+    assert.doesNotMatch(out.stdout, /"permissionDecision":"deny"/,
+      "a tree that cannot hold a repair ledger cannot hold a repair program — denying every write there is a false positive");
+    assert.match(out.stdout, /BLIND/,
+      "and the relief is ANNOUNCED — a control that quietly stops checking is indistinguishable from one that passed");
+  } finally { cleanup(); }
+});
+
+test("POLARITY: the installed guard still DENIES a source write when the ledger exists and cannot be read", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const ledgerDir = path.join(dir, ".git", "workflow-kit");
+    mkdirSync(ledgerDir, { recursive: true });
+    writeFileSync(path.join(ledgerDir, "repair-events-v1.jsonl"), "{not json at all\n");
+    const out = spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify({ session_id: "s2", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: path.join(dir, "src/x.mjs") } }), encoding: "utf8",
+    });
+    assert.match(out.stdout, /"permissionDecision":"deny"/,
+      "a ledger that EXISTS and cannot be read is a subject this control cannot see — that must deny");
+    assert.match(out.stdout, /PRESERVE it and repair it/,
+      "and the remedy must be preservation, never the deletion that discards every round's history");
+    assert.match(out.stdout, /could not be RUN|git rev-parse/,
+      "the message must also name the OTHER cause of this state — git unavailable — since repairing a healthy ledger would not fix that");
+  } finally { cleanup(); }
+});
+
+test("a build brief is gated by the ACTIVE program, not by the bare verdict", () => {
+  // Found by a cold seat: the source-write path learned the new predicate and this one did not, so a
+  // DEFER or a closed program released its paths while ORDINARY brief writing stayed trapped — the
+  // same lockout, one surface over. This is the guard's own sidecar contract, not the controller's.
+  assert.equal(state(fresh({ dispatch_kind: "build" }), { events: [verdictEvent()] }),
+    "repair-dispatch-required",
+    "a LIVE repair still refuses an ordinary build brief — it must be dispatched as a repair");
+  for (const disposition of ["DEFER", "DECLINE", "ESCALATE", "NOTE"]) {
+    assert.equal(state(fresh({ dispatch_kind: "build" }), { events: [verdictEvent({ disposition })] }),
+      "receipted",
+      `a NO-GO dispositioned ${disposition} authorizes no repair, so ordinary work stays ordinary`);
+  }
+  assert.equal(state(fresh({ dispatch_kind: "build" }), { events: [verdictEvent({ verdict: "GO", disposition: "NOTE",
+    finding_ids: [], finding_class: null, original_trigger: null, authorized_paths: [] })] }),
+    "receipted", "and a GO was never a repair program at all");
+});

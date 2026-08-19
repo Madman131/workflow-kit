@@ -14,6 +14,12 @@ import assert from "node:assert/strict";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { ROLE_CAPS } = await import(new URL("../scripts/check-doc-size.mjs", import.meta.url).href);
+// The method cap, spelled either way round, with the cap-word vocabulary this repo actually uses.
+// `[^.\n]{0,60}` keeps the two halves inside one sentence so an unrelated KiB figure two sentences
+// away cannot pair with the word "cap" and produce a phantom offender.
+const CAP_WORD = "(?:cap|limit|ceiling|budget)";
+const CAP_BEFORE = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*KiB[^.\\n]{0,60}?(?:BINDING-)?method\\s*${CAP_WORD}`, "gi");
+const CAP_AFTER = new RegExp(`(?:BINDING-)?method\\s*${CAP_WORD}[^.\\n]{0,60}?(\\d+(?:\\.\\d+)?)\\s*KiB`, "gi");
 
 // A nested `node --test` inherits the parent runner's env (NODE_TEST_CONTEXT / NODE_OPTIONS) and then
 // reports up over IPC instead of exiting non-zero — so a failing inner run would look green. Strip
@@ -1569,11 +1575,11 @@ test("no shipped doc restates a method-cap number that disagrees with the checke
       if (e.isDirectory()) walk(p);
       else if (e.isFile() && (e.name.endsWith(".md") || e.name.endsWith(".tmpl"))) {
         const text = readFileSync(p, "utf8");
-        for (const m of text.matchAll(/(\d+(?:\.\d+)?)\s*KiB[^.\n]{0,60}?(method|BINDING-method)\s*cap/gi)) {
+        for (const m of text.matchAll(CAP_BEFORE)) {
           if (Number(m[1]) !== capKiB) offenders.push(`${path.relative(KIT, p)}: "${m[0].trim()}"`);
         }
-        for (const m of text.matchAll(/(method|BINDING-method)\s*cap[^.\n]{0,60}?(\d+(?:\.\d+)?)\s*KiB/gi)) {
-          if (Number(m[2]) !== capKiB) offenders.push(`${path.relative(KIT, p)}: "${m[0].trim()}"`);
+        for (const m of text.matchAll(CAP_AFTER)) {
+          if (Number(m[1]) !== capKiB) offenders.push(`${path.relative(KIT, p)}: "${m[0].trim()}"`);
         }
       }
     }
@@ -1584,11 +1590,29 @@ test("no shipped doc restates a method-cap number that disagrees with the checke
     `scripts/check-doc-size.mjs actually enforces: ${offenders.join(" · ")}`);
 
   // CANARY — an absence pin is decoration unless its regex can match the thing it forbids. Prove it
-  // against the exact stale spellings this chip removed, in both word orders.
-  const stale = ["governed at the 20 KiB method cap along with", "the BINDING-method cap of 20 KiB."];
+  // against the stale spellings this chip removed AND against the paraphrase a cold seat used to
+  // walk past the first version of this check: it required the literal word "cap", so "the method
+  // LIMIT remains 20 KiB" made the identical stale claim and passed. Enumeration cannot close a
+  // paraphrase space, but a bare-word ban is worse; the vocabulary below is the narrowest set that
+  // covers how this repo actually writes the sentence.
+  const stale = [
+    "governed at the 20 KiB method cap along with",
+    "the BINDING-method cap of 20 KiB.",
+    "The method limit remains 20 KiB.",
+    "a method ceiling of 20 KiB",
+    "the method budget is 20 KiB",
+  ];
   for (const sample of stale) {
-    const hits = [...sample.matchAll(/(\d+(?:\.\d+)?)\s*KiB[^.\n]{0,60}?(method|BINDING-method)\s*cap/gi),
-                  ...sample.matchAll(/(method|BINDING-method)\s*cap[^.\n]{0,60}?(\d+(?:\.\d+)?)\s*KiB/gi)];
+    const hits = [...sample.matchAll(CAP_BEFORE), ...sample.matchAll(CAP_AFTER)];
     assert.ok(hits.length > 0, `the cap-drift regex must match the spelling it forbids: ${sample}`);
+  }
+  // ...and the other polarity: the CURRENT spellings must NOT be flagged, or the pin is a nuisance
+  // that gets switched off.
+  for (const fine of [`the ${capKiB} KiB method cap`, `method cap of ${capKiB} KiB`]) {
+    // Both regexes capture the NUMBER as group 1 — the word-order halves are non-capturing, so a
+    // refactor cannot silently shift the group index and turn every reading into NaN.
+    const hits = [...fine.matchAll(CAP_BEFORE)].map((m) => Number(m[1]))
+      .concat([...fine.matchAll(CAP_AFTER)].map((m) => Number(m[1])));
+    assert.ok(hits.every((n) => n === capKiB), `a correct spelling must not be flagged: ${fine}`);
   }
 });

@@ -7,9 +7,10 @@
 // WHAT THE CAP IS NOT — measured 2026-07-18, data in docs/journal/read_limit_measurements.md:
 // it is NOT a truncation threshold. The Read tool's cap is 25,000 TOKENS (~66 KB of this prose
 // class), truncation is ANNOUNCED rather than silent, and bytes do not predict it — a 48,913 B file
-// read whole in the same probe where a 32,724 B file truncated. 20 KiB carries roughly 3x headroom
-// and exists to bound the BOOT CONTEXT BUDGET (~72 KB / 27K tokens spent before any work) and to
-// keep instruction artifacts short enough to be read WELL, not merely to fit.
+// read whole in the same probe where a 32,724 B file truncated. The method cap below carries ~2.7x
+// headroom and exists to bound the BOOT CONTEXT BUDGET (~72 KB / 27K tokens spent before any work)
+// and to keep instruction artifacts short enough to be read WELL, not merely to fit. Read the
+// number from ROLE_CAPS, never from this comment: it has been raised four times.
 //
 // Bytes remain the right unit despite the cap being token-derived: tokenizers differ per model
 // family (the same filler measured ~1.0 B/token on one and ~4.0 on another), nothing here can count
@@ -18,7 +19,8 @@
 //
 // THE TIGHTEST READER WINS, and it is not always Read: core/INVARIANTS.md + core/REPO_INVARIANTS.md
 // are cat'd into the Gemini gate payload, whose INLINE ceiling is 80 KiB for the ENTIRE payload.
-// At 20 KiB each they would eat half of it before any diff. Keep that pair well under this cap.
+// At the method cap each they would eat well over half of it before any diff — which is why that
+// pair is capped as `payload`, at 8 KiB, and should stay far under even that.
 //
 // SO THE CAP KEYS ON ACCESS PATTERN, NOT ON SIZE, and the access pattern is DECLARED, never inferred:
 //   CLASS: BINDING    → read whole; missing a section means violating a rule → hard cap, ROLE-DEPENDENT
