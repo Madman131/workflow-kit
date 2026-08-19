@@ -55,7 +55,7 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
       if (!result.ok) {
         const action = {
           "repair-session-missing": ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`,
-          "repair-close-self-authorized": " — a repair close, and the owner_extension authorizing it, must come from a session this program has NOT admitted as a worker: the party a program constrains does not release it",
+          "repair-close-self-authorized": " — the session id you supplied is one this program admitted as a worker, and a close (with the owner_extension authorizing it) must come from a session that is not. Note what this check is: session ids are supplied by the caller, so it refuses the ADMITTED ID, not the actor behind it",
           "repair-close-unauthorized": ' — record an owner_extension with "authority_kind":"close" at the current round first, then name its exact event_id as "owner_close_event_id"',
         }[result.state] ?? "";
         console.error(`repair event rejected: ${result.state}${result.expected ? ` (expected ${result.expected})` : ""}${action}`);

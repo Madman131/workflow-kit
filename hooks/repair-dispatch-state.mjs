@@ -699,7 +699,13 @@ export function recordOwnerExtension(input, { projectRoot, sessionId, now = new 
  * it is close-versus-the-alternative. Before it, an abandoned repair could be escaped only by
  * DELETING the ledger — available to the same caller, needing no alias, and destroying every round
  * of history on the way out. A forged close leaves a row naming the round, the reason, and the
- * authorization it claims to rest on. That is a strictly better failure, and it is the whole claim.
+ * authorization it claims to rest on, and it leaves the rest of the history standing.
+ *
+ * Be exact about what that is worth, because the obvious overstatement is wrong: it does NOT make an
+ * improper release DETECTABLE. An alias can be any string — `owner-approver` reads as credible — and
+ * nothing in the ledger ties it back to the admitted worker. What survives is an unauthenticated
+ * CLAIM plus the surrounding history, which is better for recovery and for audit than a deleted
+ * file, and is not evidence of who did it. That, and nothing more, is the claim.
  */
 export function recordRepairClose(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   if (!text(sessionId, 200)) return { ok: false, state: "repair-session-missing" };

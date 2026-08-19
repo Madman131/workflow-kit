@@ -1195,6 +1195,10 @@ test("THE RESIDUAL, PINNED: an alias defeats the close check, and the code says 
   // residual is named rather than implied, and a limitation nobody executes is a limitation nobody
   // believes. If a later change closes this for real, THIS TEST GOES RED — which is the moment to
   // rewrite it and the comments that disclose it, together.
+  //
+  // ⚠ A GREEN RUN HERE MEANS THE HOLE IS STILL OPEN AND STILL DISCLOSED. It is not a security
+  // property, and a suite summary that says "214 passing" says nothing about this one being safe.
+  // One fresh alias is enough for both events; two are used below only to keep the sequence legible.
   const { dir, cleanup } = repo();
   try {
     assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
@@ -1217,15 +1221,20 @@ test("THE RESIDUAL, PINNED: an alias defeats the close check, and the code says 
     }, { projectRoot: dir, sessionId: "worker-7-alias-b" }).ok, true);
     assert.equal(state(dir).derived.active, false, "and the program really is released — this is the residual");
 
-    // What the design actually buys, and the only thing it claims: the release is LEGIBLE. Compare
-    // the alternative it replaced, which was deleting this file.
+    // What the design buys, stated at exactly its strength. A cold seat corrected an earlier version
+    // of this comment, and the correction matters: the surviving row does NOT make an improper
+    // release detectable. The alias here is self-revealing because a test wrote it; a real one would
+    // read `owner-approver` and nothing in the ledger would contradict it. What survives is an
+    // UNAUTHENTICATED CLAIM plus the history around it — better for recovery and for audit than a
+    // deleted file, and not evidence of who did it.
     const derived = state(dir).derived;
     assert.equal(derived.close.reason, "closing under an alias");
-    assert.equal(derived.close.session_id, "worker-7-alias-b");
+    assert.equal(derived.close.session_id, "worker-7-alias-b",
+      "the row records the name the release CLAIMED, which is all a caller-supplied id can ever be");
     assert.equal(derived.verdicts.length, 1, "every round of history survives an improper close");
     assert.equal(derived.dispatches.length, 1);
     assert.equal(derived.worker_verifications.length, 1,
-      "including the admission that shows who was actually working — which is what makes the alias visible to a reader");
+      "and the admission survives too — recoverable context, NOT attribution: it does not tie the alias to the worker");
 
     // And the disclosure is IN THE SOURCE, not only in a review transcript.
     const source = readFileSync(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url), "utf8");
