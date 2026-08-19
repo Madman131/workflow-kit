@@ -682,14 +682,24 @@ export function recordOwnerExtension(input, { projectRoot, sessionId, now = new 
  * program was deleting the ledger — destroying every round's history to unblock one write.
  *
  * It takes an Owner authorization (`owner_extension` with `authority_kind: "close"`) named by its
- * exact event ID, and refuses both events from any session the program has ADMITTED AS A WORKER:
+ * exact event ID, and refuses both events from any session the program has ADMITTED AS A WORKER —
  * releasing a program also releases its global path ownership, and the party most motivated to
- * release it is the one the program constrains. That check is real — the admitted sessions are in
- * the ledger — but state plainly what it is not: `session_id` is caller-supplied, so a caller that
- * can append can append under another name. THE LEDGER RECORDS; IT DOES NOT DETER, exactly as the
- * nonce trail says of itself. What a close buys is that an improper release is a legible row with a
- * reason and an authorization beside it, instead of a deleted file and no history at all. A control
- * that claimed more than that would be the defect it exists to remove.
+ * release it is the one the program constrains.
+ *
+ * ⚠ THE RESIDUAL, NAMED — read this before relying on that check. `session_id` is SUPPLIED BY THE
+ * CALLER (`scripts/record-repair-event.mjs` takes it from the input or the environment), so an
+ * admitted worker that passes a NAME IT HAS NOT USED BEFORE satisfies both checks and closes the
+ * program constraining it. Two cold review seats walked exactly that sequence. So the check stops
+ * the LITERAL case — a session releasing itself, which is what a careless agent actually does — and
+ * stops nothing that picks a new string. It is not an authorization boundary and this comment will
+ * not call it one: THE LEDGER RECORDS; IT DOES NOT DETER, the sentence the nonce trail already
+ * applies to itself.
+ *
+ * The comparison that decides whether this event belongs here is not close-versus-perfect-authority,
+ * it is close-versus-the-alternative. Before it, an abandoned repair could be escaped only by
+ * DELETING the ledger — available to the same caller, needing no alias, and destroying every round
+ * of history on the way out. A forged close leaves a row naming the round, the reason, and the
+ * authorization it claims to rest on. That is a strictly better failure, and it is the whole claim.
  */
 export function recordRepairClose(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   if (!text(sessionId, 200)) return { ok: false, state: "repair-session-missing" };

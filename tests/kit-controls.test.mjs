@@ -17,7 +17,7 @@ const { ROLE_CAPS } = await import(new URL("../scripts/check-doc-size.mjs", impo
 // The method cap, spelled either way round, with the cap-word vocabulary this repo actually uses.
 // `[^.\n]{0,60}` keeps the two halves inside one sentence so an unrelated KiB figure two sentences
 // away cannot pair with the word "cap" and produce a phantom offender.
-const CAP_WORD = "(?:cap|limit|ceiling|budget)";
+const CAP_WORD = "(?:cap|limit|ceiling|budget|maximum|max|allowance)";
 const CAP_BEFORE = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*KiB[^.\\n]{0,60}?(?:BINDING-)?method\\s*${CAP_WORD}`, "gi");
 const CAP_AFTER = new RegExp(`(?:BINDING-)?method\\s*${CAP_WORD}[^.\\n]{0,60}?(\\d+(?:\\.\\d+)?)\\s*KiB`, "gi");
 
@@ -1585,6 +1585,11 @@ test("no shipped doc restates a method-cap number that disagrees with the checke
     }
   };
   walk(KIT);
+  // The bound, stated in the assertion itself: this catches the cap-word VOCABULARY below, in both
+  // word orders, within one sentence. It cannot close the paraphrase space — a grep proves a
+  // spelling, never a claim — and it has been walked past twice already ("limit", then "maximum"),
+  // each time by a reviewer rather than by a release. Read it as a ratchet on known spellings, not
+  // as proof that no surface disagrees.
   assert.deepEqual(offenders, [],
     `these surfaces state a method cap other than ${capKiB} KiB (${capBytes} B), which is what ` +
     `scripts/check-doc-size.mjs actually enforces: ${offenders.join(" · ")}`);
@@ -1601,6 +1606,7 @@ test("no shipped doc restates a method-cap number that disagrees with the checke
     "The method limit remains 20 KiB.",
     "a method ceiling of 20 KiB",
     "the method budget is 20 KiB",
+    "The method maximum remains 20 KiB.",   // a cold seat's second bypass of this pin
   ];
   for (const sample of stale) {
     const hits = [...sample.matchAll(CAP_BEFORE), ...sample.matchAll(CAP_AFTER)];

@@ -494,8 +494,12 @@ disposition REMEDIATE and no Owner-authorized close, a write to a path that repa
 admitted only from a session holding a verified worker receipt. Every other disposition holds
 nothing: a NO-GO dispositioned DEFER, DECLINE, ESCALATE or NOTE authorizes no repair, so it binds no
 worker and owns no path. When a repair is abandoned, it is CLOSED — an `owner_extension` with
-`"authority_kind":"close"` and a `repair_close` naming it — never unstuck by deleting the ledger,
-which throws away the history that says what was authorized.
+`"authority_kind":"close"` and a `repair_close` naming it, **both recorded from a session the
+program has not admitted as a worker** — never unstuck by deleting the ledger, which throws away the
+history that says what was authorized. That session check stops a worker releasing itself by name;
+it does not stop one that supplies a name it has not used, because `session_id` is caller-supplied.
+The ledger records, it does not deter — what a close buys over a deleted ledger is a row naming the
+round, the reason, and the authorization it claims.
 
 **One ritual authorizes one dispatch**, because freshness and target-binding together still let a
 SECOND dispatch to the same target ride the first ritual — and that repeat is the dangerous one,

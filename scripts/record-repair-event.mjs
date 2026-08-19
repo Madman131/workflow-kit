@@ -53,9 +53,11 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
         sessionId,
       });
       if (!result.ok) {
-        const action = result.state === "repair-session-missing"
-          ? ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`
-          : "";
+        const action = {
+          "repair-session-missing": ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`,
+          "repair-close-self-authorized": " — a repair close, and the owner_extension authorizing it, must come from a session this program has NOT admitted as a worker: the party a program constrains does not release it",
+          "repair-close-unauthorized": ' — record an owner_extension with "authority_kind":"close" at the current round first, then name its exact event_id as "owner_close_event_id"',
+        }[result.state] ?? "";
         console.error(`repair event rejected: ${result.state}${result.expected ? ` (expected ${result.expected})` : ""}${action}`);
         process.exitCode = 1;
       } else {

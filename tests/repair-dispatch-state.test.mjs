@@ -1187,3 +1187,51 @@ test("a hand-appended close from the constrained session is INERT — not author
     assert.equal(state(dir).derived.active, false);
   } finally { cleanup(); }
 });
+
+test("THE RESIDUAL, PINNED: an alias defeats the close check, and the code says so", () => {
+  // Two cold seats walked this and were right both times. `session_id` is caller-supplied, so an
+  // admitted worker that passes a name it has not used satisfies both session checks and closes the
+  // program constraining it. This test asserts the HOLE, deliberately: the kit's rule is that a
+  // residual is named rather than implied, and a limitation nobody executes is a limitation nobody
+  // believes. If a later change closes this for real, THIS TEST GOES RED — which is the moment to
+  // rewrite it and the comments that disclose it, together.
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const authority = dispatchNext(dir);
+    assert.equal(recordWorkerVerification({
+      task_id: "task-1", repair_dispatch_event_id: authority.repair_dispatch_event_id,
+    }, { projectRoot: dir, sessionId: "worker-7" }).ok, true);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "task-1", session_id: "worker-7", target: "src/other.mjs" },
+      { projectRoot: dir }).ok, false, "the worker is constrained to its authorized path set");
+
+    // The same actor, a name it has not used before.
+    const alias = recordOwnerExtension({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, authority_kind: "close",
+      owner_evidence: "Owner approved (in fact the worker, under another name)",
+    }, { projectRoot: dir, sessionId: "worker-7-alias-a" });
+    assert.equal(alias.ok, true, "an unadmitted NAME is accepted — nothing here authenticates anyone");
+    assert.equal(recordRepairClose({
+      task_id: "task-1", changeset_id: "changeset-1", after_round: 1, reason: "closing under an alias",
+      owner_close_event_id: alias.event_id,
+    }, { projectRoot: dir, sessionId: "worker-7-alias-b" }).ok, true);
+    assert.equal(state(dir).derived.active, false, "and the program really is released — this is the residual");
+
+    // What the design actually buys, and the only thing it claims: the release is LEGIBLE. Compare
+    // the alternative it replaced, which was deleting this file.
+    const derived = state(dir).derived;
+    assert.equal(derived.close.reason, "closing under an alias");
+    assert.equal(derived.close.session_id, "worker-7-alias-b");
+    assert.equal(derived.verdicts.length, 1, "every round of history survives an improper close");
+    assert.equal(derived.dispatches.length, 1);
+    assert.equal(derived.worker_verifications.length, 1,
+      "including the admission that shows who was actually working — which is what makes the alias visible to a reader");
+
+    // And the disclosure is IN THE SOURCE, not only in a review transcript.
+    const source = readFileSync(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url), "utf8");
+    assert.match(source, /THE RESIDUAL, NAMED/,
+      "the module must disclose this limitation where the next reader will meet it");
+    assert.match(source, /THE LEDGER RECORDS; IT DOES NOT DETER/,
+      "and must not describe the check as an authorization boundary");
+  } finally { cleanup(); }
+});
