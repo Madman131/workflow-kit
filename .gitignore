@@ -1,10 +1,9 @@
 node_modules
 .DS_Store
-# if the kit is ever self-adopted:
-.claude/FAILURE_MODES.md
-.claude/task-lane.json
-.claude/lane-ledger.jsonl
-.claude/brief-rung.json
+# The whole .claude/ directory is working state, never shipped kit content: lane files, the
+# failure log, chip discharge/repair artifacts (verdict-laden — one `git add -A` from tracked),
+# harness worktrees, local settings. The shipped-docs test walk skips it for the same reason.
+.claude/
 
 # Thread-restart digests — transient handoffs, stale within hours; commit one only on purpose.
 thread-restarts/
