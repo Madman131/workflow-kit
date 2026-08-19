@@ -490,7 +490,7 @@ must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
 **The same guard also gates SOURCE writes** once a repair program is live — a scope worth stating
 plainly, because it is the half most likely to block you. While a gate round stands at NO-GO with
-disposition REMEDIATE and no Owner-authorized close, a write to a path that repair claimed is
+disposition REMEDIATE and no eligible recorded close, a write to a path that repair claimed is
 admitted only from a session holding a verified worker receipt. Every other disposition holds
 nothing: a NO-GO dispositioned DEFER, DECLINE, ESCALATE or NOTE authorizes no repair, so it binds no
 worker and owns no path. When a repair is abandoned, it is CLOSED — an `owner_extension` with

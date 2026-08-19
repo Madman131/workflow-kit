@@ -948,7 +948,7 @@ test("THE REMEDY THE DENY NAMES ACTUALLY WORKS — confirm, verify, write, execu
   } finally { cleanup(); }
 });
 
-test("an abandoned REMEDIATE program is closed IN BAND, on Owner authority, never by deleting history", () => {
+test("an abandoned REMEDIATE program is closed IN BAND, on a recorded authorization, never by deleting history", () => {
   const { dir, cleanup } = repo();
   try {
     assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
