@@ -21,6 +21,8 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Freeze compliance is PANEL-ENFORCED, not willpower.** Three changesets edited the artifact while
   seats were live before the rule stuck; each disclosed it, and disclosure is not a control. Give
   every seat the frozen SHA and have it verify that SHA itself.
+- **Seat blind panels in a scratch worktree with review-history artifacts DELETED and the contract
+  redacted of round narration** — `free` becomes verifiable rather than aspirational.
 - **ENVIRONMENT is a decorrelation axis**, alongside family and charter. Four independent seats once
   shared the author's temp-directory regime; a defect visible only in the other regime survived all
   four. Vary a seat's rig, or run the mechanical rungs twice.

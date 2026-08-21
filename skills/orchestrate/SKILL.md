@@ -80,17 +80,18 @@ into a private worktree.
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
    fold-check (`/frontier-review`). Ledger every round by changeset. Rounds run in cycles of at most
-   three harm-bearing rounds; at each soft stop, one root assessment + one bounded remediation, whose
-   NO-GO bookend is the next cycle's round 1. Enter root assessment earlier on two consecutive
-   same-class Rule-1 harms or a repair-introduced harm. After two completed cycles, a process audit on
-   the exact bytes gates continuation — its GO buys one more two-cycle window, its NO-GO or window
-   exhaustion returns to the Owner. The absolute count never resets. Record round
-   events with `node scripts/record-repair-event.mjs --event <json>`. After writing a repair brief,
-   confirm its actual bytes with `node scripts/confirm-repair-brief.mjs --confirm <json>`; the worker
-   records `{"task_id":"…","repair_dispatch_event_id":"…","session_id":"<current hook session>"}`
-   and runs `node scripts/confirm-repair-brief.mjs --verify <json>` before writing. The registered
-   write guard rechecks that session, current candidate, brief bytes and every authorized path.
-   Direct status sends carry no repair authority; shell writes remain outside this tool-bound guard.
+   three harm-bearing rounds (the CIRCULAR cadence); at each soft stop, one root assessment + one
+   bounded remediation, whose NO-GO bookend is the next cycle's round 1. Enter root assessment
+   earlier on two consecutive same-class Rule-1 harms or a repair-introduced harm. After two
+   completed cycles, a process audit on the exact bytes gates continuation — its GO buys one more
+   two-cycle window, its NO-GO or window exhaustion returns to the Owner. The absolute count never
+   resets. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both
+   lenses on every scope/disposition/root call, zoomed-out CONTROLS; KISS; RULE #1 screens first**
+   (`core/FOUNDATIONS.md`; cite document+section, never bare "rule 1"). Round events:
+   `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
+   (`confirm-repair-brief.mjs --confirm`); worker `--verify` first. The write guard
+   rechecks session, candidate, bytes and paths. Status sends carry no repair authority; shell
+   writes escape this guard.
 6. **PR, then independent diligence.** The orchestrator re-runs the evidence on the final head, not
    the summary.
 7. **GO ask → merge → verify on merged main BY EXECUTION** → **fast-forward the primary clone ONLY
