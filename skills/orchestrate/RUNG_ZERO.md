@@ -19,8 +19,8 @@ they find real defects in work that should not have reached them. Rung zero is t
 
 **Precedence and the carve-outs** (irreversible · prod write · gate-ran-lighter-than-mandate)
 **screen FIRST and never exit as a NOTE; then RULE #1** (`core/FOUNDATIONS.md` § Principles): harm
-to the Owner/user, product's usability, or code's FUNCTIONALITY — plus its mechanism, a
-reachable trigger, not a diagnosis. Everything else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the
+to the Owner/user, product's usability, or code's FUNCTIONALITY — plus its mechanism, a causal
+path, not a diagnosis. Everything else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the
 work.**
 
 ---
