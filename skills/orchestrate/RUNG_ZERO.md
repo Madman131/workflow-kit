@@ -17,10 +17,10 @@ gives it an artifact.**
 reshaped first. The rounds that follow are not too careful — they are aimed at the wrong thing, and
 they find real defects in work that should not have reached them. Rung zero is those checks.
 
-**RULE #1 screens first** (`core/FOUNDATIONS.md`): a finding blocks only by naming harm to the
-Owner/user, the product's usability, or the code's FUNCTIONALITY, plus its mechanism. Precedence and the
-carve-outs (irreversible · prod write · gate-ran-lighter-than-mandate) screen FIRST and never exit as
-a NOTE. Everything else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the
+**Precedence and the carve-outs** (irreversible · prod write · gate-ran-lighter-than-mandate)
+**screen FIRST and never exit as a NOTE; then RULE #1** (`core/FOUNDATIONS.md` § Principles): harm
+to the Owner/user, product's usability, or code's FUNCTIONALITY — plus its mechanism, a causal
+path, not a diagnosis. Everything else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the
 work.**
 
 ---
