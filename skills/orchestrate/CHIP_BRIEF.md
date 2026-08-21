@@ -26,9 +26,9 @@ correctly on its first turn is in the brief or in the shared program record it p
    delivery failure that did not happen.
 4. **Scope** — what ships and what does NOT. Name artifacts.
 5. **Process** — ordered rungs and pre-decided skips. Repair briefs declare task, changeset, candidate,
-   next round, findings/class/ownership/trigger/paths/flags, plus R4+/7+/9+ exit/audit/Owner event
-   IDs. After write, the orchestrator confirms its bytes with `confirm-repair-brief --confirm` and
-   sends only its receipt/path. The worker puts `session_id` in `--verify`; the write guard binds
+   next round, findings/class/ownership/trigger/paths/flags, plus the cadence's typed exit/audit/Owner event
+   IDs. After write, the orchestrator confirms bytes (`confirm-repair-brief --confirm`) and
+   sends only the receipt/path. The worker puts `session_id` in `--verify`; the write guard binds
    each authorized path.
 6. **Standing rules** — binding every chip: surgical staging, the identity ritual,
    generalization rules (no Owner name, no model names, no absolute paths), read-only sources.

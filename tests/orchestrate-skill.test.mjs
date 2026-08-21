@@ -147,8 +147,8 @@ test("the round controller pins ordinary, root-cause, audit, and Owner boundarie
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
   pin(brief, "Repair briefs declare task, changeset, candidate, next round, findings/class/ownership/trigger/paths/flags",
     "repair dispatch declaration fields");
-  pin(brief, "R4+/7+/9+ exit/audit/Owner event IDs",
-    "repair dispatch typed threshold evidence");
+  pin(brief, "the cadence's typed exit/audit/Owner event IDs",
+    "repair dispatch evidence follows the cadence, never fixed rounds");
   pin(brief, "The worker puts `session_id` in `--verify`; the write guard binds",
     "worker verifies the persisted brief receipt");
   pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
