@@ -84,13 +84,13 @@ into a private worktree.
    bounded remediation, whose NO-GO bookend is the next cycle's round 1. Enter root assessment
    earlier on two consecutive same-class Rule-1 harms or a repair-introduced harm. After two
    completed cycles, a process audit on the exact bytes gates continuation — its GO buys one more
-   two-cycle window, its NO-GO or window exhaustion returns to the Owner. The absolute count never
-   resets. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both
-   lenses on every scope/disposition/root call, zoomed-out CONTROLS; KISS; RULE #1 screens first**
-   (`core/FOUNDATIONS.md`; cite document+section, never bare "rule 1"). Round events:
+   two-cycle window; NO-GO or exhaustion returns to the Owner. The absolute count never
+   resets. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
+   scope/disposition/root call; on disagreement zoomed-out CONTROLS; KISS; carve-outs screen
+   first, then RULE #1** (`core/FOUNDATIONS.md` § Principles; cite document+section). Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
    (`confirm-repair-brief.mjs --confirm`); worker `--verify` first. The write guard
-   rechecks session, candidate, bytes and paths. Status sends carry no repair authority; shell
+   rechecks session, candidate, bytes, paths. Status sends carry no repair authority; shell
    writes escape this guard.
 6. **PR, then independent diligence.** The orchestrator re-runs the evidence on the final head, not
    the summary.
