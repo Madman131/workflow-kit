@@ -16,3 +16,11 @@ The candidate changes only `hooks/repair-dispatch-state.mjs`, its focused test, 
 Two code-mode packet attempts were rig-invalid and count-free: one reviewed only the temporary invariant file; one full review used the non-crediting oversized FILE route. Neither changed candidate bytes. The approved bounded plan is `8c149a51830c12faae90a6bb8830bdd8c0c755385892fc36f31ffa629b094b8b`. Controller and cross-boundary slices were GO; evidence was NO-GO only for WK-LAC-E1. The contract-only NO-GO is declined above. One consolidated evidence repair is authorized; no controller or authority change.
 
 **LADDER: continue to the single Round-1 evidence repair, then refreeze and rerun the original trigger plus affected gates.**
+
+## Final affected-gate bookend
+
+`GATE ROUND 2 · changeset ledger-aggregate-compatibility · verdict GO · HARM-PASSING 0 · NOTES 2`
+
+Gemini slice-set receipt `PIL-GATE-1787596317-34457-541327995` binds approved plan `a0bf5c81136ad579213f76e9f7cf6f4c6a58062147eb9cb3eacafbb65662d55b`; both the public-reader and cross-boundary slices are GO. Its two suggestions are NOTES: a `null.length` TypeError still turns parser rejection red rather than falsely passing, and the existing downstream derivation/path-owner assertions prevent a wrong ten-row projection from clearing. The exact downstream-only-filter mutation failed `13 !== 10`. Focused tests passed 36/36 and full `npm test` passed 216/216.
+
+**LADDER: aggregate GO; stop for Owner push-GO.**
