@@ -71,10 +71,12 @@ test("aggregate-extension rows replay inert without changing the standard reader
     assert.equal(physical.length, 13);
     const bytes = physical.map((event) => JSON.stringify({ event_id: forgedId(event), event })).join("\n") + "\n";
     writeFileSync(ledger, bytes);
+    assert.equal(readRepairEvents(ledger).length, 10,
+      "the public reader projects only its standard event contract");
 
     const loaded = loadRepairEventsForProject(dir);
     assert.equal(loaded.ok, true);
-    assert.equal(loaded.events.length, 10, "the public reader returns only its standard event contract");
+    assert.equal(loaded.events.length, 10, "the downstream loader preserves that standard projection");
     assert.equal(deriveRepairState(loaded.events, "task-1").active, true,
       "historical extensions cannot close or transfer standard authority");
     assert.deepEqual(activeRepairPathOwners(loaded.events, "src/other.mjs").owners, []);

@@ -54,3 +54,45 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: Entire docs/journal/ledger_aggregate_compatibility_design.md, core invariants, and repo invariants.
     PIL-DONE-19710663ed469c503d5e82c8
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-24T17:43:45Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787593365-79377-76628188`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=16282; instrumented_payload=16384; inline_combined=19372; file=16457
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design:  context:docs/journal/ledger_aggregate_compatibility_design.md
+- HEAD: `6496c60b4e575ef331813483a64e3d01df9c48b7`
+- Artifact-Base: `7ebef764a35cd0dd3e94c81b7a5530cc966a9d6e`
+- Artifact-SHA: `6496c60b4e575ef331813483a64e3d01df9c48b7`
+- Artifact-Ref: `refs/pil/gate-artifacts/6496c60b4e575ef331813483a64e3d01df9c48b7`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: The provided diff containing only `core/REPO_INVARIANTS.md`, judged against the DESIGN/ACCEPTANCE CONTEXT requiring modifications to `hooks/repair-dispatch-state.mjs` and `tests/repair-dispatch-state.test.mjs`.
+- Start: 2026-08-24T17:42:45Z
+- End: 2026-08-24T17:43:45Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-f72f29a2963f0b2c4f246363
+    CANARIES: PIL-INGEST-01d5b94403d4 PIL-INGEST-02bd974d8b42
+
+    1. BLOCKER | hooks/repair-dispatch-state.mjs:0 (missing file)
+    - **What is wrong:** The diff completely omits the implementation of the read-only compatibility set and projection logic in `hooks/repair-dispatch-state.mjs`, as well as the required acceptance tests in `tests/repair-dispatch-state.test.mjs`. The diff only introduces `core/REPO_INVARIANTS.md`.
+    - **Why it matters:** This is a severe CONTRACT-vs-DESIGN DRIFT. The DESIGN/ACCEPTANCE CONTEXT explicitly mandates a physical parser update targeting at most +20 net controller lines and +90 net test lines to resolve the ledger compatibility defect. Merging this as-is delivers an empty shell that does not address the stated product or Owner usability harms, violating the design contract entirely.
+    - **Check:** Search the diff for `hooks/repair-dispatch-state.mjs` or `tests/repair-dispatch-state.test.mjs`; observe they are absent.
+
+    Overall read:
+    - **Blast radius:** Zero runtime impact, as no executable code was modified, but it fails to solve the critical issue blocking product work.
+    - **Reversibility:** Trivial (only documentation was added).
+    - **One thing to double-check first:** Confirm whether the author simply forgot to `git add` and commit the actual implementation and test files before generating the patch.
+
+    VERDICT: NO-GO
+    INSPECTED SCOPE: The provided diff containing only `core/REPO_INVARIANTS.md`, judged against the DESIGN/ACCEPTANCE CONTEXT requiring modifications to `hooks/repair-dispatch-state.mjs` and `tests/repair-dispatch-state.test.mjs`.
+
+    PIL-DONE-6bc8cd6134ce026a1d420e21
