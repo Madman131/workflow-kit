@@ -1,6 +1,6 @@
 # Ledger aggregate compatibility — implementation record
 
-**Base:** `16a4804a6b1a94ccaf7b979e31a553a6c3e6af76`  
+**Base:** `16a4804a6b1a94ccaf7b979e31a553a6c3e6af76`
 **Frozen code candidate:** `7ebef764a35cd0dd3e94c81b7a5530cc966a9d6e` / tree `814a72d43132602325cac1adfa1f9c54787348e7`
 
 The candidate changes only `hooks/repair-dispatch-state.mjs`, its focused test, and the design/reporting records. Controller delta is +9/-2; test delta is +42. Focused tests passed 36/36, full `npm test` passed 216/216, `git diff --check` was clean, and the unchanged adopter 13-row ledger projected eight standard rows while preserving its old standard path owner.
