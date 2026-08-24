@@ -16,6 +16,8 @@ const EVENT_TYPES = new Set([
   "round_disposition", "root_cause_exit", "adherence_audit", "owner_extension", "repair_dispatch",
   "worker_verification", "repair_close",
 ]);
+const REPLAY_ONLY_EVENT_TYPES = new Set(["panel_close", "evidence_rerun", "child_continuation"]);
+const READ_EVENT_TYPES = new Set([...EVENT_TYPES, ...REPLAY_ONLY_EVENT_TYPES]);
 const AUTHORITY_KINDS = ["rounds", "scope", "close"];
 const DISPOSITIONS = new Set(["REMEDIATE", "DEFER", "DECLINE", "ESCALATE", "NOTE"]);
 
@@ -106,7 +108,7 @@ export function repairLedgerPath(projectRoot, options = {}) {
   return common ? path.join(common, REPAIR_LEDGER_REL) : null;
 }
 
-export function readRepairEvents(file) {
+function readRepairLedgerRows(file) {
   if (!file) return null;
   let raw;
   try {
@@ -123,11 +125,16 @@ export function readRepairEvents(file) {
   for (const line of raw.split("\n").filter(Boolean)) {
     let row;
     try { row = JSON.parse(line); } catch { return null; }
-    if (!plain(row) || !plain(row.event) || !EVENT_TYPES.has(row.event.type) || row.event_id !== eventId(row.event)) return null;
+    if (!plain(row) || !plain(row.event) || !READ_EVENT_TYPES.has(row.event.type) || row.event_id !== eventId(row.event)) return null;
     if (!seen.has(row.event_id)) rows.push(row);
     seen.add(row.event_id);
   }
   return rows;
+}
+
+export function readRepairEvents(file) {
+  const rows = readRepairLedgerRows(file);
+  return rows === null ? null : rows.filter((row) => EVENT_TYPES.has(row.event.type));
 }
 
 // A reader can arrive after another process extends the append-only file but before that one small

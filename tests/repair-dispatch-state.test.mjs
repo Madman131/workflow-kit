@@ -12,6 +12,7 @@ import {
   recordRepairClose, recordRootCauseExit, recordRoundDisposition, recordWorkerVerification,
   repairLedgerPath, validateRepairDispatch, verifyRepairBriefReceipt, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
+import { recordEvent } from "../scripts/record-repair-event.mjs";
 
 function repo() {
   const dir = mkdtempSync(path.join(os.tmpdir(), "repair-controller-"));
@@ -49,6 +50,49 @@ const mutate = (dir, n) => writeFileSync(path.join(dir, "src", "x.mjs"), `export
 // to get there because the controller triggered on the round NUMBER, and that positional trigger is
 // gone. The subject of those tests is concurrency and first-wins, not how the trigger fired.
 const recurringClass = (n) => (n === 3 ? "class-2" : `class-${n}`);
+
+test("aggregate-extension rows replay inert without changing the standard reader contract", () => {
+  const { dir, cleanup } = repo();
+  try {
+    assert.equal(recordRoundDisposition(round(1), options(dir)).ok, true);
+    const ledger = repairLedgerPath(dir);
+    const standard = readRepairEvents(ledger)[0].event;
+    const compatibility = ["panel_close", "evidence_rerun", "child_continuation"].map((type, index) => ({
+      type, task_id: "task-1", changeset_id: "changeset-1", recorded_at: `2099-01-01T00:00:0${index}.000Z`,
+      session_id: "historical-extension", authorized_paths: ["src/other.mjs"],
+      authority_kind: "close", repair_dispatch_event_id: "f".repeat(64),
+    }));
+    const duplicates = Array.from({ length: 9 }, (_, index) => ({
+      ...standard, recorded_at: `2099-02-01T00:00:${String(index).padStart(2, "0")}.000Z`,
+      session_id: `duplicate-${index}`,
+    }));
+    const physical = [standard, compatibility[0], duplicates[0], compatibility[1],
+      ...duplicates.slice(1, 5), compatibility[2], ...duplicates.slice(5)];
+    assert.equal(physical.length, 13);
+    const bytes = physical.map((event) => JSON.stringify({ event_id: forgedId(event), event })).join("\n") + "\n";
+    writeFileSync(ledger, bytes);
+    assert.equal(readRepairEvents(ledger).length, 10,
+      "the public reader projects only its standard event contract");
+
+    const loaded = loadRepairEventsForProject(dir);
+    assert.equal(loaded.ok, true);
+    assert.equal(loaded.events.length, 10, "the downstream loader preserves that standard projection");
+    assert.equal(deriveRepairState(loaded.events, "task-1").active, true,
+      "historical extensions cannot close or transfer standard authority");
+    assert.deepEqual(activeRepairPathOwners(loaded.events, "src/other.mjs").owners, []);
+    assert.deepEqual(activeRepairPathOwners(loaded.events, "src/x.mjs").owners.map((owner) => owner.task_id), ["task-1"]);
+    for (const event of compatibility) {
+      assert.equal(recordEvent(event, options(dir)).state, "repair-event-type-unsupported");
+    }
+    assert.equal(readFileSync(ledger, "utf8"), bytes, "unsupported compatibility events cannot append");
+
+    const unknown = { ...compatibility[0], type: "aggregate_unknown" };
+    writeFileSync(ledger, `${bytes}${JSON.stringify({ event_id: forgedId(unknown), event: unknown })}\n`);
+    assert.equal(readRepairEvents(ledger), null, "an arbitrary extension still fails closed");
+    writeFileSync(ledger, `${bytes}${JSON.stringify({ event_id: "0".repeat(64), event: compatibility[0] })}\n`);
+    assert.equal(readRepairEvents(ledger), null, "a corrupted compatibility hash still fails closed");
+  } finally { cleanup(); }
+});
 
 function state(dir) {
   const loaded = loadRepairEventsForProject(dir);
