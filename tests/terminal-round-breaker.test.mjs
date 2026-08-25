@@ -16,12 +16,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, fingerprintCandidate,
+  activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState,
+  derivePendingLineageBudgets, deriveRepairState, fingerprintCandidate,
   gitSubjectPresent, loadRepairEventsForProject, recordAggregateChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff,
   recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateRootExit,
-  recordAggregateWorkerHandoff, recordWorkerVerification, repairLedgerPath,
-  verifyRepairWorkerWrite,
+  recordAggregateWorkerHandoff, recordOwnerExtension, recordRepairClose,
+  recordWorkerVerification, repairLedgerPath, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
 
 const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
@@ -303,7 +304,7 @@ test("LE3 + M23: terminality dominates delayed events, and a refreeze supersedes
         "      if (!state || state.changeset_id !== row.changeset_id ||\n          !ID64.test(row.panel_open_event_id || \"\")) continue;"],
       ["      if (!state || state.terminal || state.changeset_id !== row.changeset_id ||\n          !ID64.test(row.panel_close_event_id || \"\") || !pmFindingsShape(row.pm_findings)) continue;",
         "      if (!state || state.changeset_id !== row.changeset_id ||\n          !ID64.test(row.panel_close_event_id || \"\") || !pmFindingsShape(row.pm_findings)) continue;"],
-      ["            stoppedPathOverlap(paths, dispositionLineage?.parent_task_id ?? null) ||\n",
+      ["            stoppedPathOverlap(paths, dispositionLineage ? lineageAncestors(row.task_id) : null) ||\n",
         ""],
     ]);
     const resurrected = mutant.deriveAggregateRepairState(
@@ -1310,7 +1311,7 @@ test("M35: the reservation lift is COVERAGE-SCOPED — a child's GO releases its
     assert.equal(deriveAggregateRepairState([...loaded.aggregate_events, plantedY], "planted-y",
       { standardEvents: loaded.events }).panels_open.length, 0, "replay refuses the y-open too");
     const mutant = await importMutant(mutantDir, [[
-      "for (const entry of lineage.authorized_paths) lifted.add(entry);",
+      "for (const entry of lineage.authorized_paths) if (repaired.has(entry)) lifted.add(entry);",
       "for (const entry of (program.stopped_paths || [])) lifted.add(entry);",
     ]]);
     assert.equal(mutant.deriveAggregateRepairState([...loaded.aggregate_events, plantedY], "planted-y",
@@ -1380,7 +1381,7 @@ test("M36: the CLOSED trigger floor — the accepted set must be CARRIED, and on
     assert.equal(deriveAggregateRepairState(rows, "m36-shed", { standardEvents: window.events })
       .panels_open.length, 0, "the shipped floor keeps the harm-shedding exit shut");
     const mutant = await importMutant(mutantDir, [[
-      "accepted.every((id) => row.trigger_ids.includes(id)) &&",
+      "[...accepted, ...undisposedGround].every((id) => row.trigger_ids.includes(id)) &&",
       "true &&",
     ]]);
     assert.equal(mutant.deriveAggregateRepairState(rows, "m36-shed", { standardEvents: window.events })
@@ -1640,4 +1641,550 @@ test("M40: an ACTIVE program binds its authorized set PLUS any undisposed open �
     assert.equal(free.opened.ok, true,
       `before a panel opens, the bound is exactly the authorized set: ${free.opened.state}`);
   } finally { ctxB.cleanup(); }
+});
+
+// ── terminal-round-breaker-2 · R4 accepted findings — the M41–M47 pins ─────────────────────────
+
+test("M41: the lift is budget ∩ OPENED COVERAGE — a wide budget is a plan, not a repair", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // Parent STOPs over {x, y}; ONE child declares the WHOLE budget {x, y} but opens only x.
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
+    const parentCand = commit(ctx.dir, "p41");
+    const panel = openPanel(ctx, 1, parentCand);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const closed = closePanel(ctx, panel, parentCand, ["F1"]);
+    const stop = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stop.ok, true, stop.state);
+    const cont = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: stop.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "c41", changeset_id: "c41-cs", tier: "T2", budget: "wide plan",
+        authorized_paths: ["src/x.mjs", "src/y.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(cont.ok, true, cont.state);
+    const cCand = sideCandidate(ctx, "c41-line", { "src/x.mjs": "export const x = 'c41';\n" });
+    const cOpen = openPanel(ctx, 1, cCand, { task: "c41", changeset: "c41-cs",
+      lineage: { continuation: cont.event_id } });
+    assert.equal(cOpen.opened.ok, true, cOpen.opened.state);
+    const cClosed = closePanel(ctx, cOpen, cCand, [], { task: "c41", changeset: "c41-cs" });
+    const cGo = decide(ctx, cClosed, { task: "c41", changeset: "c41-cs",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(cGo.ok, true, cGo.state);
+    assert.equal(derive(ctx, "c41").terminal, "GO");
+    // The never-REVIEWED budget remainder stays reserved…
+    const yProbe = sideCandidate(ctx, "m41-y", { "src/y.mjs": "export const y = 'out';\n" });
+    assert.equal(openPanel(ctx, 1, yProbe, { task: "m41-out-y", changeset: "m41-out-y-cs" }).opened.ok,
+      false, "the GO lifted only what the child's panels actually reviewed — never the plan");
+    // …while the reviewed slice is released.
+    const xProbe = sideCandidate(ctx, "m41-x", { "src/x.mjs": "export const x = 'out';\n" });
+    assert.equal(openPanel(ctx, 1, xProbe, { task: "m41-out-x", changeset: "m41-out-x-cs" }).opened.ok,
+      true, "the reviewed slice IS lifted");
+    // Disabled arm: lift the whole declared budget without the repaired.has filter — the R4
+    // wide-budget gap: a child declared wide, opened narrow, and its GO released never-reviewed
+    // reserved surface.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const plantedY = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "m41-planted", changeset_id: "m41-planted-cs",
+      recorded_at: "2099-01-01T00:05:00.000Z", session_id: "outsider", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: yProbe.commit, frozen_tree: yProbe.tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["src/y.mjs"],
+      expected_seats: expectedSeats(["src/y.mjs"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    });
+    assert.equal(deriveAggregateRepairState([...loaded.aggregate_events, plantedY], "m41-planted",
+      { standardEvents: loaded.events }).panels_open.length, 0, "replay refuses the y-open too");
+    const mutant = await importMutant(mutantDir, [[
+      "for (const entry of lineage.authorized_paths) if (repaired.has(entry)) lifted.add(entry);",
+      "for (const entry of lineage.authorized_paths) lifted.add(entry);",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState([...loaded.aggregate_events, plantedY], "m41-planted",
+      { standardEvents: loaded.events }).panels_open.length, 1,
+    "lifting the un-reviewed budget remainder reproduces the R4 gap");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M42: the reservation exception walks the FULL ancestor chain — a grandchild is not locked out by its grandparent", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // P STOPs on x → child C opens x, collects ground, is Owner-closed via its winning open
+    // (C now reserves x too) → C's continuation seeds grandchild G on the same slice.
+    const pCand = commit(ctx.dir, 1);
+    const pPanel = openPanel(ctx, 1, pCand);
+    const pClosed = closePanel(ctx, pPanel, pCand, ["P1"]);
+    const pStop = decide(ctx, pClosed, { accepted: ["P1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(pStop.ok, true, pStop.state);
+    const contPC = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: pStop.event_id, trigger_ids: ["P1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "c42", changeset_id: "c42-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(contPC.ok, true, contPC.state);
+    const cCand = sideCandidate(ctx, "c42-line", { "src/x.mjs": "export const x = 'c42';\n" });
+    const cOpen = openPanel(ctx, 1, cCand, { task: "c42", changeset: "c42-cs",
+      lineage: { continuation: contPC.event_id } });
+    assert.equal(cOpen.opened.ok, true, cOpen.opened.state);
+    const cClosed = closePanel(ctx, cOpen, cCand, ["C1"], { task: "c42", changeset: "c42-cs" });
+    assert.equal(cClosed.ok, true, cClosed.state);
+    const cClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "c42", changeset_id: "c42-cs",
+      disposition_event_id: null, panel_open_event_id: cOpen.opened.event_id,
+      reason: "abandoned after collection", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-session"));
+    assert.equal(cClose.ok, true, cClose.state);
+    const contCG = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "c42", changeset_id: "c42-cs",
+      parent_disposition_event_id: null, trigger_ids: ["C1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "g42", changeset_id: "g42-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(contCG.ok, true, contCG.state);
+    // G's open on x ACCEPTS — the exception excepts BOTH C (parent) and P (grandparent).
+    const gCand = sideCandidate(ctx, "g42-line", { "src/x.mjs": "export const x = 'g42';\n" });
+    const gOpen = openPanel(ctx, 1, gCand, { task: "g42", changeset: "g42-cs",
+      lineage: { continuation: contCG.event_id } });
+    assert.equal(gOpen.opened.ok, true,
+      `the grandchild works its whole ancestor chain's slice: ${gOpen.opened.state}`);
+    // Control: an UNRELATED program's open on x still refuses — the chain is an exception for
+    // descendants, not a release.
+    const outCand = sideCandidate(ctx, "m42-out", { "src/x.mjs": "export const x = 'out';\n" });
+    assert.equal(openPanel(ctx, 1, outCand, { task: "m42-out", changeset: "m42-out-cs" }).opened.ok,
+      false, "outside the lineage, x stays reserved");
+    // Disabled arm: except only the DIRECT parent (drop the while-walk) and G's recorded open
+    // evaporates on replay — the R4 nested lockout, the exit lattice one-shot again.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(deriveAggregateRepairState(loaded.aggregate_events, "g42",
+      { standardEvents: loaded.events }).panels_open.length, 1);
+    const mutant = await importMutant(mutantDir, [[
+      "    while (current !== null && !ancestors.has(current)) {\n      ancestors.add(current);\n      current = childLineage.get(current)?.parent_task_id ?? null;\n    }",
+      "    if (current !== null) ancestors.add(current);",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState(loaded.aggregate_events, "g42",
+      { standardEvents: loaded.events }).panels_open.length, 0,
+    "excepting only the direct parent re-bricks the grandchild on the grandparent's reservation");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M43: ONE LIVE continuation per anchor — a stranded virgin child reopens the anchor; a GO child does not", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    const pCand = commit(ctx.dir, 1);
+    const pPanel = openPanel(ctx, 1, pCand);
+    const pClosed = closePanel(ctx, pPanel, pCand, ["F1"]);
+    const pStop = decide(ctx, pClosed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(pStop.ok, true, pStop.state);
+    const successor = (task, paths) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: pStop.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: task, changeset_id: `${task}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths }],
+    }, options(ctx.dir));
+    const first = successor("c43a", ["src/x.mjs"]);
+    assert.equal(first.ok, true, first.state);
+    // While the declared child is PENDING (no program yet), a second continuation refuses — the
+    // disjoint budget leaves the standing-anchor rule as the only possible refuser.
+    const whilePending = successor("c43b", ["docs/m43.md"]);
+    assert.equal(whilePending.ok, false);
+    assert.equal(whilePending.state, "aggregate-continuation-conflict",
+      "a standing continuation with a pending child blocks a second declaration");
+    // While the child is OPEN and non-terminal: still refused.
+    const cCand = sideCandidate(ctx, "c43a-line", { "src/x.mjs": "export const x = 'c43';\n" });
+    const cOpen = openPanel(ctx, 1, cCand, { task: "c43a", changeset: "c43a-cs",
+      lineage: { continuation: first.event_id } });
+    assert.equal(cOpen.opened.ok, true, cOpen.opened.state);
+    assert.equal(successor("c43b", ["docs/m43.md"]).ok, false,
+      "a live, non-terminal child still holds the anchor");
+    // The child VIRGIN-closes — opened, collected nothing, closed. Its slice of the parent's
+    // reservation would be stranded forever; the anchor REOPENS for a fresh child identity.
+    const cClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "c43a", changeset_id: "c43a-cs",
+      disposition_event_id: null, panel_open_event_id: cOpen.opened.event_id,
+      reason: "roster unassemblable", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-session"));
+    assert.equal(cClose.ok, true, cClose.state);
+    const reopened = successor("c43c", ["src/x.mjs"]);
+    assert.equal(reopened.ok, true,
+      `a stranded slice is re-declarable with a fresh child identity: ${reopened.state}`);
+    // Anti-spam polarity, separate parent: when the only child ran to GO nothing is stranded —
+    // the second continuation refuses.
+    const wCand = sideCandidate(ctx, "p43g-line", { "docs/w43.md": "w43\n" });
+    const wPanel = openPanel(ctx, 1, wCand, { task: "p43g", changeset: "cs-p43g" });
+    assert.equal(wPanel.opened.ok, true, wPanel.opened.state);
+    const wClosed = closePanel(ctx, wPanel, wCand, ["G1"], { task: "p43g", changeset: "cs-p43g" });
+    const wStop = decide(ctx, wClosed, { task: "p43g", changeset: "cs-p43g", accepted: ["G1"],
+      terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+    assert.equal(wStop.ok, true, wStop.state);
+    const goSuccessor = (task, paths) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "p43g", changeset_id: "cs-p43g",
+      parent_disposition_event_id: wStop.event_id, trigger_ids: ["G1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: task, changeset_id: `${task}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths }],
+    }, options(ctx.dir));
+    const goCont = goSuccessor("c43g", ["docs/w43.md"]);
+    assert.equal(goCont.ok, true, goCont.state);
+    const gCand = sideCandidate(ctx, "c43g-line", { "docs/w43.md": "repaired\n" });
+    const gOpen = openPanel(ctx, 1, gCand, { task: "c43g", changeset: "c43g-cs",
+      lineage: { continuation: goCont.event_id } });
+    assert.equal(gOpen.opened.ok, true, gOpen.opened.state);
+    const gClosed = closePanel(ctx, gOpen, gCand, [], { task: "c43g", changeset: "c43g-cs" });
+    const gGo = decide(ctx, gClosed, { task: "c43g", changeset: "c43g-cs",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(gGo.ok, true, gGo.state);
+    const antiSpam = goSuccessor("c43h", ["docs/m43b.md"]);
+    assert.equal(antiSpam.ok, false);
+    assert.equal(antiSpam.state, "aggregate-continuation-conflict",
+      "a GO child strands nothing — its anchor stays consumed");
+    // Disabled arm: revert to one-EVER (anchorConsumed always true for a standing continuation)
+    // and the accepted re-continuation evaporates on replay — the R4 stranded-slice brick.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const pendingReal = derivePendingLineageBudgets(loaded.aggregate_events,
+      { standardEvents: loaded.events });
+    assert.ok(pendingReal.some((entry) => entry.task_id === "c43c"),
+      "the re-declared child holds its pending budget");
+    const mutant = await importMutant(mutantDir, [[
+      "        return !(allTerminal && anyVirgin);",
+      "        return true;",
+    ]]);
+    const pendingMutant = mutant.derivePendingLineageBudgets(loaded.aggregate_events,
+      { standardEvents: loaded.events });
+    assert.ok(!pendingMutant.some((entry) => entry.task_id === "c43c"),
+      "one-ever anchors re-brick the stranded slice: the re-continuation is refused on replay");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M44: pending-vs-active refuses AT DECLARATION — continuation and legacy handoff alike — and the pending hold is NAMED in the deny", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // Program task-1 is ACTIVE on x.
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel, candidate, ["F1"]);
+    const decided = decide(ctx, closed, { accepted: ["F1"], authorized_paths: ["src/x.mjs"] });
+    assert.equal(decided.ok, true, decided.state);
+    dispatchBatch(ctx, decided.event_id, closed.event_id, 2);
+    // An unrelated parent runs to GO on its own surface.
+    const pCand = sideCandidate(ctx, "p44-line", { "docs/p44.md": "p44\n" });
+    const pPanel = openPanel(ctx, 1, pCand, { task: "p44", changeset: "cs-p44" });
+    assert.equal(pPanel.opened.ok, true, pPanel.opened.state);
+    const pClosed = closePanel(ctx, pPanel, pCand, [], { task: "p44", changeset: "cs-p44" });
+    const pGo = decide(ctx, pClosed, { task: "p44", changeset: "cs-p44",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(pGo.ok, true, pGo.state);
+    const window = loadRepairEventsForProject(ctx.dir); // anchor still free, for the mutant pair
+    const declare = (task, paths) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "p44", changeset_id: "cs-p44",
+      parent_disposition_event_id: pGo.event_id, trigger_ids: [],
+      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on",
+      children: [{ task_id: task, changeset_id: `${task}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths }],
+    }, options(ctx.dir));
+    // A pending budget over a LIVE program's bound surface would wedge the victim — refused at
+    // declaration, where the mutual brick is cheap to stop…
+    const wedge = declare("c44x", ["src/x.mjs"]);
+    assert.equal(wedge.ok, false);
+    assert.equal(wedge.state, "aggregate-continuation-conflict",
+      "a child budget over an active program's surface refuses at declaration");
+    // Disabled arm: drop the declaration-time active check and the wedge declaration lands.
+    const p44Open = derive(ctx, "p44").panels_open.at(-1);
+    const plantedWedge = stamped({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "p44", changeset_id: "cs-p44",
+      recorded_at: "2099-01-01T00:06:00.000Z", session_id: "planter",
+      parent_disposition_event_id: pGo.event_id,
+      parent_frozen_commit: p44Open.frozen_commit, parent_frozen_tree: p44Open.frozen_tree,
+      trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "wedge",
+      children: [{ task_id: "c44x", changeset_id: "c44x-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] }],
+    });
+    const wedgeRows = [...window.aggregate_events, plantedWedge];
+    assert.ok(!derivePendingLineageBudgets(wedgeRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "c44x"), "the shipped check keeps the wedge out");
+    const mutant = await importMutant(mutantDir, [[
+      "          row.children.some((child) => activePathOverlap(child.authorized_paths, row.task_id, rowSeq))) continue;",
+      "          false) continue;",
+    ]]);
+    assert.ok(mutant.derivePendingLineageBudgets(wedgeRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "c44x"),
+    "without the declaration-time check the wedge lands — the R4 mutual brick");
+    // …while a DISJOINT budget declares freely.
+    const disjoint = declare("c44d", ["docs/c44.md"]);
+    assert.equal(disjoint.ok, true, disjoint.state);
+    // THE DIAGNOSIS: an open refused by the pending hold names the holder and its parent.
+    const probeCand = sideCandidate(ctx, "c44-probe", { "docs/c44.md": "probe\n" });
+    const refused = openPanel(ctx, 1, probeCand, { task: "m44-victim", changeset: "m44-victim-cs" });
+    assert.equal(refused.opened.ok, false);
+    assert.equal(refused.opened.state, "aggregate-panel-open-conflict");
+    assert.match(refused.opened.detail ?? "", /c44d/, "the deny names the pending child");
+    assert.match(refused.opened.detail ?? "", /p44/, "…and the parent whose lineage holds it");
+    // The SAME pending-vs-active check on the legacy_handoff child (LE2-style standard fixture):
+    // a handoff whose child budget covers the active program's x refuses; a disjoint one lands.
+    const manifest = fingerprintCandidate(ctx.dir, ["src/x.mjs"]);
+    const standardRow = (task, cs, authorized, at) => stamped({
+      type: "round_disposition", task_id: task, changeset_id: cs, round: 1,
+      candidate_sha: manifest.digest, candidate_manifest: manifest.records, verdict: "NO-GO",
+      disposition: "REMEDIATE", finding_ids: [`${task}-L1`], finding_class: "class-a",
+      ownership_area: "controller", original_trigger: "legacy trigger",
+      authorized_paths: authorized, introduced_by_prior_repair: false, new_scope: false,
+      repair_dispatch_event_id: null, root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: at, session_id: "legacy-s",
+    });
+    const legacyX = standardRow("legacy-x", "legacy-x-cs", ["src/x.mjs"], "2099-01-01T00:06:10.000Z");
+    const legacyD = standardRow("legacy-d", "legacy-d-cs", ["docs/l44.md"], "2099-01-01T00:06:11.000Z");
+    writeFileSync(repairLedgerPath(ctx.dir),
+      [legacyX, legacyD].map((row) => JSON.stringify(row)).join("\n") + "\n", { flag: "a" });
+    const handoff = (parent, cs, paths, child) => recordAggregateLegacyHandoff({
+      type: "aggregate_v2", kind: "legacy_handoff", task_id: parent, changeset_id: cs,
+      parent_task_id: parent, parent_changeset_id: cs, parent_candidate_sha: manifest.digest,
+      authorized_paths: paths, owner_evidence: "Owner handoff",
+      child: { task_id: child, changeset_id: `${child}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths },
+    }, options(ctx.dir));
+    const legacyWedge = handoff("legacy-x", "legacy-x-cs", ["src/x.mjs"], "lh44x");
+    assert.equal(legacyWedge.ok, false);
+    assert.equal(legacyWedge.state, "aggregate-legacy-handoff-conflict",
+      "a handoff child budget over an active program's surface refuses at declaration too");
+    const legacyOk = handoff("legacy-d", "legacy-d-cs", ["docs/l44.md"], "lh44d");
+    assert.equal(legacyOk.ok, true, legacyOk.state);
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M45: the CLOSED floor carries the UNDISPOSED GROUND — collected-but-unadjudicated harms ride the lineage", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // r1 CONTINUE accepts H1; r2 collects NEW ground H9 that is never adjudicated; the Owner
+    // closes citing the r1 disposition (the latest — r2 never got one).
+    const cand1 = commit(ctx.dir, 1);
+    const p1 = openPanel(ctx, 1, cand1);
+    const c1 = closePanel(ctx, p1, cand1, ["H1"]);
+    const d1 = decide(ctx, c1, { accepted: ["H1"] });
+    assert.equal(d1.ok, true, d1.state);
+    const authority = dispatchBatch(ctx, d1.event_id, c1.event_id, 2);
+    const cand2 = commit(ctx.dir, 2);
+    const p2 = openPanel(ctx, 2, cand2, { incoming: authority });
+    assert.equal(p2.opened.ok, true, p2.opened.state);
+    const c2 = closePanel(ctx, p2, cand2, ["H9"]);
+    assert.equal(c2.ok, true, c2.state);
+    const ownerClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
+      disposition_event_id: d1.event_id, reason: "abandoned mid-r2", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-session"));
+    assert.equal(ownerClose.ok, true, ownerClose.state);
+    const window = loadRepairEventsForProject(ctx.dir); // pre-successor rows, for the mutant pair
+    const successor = (trigger_ids) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: d1.event_id, trigger_ids,
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "c45", changeset_id: "c45-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    // Carrying only the ACCEPTED set sheds the r2 ground…
+    const shed = successor(["H1"]);
+    assert.equal(shed.ok, false);
+    assert.equal(shed.state, "aggregate-continuation-conflict",
+      "the successor must not shed the collected-but-undisposed H9");
+    // …an invented id stays inadmissible…
+    assert.equal(successor(["H1", "H9", "unknown"]).ok, false,
+      "only accepted ∪ followups ∪ undisposed ground are admissible");
+    // …and accepted + ground lands.
+    const carried = successor(["H1", "H9"]);
+    assert.equal(carried.ok, true, carried.state);
+    // Disabled arm (the ground half — M36 pins the accepted half): strip undisposedGround from
+    // the floor and the H1-only successor lands with its child, shedding H9 — the R4 shed.
+    const r2Open = derive(ctx).panels_open.at(-1);
+    const plantedShed = stamped({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      recorded_at: "2099-01-01T00:07:00.000Z", session_id: "planter",
+      parent_disposition_event_id: d1.event_id,
+      parent_frozen_commit: r2Open.frozen_commit, parent_frozen_tree: r2Open.frozen_tree,
+      trigger_ids: ["H1"], continuation_kind: "new_changeset", owner_evidence: "shed the ground",
+      children: [{ task_id: "c45-shed", changeset_id: "c45-shed-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+    });
+    const plantedChildOpen = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "c45-shed", changeset_id: "c45-shed-cs",
+      recorded_at: "2099-01-01T00:07:01.000Z", session_id: "planter", round: 1,
+      phase: "repair_round", tier: "T2",
+      frozen_commit: r2Open.frozen_commit, frozen_tree: r2Open.frozen_tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["src/x.mjs"],
+      expected_seats: expectedSeats(["src/x.mjs"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: plantedShed.event_id, legacy_handoff_event_id: null,
+    });
+    const rows = [...window.aggregate_events, plantedShed, plantedChildOpen];
+    assert.equal(deriveAggregateRepairState(rows, "c45-shed", { standardEvents: window.events })
+      .panels_open.length, 0, "the shipped floor refuses the ground-shedding successor");
+    const mutant = await importMutant(mutantDir, [[
+      "[...accepted, ...undisposedGround].every((id) => row.trigger_ids.includes(id)) &&",
+      "[...accepted].every((id) => row.trigger_ids.includes(id)) &&",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState(rows, "c45-shed", { standardEvents: window.events })
+      .panels_open.length, 1,
+    "without the ground half of the floor, the H1-only successor sheds H9 — the R4 shed");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M46: legacy activeness binds AS-OF — an inactive-parent handoff is inert, and a post-handoff close cannot unmake lineage", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const manifest = fingerprintCandidate(ctx.dir, ["src/x.mjs"]);
+    const standardRow = (task, cs, disposition, authorized, at) => stamped({
+      type: "round_disposition", task_id: task, changeset_id: cs, round: 1,
+      candidate_sha: manifest.digest, candidate_manifest: manifest.records, verdict: "NO-GO",
+      disposition, finding_ids: [`${task}-L1`], finding_class: "class-a",
+      ownership_area: "controller", original_trigger: "legacy trigger",
+      authorized_paths: authorized, introduced_by_prior_repair: false, new_scope: false,
+      repair_dispatch_event_id: null, root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: at, session_id: "legacy-s",
+    });
+    // A DEFER-dispositioned parent authorizes no repair — it is INACTIVE. A REMEDIATE parent is
+    // active. Same shape, one field apart. DISJOINT surfaces, so the inactive parent's probes
+    // read the ACTIVENESS bind alone (an overlapping active parent would shadow the mutant).
+    const deferRow = standardRow("leg46-defer", "leg46-defer-cs", "DEFER",
+      ["docs/leg46.md"], "2099-01-01T00:08:00.000Z");
+    const activeRow = standardRow("leg46b", "leg46b-cs", "REMEDIATE",
+      ["src/x.mjs"], "2099-01-01T00:08:01.000Z");
+    const ledger = repairLedgerPath(ctx.dir);
+    mkdirSync(path.dirname(ledger), { recursive: true });
+    writeFileSync(ledger, [deferRow, activeRow].map((row) => JSON.stringify(row)).join("\n") + "\n",
+      { flag: "a" });
+    // The record path refuses the inactive parent outright…
+    const recordRefusal = recordAggregateLegacyHandoff({
+      type: "aggregate_v2", kind: "legacy_handoff", task_id: "leg46-defer", changeset_id: "leg46-defer-cs",
+      parent_task_id: "leg46-defer", parent_changeset_id: "leg46-defer-cs",
+      parent_candidate_sha: manifest.digest, authorized_paths: ["docs/leg46.md"],
+      owner_evidence: "Owner handoff",
+      child: { task_id: "h46d", changeset_id: "h46d-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["docs/leg46.md"] },
+    }, options(ctx.dir));
+    assert.equal(recordRefusal.ok, false);
+    assert.equal(recordRefusal.state, "aggregate-legacy-handoff-malformed",
+      "the recorder refuses an inactive parent");
+    // …and a PLANTED hash-valid handoff citing the inactive parent is INERT on replay: its child
+    // cannot open through it.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const plantedHandoff = stamped({
+      type: "aggregate_v2", kind: "legacy_handoff", task_id: "leg46-defer", changeset_id: "leg46-defer-cs",
+      recorded_at: "2099-01-01T00:08:02.000Z", session_id: "planter",
+      parent_task_id: "leg46-defer", parent_changeset_id: "leg46-defer-cs",
+      parent_disposition_event_id: deferRow.event_id, parent_round: 1,
+      parent_candidate_sha: manifest.digest, authorized_paths: ["docs/leg46.md"],
+      owner_evidence: "planted",
+      child: { task_id: "h46d", changeset_id: "h46d-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["docs/leg46.md"] },
+    });
+    const plantedChildOpen = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "h46d", changeset_id: "h46d-cs",
+      recorded_at: "2099-01-01T00:08:03.000Z", session_id: "planter", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["docs/leg46.md"],
+      expected_seats: expectedSeats(["docs/leg46.md"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: plantedHandoff.event_id,
+    });
+    const inertRows = [...loaded.aggregate_events, plantedHandoff, plantedChildOpen];
+    assert.equal(deriveAggregateRepairState(inertRows, "h46d", { standardEvents: loaded.events })
+      .panels_open.length, 0, "a handoff citing an inactive parent mints NO lineage on replay");
+    // Disabled arm: drop the activeness check and the planted inactive-parent handoff mints the
+    // child — the R4 fail-open.
+    const mutant = await importMutant(mutantDir, [[
+      "if (!standard?.ok || !standard.active || standard.changeset_id !== row.parent_changeset_id ||",
+      "if (!standard?.ok || standard.changeset_id !== row.parent_changeset_id ||",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState(inertRows, "h46d", { standardEvents: loaded.events })
+      .panels_open.length, 1, "without the activeness bind the planted handoff mints lineage");
+    // The SAME handoff against the ACTIVE parent records…
+    const recorded = recordAggregateLegacyHandoff({
+      type: "aggregate_v2", kind: "legacy_handoff", task_id: "leg46b", changeset_id: "leg46b-cs",
+      parent_task_id: "leg46b", parent_changeset_id: "leg46b-cs",
+      parent_candidate_sha: manifest.digest, authorized_paths: ["src/x.mjs"],
+      owner_evidence: "Owner handoff",
+      child: { task_id: "h46", changeset_id: "h46-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] },
+    }, options(ctx.dir));
+    assert.equal(recorded.ok, true, recorded.state);
+    // …and a LATER standard close of the parent does not unmake it (the close is after the
+    // handoff's seq): the child still opens through the lineage.
+    const extension = recordOwnerExtension({ task_id: "leg46b", changeset_id: "leg46b-cs",
+      after_round: 1, authority_kind: "close", owner_evidence: "Owner close authority" },
+    options(ctx.dir, "owner-46"));
+    assert.equal(extension.ok, true, extension.state);
+    const stdClose = recordRepairClose({ task_id: "leg46b", changeset_id: "leg46b-cs",
+      after_round: 1, reason: "parent emptied by handoff",
+      owner_close_event_id: extension.event_id }, options(ctx.dir, "owner-46"));
+    assert.equal(stdClose.ok, true, stdClose.state);
+    const after = loadRepairEventsForProject(ctx.dir);
+    const parentEnd = deriveRepairState(after.events, "leg46b");
+    assert.equal(parentEnd.active, false,
+      "the standard close LANDED — the parent is inactive at the ledger's end");
+    assert.ok(parentEnd.close, "…via the recorded eligible close");
+    const childCand = commit(ctx.dir, 2);
+    const childOpen = openPanel(ctx, 1, childCand, { task: "h46", changeset: "h46-cs",
+      lineage: { handoff: recorded.event_id } });
+    assert.equal(childOpen.opened.ok, true,
+      `as-of stability: the pre-close handoff still carries the lineage: ${childOpen.opened.state}`);
+    assert.equal(derive(ctx, "h46").lineage_event_id, recorded.event_id);
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS, 1201 ids refuse on shape", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    // A ground of 101 ids across TWO seats (one seat may carry at most 100): the old 100-id
+    // trigger cap made the winning-open exit SHAPE-impossible for this grammar-legal ground —
+    // the R4 corner.
+    const many = Array.from({ length: 100 }, (_, index) => `W1-${index}`);
+    const ground = [...many, "W2-100"];
+    const received = receivedSeats(panel.expected, candidate).map((seat) => seat.seat_id === "a"
+      ? { ...seat, verdict: "NO-GO", raw_finding_ids: many }
+      : seat.seat_id === "b" ? { ...seat, verdict: "NO-GO", raw_finding_ids: ["W2-100"] } : seat);
+    const closed = recordAggregatePanelClose({
+      type: "aggregate_v2", kind: "panel_close", task_id: "task-1", changeset_id: "cs-1",
+      panel_open_event_id: panel.opened.event_id, received_seats: received,
+    }, options(ctx.dir));
+    assert.equal(closed.ok, true, closed.state);
+    const ownerClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
+      disposition_event_id: null, panel_open_event_id: panel.opened.event_id,
+      reason: "abandoned after collection", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-session"));
+    assert.equal(ownerClose.ok, true, ownerClose.state);
+    const successor = (trigger_ids) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: null, trigger_ids,
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "c47", changeset_id: "c47-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    // 1201 unique ids exceed the exact-carry bound (12 seats x 100 ids) — refused on SHAPE,
+    // under the ONE unified malformed spelling.
+    const over = successor(Array.from({ length: 1201 }, (_, index) => `Z-${index}`));
+    assert.equal(over.ok, false);
+    assert.equal(over.state, "aggregate-continuation-malformed",
+      "beyond the exact-carry bound is a shape refusal — and the derived name is the unified one");
+    // The exact 101-id ground carries.
+    const carried = successor(ground);
+    assert.equal(carried.ok, true,
+      `a grammar-legal ground is never shape-impossible to carry: ${carried.state}`);
+  } finally { ctx.cleanup(); }
 });

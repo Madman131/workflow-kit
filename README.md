@@ -705,7 +705,7 @@ that kept failing get an external trigger instead of a rule.**
 - **A retired control, recorded so it is not rebuilt.** Commit-time gate-adjudication records were
   built, NO-GO'd twice and discarded: round counting is a *conversation* fact, not a *tree* fact, and
   the measured refutation was one permit followed by 8 accepted commits with zero dispositions. It is
-  why `core/WORKFLOW.md` says no hook counts rounds, and it bounds what `pre-commit` may claim: **a
+  why `core/WORKFLOW.md` said no hook counts rounds *(historical — since v2.16.0 the controller WALLS a recorded program's rounds from its ledger: recorded transitions, never inference from the tree)*, and it bounds what `pre-commit` may claim: **a
   commit-time hook is a tripwire for forgetting, never a boundary.**
 - **Two stale claims corrected while in the neighbourhood.** `core/WORKFLOW.md` said the gate-ladder
   sensor was "Claude lane only" — it has registered in **both** lanes since v2.1 — and described the

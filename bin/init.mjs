@@ -227,6 +227,49 @@ function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 // LINK here", not "does a file exist here".
 function isSymlinkAt(p) { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } }
 
+// The roots this run may write under — the repo target plus the user-global Codex prompts dir —
+// set by main() before the first copy. A dst whose REAL parent directory escapes both is being
+// routed through a symlinked INTERMEDIATE directory (`.claude/hooks` → elsewhere), which the
+// per-file lstat above cannot see: the file inside the linked dir is a regular file. Resolved
+// lazily per write, so a root that main() only just created (or one under macOS's /tmp symlink)
+// compares by its real path. An empty roots list refuses everything — fail closed, not open.
+let writeRoots = [];
+function containedInWriteRoots(dst) {
+  const parent = realpathOrSelf(path.dirname(dst));
+  return writeRoots.some((root) => {
+    const r = realpathOrSelf(root);
+    return parent === r || parent.startsWith(r + path.sep);
+  });
+}
+
+// ONE writer for every `<dst>.bak`, refusing rather than damaging. Two refusals beyond a plain
+// write failure: a symlink in the .bak slot would send the bytes into the link's target, and a
+// prior .bak holding DIFFERENT content may be the ONLY copy of an adopter's hand edit (taken by
+// an earlier --force) — a second --force must not destroy the one thing the backup exists to
+// preserve. Identical content passes (an idempotent rerun). Returns true when the backup is in
+// place; false = refused, already warned here — the CALLER records the refusal and must not
+// overwrite dst.
+function saveBackup(dst, bytes) {
+  const bak = `${dst}.bak`;
+  const data = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if (isSymlinkAt(bak)) {
+    warn(`REFUSED: ${bak} is a SYMLINK — init does not write through links. Replace it with a regular file and re-run.`);
+    return false;
+  }
+  if (existsSync(bak)) {
+    let same = false;
+    try { same = readFileSync(bak).equals(data); } catch { /* unreadable/non-file: not provably same */ }
+    if (same) return true;
+    warn(`REFUSED: a prior backup at ${bak} would be destroyed (its content differs from what this run would save there) — it may be the only copy of an earlier hand edit. Move it aside first, then re-run.`);
+    return false;
+  }
+  try { writeFileSync(bak, data); } catch {
+    warn(`REFUSED: could not write the backup ${bak} — the existing file is untouched. Free ${bak} and re-run.`);
+    return false;
+  }
+  return true;
+}
+
 // Copy refusing to clobber unless force. Returns "written" | "skipped" | "refused".
 // A MECHANISM skip COMPARES BYTES: a kept file identical to this kit is a completed install, but a
 // kept MECHANISM file that DIFFERS — the controller, guards, recorder, scripts, core doctrine,
@@ -245,6 +288,25 @@ function isSymlinkAt(p) { try { return lstatSync(p).isSymbolicLink(); } catch { 
 let staleKept = [];
 let backupRefused = [];
 function copyGuarded(src, dst, force, mechanism = true) {
+  // The symlink refusal runs UNCONDITIONALLY, above both existsSync gates: existsSync FOLLOWS
+  // links, so a DANGLING dst symlink read "nothing here", fell through both branches, and the
+  // plain write below created the link's external target — on plain and force runs alike. The
+  // .bak slot is refused the same way: "backing up" onto a link would send the adopter's bytes
+  // into the link's target instead of preserving them beside the file. The link stays untouched.
+  if (isSymlinkAt(dst) || isSymlinkAt(`${dst}.bak`)) {
+    backupRefused.push(dst);
+    warn(`REFUSED: ${isSymlinkAt(dst) ? dst : `${dst}.bak`} is a SYMLINK — init does not write through links. Replace it with a regular file and re-run.`);
+    return "refused";
+  }
+  // An INTERMEDIATE directory symlink routes the whole write outside the install — the file
+  // inside the linked dir is a regular file, so only the resolved PARENT exposes it. ensureDir
+  // first, so the realpath sees a directory that exists.
+  ensureDir(path.dirname(dst));
+  if (!containedInWriteRoots(dst)) {
+    backupRefused.push(dst);
+    warn(`REFUSED: the directory holding ${dst} resolves OUTSIDE the install target (${realpathOrSelf(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
+    return "refused";
+  }
   if (existsSync(dst) && !force) {
     if (mechanism) {
       let differs = true;
@@ -259,33 +321,47 @@ function copyGuarded(src, dst, force, mechanism = true) {
     return "skipped";
   }
   if (force && existsSync(dst)) {
-    // A symlink at either end REFUSES: overwriting dst would write through the link, and "backing
-    // up" onto a linked .bak would send the adopter's bytes into the link's target instead of
-    // preserving them beside the file. Counted like any other refused backup; the link is untouched.
-    if (isSymlinkAt(dst) || isSymlinkAt(`${dst}.bak`)) {
-      backupRefused.push(dst);
-      warn(`REFUSED: ${isSymlinkAt(dst) ? dst : `${dst}.bak`} is a SYMLINK — --force does not write through links. Replace it with a regular file and re-run.`);
-      return "refused";
-    }
     let differs = true;
     try { differs = !readFileSync(src).equals(readFileSync(dst)); } catch { /* unreadable = differs */ }
     if (differs) {
-      try { copyFileSync(dst, `${dst}.bak`); }
-      catch {
+      let cur = null;
+      try { cur = readFileSync(dst); } catch { /* unreadable: cannot preserve it */ }
+      if (cur === null || !saveBackup(dst, cur)) {
         backupRefused.push(dst);
-        warn(`REFUSED: could not back up ${dst} before overwrite — the existing file is untouched. Free ${dst}.bak and re-run.`);
+        if (cur === null) warn(`REFUSED: could not read ${dst} to back it up — the existing file is untouched.`);
         return "refused";
       }
       warn(`backed up: ${dst}.bak (your edited version; the kit's replaces it)`);
     }
   }
-  ensureDir(path.dirname(dst));
   copyFileSync(src, dst);
   return "written";
 }
 // The gate-machinery skill set — doctrine an agent EXECUTES, upgraded with the kit. The personal
 // skills stay adopter-owned.
 const MECHANISM_SKILLS = new Set(["orchestrate", "frontier-review"]);
+
+// core/ files the [G] template table GENERATES (step 7). copyTree must never ship a kit-local copy
+// of one of these: a [G] doc names THIS repo's bindings and people, and copying one repo's into
+// another is exactly the cross-repo confusion the identity fingerprint exists to prevent. The
+// shipped kit carries none of them in core/, but a working checkout can (its own gate-rig copy) —
+// and before this filter that file rode copyTree into every adopter, then OSCILLATED with the
+// generated version on each --force, tripping the prior-backup refusal on a file no adopter wrote.
+const GENERATED_CORE = new Set(["BINDINGS.md", "REPO_INVARIANTS.md", "SYSTEM_MAP.md", "OWNER_COMMS.md"]);
+
+// A mechanism family excluded by its skip/omit flag but PRESENT on disk still gets the READ-ONLY
+// stale comparison — the same rule the skipped .codex lane follows: this run just KEPT those
+// bytes, and exiting 0 over a differing keep claims an upgrade that did not happen. Nothing in
+// the skipped family is written.
+function staleCheckSkipped(src, dst, remedy) {
+  if (!existsSync(dst)) return;   // absent is not a stale KEEP — nothing was kept
+  let differs = true;
+  try { differs = !readFileSync(src).equals(readFileSync(dst)); } catch { /* unreadable = differs */ }
+  if (differs) {
+    staleKept.push(dst);
+    warn(`exists, KEPT BUT STALE against this kit (${remedy}): ${dst}`);
+  }
+}
 
 // --force is GLOBAL and it is also the remedy init itself recommends for a stale hook ("re-run with
 // --force to update"). That combination silently destroys hand-authored content in the `[G]` files —
@@ -302,9 +378,8 @@ function backupBeforeOverwrite(dst, nextText) {
   // Unreadable but present: we cannot preserve it, so we must not destroy it either.
   try { current = readFileSync(dst, "utf8"); } catch { return "FAILED"; }
   if (current === nextText) return "not-needed";  // identical — nothing to preserve
-  const bak = `${dst}.bak`;
-  try { writeFileSync(bak, current); } catch { return "FAILED"; }
-  warn(`OVERWROTE ${dst} (--force); your previous version is saved at ${bak}`);
+  if (!saveBackup(dst, current)) return "FAILED";  // symlinked/blocked/prior-differing .bak all refuse
+  warn(`OVERWROTE ${dst} (--force); your previous version is saved at ${dst}.bak`);
   return "backed-up";
 }
 
@@ -317,12 +392,18 @@ function writeWithBackup(dst, text) {
     warn(`REFUSED to overwrite ${dst}: ${isSymlinkAt(dst) ? "it" : `${dst}.bak`} is a SYMLINK, and init does not write through links. Replace it with a regular file and re-run.`);
     return false;
   }
+  // Same intermediate-directory containment as copyGuarded, same reason, same accounting.
+  ensureDir(path.dirname(dst));
+  if (!containedInWriteRoots(dst)) {
+    backupRefused.push(dst);
+    warn(`REFUSED to overwrite ${dst}: its directory resolves OUTSIDE the install target (${realpathOrSelf(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
+    return false;
+  }
   if (backupBeforeOverwrite(dst, text) === "FAILED") {
     backupRefused.push(dst);
     warn(`REFUSED to overwrite ${dst}: its previous content could not be backed up (is ${dst}.bak writable?). The existing file is UNCHANGED — move it aside yourself, then re-run.`);
     return false;
   }
-  ensureDir(path.dirname(dst));
   writeFileSync(dst, text);
   return true;
 }
@@ -348,28 +429,38 @@ function fillTemplate(tmplPath, vars) {
 
 // Merge our PreToolUse registrations (4 guards + 2 sensors) into an existing settings.json, or create it.
 function mergeSettings(targetSettings, kitSettings, force) {
+  // A SYMLINKED settings.json refuses the merge on BOTH paths: the parse-OK branch wrote
+  // unconditionally, so a link here had its EXTERNAL target rewritten — no .bak, exit 0, on plain
+  // and force runs alike (the one file the backup machinery below never saw). lstat first, so a
+  // dangling link cannot read as "absent" and be created through.
+  if (isSymlinkAt(targetSettings)) {
+    const resolved = realpathOrSelf(targetSettings);
+    if (force) {
+      backupRefused.push(targetSettings);
+      warn(`REFUSED to merge into ${targetSettings}: it is a SYMLINK (resolves to ${resolved}), and init does not write through links. Replace the link with a regular file — or add the registrations to ${resolved} yourself — then re-run.`);
+    } else {
+      warn(`${targetSettings} is a SYMLINK (resolves to ${resolved}) — left untouched: init does not write through links. Replace the link with a regular file, or add the registrations to ${resolved} yourself.`);
+    }
+    return "skipped";
+  }
   let existing = {};
+  let raw = null;        // the file's current bytes when it exists and reads — the backup source
+  let bakDone = false;   // the corrupt branch backs up early so its console claim is already true
   if (existsSync(targetSettings)) {
-    let raw = null;
     try { raw = readFileSync(targetSettings, "utf8"); existing = JSON.parse(raw); }
     catch {
       if (!force) { warn(`existing ${targetSettings} is not valid JSON — left untouched (use --force to replace)`); return "skipped"; }
       // --force REPLACES an unparseable settings.json — adopter-owned bytes nothing here can
-      // merge. This was the ONE overwrite path not routed through the backup machinery: the
-      // original goes to .bak first, and a backup that cannot be taken (unreadable file, a
-      // symlink at either end, an unwritable .bak slot) refuses the replacement — counted into
-      // the same refused-backup accounting as every other overwrite.
-      const bak = `${targetSettings}.bak`;
-      let saved = false;
-      if (raw !== null && !isSymlinkAt(targetSettings) && !isSymlinkAt(bak)) {
-        try { writeFileSync(bak, raw); saved = true; } catch { /* refused below */ }
-      }
-      if (!saved) {
+      // merge. The original goes to .bak first, and a backup that cannot be taken (unreadable
+      // file, a blocked or prior-differing .bak slot) refuses the replacement — counted into the
+      // same refused-backup accounting as every other overwrite.
+      if (raw === null || !saveBackup(targetSettings, raw)) {
         backupRefused.push(targetSettings);
-        warn(`REFUSED to replace ${targetSettings}: it is not valid JSON AND its original bytes could not be backed up to ${bak}. The existing file is UNCHANGED — move it aside yourself, then re-run.`);
+        warn(`REFUSED to replace ${targetSettings}: it is not valid JSON AND its original bytes could not be backed up to ${targetSettings}.bak. The existing file is UNCHANGED — move it aside yourself, then re-run.`);
         return "skipped";
       }
-      warn(`replacing ${targetSettings} (--force): it is not valid JSON, so nothing could be merged — your original is saved at ${bak}`);
+      bakDone = true;
+      warn(`replacing ${targetSettings} (--force): it is not valid JSON, so nothing could be merged — your original is saved at ${targetSettings}.bak`);
       existing = {};
     }
     if (existing === null || typeof existing !== "object" || Array.isArray(existing)) existing = {};
@@ -400,8 +491,22 @@ function mergeSettings(targetSettings, kitSettings, force) {
       }
     }
   }
+  const out = JSON.stringify(existing, null, 2) + "\n";
   ensureDir(path.dirname(targetSettings));
-  writeFileSync(targetSettings, JSON.stringify(existing, null, 2) + "\n");
+  if (raw !== out) {
+    // A rewrite that CHANGES the file's bytes under --force backs the original up first — the
+    // same refusal semantics as every other overwrite. Identical bytes skip the write entirely
+    // (no backup noise, and the verify below still reads the file that is already correct).
+    if (force && raw !== null && !bakDone) {
+      if (!saveBackup(targetSettings, raw)) {
+        backupRefused.push(targetSettings);
+        warn(`REFUSED to merge into ${targetSettings}: the rewrite would change it and its current bytes could not be backed up (see above). The existing file is UNCHANGED.`);
+        return "skipped";
+      }
+      warn(`merged ${targetSettings} (--force): the rewrite changes it, so your previous version is saved at ${targetSettings}.bak`);
+    }
+    writeFileSync(targetSettings, out);
+  }
   // Post-write self-check: confirm every registration we intended is actually present on disk, so a
   // future serialization surprise can never let init report success on an unprotected repo.
   const roundtrip = JSON.parse(readFileSync(targetSettings, "utf8"));
@@ -493,12 +598,17 @@ function main() {
   ensureDir(T);
   staleKept = [];
   backupRefused = [];
+  // The two places this run is allowed to create files: the repo target and the user-global Codex
+  // prompts dir. Everything else a write resolves into is an escape (see containedInWriteRoots).
+  writeRoots = [T, args.codexPromptsDir];
   log(`workflow-kit init → ${T}`);
   const remaining = []; // generated files still carrying unfilled placeholders
   const remainingTokens = new Map(); // dst -> the specific placeholder names still unfilled
 
-  // 1. [P] core method docs (verbatim).
-  const core = copyTree(path.join(KIT_ROOT, "core"), path.join(T, "core"), force);
+  // 1. [P] core method docs (verbatim). The [G]-generated names are EXCLUDED: those are step 7's
+  // to write from templates, and a kit checkout carrying its own local copy (see GENERATED_CORE)
+  // must not ship that copy into an adopter.
+  const core = copyTree(path.join(KIT_ROOT, "core"), path.join(T, "core"), force, (name) => !GENERATED_CORE.has(name));
   log(`  core/ method docs: ${core.filter(([, s]) => s === "written").length} written, ${core.filter(([, s]) => s === "skipped").length} kept`);
 
   // 2. [P] Claude-lane hooks (verbatim mechanism): the four PreToolUse guards, which fail CLOSED,
@@ -566,8 +676,9 @@ function main() {
   copyGuarded(path.join(KIT_ROOT, "scripts", "check-doc-size.mjs"), path.join(T, "scripts", "check-doc-size.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "record-repair-event.mjs"), path.join(T, "scripts", "record-repair-event.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "confirm-repair-brief.mjs"), path.join(T, "scripts", "confirm-repair-brief.mjs"), force);
+  const runners = ["codex-gate.sh", "cold-review-gemini.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs"];
+  const gateGuardRel = path.join("scripts", "codex-gate-guard", "claude");
   if (args.withGateRunners) {
-    const runners = ["codex-gate.sh", "cold-review-gemini.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs"];
     for (const r of runners) {
       const d = path.join(T, "scripts", r);
       if (copyGuarded(path.join(KIT_ROOT, "scripts", r), d, force) === "written" && r.endsWith(".sh")) chmodX(d);
@@ -576,6 +687,12 @@ function main() {
     if (copyGuarded(path.join(KIT_ROOT, "scripts", "codex-gate-guard", "claude"), guard, force) === "written") chmodX(guard);
     log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + gate runners (need codex/agy at runtime — see PORTABILITY.md)`);
   } else {
+    // Skipped is not UNEXAMINED: runners a previous adopt installed are mechanism kept-files even
+    // when this run omits the flag — read-only compared, like the skipped .codex lane below.
+    for (const r of runners) {
+      staleCheckSkipped(path.join(KIT_ROOT, "scripts", r), path.join(T, "scripts", r), "--with-gate-runners was omitted; re-run --force WITH the flag to upgrade it");
+    }
+    staleCheckSkipped(path.join(KIT_ROOT, gateGuardRel), path.join(T, gateGuardRel), "--with-gate-runners was omitted; re-run --force WITH the flag to upgrade it");
     log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs (gate runners skipped; pass --with-gate-runners to include them)`);
   }
 
@@ -663,6 +780,13 @@ function main() {
   }
 
   if (args.skipCodexPrompt) {
+    // Skipped is not UNEXAMINED: the MECHANISM shims already sitting in the user-global prompts
+    // dir are doctrine an agent executes, read-only compared like the skipped .codex lane. The
+    // personal prompts (humanize and the ritual set) stay adopter-owned plain keeps.
+    for (const name of codexShims) {
+      if (!MECHANISM_SKILLS.has(name)) continue;
+      staleCheckSkipped(path.join(shimsSrc, "codex", `${name}.md`), path.join(args.codexPromptsDir, `${name}.md`), "--skip-codex-prompt left it untouched; re-run --force WITHOUT the skip to upgrade it");
+    }
     log(`  Codex skill prompts: SKIPPED (--skip-codex-prompt) — the shared bodies + Claude shims still install`);
   } else {
     let cInstalled = 0, cKept = 0, cFailed = 0;
@@ -828,6 +952,8 @@ function main() {
         warn(`exists, KEPT BUT STALE against this kit (--skip-codex-lane left it untouched; re-run --force WITHOUT the skip to upgrade it): ${p}`);
       }
     }
+    // The lane's arming probe ships WITH the lane, so the same skip leaves it behind too.
+    staleCheckSkipped(path.join(KIT_ROOT, "scripts", "check-codex-hooks-armed.mjs"), path.join(T, "scripts", "check-codex-hooks-armed.mjs"), "--skip-codex-lane left it untouched; re-run --force WITHOUT the skip to upgrade it");
     log(existing
       ? `  .codex/: SKIPPED (--skip-codex-lane) — but a .codex/ ALREADY EXISTS here and was left untouched; this run neither wrote nor removed it${laneStale ? ` — and ${laneStale} of its hook file(s) are STALE (see warnings above)` : ""}`
       : `  .codex/: SKIPPED (--skip-codex-lane)`);
@@ -1207,15 +1333,15 @@ function main() {
       }
     }
   }
-  // A REFUSED backup is a FAILING state, not a warning: every file it names still carries its OLD
-  // content, so the run did not deliver the upgrade it printed — and the refusal warnings scrolled
-  // past hundreds of lines ago. Repeat them where the exit code is decided.
+  // A REFUSED write is a FAILING state, not a warning: every file it names still carries its OLD
+  // content (or its link), so the run did not deliver the install it printed — and the refusal
+  // warnings scrolled past hundreds of lines ago. Repeat them where the exit code is decided.
   if (backupRefused.length) {
-    console.error(`\ninit: ${backupRefused.length} --force overwrite(s) were REFUSED because their .bak backup could not be taken:`);
+    console.error(`\ninit: ${backupRefused.length} overwrite(s) were REFUSED (a symlinked target, an escaping directory, or a backup that could not be taken — see each warning above):`);
     for (const f of backupRefused) console.error(`  · ${f}`);
     console.error(
       `Each file above is UNCHANGED on disk — still its OLD content, not kit v${KIT_VERSION}. ` +
-      `Clear the .bak path(s) (or move the file aside yourself), then re-run with --force.`);
+      `Resolve the cause each warning names (replace the symlink or linked directory, move the blocking .bak aside), then re-run.`);
     process.exitCode = 1;
   }
   if (staleKept.length) {

@@ -506,3 +506,45 @@ ships: no further round, batch, refreeze, or dispatch exists inside this changes
 exit is a typed OWNER CONTINUATION (child changeset) whose trigger set is the accepted set
 EXACTLY (A1–A7), inheriting tier T3. The model was applied to its own build to the letter — the
 bookend refused to let repair-introduced defects ride a GO.
+
+## OWNER CONTINUATION — ratified 2026-08-25
+
+Owner ruling, direct in-window, verbatim: **"great..good work..continue witht he build out"** —
+given against the terminal report naming the continuation decision explicitly (one child
+changeset, trigger set A1–A7 exactly, tier T3 inherited, same lane, conveyor terms standing).
+Recorded as the continuation's Owner evidence.
+
+**The typed successor:** parent `terminal-round-breaker` (TERMINAL-STOP at `1ceddb0`, gate head
+`4e5d892`) → child changeset **`terminal-round-breaker-2`**, kind `new_changeset`, tier **T3**
+(floor inherited), trigger set = the accepted set EXACTLY (A1–A7), budget = the parent's own
+surface (controller · guards · recorder · init · doctrine · contract · tests) plus the routed
+follow-ups from the ROUND 4 disposition. Ships the SAME release (2.15.0 → 2.16.0 — the parent
+never shipped). The successor builds on the same branch atop the parent's terminal record and
+receives its OWN full gate: budget-free rungs → freeze → complete T3 panel → bookend. Version
+stamp unchanged; user-install sync still discharges at ITS landing.
+
+## terminal-round-breaker-2 · BUILD COMPLETE (2026-08-25) — the trigger set consumed
+
+All seven accepted harms cured, each against its executed reproduction. Controller
+(orchestrator): A1 lift = budget ∩ opened coverage · A2 ancestor-chain reservation exception +
+one-LIVE-continuation-per-anchor (re-continuation when all children terminal and one virgin) ·
+A3 pending-vs-active refused at declaration on both successor kinds, with the pending hold NAMED
+in the panel-open diagnosis (`derivePendingLineageBudgets`) · A4 the CLOSED floor carries
+collected-but-undisposed ground · A6 legacy activeness binds as-of · A7 trigger cap 1200 (the
+12×100 ground bound) · the continuation malformed spelling unified. Init (worker chip,
+red-then-green with targeted reverts): A5a dangling-link refusal hoisted unconditional ·
+A5b write-root containment on every overwrite's parent · A5c symlinked settings refused +
+changed-merge backup · W7 a differing `.bak` is never destroyed · W8 stale accounting extended
+to gate runners, mechanism prompt shims, and the armed-check probe — PLUS the `GENERATED_CORE`
+copyTree filter, which also closes the round-1 rig-shipping residual. Tests (worker chip):
+M41–M47 pinned both-polarity with discriminating mutants (52/52 controller files). Doctrine/
+contract (orchestrator): deny texts teach all three terminal kinds + the pending holds · the
+diagnostic tail trued · SKILL's honest-limits twin fixed inside budget · T12's "(virgin)"
+corrected · the STOP-followup asymmetry REASONED in § 2 · the pending-abandonment ritual
+disclosed in § 3 · § 7 trued to the landed init incl. three disclosed limits routed to this
+panel · README's v2.2.0 stale citation annotated · M41–M47 contract rows. Followups from R4 all
+consumed except the three § 7 disclosed limits (panel material, this round).
+
+State: **npm test 251/251 · acceptance PASSED · WORKFLOW 25,064/25,088 · skill budgets all
+inside caps · parity red = the standing pre-landing state.** This changeset's own cadence now
+begins: freeze → R1 full T3 panel (its own frontier firing unspent).

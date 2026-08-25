@@ -11,7 +11,7 @@
 //   · a lane excluded by a skip flag but PRESENT on disk still gets the read-only stale-keep check.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ function adopt(extra = []) {
     { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
   const first = run();
   assert.equal(first.status, 0, `fresh adopt failed: ${first.stderr}`);
-  return { dir, run, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
+  return { dir, codexDir, run, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
 test("a refused mechanism backup under --force is COUNTED: exit 1, named in the report, file untouched", () => {
@@ -46,8 +46,10 @@ test("a refused mechanism backup under --force is COUNTED: exit 1, named in the 
     mkdirSync(`${guard}.bak`);   // a directory here makes the backup copy fail
     const r = run(["--force"]);
     assert.equal(r.status, 1, "a refused backup must FAIL the run — before this contract it warned and exited 0");
-    assert.match(r.stderr, /REFUSED: could not back up/, "the refusal is printed at the site");
-    assert.match(r.stderr, /1 --force overwrite\(s\) were REFUSED/, "…and COUNTED into the end-of-run report");
+    // A directory squatting in the .bak slot is "a prior thing that would be destroyed" to the
+    // one-writer saveBackup — the remedy (move it aside) is the same either way.
+    assert.match(r.stderr, /prior backup at .+ would be destroyed/, "the refusal is printed at the site");
+    assert.match(r.stderr, /1 overwrite\(s\) were REFUSED/, "…and COUNTED into the end-of-run report");
     assert.ok(r.stderr.includes(`· ${guard}`), "…which names the refused file");
     assert.equal(readFileSync(guard, "utf8"), drifted, "the refused file is UNTOUCHED — old content, no half-upgrade");
 
@@ -200,7 +202,7 @@ test("an unparseable settings.json under --force is backed up byte-for-byte, nev
     const refused = run(["--force"]);
     assert.equal(refused.status, 1, "a refused settings backup fails the run");
     assert.match(refused.stderr, /REFUSED to replace/, "…named at the site");
-    assert.match(refused.stderr, /--force overwrite\(s\) were REFUSED/, "…and counted into the end-of-run report");
+    assert.match(refused.stderr, /overwrite\(s\) were REFUSED/, "…and counted into the end-of-run report");
     assert.equal(readFileSync(settings, "utf8"), corrupt, "the corrupt file is UNCHANGED rather than destroyed");
   } finally { cleanup(); }
 });
@@ -247,8 +249,202 @@ test("a refused [G] backup is the SAME failing state — counted into the report
     assert.equal(r.status, 1, "a refused [G] backup fails the run like a refused copy backup");
     assert.match(r.stderr, /REFUSED to overwrite/, "the refusal is printed at the site");
     assert.match(r.stderr, /generation is INCOMPLETE/, "the mixed-tree warning is unchanged");
-    assert.match(r.stderr, /--force overwrite\(s\) were REFUSED/, "…and the end-of-run report counts it");
+    assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…and the end-of-run report counts it");
     assert.ok(r.stderr.includes(`· ${doc}`), "…naming the [G] file");
     assert.match(readFileSync(doc, "utf8"), /the customer corpus/, "the un-backup-able file is left UNCHANGED");
+  } finally { cleanup(); }
+});
+
+test("a DANGLING dst symlink is refused on plain AND force runs — never created through", () => {
+  // existsSync FOLLOWS links, so a dangling dst symlink read "nothing here", slipped past BOTH the
+  // keep gate and the force gate, and the plain write created the link's EXTERNAL target, exit 0.
+  // The refusal is hoisted above the gates, so it fires unconditionally.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-dangling-"));
+  try {
+    const guard = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
+    const extTarget = path.join(outside, "never-created.mjs");   // does NOT exist — the link dangles
+    rmSync(guard);
+    symlinkSync(extTarget, guard);
+    assert.ok(!existsSync(guard), "precondition: the dangling link reads as absent to existsSync");
+
+    const plain = run();
+    assert.equal(plain.status, 1, "a PLAIN run refuses the dangling link instead of creating its target");
+    assert.match(plain.stderr, /is a SYMLINK/);
+    assert.ok(plain.stderr.includes(`· ${guard}`), "…and it is counted");
+    assert.ok(!existsSync(extTarget), "the external target was NOT created");
+    assert.ok(lstatSync(guard).isSymbolicLink(), "the link itself is untouched");
+
+    const forced = run(["--force"]);
+    assert.equal(forced.status, 1, "a FORCE run refuses it the same way");
+    assert.ok(!existsSync(extTarget), "…still nothing created through the link");
+
+    // Polarity: replace the link with a real file and the plain run completes clean.
+    rmSync(guard);
+    const clean = run();
+    assert.equal(clean.status, 0, `with the link gone the hook reinstalls cleanly: ${clean.stderr}`);
+    assert.ok(!lstatSync(guard).isSymbolicLink() && existsSync(guard), "a regular file is back");
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("an INTERMEDIATE directory symlink is refused — the write may not resolve outside the install", () => {
+  // With `.claude/hooks` itself a symlink to an external dir, every file inside it is a REGULAR
+  // file — the per-dst lstat sees nothing wrong, and both the copy and its .bak landed outside the
+  // repo, exit 0. Only the resolved PARENT exposes the escape.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-extdir-"));
+  try {
+    const hooksDir = path.join(dir, ".claude", "hooks");
+    rmSync(hooksDir, { recursive: true, force: true });
+    symlinkSync(outside, hooksDir);
+
+    const plain = run();
+    assert.equal(plain.status, 1, "a plain run refuses to install through the linked directory");
+    assert.match(plain.stderr, /resolves OUTSIDE the install target/);
+    assert.deepEqual(readdirSync(outside), [], "NOTHING was written into the external directory");
+
+    const forced = run(["--force"]);
+    assert.equal(forced.status, 1, "a force run refuses the same way");
+    assert.deepEqual(readdirSync(outside), [], "…still nothing outside");
+
+    // Polarity: a real directory in place and the same run completes clean.
+    rmSync(hooksDir);
+    const clean = run();
+    assert.equal(clean.status, 0, `with a real directory the hooks install: ${clean.stderr}`);
+    assert.ok(existsSync(path.join(hooksDir, "guard-lane-authoring.mjs")), "…into the repo this time");
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a PARSEABLE settings.json is never written through a symlink, and a changing force-merge backs it up", () => {
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-settings-"));
+  try {
+    const settings = path.join(dir, ".claude", "settings.json");
+    // (a) symlinked settings: the parse-OK branch wrote unconditionally, so the link's EXTERNAL
+    // target was rewritten — no .bak, exit 0, on plain and force runs alike.
+    const extSettings = path.join(outside, "their-settings.json");
+    const extBytes = JSON.stringify({ theirs: true }, null, 2) + "\n";
+    writeFileSync(extSettings, extBytes);
+    const realBytes = readFileSync(settings, "utf8");
+    rmSync(settings);
+    symlinkSync(extSettings, settings);
+
+    const plain = run();
+    assert.equal(plain.status, 0, `a plain run warns but does not fail: ${plain.stderr}`);
+    assert.match(plain.stderr, /is a SYMLINK \(resolves to /, "…and the warning prints the RESOLVED target");
+    assert.ok(plain.stderr.includes(realpathSync(extSettings)), "…by its real path");
+    assert.equal(readFileSync(extSettings, "utf8"), extBytes, "the linked file was NOT rewritten (plain)");
+
+    const forced = run(["--force"]);
+    assert.equal(forced.status, 1, "under --force the refusal is counted and fails the run");
+    assert.ok(forced.stderr.includes(`· ${settings}`), "…named in the end-of-run report");
+    assert.equal(readFileSync(extSettings, "utf8"), extBytes, "the linked file was NOT rewritten (force)");
+
+    // (b) a regular settings.json whose bytes the force-merge CHANGES is backed up first…
+    rmSync(settings);
+    const preMerge = JSON.stringify({ env: { KEEP_ME: "1" } }, null, 2) + "\n";
+    writeFileSync(settings, preMerge);
+    const merged = run(["--force"]);
+    assert.equal(merged.status, 0, merged.stderr);
+    assert.equal(readFileSync(`${settings}.bak`, "utf8"), preMerge, "the pre-merge bytes are in the .bak");
+    const after = JSON.parse(readFileSync(settings, "utf8"));
+    assert.equal(after.env?.KEEP_ME, "1", "…and the merge still PRESERVES the adopter's own settings");
+    assert.ok(after.hooks.PreToolUse.some((g) => (g.hooks || []).some((h) => String(h.command).includes("guard-lane-authoring.mjs"))),
+      "…alongside the kit's registrations");
+
+    // …and an IDENTICAL re-merge writes nothing: no second backup, the existing (differing) .bak
+    // is neither touched nor refused — no noise on the idempotent rerun.
+    const again = run(["--force"]);
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(readFileSync(`${settings}.bak`, "utf8"), preMerge, "the prior .bak is untouched by an identical merge");
+    void realBytes;
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a second --force never destroys the only backup: a differing prior .bak refuses; identical is idempotent", () => {
+  // The reproduction: force #1 preserves the hand edit in .bak; force #2 (with different flags or a
+  // newer hand edit) re-backed-up the CURRENT file over it — both runs exit 0 and the only copy of
+  // the original edit is gone. Now a prior .bak whose bytes differ from what this run would save
+  // there is never overwritten.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  try {
+    // The [G] path (backupBeforeOverwrite → saveBackup).
+    const doc = path.join(dir, "core", "OWNER_COMMS.md");
+    const v1 = readFileSync(doc, "utf8").replace("{{OWNER_PROFILE}}", "profile ONE");
+    writeFileSync(doc, v1);
+    let r = run(["--force"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v1, "force #1 preserved the hand edit");
+
+    const v2 = readFileSync(doc, "utf8").replace("{{OWNER_PROFILE}}", "profile TWO");
+    writeFileSync(doc, v2);
+    r = run(["--force"]);
+    assert.equal(r.status, 1, "force #2 REFUSES rather than destroy the only copy of edit ONE");
+    assert.match(r.stderr, /prior backup at .+ would be destroyed/);
+    assert.ok(r.stderr.includes(`· ${doc}`), "…counted and named");
+    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v1, "the .bak still holds the FIRST hand edit");
+    assert.equal(readFileSync(doc, "utf8"), v2, "…and the doc itself is untouched too");
+
+    // Idempotence: when the current bytes MATCH the prior .bak, the backup is already in place and
+    // the run completes clean.
+    writeFileSync(doc, v1);
+    r = run(["--force"]);
+    assert.equal(r.status, 0, `an identical prior .bak is idempotent: ${r.stderr}`);
+    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v1, "…and it is left exactly as it was");
+
+    // The copyGuarded path pays the same rule (mechanism hook, two successive hand edits).
+    const guard = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
+    const kitGuard = readFileSync(path.join(KIT, "hooks", "guard-lane-authoring.mjs"), "utf8");
+    writeFileSync(guard, kitGuard + "// edit A\n");
+    r = run(["--force"]);
+    assert.equal(r.status, 0, r.stderr);
+    writeFileSync(guard, kitGuard + "// edit B\n");
+    r = run(["--force"]);
+    assert.equal(r.status, 1, "the copy path refuses the clobber the same way");
+    assert.equal(readFileSync(`${guard}.bak`, "utf8"), kitGuard + "// edit A\n", "edit A survives");
+    assert.equal(readFileSync(guard, "utf8"), kitGuard + "// edit B\n", "edit B untouched");
+  } finally { cleanup(); }
+});
+
+test("every skip-excluded mechanism family gets the read-only stale check: runners, prompt shims, armed probe", () => {
+  // The .codex/hooks check landed first; three families still escaped it: gate runners present
+  // while --with-gate-runners is omitted, the two MECHANISM prompt shims under --skip-codex-prompt,
+  // and the armed probe under --skip-codex-lane. Same rule for all three — read-only, absent or
+  // identical is silent, a differing keep is KEPT BUT STALE and fails the run.
+  const { dir, codexDir, run, cleanup } = adopt();   // codex lane + prompts installed
+  const SKIPS = ["--skip-codex-prompt", "--skip-codex-lane"];   // runners are excluded by default
+  try {
+    // Baseline: everything absent-or-identical under all three exclusions ⇒ silent, exit 0.
+    let r = run(SKIPS);
+    assert.equal(r.status, 0, r.stderr);
+    assert.doesNotMatch(r.stderr, /KEPT BUT STALE/, "absent/identical skipped families stay silent");
+
+    // Plant a differing keep in each family — plus a NON-mechanism prompt as the negative control.
+    const runner = path.join(dir, "scripts", "codex-gate.sh");
+    writeFileSync(runner, readFileSync(path.join(KIT, "scripts", "codex-gate.sh"), "utf8") + "# drift\n");
+    const shim = path.join(codexDir, "orchestrate.md");
+    const shimDrift = readFileSync(shim, "utf8") + "<!-- drift -->\n";
+    writeFileSync(shim, shimDrift);
+    const probe = path.join(dir, "scripts", "check-codex-hooks-armed.mjs");
+    writeFileSync(probe, readFileSync(probe, "utf8") + "// drift\n");
+    const personal = path.join(codexDir, "humanize.md");
+    writeFileSync(personal, readFileSync(personal, "utf8") + "<!-- adopter-owned -->\n");
+
+    r = run(SKIPS);
+    assert.equal(r.status, 1, "differing keeps in skipped families fail the run");
+    for (const p of [runner, shim, probe]) {
+      assert.ok(r.stderr.includes(p), `${p} is named`);
+    }
+    assert.equal((r.stderr.match(/KEPT BUT STALE/g) || []).length, 3, "…exactly the three mechanism keeps, no more");
+    assert.ok(!r.stderr.includes(personal), "the adopter-owned personal prompt is NOT flagged");
+    assert.equal(readFileSync(shim, "utf8"), shimDrift, "the check is READ-ONLY (the drifted shim was not rewritten)");
+
+    // Polarity: bring each back to kit bytes and the same skipped run is clean again.
+    writeFileSync(runner, readFileSync(path.join(KIT, "scripts", "codex-gate.sh")));
+    writeFileSync(shim, readFileSync(path.join(KIT, "skill-shims", "codex", "orchestrate.md")));
+    writeFileSync(probe, readFileSync(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs")));
+    r = run(SKIPS);
+    assert.equal(r.status, 0, `identical skipped families are silent again: ${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /KEPT BUT STALE/);
   } finally { cleanup(); }
 });
