@@ -3,9 +3,8 @@
 Word budget: 1000 (**Owner-ratified 2026-08-11**, raised from an author-set 600 when § 2 and § 7
 gained the routing completion; its own number, never summed with the body's).
 
-Reference layer for `.agents/skills/orchestrate/SKILL.md`. A brief is written by the orchestrator
-and read by a session with **no memory of the program**. Everything the worker needs to act
-correctly on its first turn is in the brief or in the shared program record it points at.
+Reference layer for `.agents/skills/orchestrate/SKILL.md`. A brief goes to a session with **no
+memory of the program**. Everything needed on its first turn is in the brief or referenced record.
 
 ## The nine sections
 1. **Identity and order** — which chip this is, which chips must have landed first, and the
@@ -25,9 +24,11 @@ correctly on its first turn is in the brief or in the shared program record it p
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
    delivery failure that did not happen.
 4. **Scope** — what ships and what does NOT. Name artifacts.
-5. **Process** — ordered rungs and pre-decided skips. Repair briefs declare task, changeset, candidate,
-   next round, findings/class/ownership/trigger/paths/flags, plus whichever typed exit/audit/Owner event IDs
-   the procedure recorded. Post-write, the orchestrator confirms bytes (`confirm-repair-brief
+5. **Process** — ordered rungs and pre-decided skips. Aggregate repair briefs declare
+   `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
+   event IDs, next round, and the R3 root-exit ID when required. Stored standard programs are
+   replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
+   standard round. Post-write, the orchestrator confirms bytes (`confirm-repair-brief
    --confirm`), sending only the receipt/path. The worker puts `session_id` in `--verify`; the write guard binds
    each authorized path.
 6. **Standing rules** — binding every chip: surgical staging, the identity ritual,
@@ -39,20 +40,20 @@ correctly on its first turn is in the brief or in the shared program record it p
    **⚠ The timeout requires that you KNOW the question was the orchestrator's. If you were UNSURE
    which bucket it fell in, the timeout does not apply — unsure is not a licence to proceed, it is
    the reason to wait.** Every other unsure in this method fails closed; this one does too.
-   **And it NEVER reaches a decision the TARGET REPO reserves to the Owner. The five below are
+   **It NEVER reaches a decision the TARGET REPO reserves to the Owner. The five below are
    EXAMPLES, not a closed set** — a repo reserves what it reserves, and any list a portable file
    ships is short in every repo it is wrong about. **Short used to mean "ask the Owner"; keyed to a
    timeout it means "proceed without them", so the property is what binds, never the count.** A ratification that did not arrive did
    not happen: waiting on one, you keep building everything it does not touch and you seat nothing
    that depends on it. Timing out an Owner rung is self-authorisation wearing initiative's clothes,
    and the gate it skips is the one whose whole reason is that the call is not yours.
-   **Name what the TARGET REPO reserves, and give these five as EXAMPLES, not a closure — merge/push
+   **Name the TARGET REPO's reserved calls, with these five as examples — merge/push
    GO · intent or risk acceptance · tier ratification · core-doc wording sign-off · and the named
    WRITE-GO for each prod write, which a push-GO never covers — and say that even those route THROUGH
    the orchestrator, who relays**; the write-GO is the one whose omission routes a live production
    write. **Give the orchestrator-facing
    labels (`CONSULT:` / `RULING NEEDED:`) and forbid EVERY Owner-facing label rule 8 defines — `QUESTION:` · `RECOMMENDATION:` ·
-   `DECISION NEEDED:`, and take that list from rule 8 rather than from here**, which the Owner reads as theirs off the chip's terminal. Do not restate the list
+   `DECISION NEEDED:`**, which the Owner reads as theirs off the chip's terminal. Do not restate the list
    by pointer alone: a chip reads its brief and may never load the body.
 8. **Accumulated corrections** — the rulings and lessons this chip inherits, especially any that
    CONTRADICT what the brief said when it was first written. A superseded instruction left standing

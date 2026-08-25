@@ -311,20 +311,27 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
   } finally { cleanup(); }
 });
 
-test("a plain init re-run does NOT update an installed [P] control — so the upgrade note must say --force", () => {
+test("a plain init re-run KEEPS a stale installed [P] control and FAILS, naming --force", () => {
   // A control fix reaches an adopter only through the instruction the release note gives them.
-  // `init` never overwrites a file it did not write this run: a plain re-run prints "exists, kept",
-  // EXITS 0, and leaves the old control in place. A release that changes `[P]` controls and tells the
-  // reader to "re-run init with your original flags" therefore ships them nothing while reporting
-  // success. Both halves are executed here, and the note itself is pinned.
+  // `init` never overwrites a file it did not write this run — and since v2.16.0 a plain re-run
+  // that keeps STALE mechanism bytes exits NONZERO naming --force, instead of reporting success
+  // while shipping nothing (the silent-claim upgrade). Both halves are executed here, and the
+  // release note itself is pinned.
   const { dir, run, cleanup } = adopt(["--skip-codex-prompt"]);
   try {
     const installed = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
     const marker = "// PRE-UPGRADE MARKER\n";
     writeFileSync(installed, marker + readFileSync(installed, "utf8"));
-    run(["--skip-codex-prompt"]);
+    const stale = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(stale.status, 1, "a plain re-run over a stale install FAILS instead of claiming the upgrade");
+    assert.match(stale.stdout + stale.stderr, /KEPT BUT STALE/, "…names the stale keep");
+    assert.match(stale.stdout + stale.stderr, /A plain rerun never claims the new controller/,
+      "…states the rule outright");
+    assert.match(stale.stdout + stale.stderr, /re-trusted interactively/,
+      "…and carries the Codex re-trust consequence beside the --force remedy");
     assert.ok(readFileSync(installed, "utf8").startsWith(marker),
-      "a plain re-run KEEPS the already-installed control (this is why --force is required)");
+      "a plain re-run still KEEPS the already-installed control (this is why --force is required)");
     run(["--skip-codex-prompt", "--force"]);
     assert.ok(!readFileSync(installed, "utf8").startsWith(marker),
       "--force is what actually replaces the installed control");
@@ -649,7 +656,10 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     const initSays = (args = []) => {
       const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
         "--codex-prompts-dir", codexDir, ...args], { encoding: "utf8" });
-      assert.equal(r.status, 0, `init should exit 0: ${r.stderr}`);
+      // This test mutates INSTALLED mechanism files on purpose, so a plain rerun now legitimately
+      // fails as a stale install; any other nonzero is a real error.
+      assert.ok(r.status === 0 || (r.status === 1 && /KEPT BUT STALE/.test(r.stdout + r.stderr)),
+        `init should exit 0, or fail only as a stale install: ${r.stderr}`);
       return r.stdout + r.stderr;
     };
     const fmSwap = (line) => writeFileSync(consult, consultText.replace(/^tools: \[\]$/m, line));

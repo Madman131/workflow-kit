@@ -14,7 +14,7 @@ const controllerPath = [
 ].find((candidate) => existsSync(candidate));
 if (!controllerPath) throw new Error("repair controller is not installed beside this recorder");
 const {
-  recordAdherenceAudit, recordOwnerExtension, recordRepairClose, recordRootCauseExit,
+  recordAdherenceAudit, recordAggregateEvent, recordOwnerExtension, recordRepairClose, recordRootCauseExit,
   recordRoundDisposition,
 } = await import(pathToFileURL(controllerPath).href);
 
@@ -27,6 +27,7 @@ function readInput(file) {
 }
 
 export function recordEvent(input, options) {
+  if (input.type === "aggregate_v2") return recordAggregateEvent(input, options);
   if (input.type === "round_disposition") return recordRoundDisposition(input, options);
   if (input.type === "root_cause_exit") return recordRootCauseExit(input, options);
   if (input.type === "adherence_audit") return recordAdherenceAudit(input, options);

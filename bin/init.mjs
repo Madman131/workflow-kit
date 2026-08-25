@@ -221,8 +221,27 @@ function isSegment(s) { return typeof s === "string" && s.length > 0 && !s.inclu
 function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 
 // Copy refusing to clobber unless force. Returns "written" | "skipped".
-function copyGuarded(src, dst, force) {
-  if (existsSync(dst) && !force) { warn(`exists, kept (use --force to overwrite): ${dst}`); return "skipped"; }
+// A MECHANISM skip COMPARES BYTES: a kept file identical to this kit is a completed install, but a
+// kept MECHANISM file that DIFFERS — controller, guard, recorder, doctrine, orchestrate assets — is
+// a stale install this rerun did not upgrade, and a rerun that keeps old mechanism bytes while
+// exiting 0 tells an upgrading adopter the upgrade happened. Those keeps are collected and FAIL the
+// run at the end. Convenience files an adopter legitimately edits (the thread-restart commands, the
+// Codex lane config) pass `mechanism: false` and stay a plain keep.
+const staleKept = [];
+function copyGuarded(src, dst, force, mechanism = true) {
+  if (existsSync(dst) && !force) {
+    if (mechanism) {
+      let differs = true;
+      try { differs = !readFileSync(src).equals(readFileSync(dst)); } catch { /* unreadable = differs */ }
+      if (differs) {
+        staleKept.push(dst);
+        warn(`exists, KEPT BUT STALE against this kit (use --force to upgrade): ${dst}`);
+        return "skipped";
+      }
+    }
+    warn(`exists, kept (use --force to overwrite): ${dst}`);
+    return "skipped";
+  }
   ensureDir(path.dirname(dst));
   copyFileSync(src, dst);
   return "written";
@@ -261,13 +280,13 @@ function writeWithBackup(dst, text) {
   return true;
 }
 
-function copyTree(srcDir, dstDir, force, filter = () => true) {
+function copyTree(srcDir, dstDir, force, filter = () => true, mechanism = true) {
   const results = [];
   for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
     const s = path.join(srcDir, entry.name);
     const d = path.join(dstDir, entry.name);
-    if (entry.isDirectory()) results.push(...copyTree(s, d, force, filter));
-    else if (entry.isFile() && filter(entry.name, s)) results.push([d, copyGuarded(s, d, force)]);
+    if (entry.isDirectory()) results.push(...copyTree(s, d, force, filter, mechanism));
+    else if (entry.isFile() && filter(entry.name, s)) results.push([d, copyGuarded(s, d, force, mechanism)]);
   }
   return results;
 }
@@ -508,7 +527,7 @@ function main() {
   // copies each VERBATIM (no per-repo rewrite). See README/PORTABILITY § dual-harness. copyGuarded
   // refuses to clobber without --force, so re-runs are idempotent.
   const claudeCmdDst = path.join(T, ".claude", "commands", "thread-restart.md");
-  const claudeCmdResult = copyGuarded(path.join(KIT_ROOT, "commands", "claude", "thread-restart.md"), claudeCmdDst, force);
+  const claudeCmdResult = copyGuarded(path.join(KIT_ROOT, "commands", "claude", "thread-restart.md"), claudeCmdDst, force, false);
   log(claudeCmdResult === "written"
     ? `  .claude/commands/thread-restart.md: /thread-restart installed (Claude lane)`
     : `  .claude/commands/thread-restart.md: EXISTING kept (--force to update)`);
@@ -520,7 +539,7 @@ function main() {
     // (unwritable ~/.codex, a non-directory in the way) must NOT abort the repo-local adopt — the
     // Claude command + AGENTS.md pointer are the load-bearing install. Warn and continue.
     try {
-      const codexResult = copyGuarded(path.join(KIT_ROOT, "commands", "codex", "thread-restart.md"), codexDst, force);
+      const codexResult = copyGuarded(path.join(KIT_ROOT, "commands", "codex", "thread-restart.md"), codexDst, force, false);
       log(codexResult === "written"
         ? `  ${codexDst}: /thread-restart Codex prompt installed (USER-GLOBAL, OUTSIDE the repo — override with --codex-prompts-dir, opt out with --skip-codex-prompt)`
         : `  ${codexDst}: EXISTING kept (--force to update)`);
@@ -564,10 +583,10 @@ function main() {
   // must not abort the run before the guards are registered, which would leave hook files on disk
   // with zero registrations: exactly the silent fail-open mergeSettings' own read-back exists to stop.
   try {
-    for (const name of bodyNames) copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force);
+    for (const name of bodyNames) copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force, () => true, false);
     for (const name of claudeShims) {
       const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
-      copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force);
+      copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, false);
       installedShims.push(["claude", name, dst]);
     }
     log(bodyNames.length || claudeShims.length
@@ -594,7 +613,7 @@ function main() {
       // Failure-ISOLATED, exactly like the /thread-restart Codex prompt: this is the ONE install
       // target outside the repo, and an unwritable ~/.codex must never abort a mostly-complete adopt.
       try {
-        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force) === "written") cInstalled++; else cKept++;
+        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force, false) === "written") cInstalled++; else cKept++;
         installedShims.push(["codex", name, dst]);
       } catch (e) {
         cFailed++;
@@ -654,7 +673,7 @@ function main() {
       : [];
     let aInstalled = 0, aKept = 0;
     for (const name of agentFiles) {
-      if (copyGuarded(path.join(agentsSrc, name), path.join(T, ".claude", "agents", name), force) === "written") aInstalled++; else aKept++;
+      if (copyGuarded(path.join(agentsSrc, name), path.join(T, ".claude", "agents", name), force, false) === "written") aInstalled++; else aKept++;
     }
     if (agentFiles.length) {
       log(`  .claude/agents/: ${aInstalled} review-seat agent(s) installed, ${aKept} kept${aKept ? " — may be STALE; --force to update" : ""} (Claude lane only)`);
@@ -733,7 +752,7 @@ function main() {
       const cfgDst = path.join(T, ".codex", "config.toml");
       // Fail HERE, inside the catch, rather than later in the template loop.
       ensureDir(path.join(T, ".codex", "agents"));
-      const codexCfg = copyGuarded(path.join(KIT_ROOT, "codex", "config.toml"), cfgDst, force);
+      const codexCfg = copyGuarded(path.join(KIT_ROOT, "codex", "config.toml"), cfgDst, force, false);
       // A KEPT config.toml may already declare `hooks`. Codex accepts registrations in either that
       // file or `.codex/hooks.json` and warns when both do, so an adopter carrying their own is
       // fine — but they must know the kit did NOT touch it, rather than assume the kit's version won.
@@ -1075,6 +1094,25 @@ function main() {
     `rule-1 miss AFTER the message is already sent, and a clean run proves nothing.`,
     `Never describe it to your team as enforcement. Off switch: WORKFLOW_KIT_COMMS_GUARD=false.`,
   );
+
+  // A PLAIN RERUN OVER AN OLDER INSTALL IS A FAILING STATE, NOT A WARNING. Every mechanism file
+  // kept-but-different above still runs the OLD controller, guard, recorder or doctrine while this
+  // run printed the new version's name — exiting 0 here is how an adopter "upgrades" without
+  // upgrading and never learns it. The remediation is explicit about its costs because --force is
+  // GLOBAL: [G] docs are regenerated with a backup first (a backup that cannot be taken REFUSES
+  // rather than destroys), kept portable files are overwritten in place with NO backup, and any
+  // CHANGED HOOK is DISARMED in the Codex lane until a human re-trusts it interactively — a plain
+  // `codex exec` skips an untrusted hook silently.
+  if (staleKept.length) {
+    console.error(`\ninit: ${staleKept.length} installed mechanism file(s) are STALE against kit v${KIT_VERSION} and were NOT upgraded:`);
+    for (const f of staleKept) console.error(`  · ${f}`);
+    console.error(
+      `A plain rerun never claims the new controller. To upgrade, re-run with --force — GLOBAL: ` +
+      `[G] docs regenerate with a backup (refusing if the backup fails); kept portable files are ` +
+      `overwritten in place with NO backup; changed hooks are DISARMED in the Codex lane until ` +
+      `re-trusted interactively (then verify: node scripts/check-codex-hooks-armed.mjs).`);
+    process.exitCode = 1;
+  }
 }
 
 // RUN ONLY AS A CLI. This file exports `tomlDeclaresHooks` so the suite can pin it against the

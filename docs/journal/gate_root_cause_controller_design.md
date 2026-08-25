@@ -1,4 +1,12 @@
-# Gate root-cause controller — contract
+# Gate root-cause controller — historical contract (superseded)
+
+> **SUPERSEDED by `docs/journal/terminal_round_breaker_contract.md`.** This file preserves the
+> earlier linear/circular designs as history only. It grants no current round, dispatch,
+> continuation-window, or repair authority. The Owner ratification that retired the circular
+> cadence's CONTINUATION MECHANICS (the process-audit two-cycle-window loop) is recorded in that
+> contract — no repo carries two live rulings that disagree: the cadence's surviving spirit
+> (bounded harm-bearing work, terminal root replacement, Owner-held continuation) lives in the
+> batch model.
 
 ## Intent
 

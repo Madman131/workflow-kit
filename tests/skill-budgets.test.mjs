@@ -505,7 +505,12 @@ test("a plain init re-run ships NONE of v1.7's edits to existing [P] files — s
     ];
     const marker = "<!-- PRE-UPGRADE MARKER -->\n";
     for (const t of targets) writeFileSync(t, marker + readFileSync(t, "utf8"));
-    run(["--skip-codex-prompt"]);
+    // Since v2.16.0 a plain re-run that keeps a stale MECHANISM file ([P] core doc) FAILS instead
+    // of exiting 0 — the keep itself is unchanged, which is what this test pins.
+    const stale = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(stale.status, 1, "a plain re-run over a stale [P] core doc FAILS rather than claiming the upgrade");
+    assert.match(stale.stdout + stale.stderr, /KEPT BUT STALE/, "…and names the stale keep");
     for (const t of targets) {
       assert.ok(readFileSync(t, "utf8").startsWith(marker),
         `a plain re-run KEEPS the already-installed ${path.basename(t)} (this is why --force is required)`);
@@ -571,11 +576,15 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     writeFileSync(body, readFileSync(body, "utf8")
       .replace(/^- \*\*A buried ask\*\*[\s\S]*?label it\.\n/m, ""));
 
-    run(["--owner-name", "Alex", "--skip-codex-prompt"]);
+    // A plain re-run still ships NOTHING — and since v2.16.0 it also FAILS (stale mechanism keeps:
+    // the rolled-back WORKFLOW.md and the edited hook bystanders), instead of exiting 0 in silence.
+    const plainRerun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--owner-name", "Alex", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(plainRerun.status, 1, "a plain re-run over stale mechanism files FAILS rather than claiming the upgrade");
     assert.doesNotMatch(readFileSync(doc, "utf8"), /DECISION NEEDED/,
       "a plain re-run ships rule 8 to NOBODY who already has the doc (this is why --force is required)");
     assert.doesNotMatch(readFileSync(body, "utf8"), /buried ask/,
-      "…and ships the /humanize miss to nobody either, while exiting 0");
+      "…and ships the /humanize miss to nobody either");
     assert.match(readFileSync(doc, "utf8"), /workflow-kit v2\.1\.0/,
       "…leaving the doc stamped with the OLD version, exactly as the note warns");
 

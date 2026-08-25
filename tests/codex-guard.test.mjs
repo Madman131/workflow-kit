@@ -942,7 +942,9 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
   const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-codex-prompts-"));
   const init = (...extra) => {
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "u", "--codex-prompts-dir", codexDir, ...extra], { encoding: "utf8" });
-    assert.equal(r.status, 0, r.stderr);
+    // A plain rerun over the v2.0-shaped adopter is a STALE INSTALL and fails since v2.16.0;
+    // a --force run completes clean.
+    assert.equal(r.status, extra.includes("--force") ? 0 : 1, r.stderr);
     return `${r.stdout}\n${r.stderr}`;
   };
   try {

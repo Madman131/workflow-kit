@@ -225,12 +225,11 @@ export const CONTRACT =
   `a ladder where everything was REMEDIATE means the PM never engaged. A ladder ends on a JUDGMENT,\n` +
   `never on reviewer silence — an adversarial reviewer never runs out of findings, so "no findings\n` +
   `left" is not reachable. Rounds continue only while each new one is warranted by NEW harm-passing\n` +
-  `findings. Rounds run in cycles of at most three harm-bearing rounds; at each soft stop, one\n` +
-  `root-cause assessment plus one bounded remediation, whose NO-GO bookend is the next cycle's round\n` +
-  `1. Enter root-cause assessment earlier on two consecutive same-class Rule-1 harms or a\n` +
-  `repair-introduced harm; at latest by the third. After two completed cycles a process audit on the\n` +
-  `exact bytes gates continuation — its GO buys one more two-cycle window, its NO-GO or window\n` +
-  `exhaustion returns to the Owner. The absolute count never resets. A REMEDIATE discharges only when the finding's\n` +
+  `findings. One frozen candidate plus its precommitted complete panel is one round. R1 and R2 may\n` +
+  `dispatch one bounded batch each. R3 accepted harm requires root replacement, simplification, or split, a root-exit\n` +
+  `record, and exactly one batch 3. R4 is the final aggregate bookend: zero accepted blockers is GO;\n` +
+  `any accepted blocker is STOP. R4 has no outgoing dispatch; no R5, cycle, scope reset, or process-\n` +
+  `audit window exists. A parent-linked Owner child never resets the terminal parent's count. A REMEDIATE discharges only when the finding's\n` +
   `OWN trigger is re-run and no longer fires —\n` +
   `a new test passing is not discharge; the ORIGINAL reproduction, dead, is.\n\n` +
   `<n> is a CONVERSATION fact — the number of reviewer verdicts dispositioned for this changeset.\n` +

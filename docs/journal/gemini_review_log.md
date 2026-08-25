@@ -1746,3 +1746,76 @@
         }
       ]
     }
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T03:33:56Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787628690-30052-3023720928`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=28345; instrumented_payload=28447; inline_combined=32264; file=28520
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `b92ca4f416edfb13e3b03cade45d42da7bc0abf6`
+- Artifact-Base: `956c62c4201cd9292704895c061545651b01b5eb`
+- Artifact-SHA: `b92ca4f416edfb13e3b03cade45d42da7bc0abf6`
+- Artifact-Ref: `refs/pil/gate-artifacts/b92ca4f416edfb13e3b03cade45d42da7bc0abf6`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, Sections 1 through 9)
+- Start: 2026-08-25T03:31:30Z
+- End: 2026-08-25T03:33:56Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-8faf3128da2651c1bfbd2fb6
+    CANARIES: PIL-INGEST-01dea8bda4c3 PIL-INGEST-02b2fd7a4364
+    
+    Here is the cross-family audit of the terminal round breaker contract.
+    
+    ### 1. INTER-SECTION CONTRADICTIONS: Cyclic Hash Dependency (TOCTOU) on GO Disposition
+    **Severity:** BLOCKER
+    **Sections:** § 2 (`separate_successor_finding`) vs. § 3 (T4)
+    **Concrete Scenario:** T4's guard for `aggregate_disposition GO` demands that every accepted-adjacent ID "carries a `separate_successor_finding` row". However, § 2 dictates that a `separate_successor_finding` event must bind/cite "the GO disposition". In an append-only ledger where event IDs are SHA-256 hashes of the payload (Invariant #1), you cannot write the separate rows first because they cannot cite a GO disposition hash that doesn't exist yet. If you write the GO disposition first, T4 rejects it because the separate rows are missing.
+    **Why it matters:** It is mathematically impossible to achieve a `TERMINAL-GO` state if the panel has ever accepted an adjacent finding. The repair is permanently deadlocked at the end of the round.
+    **Fix:** Break the cycle. `separate_successor_finding` must cite the `panel_close` event instead of the GO disposition, or the routing fields must be embedded directly within the `aggregate_disposition` array payload rather than existing as separate events.
+    
+    ### 2. MECHANISM CORRECTNESS / COMPLETENESS GAPS: Missing Transitions for Core Events
+    **Severity:** BLOCKER
+    **Sections:** § 2 (Event Grammar) vs. § 3 (Transition table)
+    **Concrete Scenario:** Section 2 defines three critical event kinds: `root_cause_exit`, `worker_handoff`, and `separate_successor_finding`. However, Section 3's transition table completely omits them. A strict event-sourced state machine will reject events lacking defined transitions. Furthermore, T8 strictly requires that "batch 3 cites a valid `root_cause_exit`". Conversely, T3 specifies a transition triggered by a "rig failure", but no such event kind exists in § 2's grammar.
+    **Why it matters:** Because `root_cause_exit` has no transition, it cannot be appended to the ledger. Because it cannot be appended, T8's guard will always fail, permanently bricking batch 3 dispatch. Similarly, `worker_handoff` cannot be executed (bricking repair if a worker dies), and the worker has no vocabulary to report the T3 "rig failure".
+    **Fix:** Add explicit transition rows in § 3 for `root_cause_exit` (e.g., `disposed(3)` → `disposed(3)`), `worker_handoff` (`dispatched(r)` → `dispatched(r)`), and `separate_successor_finding`. Define a formal event kind in § 2 for rig failures.
+    
+    ### 3. DATA-SAFETY / MECHANISM CORRECTNESS: Deadlock on Contaminated Rig Failure
+    **Severity:** HIGH
+    **Sections:** § 8 (M13) vs. § 3 (T2 & T3)
+    **Concrete Scenario:** M13 claims that a rig failure which mutates the candidate (e.g. a changed fixture) "consumes the batch". To consume a batch, the system must progress through disposition and dispatch. However, the system is trapped in `open(r)`: `panel_close` (T2) refuses to fire because it requires "candidate unchanged", and the T3 rerun refuses because it requires "candidate bytes UNCHANGED".
+    **Why it matters:** If a test runner crashes and dumps a log into the workspace mid-inspection, changing the candidate bytes, the repair is permanently deadlocked. It cannot close, cannot rerun, and cannot consume the batch as M13 claims.
+    **Fix:** Introduce a `panel_abort` event (or a variant of `panel_close`) that explicitly accepts a changed candidate due to rig contamination, immediately bypassing standard completeness checks and forcing a NO-GO disposition to consume the batch.
+    
+    ### 4. COMPLETENESS GAPS: Orphaned State on Round 4 Non-Blocking Harms
+    **Severity:** HIGH
+    **Sections:** § 3 (T11 Final Bookend)
+    **Concrete Scenario:** At round 4 (`closed(4)`), T11 defines only two paths: GO ("zero accepted") or STOP ("any PM-accepted blocking harm"). It explicitly states "NO batch kind is legal at r=4". If the disposition contains *only* accepted non-blocking harms (e.g., an `adjacent` finding), it is neither GO (has accepted IDs) nor STOP (has no blocking harms).
+    **Why it matters:** The disposition falls entirely through the transition table. The event is rejected, and the task is stranded in `closed(4)` forever with no legal batch to dispatch and no terminal state to enter.
+    **Fix:** T11 must define the fallback transition for non-blocking accepted harms (e.g., forcing a `TERMINAL-GO` with mandatory successor routing, or a `TERMINAL-STOP` if routing is unavailable).
+    
+    ### 5. CONCURRENCY / LOCK HAZARDS: Overlapping Aggregate Path Ownership
+    **Severity:** MEDIUM
+    **Sections:** § 3 (T1) vs. § 3 (Resolution order)
+    **Concrete Scenario:** T1's guard allows `panel_open` if "no active standard program owns any declared path". It completely fails to check if another active *aggregate* program owns the path.
+    **Why it matters:** Two separate aggregate tasks can successfully emit `panel_open` for the same files concurrently. Both will transition to `open(1)` and dispatch workers that have write authority over the exact same paths, leading to silent data overwriting.
+    **Fix:** Update the T1 guard to check that NO active program (neither standard nor aggregate) owns any of the declared paths.
+    
+    ***
+    
+    **Highest-risk thing to resolve first:** The Cyclic Hash Dependency (TOCTOU) on the GO disposition (Finding 1). It structurally breaks the core append-only ledger model for successful repairs and must be redesigned before any implementation begins.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, Sections 1 through 9)
+    
+    PIL-DONE-d84de599e9a5fa60f99b64b8

@@ -79,13 +79,12 @@ into a private worktree.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
-   fold-check (`/frontier-review`). Ledger every round by changeset. Rounds run in cycles of at most
-   three harm-bearing rounds (the CIRCULAR cadence); at each soft stop, one root assessment + one
-   bounded remediation, whose NO-GO bookend is the next cycle's round 1. Enter root assessment
-   earlier on two consecutive same-class Rule-1 harms or a repair-introduced harm. After two
-   completed cycles, a process audit on the exact bytes gates continuation — its GO buys one more
-   two-cycle window; NO-GO or exhaustion returns to the Owner. The absolute count never
-   resets. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
+   fold-check (`/frontier-review`). Precommit one panel, collect it, then PM-disposition it once.
+   R1/R2 permit one bounded batch each; R3 accepted harm requires root replacement,
+   simplification, or split plus root exit and one batch 3; R4 is the final GO/STOP bookend and
+   has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No cycles,
+   R5, reset, or process-audit continuation. An Owner child links to a terminal parent without
+   resetting it. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
    scope/disposition/root call; on disagreement zoomed-out CONTROLS; KISS; carve-outs screen
    first, then RULE #1** (`core/FOUNDATIONS.md` § Principles; cite document+section). Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes

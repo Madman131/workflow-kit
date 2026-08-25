@@ -21,7 +21,11 @@ import {
   adjudicateFirst, ledgerRows, repairDeclarationState, writeLedger,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
-import { deriveRepairState, loadRepairEventsForProject } from "../hooks/repair-dispatch-state.mjs";
+import {
+  confirmRepairBrief, deriveRepairState, fingerprintCandidate, loadRepairEventsForProject,
+  recordAggregateDisposition, recordAggregatePanelClose, recordAggregatePanelOpen,
+  recordWorkerVerification, repairLedgerPath,
+} from "../hooks/repair-dispatch-state.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SEND = { kind: "send", target: "local_dest" };
@@ -184,12 +188,13 @@ test("the STATUS escape is available to a send and refused to a brief", () => {
   assert.equal(state(fresh({ class: "load-bearing", checks: [] })), "no-executed-check");
 });
 
-test("repair dispatch declarations enforce the round controller mechanically, never semantically", () => {
+test("retired standard repair declarations refuse while active legacy state still blocks ordinary repair work", () => {
   assert.equal(repairDeclarationState({}).state, "dispatch-kind-missing");
-  assert.equal(state(fresh({ dispatch_kind: "repair", repair: validRepair() }), { events: repairEvents }), "receipted");
+  assert.equal(state(fresh({ dispatch_kind: "repair", repair: validRepair() }), { events: repairEvents }),
+    "standard-mint-retired");
   assert.equal(state(fresh({ dispatch_kind: "repair", repair: validRepair(), target: "local_dest" }),
-    { events: repairEvents, dispatch: SEND }), "repair-brief-required",
-    "repair authority cannot live only in a transport message");
+    { events: repairEvents, dispatch: SEND }), "standard-mint-retired",
+    "retired standard authority cannot be revived through a transport message");
 
   const malformed = [
     { changeset_id: "" },
@@ -217,23 +222,20 @@ test("repair dispatch declarations enforce the round controller mechanically, ne
     { events: repairEvents, taskId: "task1", dispatch: BRIEF }).state, "repair-dispatch-required");
 });
 
-test("the repair declaration is preserved in the durable dispatch ledger", () => {
+test("a retired standard declaration cannot be laundered into the brief-rung audit ledger", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "brief-rung-repair-"));
   try {
     mkdirSync(path.join(dir, ".claude"));
     const declared = repairDeclarationState({ dispatch_kind: "repair", task_id: "task1", repair: validRepair() },
       { events: repairEvents, taskId: "task1", dispatch: BRIEF });
-    assert.equal(declared.ok, true);
+    assert.equal(declared.state, "standard-mint-retired");
     assert.equal(writeLedger(dir, {
       decision: "allow", state: "receipted", kind: "brief", target: "briefs/cs1.md",
       sessionId: "s1", checks: 1, cls: "load-bearing", nonce: "n1", attempt: "a1",
-      repair: declared.repair,
+      ...(declared.ok ? { repair: declared.repair } : {}),
     }), true);
     const row = JSON.parse(readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8"));
-    assert.deepEqual(row.repair, declared.repair);
-    assert.equal(row.repair.original_trigger, validRepair().original_trigger);
-    assert.deepEqual(row.repair.authorized_paths, validRepair().authorized_paths);
-    assert.equal(row.repair.candidate_sha, FAKE_CANDIDATE);
+    assert.equal(row.repair, undefined, "refused authority is never persisted as an admitted repair");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -351,6 +353,52 @@ function adopt() {
   return { dir, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
+function seedStoredLegacy(dir, {
+  taskId = "task1", changesetId = "cs1", workerSession = null,
+  authorizedPaths = ["src/x.mjs"],
+} = {}) {
+  const candidate = fingerprintCandidate(dir, authorizedPaths);
+  const round = {
+    type: "round_disposition", task_id: taskId, changeset_id: changesetId,
+    recorded_at: "2026-08-15T00:00:00.000Z", session_id: "stored-orchestrator", round: 1,
+    candidate_sha: candidate.digest, candidate_manifest: candidate.records, verdict: "NO-GO",
+    finding_ids: ["F1"], finding_class: "writer-liveness", ownership_area: "writer-authority",
+    original_trigger: "dead writer blocks successors", authorized_paths: authorizedPaths,
+    introduced_by_prior_repair: false, new_scope: false, disposition: "REMEDIATE",
+    repair_dispatch_event_id: null, root_cause_exit_event_id: null, adherence_audit_event_id: null,
+    owner_extension_event_id: null, owner_scope_event_id: null,
+  };
+  const rows = [round];
+  let dispatch = null;
+  if (workerSession) {
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    const brief = "stored repair brief\n";
+    writeFileSync(path.join(dir, "briefs", "fix.md"), brief);
+    dispatch = {
+      type: "repair_dispatch", task_id: taskId, changeset_id: changesetId,
+      recorded_at: "2026-08-15T00:00:01.000Z", session_id: "stored-orchestrator",
+      source_round: 1, next_round: 2, candidate_sha: round.candidate_sha,
+      finding_ids: [...round.finding_ids], authorized_paths: [...authorizedPaths],
+      target_kind: "brief", target: "briefs/fix.md",
+      brief_sha256: createHash("sha256").update(brief).digest("hex"), brief_size: Buffer.byteLength(brief),
+    };
+    const dispatchId = createHash("sha256").update(stable(dispatch)).digest("hex");
+    rows.push(dispatch, {
+      type: "worker_verification", task_id: taskId, changeset_id: changesetId,
+      recorded_at: "2026-08-15T00:00:02.000Z", session_id: workerSession,
+      worker_session_id: workerSession, repair_dispatch_event_id: dispatchId,
+      candidate_sha: round.candidate_sha, authorized_paths: [...authorizedPaths],
+      brief_path: dispatch.target, brief_sha256: dispatch.brief_sha256,
+    });
+  }
+  const file = repairLedgerPath(dir);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, rows.map((event) => JSON.stringify({
+    event_id: createHash("sha256").update(stable(event)).digest("hex"), event,
+  })).join("\n") + "\n", { flag: "a" });
+  return { round, dispatch };
+}
+
 test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — proven both ways", () => {
   // Presence and registration are the two lies this kit shipped one release apart (v2.1.0's probe,
   // v2.2.0's sensor). So this adopts, asserts the file is THERE, asserts BOTH lanes REGISTER it, and
@@ -445,22 +493,91 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
   } finally { cleanup(); }
 });
 
-test("AN INSTALLED REPAIR SEND DENIES, and only a persisted confirmed brief records authority", () => {
+test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and source write", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: dir });
+    const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+    execFileSync("git", ["update-ref", "refs/remotes/origin/main", base], { cwd: dir });
+    mkdirSync(path.join(dir, "src"));
+    writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+    execFileSync("git", ["add", "src/x.mjs"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "candidate"], { cwd: dir });
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+    const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: dir, encoding: "utf8" }).trim();
+    const paths = ["src/x.mjs"];
+    const expected = [
+      { seat_id: "free", role: "free", family: "codex", pass_type: "free", paths },
+      { seat_id: "a", role: "angle:a", family: "codex", pass_type: "free", paths },
+      { seat_id: "b", role: "angle:b", family: "codex", pass_type: "free", paths },
+      { seat_id: "external", role: "external", family: "claude", pass_type: "folded", paths },
+    ];
+    const options = { projectRoot: dir, sessionId: "orchestrator" };
+    const opened = recordAggregatePanelOpen({
+      type: "aggregate_v2", kind: "panel_open", task_id: "task1", changeset_id: "cs1",
+      round: 1, phase: "repair_round", tier: "T2", frozen_commit: commit, frozen_tree: tree,
+      base_ref: "origin/main", base_commit: base, expected_seats: expected,
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    }, options);
+    assert.equal(opened.ok, true, opened.state);
+    const received = expected.map((seat, index) => ({
+      seat_id: seat.seat_id, role: seat.role, family: seat.family, pass_type: seat.pass_type,
+      inspected_paths: paths, reviewed_commit: commit, reviewed_tree: tree,
+      verdict: index === 1 ? "NO-GO" : "GO", raw_finding_ids: index === 1 ? ["F1"] : [],
+      artifact_receipt: `receipt-${seat.seat_id}`, artifact_sha256: String(index + 1).repeat(64),
+      pre_loaded: false, packet_scope: "candidate-only",
+    }));
+    const closed = recordAggregatePanelClose({
+      type: "aggregate_v2", kind: "panel_close", task_id: "task1", changeset_id: "cs1",
+      panel_open_event_id: opened.event_id, received_seats: received,
+    }, options);
+    assert.equal(closed.ok, true, closed.state);
+    const decided = recordAggregateDisposition({
+      type: "aggregate_v2", kind: "disposition", task_id: "task1", changeset_id: "cs1",
+      panel_close_event_id: closed.event_id, pm_findings: [],
+      finding_dispositions: { accepted: ["F1"], declined: [], note: [], followup: [] },
+      terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: paths,
+    }, options);
+    assert.equal(decided.ok, true, decided.state);
+
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(dir, "briefs", "fix.md"), "aggregate repair\n");
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
+      mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T2",
+    }));
+    const repair = {
+      aggregate_controller: "aggregate_v2", task_id: "task1", changeset_id: "cs1",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.event_id,
+      next_round: 2, root_exit_event_id: null,
+    };
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
+      sessionId: "s1", target: "briefs/fix.md", nonce: "aggregate-rung", checks: OK_CHECK,
+      dispatch_kind: "repair", task_id: "task1", repair,
+    }));
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (target) => spawnSync(process.execPath, [hook, "--project-dir", dir], {
+      input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
+        tool_input: { file_path: path.join(dir, target) } }), encoding: "utf8",
+    });
+    assert.equal(run("briefs/fix.md").stdout, "", "aggregate declaration passes the installed guard");
+    const dispatch = confirmRepairBrief({ declaration: repair, brief_path: "briefs/fix.md" }, options);
+    assert.equal(dispatch.ok, true, dispatch.state);
+    const worker = recordWorkerVerification({
+      task_id: "task1", repair_dispatch_event_id: dispatch.event_id,
+    }, { projectRoot: dir, sessionId: "s1" });
+    assert.equal(worker.ok, true, worker.state);
+    assert.equal(run("src/x.mjs").stdout, "", "verified aggregate worker may write its exact path");
+  } finally { cleanup(); }
+});
+
+test("AN INSTALLED GUARD honors stored worker authority and still refuses repair authority in a send", () => {
   const { dir, cleanup } = adopt();
   try {
     mkdirSync(path.join(dir, "src"));
-    mkdirSync(path.join(dir, "briefs"));
     writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
-    const eventFile = path.join(dir, "round.json");
-    writeFileSync(eventFile, JSON.stringify({
-      type: "round_disposition", task_id: "task1", changeset_id: "cs1", round: 1,
-      candidate_paths: ["src/x.mjs"], verdict: "NO-GO", disposition: "REMEDIATE",
-      finding_ids: ["F1"], finding_class: "writer-liveness", ownership_area: "writer-authority",
-      original_trigger: "dead writer blocks successors", authorized_paths: ["src/x.mjs"],
-      introduced_by_prior_repair: false, new_scope: false,
-    }));
-    execFileSync(process.execPath, [path.join(dir, "scripts", "record-repair-event.mjs"), "--event", eventFile],
-      { cwd: dir, env: { ...process.env, WORKFLOW_KIT_SESSION_ID: "s1" } });
+    const seeded = seedStoredLegacy(dir, { workerSession: "s1" });
     const loaded = loadRepairEventsForProject(dir);
     const latest = deriveRepairState(loaded.events, "task1").latest;
     const repair = {
@@ -478,53 +595,10 @@ test("AN INSTALLED REPAIR SEND DENIES, and only a persisted confirmed brief reco
       dispatch_kind: "repair", task_id: "task1", repair,
     }));
     const denied = run({ session_id: "s1", tool_name: "send_message", tool_input: { session_id: "worker-1" } });
-    assert.match(denied.stdout, /repair authority in a cross-session send/);
-    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
-      sessionId: "s1", target: "briefs/fix.md", nonce: "brief-1", checks: OK_CHECK,
-      dispatch_kind: "repair", task_id: "task1", repair,
-    }));
-    const allowed = run({ session_id: "s1", tool_name: "Write", cwd: dir,
-      tool_input: { file_path: path.join(dir, "briefs", "fix.md") } });
-    assert.equal(allowed.stdout, "");
-    let after = deriveRepairState(loadRepairEventsForProject(dir).events, "task1");
-    assert.equal(after.dispatches.length, 0, "PreToolUse admission is not proof that the write occurred");
-    writeFileSync(path.join(dir, "briefs", "fix.md"), "persisted repair brief\n");
-    const confirmFile = path.join(dir, "confirm.json");
-    writeFileSync(confirmFile, JSON.stringify({ declaration: repair, brief_path: "briefs/fix.md" }));
-    const confirmed = spawnSync(process.execPath,
-      [path.join(dir, "scripts", "confirm-repair-brief.mjs"), "--confirm", confirmFile],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, WORKFLOW_KIT_SESSION_ID: "s1" } });
-    assert.equal(confirmed.status, 0, confirmed.stderr);
-    const receipt = JSON.parse(confirmed.stdout);
-    const beforeWorkerVerification = run({ session_id: "s1", tool_name: "Write", cwd: dir,
-      tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
-    assert.match(beforeWorkerVerification.stdout, /no typed worker-verification event/,
-      "a persisted brief is not yet source-write authority for a worker session");
+    assert.match(denied.stdout, /new standard repair rounds are retired/);
     const taskLaneBootstrap = run({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: path.join(dir, ".claude", "task-lane.json") } });
     assert.equal(taskLaneBootstrap.stdout, "", "task-lane bootstrap must not require its own worker receipt");
-    const verifyFile = path.join(dir, "verify.json");
-    const { WORKFLOW_KIT_SESSION_ID: _ignoredSession, ...envWithoutSession } = process.env;
-    writeFileSync(verifyFile, JSON.stringify({
-      task_id: "task1", repair_dispatch_event_id: receipt.event_id,
-    }));
-    const missingSession = spawnSync(process.execPath,
-      [path.join(dir, "scripts", "confirm-repair-brief.mjs"), "--verify", verifyFile],
-      { cwd: dir, encoding: "utf8", env: envWithoutSession });
-    assert.equal(missingSession.status, 1);
-    assert.match(missingSession.stderr, /repair-worker-session-missing/);
-    assert.match(missingSession.stderr, /add the current hook session as "session_id"/);
-    writeFileSync(verifyFile, JSON.stringify({
-      task_id: "task1", repair_dispatch_event_id: receipt.event_id, session_id: "s1",
-    }));
-    const verified = spawnSync(process.execPath,
-      [path.join(dir, "scripts", "confirm-repair-brief.mjs"), "--verify", verifyFile],
-      { cwd: dir, encoding: "utf8", env: envWithoutSession });
-    assert.equal(verified.status, 0, verified.stderr);
-    after = deriveRepairState(loadRepairEventsForProject(dir).events, "task1");
-    assert.equal(after.dispatches.length, 1);
-    assert.equal(after.dispatches[0].target_kind, "brief");
-    assert.equal(after.worker_verifications.length, 1);
     const allowedSource = run({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
     assert.equal(allowedSource.stdout, "", "the verified worker session may write the exact authorized path");
@@ -534,7 +608,8 @@ test("AN INSTALLED REPAIR SEND DENIES, and only a persisted confirmed brief reco
     const wrongPath = run({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: path.join(dir, "src", "outside.mjs") } });
     assert.match(wrongPath.stdout, /outside the exact authorized-path set/);
-    writeFileSync(path.join(dir, "briefs", "fix.md"), "changed after worker verification\n");
+    assert.equal(deriveRepairState(loadRepairEventsForProject(dir).events, "task1").worker_verifications.length, 1);
+    writeFileSync(path.join(dir, seeded.dispatch.target), "changed after worker verification\n");
     const changedBrief = run({ session_id: "s1", tool_name: "Write", cwd: dir,
       tool_input: { file_path: path.join(dir, "src", "x.mjs") } });
     assert.match(changedBrief.stdout, /no longer matches the bytes/);
@@ -551,21 +626,7 @@ test("GLOBAL ACTIVE PATH OWNERSHIP survives lane relabel without freezing unrela
       input: JSON.stringify({ session_id: session, tool_name: "Write", cwd: dir,
         tool_input: { file_path: path.join(dir, target) } }), encoding: "utf8",
     });
-    const record = (name, event) => {
-      const eventFile = path.join(dir, `${name}.json`);
-      writeFileSync(eventFile, JSON.stringify(event));
-      return spawnSync(process.execPath,
-        [path.join(dir, "scripts", "record-repair-event.mjs"), "--event", eventFile],
-        { cwd: dir, encoding: "utf8", env: { ...process.env, WORKFLOW_KIT_SESSION_ID: "s1" } });
-    };
-    const base = {
-      type: "round_disposition", round: 1, candidate_paths: ["src/x.mjs"], verdict: "NO-GO",
-      disposition: "REMEDIATE", finding_ids: ["F1"], finding_class: "writer-liveness",
-      ownership_area: "writer-authority", original_trigger: "dead writer blocks successors",
-      authorized_paths: ["src/x.mjs"], introduced_by_prior_repair: false, new_scope: false,
-    };
-    const first = record("round-a", { ...base, task_id: "task1", changeset_id: "cs1" });
-    assert.equal(first.status, 0, first.stderr);
+    seedStoredLegacy(dir);
 
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
@@ -584,8 +645,7 @@ test("GLOBAL ACTIVE PATH OWNERSHIP survives lane relabel without freezing unrela
       mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1",
     }));
 
-    const second = record("round-b", { ...base, task_id: "task2", changeset_id: "cs2" });
-    assert.equal(second.status, 0, second.stderr);
+    seedStoredLegacy(dir, { taskId: "task2", changesetId: "cs2" });
     const overlap = run("src/x.mjs");
     assert.match(overlap.stdout, /claimed by multiple active NO-GO repair programs/,
       "overlapping active owners fail closed instead of selecting one by lane label");

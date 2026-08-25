@@ -304,7 +304,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(r, /under-reporting is the failure mode this rule creates/);
 });
 
-test("the retired chase machinery is gone and the bounded root-cause controller replaces it", () => {
+test("the retired chase machinery is gone and the finite aggregate controller replaces it", () => {
   // A ladder doc that carries BOTH contracts is worse than one carrying the old one: the reader
   // meets whichever comes first. These are absence pins, so each names a spelling the OLD text
   // actually used — an absence pin whose phrase never appeared would be green by construction.
@@ -317,11 +317,11 @@ test("the retired chase machinery is gone and the bounded root-cause controller 
     "the open-referent WORTH IT? is retired: it let the process answer about itself");
   // …and the replacement is present, or the assertions above pass on a gutted file.
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
-  assert.match(w, /A cycle is at most three harm-bearing rounds/);
-  assert.match(w, /at the soft stop, one root assessment \+ one bounded root remediation/);
-  assert.match(w, /After two completed cycles the first continuing harm-bearing bookend takes its normal review, then a \*\*process audit on those exact bytes\*\*/);
-  assert.match(w, /Audit `GO` buys one more \*\*two-cycle window\*\*/);
-  assert.match(w, /audit NO-GO or window exhaustion returns to the Owner/);
+  assert.match(w, /Before review, `panel_open` binds the clean frozen commit\/tree/);
+  assert.match(w, /Accepted harm in R1 or R2 permits one bounded batch/);
+  assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or genuine split/);
+  assert.match(w, /R4, the final aggregate bookend/);
+  assert.match(w, /there is no R5, cycle, scope reset, audit window/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -491,7 +491,7 @@ test("the round controller is stated in one shape everywhere it is stated at all
   for (const rel of STATES) {
     const t = contractOf(rel);
     assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
-    assert.match(t, /root-cause/i, `${rel} states the round controller and must carry the root-cause boundary`);
+    assert.match(t, /root-cause|root-exit/i, `${rel} states the round controller and must carry the root boundary`);
     // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
     assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
       `${rel} still prints the retired rounds rule`);
@@ -661,7 +661,7 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
     "…and a RAW scan must NOT see it, or this canary is not reproducing the gap it documents");
 });
 
-test("the round controller's CADENCE agrees between the surfaces that STATE it, or drift reddens", () => {
+test("the finite aggregate cadence agrees between every live surface", () => {
   // WHY THIS IS ITS OWN PIN. "the round controller is stated in one shape everywhere" (above) checks
   // each STATES surface IN ISOLATION — carries /root-cause/, lacks a retired spelling — but never
   // that the doc and the hook AGREE on the cadence. That is exactly the gap the KO16 reconciliation
@@ -674,33 +674,33 @@ test("the round controller's CADENCE agrees between the surfaces that STATE it, 
   // Derive the controller ¶ from the doc rather than re-listing it here — a hand-listed copy would
   // be the third mirror this file exists to delete. `[\s\S]*?` stops at the first sentence end so
   // the capture is the cadence body, not the zoom-out/KISS tail that follows it.
-  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?never inherit this authority\./.exec(w)?.[0] ?? "";
+  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?dominant defect source\*\*\)\./.exec(w)?.[0] ?? "";
   assert.ok(ctrl, "the controller ¶ must be findable in core/WORKFLOW.md — re-point this test");
   // The circular cadence as CONCEPTS, hand-maintained for the SAME reason the sibling one-shape
   // lists are (a tree-derived list goes vacuous the moment a surface drops the rule). Each must
   // appear in the doc AND in what the hook prints, or the two hand the agent divergent cadences.
-  const CIRCULAR_CADENCE = [
-    /at most three harm-bearing rounds/i, // the per-cycle bound
-    /two-cycle window/i,                  // what an audit GO buys — the widest divergence from the linear unlock
-    /process audit/i,                     // the after-two-completed-cycles gate
-    /returns to the Owner/i,              // the escalation boundary
+  const FINITE_CADENCE = [
+    /R1 (?:or|and) R2 (?:permits|may dispatch) one bounded batch/i,
+    /R3 (?:accepted harm )?requires (?:one )?root replacement, simplification, or (?:genuine )?split/i,
+    /R4(?:,| is) the final aggregate bookend/i,
+    /no R5/i,
   ];
-  for (const tok of CIRCULAR_CADENCE) {
-    assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the circular cadence token ${tok}`);
-    assert.match(hook, tok, `the hook must PRINT the same circular cadence token ${tok}, or it hands a divergent wall`);
+  for (const tok of FINITE_CADENCE) {
+    assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the finite cadence token ${tok}`);
+    assert.match(hook, tok, `the hook must PRINT the same finite cadence token ${tok}`);
   }
   // The retired LINEAR ladder must be GONE from BOTH — a reader/agent meets whichever they get, and
   // both shipping is worse than either. These are the shapes THIS chip retired.
-  const RETIRED_LINEAR = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /unlocks Rounds 7[–-]8/i, /Round 9 returns to the Owner/i];
-  for (const dead of RETIRED_LINEAR) {
+  const RETIRED = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /two-cycle window/i, /process audit on the exact bytes/i];
+  for (const dead of RETIRED) {
     assert.doesNotMatch(ctrl, dead, `core/WORKFLOW.md still states the retired linear ladder ${dead}`);
     assert.doesNotMatch(hook, dead, `the hook still prints the retired linear ladder ${dead}`);
   }
   // Canary: an absence check is decoration unless its regex can actually match the thing it forbids.
   // Prove each against the exact retired spelling, so a regex that silently never matches (the
   // fail-open) is caught HERE instead of passing the absence checks above for free.
-  const RETIRED_SAMPLE = "Rounds 1–3 are ordinary; Rounds 4–6 require its exit packet; PASS unlocks Rounds 7–8 only; Round 9 returns to the Owner.";
-  for (const dead of RETIRED_LINEAR) {
+  const RETIRED_SAMPLE = "Rounds 1–3 are ordinary; Rounds 4–6 require its exit packet; a process audit on the exact bytes buys a two-cycle window.";
+  for (const dead of RETIRED) {
     assert.match(RETIRED_SAMPLE, dead, `the retired-ladder regex ${dead} must match the spelling it forbids, or it is a dead absence pin`);
   }
 });
