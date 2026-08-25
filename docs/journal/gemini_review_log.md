@@ -2179,3 +2179,60 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0-9)
     PIL-DONE-371b88c6040d4b51b7e87c99
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T17:19:16Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787678070-80264-2290731606`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=49732; instrumented_payload=49885; inline_combined=53702; file=49958
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `efc89a0e5e24d20fcfb11322230038a456738819`
+- Artifact-Base: `31f8c20a8cdc596e574b373c25678a723225df4d`
+- Artifact-SHA: `efc89a0e5e24d20fcfb11322230038a456738819`
+- Artifact-Ref: `refs/pil/gate-artifacts/efc89a0e5e24d20fcfb11322230038a456738819`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0 through 9)
+- Start: 2026-08-25T17:14:30Z
+- End: 2026-08-25T17:19:16Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-266e4f6e52ea8aee7104381b
+    CANARIES: PIL-INGEST-015b333338f9 PIL-INGEST-02fbf69368da PIL-INGEST-03d90de23876
+    
+    Here is the independent cross-family review of the design, ranked by severity.
+    
+    ### 1. BLOCKER: Transitive Lift Failure / Generational Lock Leak
+    **Section:** 3 · Transition table (Terminal reservations prose)
+    **Failure Scenario:** A multi-generational repair goes deep (e.g., Gen 1 → Gen 2 → Gen 3). Gen 1 works on file `A`, fails, and STOPs, reserving `A`. Gen 1 spawns Gen 2 (budget `A`), which opens `A` (excepting its ancestor chain), fails, and STOPs, reserving `A`. Gen 2 spawns Gen 3 (budget `A`), which opens `A`, successfully repairs it, and reaches `TERMINAL-GO`. Per the explicit rule, *"a grandchild's GO lifts only its own parent's reservation, never across generations"*. Gen 3's GO lifts Gen 2's reservation on `A`. However, Gen 1's reservation on `A` remains intact.
+    **Why it matters (Mechanism Correctness / Unbounded Lock):** Because Gen 1's direct child (Gen 2) is already `TERMINAL-STOP`, Gen 1 can never receive a GO from it. The successfully repaired file `A` is permanently locked repository-wide by Gen 1. Unlocking it would require the user to spawn a new direct child of Gen 1 to re-repair the exact same file that Gen 3 already fixed. The design correctly made the `OPEN` exception transitive across the whole ancestor chain, but intentionally restricted the `LIFT` to direct children, fundamentally bricking the repository on any successful 3+ generation lineage.
+    **Fix:** A `TERMINAL-GO` must transitively lift the intersected budget for the entire non-GO ancestor chain, OR a GO node must be permitted to discharge any ancestor's reservation it fulfilled.
+    
+    ### 2. HIGH: `.git` File Directory Traversal / Write Escape
+    **Section:** 7 · Adopter upgrade rung
+    **Failure Scenario:** An attacker or compromised repository provides a `.git` that is a regular FILE (not a symlink) containing the Git worktree directive `gitdir: /home/user/.ssh/` or `/etc/`. The `init --force` upgrade script performs an `lstat` check, sees it is not a symlink, and permits the operation. The script then executes `git config`, which natively parses the `.git` file, follows the `gitdir:` directive, and writes the Git configuration to the arbitrary external path.
+    **Why it matters (Data-Safety / Invariant Violation):** The design explicitly claims *"no path or environment routes a write into another repository"* and relies solely on environment variable checks and *"link-shape keying"* to prevent escapes. It completely misses that Git natively treats regular files named `.git` as valid pointers, providing a trivial bypass to overwrite files completely outside the sandbox.
+    **Fix:** The upgrade guard must explicitly read and parse `.git` if it is a regular file. If it contains a `gitdir:` directive, the resolved destination path must be validated to fall strictly within the declared write roots before allowing `git config` to execute.
+    
+    ### 3. MEDIUM: TOCTOU Race Condition in Adopter Upgrade File Replacement
+    **Section:** 7 · Adopter upgrade rung
+    **Failure Scenario:** The upgrade script validates safety by calling `realpath` on the overwrite's destination parent, followed by an `lstat` on the destination. An attacker (or concurrent misbehaving process) monitors these filesystem calls and, immediately after the `realpath`/`lstat` checks complete, swaps the parent directory with a symlink pointing outside the install roots. The script then writes the `.bak` or new file to the hijacked path.
+    **Why it matters (Concurrency / Lock Hazards):** This is a classic Time-Of-Check to Time-Of-Use (TOCTOU) lock hazard. It bypasses the bounds checks ("no overwrite path bypasses the backup machinery"), silently allowing file overwrites in privileged system locations.
+    **Fix:** After validating the directory, open it to obtain a file descriptor. Use `openat()` (or explicit `O_NOFOLLOW` with secure path resolution on the final write) to perform the backup and write operations, ensuring the path cannot be swapped mid-flight.
+    
+    ***
+    
+    **Overall Verdict & Priorities**
+    The design introduces a sophisticated ledger and strict invariants but fails critically on deep lineage state resolution and Git worktree sanitization. The single highest-risk thing to resolve first is the **Transitive Lift Failure**, as it guarantees that any successful 3+ generation repair will permanently brick the files it successfully fixed, destroying the core value proposition of the system.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0 through 9)
+    
+    PIL-DONE-fa2f221109674db068974eea

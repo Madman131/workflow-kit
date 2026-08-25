@@ -787,3 +787,129 @@ State: **npm test 267/267 · acceptance PASSED · WORKFLOW 25,087/25,088 · budg
 parity red = the standing pre-landing state.** Round accounting: R1 batch 1 · R2 batch 2 (both
 bounded, spent) · remaining: R3 (root kind only, if accepted harm exists — a clean panel closes
 GO at any round per the doctrine this program itself landed) · R4 bookend.
+
+## terminal-round-breaker-2 · ROUND 3 · candidate `31f8c20a8cdc596e574b373c25678a723225df4d` (tree `a5f3e40b…`)
+
+Panel (mixed fleet): free (OPUS) · state-machine (FABLE) · fail-closed (OPUS) · doctrine (OPUS) ·
+adversarial (FABLE) + Codex external (receipt `TRB2-R3-fd7a05ed44a8c87a`, quote verified against
+core/ARTIFACT_CLASS.md:1) + Gemini design bookend (receipt `PIL-DONE-fa2f221109674db068974eea`).
+All seven NO-GO. Endgame verified sound under attack (adversarial walk-5 + fail-closed: R3
+root-kind only, R4 bookend carries no batch, terminality dominates, re-dispatch refuses) — the
+CADENCE MACHINERY IS CORRECT; every accepted harm is at an edge a cure introduced or a surface a
+cure missed.
+
+`GATE ROUND 3 · changeset terminal-round-breaker-2 · verdict NO-GO · HARM-PASSING 6 clustered ·
+NOTES 18 · LADDER: continue`
+
+### ROOT TRIGGER — recorded, root_replacement declared (the mandatory R3 root batch)
+
+Two consecutive rounds (R2, R3) accepted the SAME class, and R1/R2 cures INTRODUCED R3's
+instances: a control or a sentence trusting a DECLARED SHAPE instead of the RESOLVED EFFECT.
+Five doors of it, executed across the panel:
+- the init `git config` write trusts an ENUMERATED override set (`GIT_DIR`/`GIT_COMMON_DIR`/
+  `GIT_WORK_TREE`) — `GIT_CONFIG` redirects the write TARGET without relocating discovery, and
+  routes `core.hooksPath` into a foreign repo at exit 0 with "binds every lane" printed (Codex,
+  adversarial, fail-closed — executed three ways; the R2 batch's own new § 7 categorical is
+  false).
+- the remainder-intersect gate trusts a BUDGET STRING — a child that NAMES a remainder path and
+  never opens it grinds the anchor indefinitely (free seat, 5 consecutive executed reopens).
+- the `.git` REGULAR-FILE `gitdir:` pointer and the TOCTOU window — same trust-the-shape class,
+  the first cooperative-reachable (Gemini), the second out-of-model (Codex).
+- the doctrine/contract prose trusts that a § 8 MATRIX ROW = the human-read § 3/doctrine surface
+  — the continuation-intersect rule, the STOP reservation (disclosed on ZERO shipped surfaces),
+  and the round-2 "de-narration" that ADDED round narration to the contract § 0 forbids, all
+  landed in code+matrix but not on the surface a PM plans against (state-machine, doctrine, free,
+  fail-closed).
+
+**root_replacement — shared mechanism:** predicates and prose keyed on a declaration's SHAPE
+(an env-var allow-list · a budget string · a matrix row's presence) rather than the run's
+RESOLVED EFFECT (the actual write target · what a child opened · what a human surface states).
+**Symptoms = every R2/R3 door above.** **Replacement:**
+- INIT: one guarded write-resolution — after `git config`, READ BACK from the target's own config
+  FILE (immune to `GIT_CONFIG`; `git`-based reads are redirected too) and refuse+count if the
+  write did not land in the target; the root-level appends route through the same backup/refusal
+  machinery every other write uses; the `.git` regular-file `gitdir:` pointer is resolved and
+  bounded. Retires the per-door env enumeration as the guard (the enumeration stays only as
+  S1a's discovery-relocation sensor, its real purpose).
+- CONTROLLER: the intersect gate binds to OPENED COVERAGE, not the declared budget — a
+  re-continuation reopens only when its children's ACTUAL opens will touch the remainder (bound
+  at open, not at declaration).
+- DOCS: the § 3/doctrine surfaces carry what code+matrix carry — the intersect rule folded into
+  § 3, the STOP reservation stated on WORKFLOW + the printed CONTRACT, the round narration my
+  batch added STRIPPED from the contract/tests, WORKFLOW:78's bookend-wrong mis-tier line fixed,
+  the § 6 enumeration completed — and a third agreement pin binds the § 3 normative sentences to
+  the mechanism, closing the drift class mechanically (the R2 pins caught numbers and row-presence
+  but not sentence semantics — the recurrence proves the gap).
+**Removed workarounds:** the env-set-as-write-guard; the budget-string intersect check; the
+per-door symlink/env patches as independent guards. **Trigger matrix:** the GIT_CONFIG write
+(target vs victim config file), the claim-without-open grind (opened-coverage lift), the
+gitdir-pointer file, the § 3-vs-code semantic pin, the STOP-reservation doctrine-surface pin,
+the contract/test de-narration completeness.
+
+**DECLINED:** Gemini transitive-lift "brick" (the remainder-reopen rule IS the exit its scenario
+claims absent — executed by three seats; DECLINED with mechanism) · Codex/Gemini TOCTOU
+(out of the § 1 cooperative-but-fallible model; disclosed) · Gemini mid-open handoff (T9 open-reach
+is real — state-machine + fail-closed verified). **NOTES (18):** the UTF-8-lossy `[G]` backup
+(F3 fail-closed — folded into the init root as a Buffer read) · the `.bak` rotation-order comment
+(F4/F6 — folded into DOCS) · the empty-override diagnosis message (F5) · the dangling-`--target`
+raw throw (F6 free — pre-existing, folded into the init root) · the bare intersect refusal
+(diagnosis, folded) · the base-pin diagnosis lacking a test pin (state-machine F2 — folded into
+the pin work) · README's remaining un-annotated historical upgrade lines (doctrine F8) · my
+COMMIT SUBJECTS carrying gate outcomes ("closes TERMINAL-STOP") — an accepted residual routed to
+successor commit discipline, unfixable at a frozen SHA · the rest recorded in the seat files.
+
+Round accounting: R1 batch 1 · R2 batch 2 (both bounded) · **R3 batch 3 (root_replacement — the
+mandatory terminal root batch, this exit)**. The replacement candidate receives R4, the final
+bookend — GO xor STOP, no further batch.
+
+## terminal-round-breaker-2 · BATCH 3 COMPLETE — the root_replacement (2026-08-25)
+
+The mandatory R3 root batch consumed the shared root — "predicates and prose trusting a declared
+SHAPE instead of the resolved EFFECT" — across all three subsystems.
+
+INIT (Opus worker): ROOT 1 — `gitConfigVerified`, one helper the config write routes through:
+after `git config`, resolve the target's real config path via `git rev-parse --git-common-dir`
+(immune to GIT_CONFIG) and read the value back with `--file <that path> --get` (also immune) —
+trusted only when it reads from the TARGET's own config, a categorical backstop for GIT_CONFIG
+and any future write-redirect var, named or not. ROOT 2 — `escapingGitDir` generalized to the
+`.git` regular-file gitdir pointer, distinguishing a legit worktree (per-worktree gitdir nested
+under `<common>/worktrees/<name>`) from a plain escaping pointer. **The worker corrected the
+brief: the read-back does NOT catch the gitdir-file case (rev-parse follows the same pointer), so
+the ROOT 2 pre-check is load-bearing — the two threats close by DIFFERENT mechanisms, empirically
+confirmed both ways.** ROOT 3 — `appendWrite`, a non-throwing counted write both appends route
+through, so an unwritable `.gitignore` is a counted refusal instead of a raw EACCES that killed
+the end-of-run accounting; `writeWithBackup`'s final write also try/caught. ROOT 4 — Buffer-read
+backups (byte-for-byte true), the rotation-order comment, the empty-override diagnosis, the
+dangling-`--target` typed refusal. init-force 19→24, each cure red-then-green.
+
+CONTROLLER/DOCS (orchestrator): the § 3 continuation guarantee trued to the HONEST
+shares-a-remainder rule (the grind is a reviewed no-op, not a brick — NO gate strengthening, per
+the zoom-out "don't grow machinery for a non-harm" the root itself mandates; `targetsRemainder`
+stands); the STOP-reservation disclosure — absent from ALL shipped surfaces (free seat) — landed
+IN FULL on the uncapped printed CONTRACT (the PM decision-time surface) and compactly on WORKFLOW
+§ Gate; the WORKFLOW mis-tier line fixed for the bookend (no NEXT round at closed(4); the typed
+successor IS the exit); the round narration my batch-2 pass had ADDED to the contract + tests
+STRIPPED (§ 0's own rule, applied to the doc that declares it — contract, controller comments,
+and 28 test instances + 2 titles, grep-clean); § 6 enumeration completed (GATES.md,
+guard-brief-rung); § 9 accounting-list claim corrected; README's remaining historical upgrade
+lines annotated.
+
+TESTS (Opus worker): M55 (the honest shares-a-remainder guarantee), the base-pin diagnosis pin
+(state-machine F2), and the THIRD agreement pin — § 3 sentence ⇄ code SEMANTICS, closing the
+drift class the R2 number/row pins couldn't (the recurrence proved the gap). The M-row
+completeness pin correctly reddened on M55 until its § 8 row landed — the class cure working.
+
+**DECLINED/DEFERRED unchanged from the R3 disposition** (transitive-lift brick refuted;
+TOCTOU out-of-model; mid-open handoff real). **ACCEPTED RESIDUALS, recorded for the bookend and
+the successor:** (1) my own COMMIT SUBJECTS carry gate outcomes ("closes TERMINAL-STOP", "consume
+the R# accepted set") — a § 0-class violation unfixable at a frozen SHA, routed to successor
+commit discipline; (2) a `.git` file masquerading as a worktree with a real registered
+back-structure defeats the nesting check (cooperative-only, beyond the plain-pointer threat —
+would need a worktree back-reference check); (3) an unwritable AGENTS.md is now exit-1 counted
+rather than warn-and-continue (deliberate, no test pinned the old exit-0); (4) read-back failure
+hard-refuses even a plain unwritable-target-config error (fail-closed, stricter than before).
+
+State: **npm test 275/275 · acceptance PASSED · WORKFLOW 25,078/25,088 (10 B) · skill budgets
+inside caps · parity red = the standing pre-landing state.** Round accounting: R1 batch 1 · R2
+batch 2 · **R3 batch 3 (root_replacement — SPENT)**. The allowance is exhausted; R4 is the final
+bookend, GO xor STOP, no further batch.

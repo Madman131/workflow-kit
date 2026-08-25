@@ -131,7 +131,11 @@ continuation is admissible when every child of the standing one is terminal AND 
 as a VIRGIN close (opened, collected nothing — its slice would otherwise strand; that ritual
 open-then-virgin-close is also the ONE exit from an abandoned pending declaration, stated here
 rather than left to be discovered) OR un-lifted remainder survives on the parent's own
-reservation — a successful PARTIAL repair must not lock the rest. A PENDING child's declared
+reservation AND the new declaration's budget SHARES a path with that remainder (a budget sharing
+nothing with the remainder refuses; a budget that shares one but whose child then opens
+elsewhere is a fully-reviewed no-op successor, not a release — the reservation is never lifted
+without a GO child that actually OPENED the freed path, so unbounded reviewed successors cost
+namespace and Owner evidence but never surrender the surface) — a successful PARTIAL repair must not lock the rest. A PENDING child's declared
 budget binds from declaration until the child opens — and is refused AT declaration when it
 overlaps another pending budget, a live program's bound surface, OR another program's un-lifted
 reservation; the reservation exception at declaration is the declarer's own NON-GO lineage chain
@@ -207,12 +211,14 @@ and the final-gate paragraph. `skills/orchestrate/SKILL.md` step 5, `PROTOCOLS.m
 bookend bullet, now also carrying the post-GO NEW-SCOPE rule and pinned by the cross-surface
 cadence tokens), `CHIP_BRIEF.md` § 5, `RUNG_ZERO.md` (the screening back-port; the honest-limits passage REWRITTEN — the stale
 quotation was deleted, not corrected). `hooks/guard-gate-ladder.mjs` CONTRACT prints the
-same cadence including the refreeze bound. The design journal carries the supersession banner
+same cadence including the refreeze bound and the STOP-reservation disclosure; `core/GATES.md`'s
+round-inference paragraph and `hooks/guard-brief-rung.mjs`'s deny-text table are edited
+instruction surfaces too. The design journal carries the supersession banner
 pointing here; § 0 above records the ruling it cites. `README.md` gains the v2.16.0 release
 section with the upgrade instructions. Generalization holds: no Owner names, no model brands, no
 adopter paths in shipped text. One RIG surface, named per the sweep rule: the untracked
 `core/REPO_INVARIANTS.md` states cadence components for THIS repo's own gate runs (its item 5 is
-the refreeze bound). It is not a shipped surface and sits in no packet or accounting list. `init`'s
+the refreeze bound). It is not a shipped surface and rides no review packet; it IS a member of `check-doc-size.mjs`'s governed floor (reported `BINDING/payload`), which is where its own budget is enforced. `init`'s
 `copyTree(core/)` filters the `[G]`-generated names (§ 7), so even an init run FROM a working
 copy holding the rig file cannot ship it; it stays untracked besides, so a released clone never
 carries it at all.
@@ -286,7 +292,7 @@ followup entry without its inline route refuses — silent adjacent survival is 
 preserved, three batches ever, every later route refused — asserting TERMINATION, never batch
 composition.
 
-Round-1 batch rows: **M23** refreeze — one supersede accepted; a second refuses; the bookend
+**M23** refreeze — one supersede accepted; a second refuses; the bookend
 refuses; a recomposed roster refuses; disabled arm deadlocks the round. **M24** close — an
 admitted worker session (any round, any window) → `aggregate-close-self-authorized`; a
 non-admitted close after any RECORDED receipt reserves the paths (relabel refused — a
@@ -317,9 +323,14 @@ remainder-reopen boundary — a fully-lifted parent's third continuation refuses
 stranded). **M52** the pending-hold diagnosis names the holder for ANY legal roster order.
 **M53** the legacy-handoff reservation guard — a handoff child budget over a STOPped surface
 refuses; disjoint accepts; disabled arm: the squat lands and both exits brick. **M54** the
-remainder-intersect gate — an unrelated-budget re-continuation refuses; a remainder-targeting
-one accepts; the virgin route unchanged; disabled arm: the unrelated-path grind reopens the
-anchor indefinitely. **M35**
+remainder-share gate — a re-continuation whose budget shares NO path with the un-lifted remainder
+refuses; one that shares a remainder path is admitted (its child does its own gated work; a
+no-op successor releases nothing); the virgin route unchanged; disabled arm: the unrelated-path
+grind reopens the anchor indefinitely. **M55** the honest remainder-share guarantee — a
+re-continuation whose budget SHARES the un-lifted remainder is ADMITTED (a reviewed no-op
+successor is permitted; unbounded gated successors cost namespace but never release the surface),
+one sharing nothing REFUSES, and the reservation lifts only when a GO child actually OPENED the
+freed path. **M35**
 the lift is coverage-scoped — a GO child releases exactly its own budget: the sibling's
 never-repaired stopped surface still refuses an unrelated open, the repaired surface admits one,
 and the sibling still enters through its lineage; disabled arm: a whole-union lift readmits the
@@ -339,13 +350,14 @@ un-intersected lift releases the remainder. **M42** a lineage open excepts its w
 chain — the grandchild opens the doubly-reserved slice, the stranger still refuses; disabled arm:
 direct-parent-only reproduces the nested brick. **M43** re-continuation — admissible when all
 children are terminal AND (one is a virgin close, OR un-lifted remainder survives and the new
-children's budgets INTERSECT it); refused while a child lives, and refused when everything
-lifted or the new budgets ignore the remainder (M54). **M44** pending-vs-active refuses at declaration on both successor kinds, and the
+budget SHARES a path with it); refused while a child lives, when everything lifted, or when the
+new budget shares nothing with the remainder (M54). A budget that shares a remainder path but
+whose child opens elsewhere is a reviewed no-op successor, never a release. **M44** pending-vs-active refuses at declaration on both successor kinds, and the
 pending refusal is DIAGNOSED (the deny names the holding child). **M45** the CLOSED floor
 carries collected-but-undisposed ground — the shedding successor refuses, the honest one
 records. **M46** legacy activeness binds as-of — a planted inactive-parent handoff is inert; a
 recorded handoff survives the parent's later close. **M47** the 2600 trigger cap — a 101-id
-exact carry accepts, 2601 refuses on shape under the unified spelling; the R1-executed 1300-id
+exact carry accepts, 2601 refuses on shape under the unified spelling; the 1300-id
 STOP carry accepts (M49), and the old 1200 cap did worse than refuse: it made a recorded
 1300-id row unreadable, failing the whole ledger (M49's disabled arm).
 

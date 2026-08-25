@@ -321,7 +321,7 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   assert.match(w, /Accepted harm in R1 or R2 permits one bounded batch/);
   assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
   assert.match(w, /R4, the final bookend/);
-  assert.match(w, /there is no R5, cycle, scope reset, or audit window; a root exit is keyed to ITS disposition/);
+  assert.match(w, /no R5, cycle, scope reset, or audit window; root batches exist only where root-kind dispositions do/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -1413,4 +1413,39 @@ test("every M-row the controller suite asserts is carried in the contract's muta
   assert.deepEqual(missing, [],
     `§ 8 is missing rows this suite PROVES: ${missing.map((id) => `M${id}`).join(", ")}`
     + " — the matrix understates the proof while reading as complete");
+});
+
+test("§ 3's continuation-admissibility clause AGREES with the code on the HONEST guarantee (budget must SHARE the remainder)", () => {
+  // THE THIRD FACE of the terminal-round-breaker doc-drift class, and the one the first two pins
+  // could not see. The cap pin caught a NUMBER; the M-row pin caught a MISSING ROW; neither could
+  // catch a row that is PRESENT and states the wrong SEMANTICS. § 3 drifted a third way: it once
+  // said the remainder disjunct required the successor to "repair" / "actually target" the
+  // remainder — a guarantee the shipped controller does NOT make. The code admits any successor
+  // whose BUDGET shares a remainder path (the child may then open elsewhere: a fully-reviewed
+  // no-op, never a release), and lifts the surface ONLY when a GO child actually opened it. A
+  // reader who plans against "must repair to reopen" builds a wall the controller will not hold.
+  //
+  // So this pin asserts the admissibility clause states the ACTUAL, weaker guarantee: the budget
+  // must SHARE the un-lifted remainder. It is scoped to that ONE clause — a whole-§3 scan would
+  // pass on the innocent "declared budget binds" sentence two clauses later, the exact pin-the-
+  // word-not-the-sentence trap this file is built around. The stop-lookahead ends the slice before
+  // that sentence, so "budget" must appear in the ADMISSIBILITY clause itself to satisfy the pin.
+  const s3 = read(BREAKER_CONTRACT);
+  const clause = /One LIVE continuation per anchor[\s\S]*?(?=A PENDING child's declared budget)/.exec(s3)?.[0] ?? "";
+  assert.ok(clause, "the § 3 admissibility clause must be findable — RE-POINT this slice");
+  // The slice must END before the pending-budget sentence, or "budget" leaks in from outside the
+  // clause and the pin passes for the wrong reason (the reflow-blind sibling trap, path-specific).
+  assert.ok(!clause.includes("A PENDING child's declared budget"),
+    "the admissibility slice ran past its clause and swallowed the pending-budget sentence — RE-POINT the boundary");
+  const SHARES_REMAINDER = /budget[\s\S]*?remainder|remainder[\s\S]*?budget|shares?\s+[\s\S]*?remainder/i;
+  // Canary, both directions. Without the first the pattern could be dead (agreement-by-absence);
+  // without the second it would keep passing after the clause was rewritten back to the OVERSTATED
+  // spelling, which is the precise regression this pin exists to catch.
+  assert.match("the new declaration's budget SHARES a path with that remainder", SHARES_REMAINDER,
+    "the pattern must bite the TRUED spelling, or this agreement pin is dead");
+  assert.doesNotMatch("a successful PARTIAL repair must not lock the rest", SHARES_REMAINDER,
+    "the pattern must MISS the overstated spelling, or it cannot catch the drift it names");
+  assert.match(clause, SHARES_REMAINDER,
+    "§ 3 must state the budget-SHARES-remainder guarantee the code makes — not 'must repair/target', "
+    + "which promises a wall the controller does not hold (M43/M54 in § 8 carry the same trued spelling)");
 });

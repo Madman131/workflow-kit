@@ -232,7 +232,12 @@ export const CONTRACT =
   `and an accepted Critical/fail-open harm STOPS at any round: declared, never inferred.\n` +
   `R3 accepted harm requires root replacement, simplification, or split, a root-exit\n` +
   `record, and exactly one batch 3. R4 is the final aggregate bookend: zero accepted blockers is GO;\n` +
-  `any accepted blocker is STOP. R4 has no outgoing dispatch; no R5, cycle, scope reset, or process-\n` +
+  `any accepted blocker is STOP. ⚠ A STOP — and an Owner close after a collected panel — RESERVES\n` +
+  `every path the changeset reviewed, permanently and repo-wide, in the shared ledger: no unrelated\n` +
+  `program may open those paths again. The ONLY way to rework a reserved surface is a typed Owner\n` +
+  `continuation (a parent-linked child changeset) whose own GO child repairs it. Declaring STOP is\n` +
+  `not free — weigh that a Critical you STOP on locks its surface until a successor earns it back.\n` +
+  `R4 has no outgoing dispatch; no R5, cycle, scope reset, or process-\n` +
   `audit window exists. A contaminated unclosed panel may be refrozen ONCE per round (never the\n` +
   `bookend, roster and scope pinned); refreezing grants nothing and resets nothing. "accepted" means\n` +
   `BLOCKING-accepted (changed-feature or contract-invariant harm); a real, non-blocking, separable\n` +

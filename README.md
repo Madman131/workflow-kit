@@ -610,7 +610,7 @@ enumeration check that searched a broad slice rather than parsing the list, so a
 could stay green; and the helper's own canary, which in its first draft stripped every occurrence
 and so could never fire.
 
-**Upgrading: a plain `init` re-run — do NOT pass `--force`.** This release adds files and edits
+**Upgrading: a plain `init` re-run — do NOT pass `--force`.** *(historical — since v2.16.0 a plain rerun over differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)* This release adds files and edits
 nothing an adopter already has, so a plain re-run ships the repo-local half in full: the body, both
 reference layers and the Claude shim all land, and a hand-edited `[P]` file is preserved (executed
 on an adopter created from v2.2.1). `--force` would buy nothing here and **destroys hand-edited
@@ -1011,7 +1011,7 @@ names it. **Neither enforces anything.** `--skip-codex-lane` omits both.
 
 1. **Drop `--risk-tokens` from your saved `init` invocation.** This is no longer optional — the run
    now fails with exit 2. Nothing replaces it; leave your `kit.config.json` alone.
-2. **Re-run `init` with your original flags — and do NOT add `--force`.** Unlike v1.7, this release
+2. **Re-run `init` with your original flags — and do NOT add `--force`.** *(historical — since v2.16.0 a plain rerun over differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)* Unlike v1.7, this release
    edits **no** `[P]` file you already have: the entire installable delta is two brand-new files, and
    `init` writes new files without `--force`. So `--force` buys you only a refreshed version stamp in
    `core/OWNER_COMMS.md`, and it **costs** you the hand-authored content of every `[G]` file —
@@ -1512,7 +1512,7 @@ hook, and it regenerates *every* `[G]` file — including a `core/OWNER_COMMS.md
 `.claude/kit.config.json` whose families you configured (regenerating that with no family flags resets
 it to `{}`, which *widens* your write guard). Since v1.3, `init` writes a `.bak` beside any such file
 before overwriting it and says so on the console, so the upgrade path is recoverable rather than
-silently destructive. Prefer a re-run without `--force` unless you actually want the kit's versions
+silently destructive. Prefer a re-run without `--force` *(historical — since v2.16.0 a plain rerun over differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)* unless you actually want the kit's versions
 back.
 
 ## What's new in v1.2.1

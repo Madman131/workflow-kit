@@ -22,10 +22,16 @@
 //     upgrades land while every generation of an adopter's edits survives;
 //   · the two root-level appends (.gitignore, AGENTS.md) lstat before they write;
 //   · a DANGLING intermediate directory link is a typed, counted refusal — never a raw ENOENT
-//     stack trace from mkdir.
+//     stack trace from mkdir;
+//   · (ROOT-BATCH, write-target trust) the core.hooksPath write is trusted by READING IT BACK from
+//     the target's own config, catching GIT_CONFIG and any write-redirect var no name list knows;
+//     a `.git` regular-FILE gitdir pointer to another repo refuses while a worktree pointer adopts;
+//     an unwritable .gitignore is a counted refusal, never a throw that kills the accounting; a
+//     corrupt settings.json is backed up byte-for-byte (non-UTF-8 intact); and a dangling
+//     `--target` ancestor is a typed refusal at the first write, not a raw mkdir crash.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -221,6 +227,28 @@ test("an unparseable settings.json under --force is backed up byte-for-byte, nev
   } finally { cleanup(); }
 });
 
+test("a corrupt settings.json with NON-UTF-8 bytes is backed up byte-for-byte, not lossily decoded", () => {
+  // ROOT-BATCH 4a. The backup source was read as utf8 and written back, so a settings.json holding
+  // raw non-UTF-8 bytes (an adopter's binary-ish content nothing here can merge) was round-tripped
+  // through a lossy decode — the .bak was NOT the original. The backup source is now read as a
+  // Buffer, so "your original is saved" is literally true.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  try {
+    const settings = path.join(dir, ".claude", "settings.json");
+    // Bytes that are INVALID UTF-8 (0xff 0xfe 0x80): a utf8 round-trip replaces them with U+FFFD.
+    const corrupt = Buffer.concat([Buffer.from("NOT JSON "), Buffer.from([0xff, 0xfe, 0x80]), Buffer.from(" bytes")]);
+    writeFileSync(settings, corrupt);
+
+    const forced = run(["--force"]);
+    assert.equal(forced.status, 0, forced.stderr);
+    assert.ok(readFileSync(`${settings}.bak`).equals(corrupt), "the .bak holds the ORIGINAL bytes exactly (byte-for-byte, no lossy decode)");
+    // And the replacement still installs the registrations over the corrupt original.
+    const merged = JSON.parse(readFileSync(settings, "utf8"));
+    assert.ok(merged.hooks.PreToolUse.some((g) => (g.hooks || []).some((h) => String(h.command).includes("guard-lane-authoring.mjs"))),
+      "…and the regenerated file carries the registrations");
+  } finally { cleanup(); }
+});
+
 test("--skip-codex-lane over a PRESENT lane still runs the read-only stale-keep check", () => {
   // The stale-keep accounting, the drift check and the armed check all lived inside the skipped
   // block, so `--force --skip-codex-lane` over a drifted .codex exited 0 saying only "left
@@ -390,6 +418,104 @@ test("a SYMLINKED .git refuses the core.hooksPath write — it may not land in A
   }
 });
 
+test("the core.hooksPath write is trusted by READ-BACK, not by a name enumeration: GIT_CONFIG is caught", () => {
+  // ROOT-BATCH 1, the resolved-EFFECT discipline. `git config core.hooksPath` obeys GIT_CONFIG (and
+  // any future write-redirect var), so a bare write lands in a FOREIGN file and exits 0 while the
+  // target's floor stays unset. The `.git` here is an ORDINARY directory — the symlink pre-check and
+  // the GIT_*DIR name-enumeration both see nothing wrong — so ONLY the post-write read-back from the
+  // target's OWN config can catch it. That is the point: the trust is in the effect, not the name.
+  const home = mkdtempSync(path.join(os.tmpdir(), "kit-force-gitconfig-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-force-prompts-"));
+  const GIT_ENV = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_CONFIG"];
+  const runInit = (target, extraEnv = {}) => {
+    const env = { ...process.env, PATH: HERMETIC_PATH };
+    for (const n of GIT_ENV) delete env[n];
+    return spawnSync(process.execPath,
+      [path.join(KIT, "bin", "init.mjs"), "--target", target, "--repo-name", "adopter",
+        "--codex-prompts-dir", codexDir, "--skip-codex-lane"],
+      { encoding: "utf8", env: { ...env, ...extraEnv } });
+  };
+  try {
+    const target = path.join(home, "adopter");
+    execFileSync("git", ["init", "-q", target]);
+    const realConfig = path.join(target, ".git", "config");
+    const foreign = path.join(home, "foreign-config");
+    writeFileSync(foreign, "");   // GIT_CONFIG redirect sink
+
+    const r = runInit(target, { GIT_CONFIG: foreign });
+    assert.equal(r.status, 1, "a redirected core.hooksPath write is a FAILING state, not a silent exit 0");
+    assert.match(r.stderr, /REFUSED to set core\.hooksPath/, "the refusal is printed at the site");
+    assert.match(r.stderr, /did not read back from .+ own git config/, "…named as a read-back failure, the resolved-effect check");
+    assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…and counted into the end-of-run report");
+    assert.ok(r.stderr.includes(`· ${path.join(target, ".git")}`), "…which names the .git whose write escaped");
+    assert.doesNotMatch(r.stdout, /core\.hooksPath=\.githooks/, "…and never prints the success line claiming the binding it could not make");
+    // The write went to the FOREIGN file; the target's OWN config never got it.
+    assert.match(readFileSync(foreign, "utf8"), /hooksPath = \.githooks/, "the write really landed in the redirect target");
+    assert.equal(spawnSync("git", ["-C", target, "config", "--file", realConfig, "--get", "core.hooksPath"], { encoding: "utf8" }).status, 1,
+      "…and NOT in the adopted repo's own config");
+
+    // Polarity: without the redirect the same install sets core.hooksPath and exits 0 — so the exit
+    // 1 above is the read-back's doing, not something general about this target.
+    const clean = runInit(target);
+    assert.equal(clean.status, 0, `a clean environment adopts and arms: ${clean.stderr}`);
+    assert.match(clean.stdout, /core\.hooksPath=\.githooks/, "…reports the binding");
+    assert.equal(spawnSync("git", ["-C", target, "config", "--file", realConfig, "--get", "core.hooksPath"], { encoding: "utf8" }).stdout.trim(),
+      ".githooks", "…which really landed in the target's own config this time");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
+test("a .git regular-FILE gitdir pointer to another repo refuses — worktree pointer still adopts", () => {
+  // ROOT-BATCH 2. A `.git` that is a regular file holding `gitdir: /elsewhere` routes git's writes
+  // into that other repo — and the read-back cannot catch it, because rev-parse follows the SAME
+  // pointer, so a pre-check must. The distinguisher from a legitimate `git worktree` (whose `.git`
+  // is also a file) is the SHAPE: a worktree's gitdir is nested under <common>/worktrees/<name>; a
+  // plain pointer's git dir == its common dir. Location alone cannot tell them apart — both are
+  // outside the target — so a location-only refusal would break worktrees.
+  const home = mkdtempSync(path.join(os.tmpdir(), "kit-force-gitdirfile-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-force-prompts-"));
+  const runInit = (target) => spawnSync(process.execPath,
+    [path.join(KIT, "bin", "init.mjs"), "--target", target, "--repo-name", "adopter",
+      "--codex-prompts-dir", codexDir, "--skip-codex-lane"],
+    { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
+  const hooksPathOf = (dir) => spawnSync("git", ["-C", dir, "config", "--get", "core.hooksPath"], { encoding: "utf8" });
+  try {
+    const victim = path.join(home, "victim");
+    const target = path.join(home, "adopter");
+    for (const d of [victim, target]) execFileSync("git", ["init", "-q", d]);
+    const victimConfig = path.join(victim, ".git", "config");
+    const before = readFileSync(victimConfig, "utf8");
+    rmSync(path.join(target, ".git"), { recursive: true, force: true });
+    writeFileSync(path.join(target, ".git"), `gitdir: ${path.join(victim, ".git")}\n`);
+    assert.ok(lstatSync(path.join(target, ".git")).isFile(), "precondition: .git is a regular FILE, not a symlink");
+
+    const r = runInit(target);
+    assert.equal(r.status, 1, "a gitdir-file pointing outside the install is a FAILING state");
+    assert.match(r.stderr, /REFUSED to set core\.hooksPath/, "refused at the site");
+    assert.match(r.stderr, /resolves OUTSIDE the install target/, "…named as the escape it is");
+    assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…counted into the end-of-run report");
+    assert.equal(readFileSync(victimConfig, "utf8"), before, "the OTHER repository's config is byte-identical");
+    assert.notEqual(hooksPathOf(target).status, 0, "…and core.hooksPath is set nowhere");
+
+    // Polarity — a REAL linked worktree (also a `.git` FILE, gitdir also outside the root) adopts.
+    const primary = path.join(home, "primary");
+    execFileSync("git", ["init", "-q", primary]);
+    execFileSync("git", ["-C", primary, "-c", "user.email=kit@example.invalid", "-c", "user.name=kit",
+      "commit", "-q", "--allow-empty", "-m", "base"]);
+    const wt = path.join(home, "adoptee-worktree");
+    execFileSync("git", ["-C", primary, "worktree", "add", "-q", wt, "-b", "lane"]);
+    assert.ok(lstatSync(path.join(wt, ".git")).isFile(), "precondition: the worktree's .git is a FILE too");
+    const adopted = runInit(wt);
+    assert.equal(adopted.status, 0, `the worktree pointer is NOT mistaken for an escape: ${adopted.stderr}`);
+    assert.equal(hooksPathOf(wt).stdout.trim(), ".githooks", "…and it arms in the common config");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
 test("a linked .claude creates NOTHING outside: the containment check runs BEFORE the mkdir", () => {
   // The check ran AFTER ensureDir, so with `.claude` linked out every FILE write refused while the
   // directory tree was built inside the external target anyway — and settings.json, the one write
@@ -479,11 +605,14 @@ test("a Git LOCATION OVERRIDE in the environment refuses the core.hooksPath writ
     assert.equal(readFileSync(otherConfig, "utf8"), before, "…still nothing written to the other repo");
 
     // A PRESENT-but-EMPTY variable is not an override to the predicate this file shares with the
-    // controller, so it takes no refusal here. (git's own reader rejects an empty GIT_DIR outright
-    // — "not a git repository: ''" — so such a run reaches the ordinary not-a-repo warning instead
-    // and sets nothing. Nothing is misdirected either way, which is what this pins.)
+    // controller, so it takes no refusal here. git's own reader rejects an empty GIT_DIR outright
+    // ("not a git repository: ''"), so isGitRepo comes back false — but the target IS a repo, and
+    // ROOT-BATCH 4c trues the diagnosis: it must name the empty variable, NOT claim "not a git repo
+    // yet" about a repo that is one.
     const empty = runInit(target, { GIT_DIR: "" });
     assert.doesNotMatch(empty.stderr, /Git LOCATION OVERRIDES/, "an empty variable is not an override");
+    assert.match(empty.stderr, /GIT_DIR .*set to an EMPTY value, which git rejects/, "the diagnosis names the real cause");
+    assert.doesNotMatch(empty.stderr, /is not a git repo yet/, "…and does NOT misdescribe a real repo as un-inited");
     assert.equal(readFileSync(otherConfig, "utf8"), before, "…and still nothing reaches the other repo");
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -530,6 +659,37 @@ test("the root-level APPENDS never write through a symlink: .gitignore and AGENT
   } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
 });
 
+test("an unwritable .gitignore is a COUNTED refusal, not a throw that destroys the end-of-run accounting", () => {
+  // ROOT-BATCH 3. The appends ran with a bare writeFileSync and no I/O guard, BEFORE the end-of-run
+  // reports. A raw EACCES on an unwritable .gitignore threw uncaught mid-run and took the refusal
+  // report, the stale-keep report and the armed-check down with it. The consequential run — a
+  // refused mechanism overwrite AND an unwritable .gitignore — must still print the accounting and
+  // exit 1, with BOTH failures named.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  try {
+    // (1) a refused mechanism overwrite: drift a hook, block its .bak slot with a directory.
+    const guard = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
+    writeFileSync(guard, readFileSync(guard, "utf8") + "\n// drift\n");
+    mkdirSync(`${guard}.bak`);
+    // (2) an unwritable .gitignore holding content that DIFFERS, so the append actually writes.
+    const gi = path.join(dir, ".gitignore");
+    writeFileSync(gi, "preexisting-entry\n");
+    chmodSync(gi, 0o444);
+
+    const r = run(["--force"]);
+    try {
+      assert.equal(r.status, 1, "the consequential run fails");
+      assert.doesNotMatch(r.stderr, /^ {4}at /m, "no raw stack trace — the append did not throw uncaught");
+      assert.doesNotMatch(r.stderr, /Error: EACCES/, "…and no uncaught EACCES");
+      assert.match(r.stderr, /REFUSED to append to .+\.gitignore: the write itself failed/, "the .gitignore refusal is typed at the site");
+      assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "the end-of-run report SURVIVED and printed");
+      assert.ok(r.stderr.includes(`· ${gi}`), "…naming the unwritable .gitignore");
+      assert.ok(r.stderr.includes(`· ${guard}`), "…AND the refused mechanism overwrite — the accounting is intact, both are there");
+      assert.equal(readFileSync(gi, "utf8"), "preexisting-entry\n", "the unwritable file is UNCHANGED");
+    } finally { chmodSync(gi, 0o644); }
+  } finally { cleanup(); }
+});
+
 test("a DANGLING intermediate directory link is a typed refusal, never a raw ENOENT crash", () => {
   // existsSync FOLLOWS links, so the ancestor walk read a dangling `.claude` as "not created yet",
   // resolved the path INSIDE the target, passed containment — and ensureDir threw a raw ENOENT
@@ -562,6 +722,44 @@ test("a DANGLING intermediate directory link is a typed refusal, never a raw ENO
     assert.equal(clean.status, 0, `with a real .claude the install completes: ${clean.stderr}`);
     assert.ok(existsSync(path.join(claude, "hooks", "guard-lane-authoring.mjs")), "…into the repo");
   } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a dangling --target ancestor is a typed refusal at the FIRST write, not a raw mkdir crash", () => {
+  // ROOT-BATCH 4d. The very first write of the run is ensureDir(T). When T sits under a dangling
+  // symlink ancestor, that mkdir threw a raw ENOENT — before the accounting even existed, the one
+  // dangling-ancestor site the per-write guard runs too late to cover. It now gets the same typed
+  // refusal the other sites give, as a clean fatal exit.
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-dangling-target-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-force-prompts-"));
+  try {
+    const link = path.join(outside, "linkdir");
+    symlinkSync(path.join(outside, "does-not-exist"), link);   // dangling ancestor
+    const target = path.join(link, "repo");
+    const r = spawnSync(process.execPath,
+      [path.join(KIT, "bin", "init.mjs"), "--target", target, "--repo-name", "adopter",
+        "--codex-prompts-dir", path.join(codexDir, "p"), "--skip-codex-lane"],
+      { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
+    assert.equal(r.status, 1, "the dangling target ancestor fails the run");
+    assert.doesNotMatch(r.stderr, /^ {4}at /m, "no raw stack trace");
+    assert.doesNotMatch(r.stderr, /Error: ENOENT/, "…and no uncaught mkdir error");
+    assert.match(r.stderr, /cannot create the target .+ a DANGLING symlink/, "a typed refusal naming the dangling ancestor");
+    assert.ok(!existsSync(path.join(outside, "does-not-exist")), "the link's target was NOT created");
+
+    // Polarity: make the ancestor real and the same target adopts.
+    rmSync(link);
+    mkdirSync(path.join(outside, "does-not-exist"));
+    symlinkSync(path.join(outside, "does-not-exist"), link);
+    execFileSync("git", ["init", "-q", target]);
+    const clean = spawnSync(process.execPath,
+      [path.join(KIT, "bin", "init.mjs"), "--target", target, "--repo-name", "adopter",
+        "--codex-prompts-dir", path.join(codexDir, "p"), "--skip-codex-lane"],
+      { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
+    assert.equal(clean.status, 0, `with a real ancestor the target adopts: ${clean.stderr}`);
+    assert.ok(existsSync(path.join(target, ".claude", "hooks", "guard-lane-authoring.mjs")), "…installing into it");
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
 });
 
 test("a linked .codex creates NOTHING outside either — the eager agents-dir mkdir is guarded too", () => {

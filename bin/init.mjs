@@ -299,7 +299,9 @@ let writeRoots = [];
 // hard-fails the run forever after. A backup slot that can hold exactly one generation is not a
 // backup system. So a differing prior .bak is ROTATED to the first free `<dst>.bak.<n>` and this
 // run's copy takes the .bak slot: nothing is destroyed, upgrades flow, and every generation of an
-// adopter's edits stays on disk in order (.bak = most recent, .bak.1 older, and so on).
+// adopter's edits stays on disk. Ordering: `.bak` always holds THIS run's copy (the newest); the
+// numbered slots fill in the order generations were rotated OUT, so `.bak.1` is the OLDEST and a
+// HIGHER n is newer (`.bak.1` older than `.bak.2`). The test pins exactly this.
 // What still REFUSES is a backup that genuinely cannot be taken: a symlink in the .bak slot or in
 // a rotation slot (init does not write through links, and rotating onto one would destroy it), a
 // non-regular file squatting in the .bak slot (it is not a backup generation and moving an
@@ -463,9 +465,12 @@ function staleCheckSkipped(src, dst, remedy) {
 function backupBeforeOverwrite(dst, nextText) {
   if (!existsSync(dst)) return "not-needed";
   let current;
-  // Unreadable but present: we cannot preserve it, so we must not destroy it either.
-  try { current = readFileSync(dst, "utf8"); } catch { return "FAILED"; }
-  if (current === nextText) return "not-needed";  // identical — nothing to preserve
+  // Read the backup SOURCE as raw BYTES (no encoding), so a non-UTF-8 file is preserved
+  // byte-for-byte rather than round-tripped through a lossy utf8 decode — "your previous version is
+  // saved" must be literally true. Unreadable but present: we cannot preserve it, so we must not
+  // destroy it either.
+  try { current = readFileSync(dst); } catch { return "FAILED"; }
+  if (current.equals(Buffer.from(nextText))) return "not-needed";  // identical — nothing to preserve
   if (!saveBackup(dst, current)) return "FAILED";  // symlinked/blocked/prior-differing .bak all refuse
   warn(`OVERWROTE ${dst} (--force); your previous version is saved at ${dst}.bak`);
   return "backed-up";
@@ -494,7 +499,14 @@ function writeWithBackup(dst, text) {
     warn(`REFUSED to overwrite ${dst}: its previous content could not be backed up (is ${dst}.bak writable?). The existing file is UNCHANGED — move it aside yourself, then re-run.`);
     return false;
   }
-  writeFileSync(dst, text);
+  // The final write is guarded too: a raw EACCES here would throw uncaught and kill the end-of-run
+  // accounting that runs after every write. A backup is already safely beside it, so this fails
+  // CLOSED as a counted refusal, not a crash.
+  try { writeFileSync(dst, text); } catch {
+    backupRefused.push(dst);
+    warn(`REFUSED to overwrite ${dst}: the write itself failed (is ${dst} or its directory writable?). Its previous content is preserved at ${dst}.bak — fix permissions, then re-run.`);
+    return false;
+  }
   return true;
 }
 
@@ -544,17 +556,19 @@ function mergeSettings(targetSettings, kitSettings, force) {
     return "skipped";
   }
   let existing = {};
-  let raw = null;        // the file's current bytes when it exists and reads — the backup source
+  let raw = null;        // the file's current bytes DECODED (for the parse + change comparison)
+  let rawBuf = null;     // the file's current RAW bytes — the backup source (byte-for-byte)
   let bakDone = false;   // the corrupt branch backs up early so its console claim is already true
   if (existsSync(targetSettings)) {
-    try { raw = readFileSync(targetSettings, "utf8"); existing = JSON.parse(raw); }
+    try { rawBuf = readFileSync(targetSettings); raw = rawBuf.toString("utf8"); existing = JSON.parse(raw); }
     catch {
       if (!force) { warn(`existing ${targetSettings} is not valid JSON — left untouched (use --force to replace)`); return "skipped"; }
       // --force REPLACES an unparseable settings.json — adopter-owned bytes nothing here can
-      // merge. The original goes to .bak first, and a backup that cannot be taken (unreadable
-      // file, a blocked or prior-differing .bak slot) refuses the replacement — counted into the
-      // same refused-backup accounting as every other overwrite.
-      if (raw === null || !saveBackup(targetSettings, raw)) {
+      // merge. The original goes to .bak first (as RAW BYTES, so non-UTF-8 adopter content is
+      // preserved intact), and a backup that cannot be taken (unreadable file, a blocked or
+      // prior-differing .bak slot) refuses the replacement — counted into the same refused-backup
+      // accounting as every other overwrite.
+      if (rawBuf === null || !saveBackup(targetSettings, rawBuf)) {
         backupRefused.push(targetSettings);
         warn(`REFUSED to replace ${targetSettings}: it is not valid JSON AND its original bytes could not be backed up to ${targetSettings}.bak. The existing file is UNCHANGED — move it aside yourself, then re-run.`);
         return "skipped";
@@ -597,8 +611,8 @@ function mergeSettings(targetSettings, kitSettings, force) {
     // A rewrite that CHANGES the file's bytes under --force backs the original up first — the
     // same refusal semantics as every other overwrite. Identical bytes skip the write entirely
     // (no backup noise, and the verify below still reads the file that is already correct).
-    if (force && raw !== null && !bakDone) {
-      if (!saveBackup(targetSettings, raw)) {
+    if (force && rawBuf !== null && !bakDone) {
+      if (!saveBackup(targetSettings, rawBuf)) {
         backupRefused.push(targetSettings);
         warn(`REFUSED to merge into ${targetSettings}: the rewrite would change it and its current bytes could not be backed up (see above). The existing file is UNCHANGED.`);
         return "skipped";
@@ -622,12 +636,35 @@ function mergeSettings(targetSettings, kitSettings, force) {
   return "written";
 }
 
+// The guarded write for the two root-level APPENDS. An append rewrites a file init itself just
+// generated (AGENTS.md) or is creating fresh (.gitignore), so it does NOT take a backup — a .bak of
+// a file this same run wrote is pure noise (it would litter one on every adopt). It pays the rest of
+// the guarded-write discipline every other site pays: the intermediate-directory containment check,
+// and a write that FAILS is a typed, COUNTED refusal — never an uncaught throw. That throw is the
+// bug ROOT-BATCH names: these appends run BEFORE the end-of-run accounting, so an uncaught EACCES
+// here destroyed the refusal report, the stale-keep report and the armed-check along with it. The
+// per-file SYMLINK refusal stays at each caller, for its file-specific "REFUSED to append" message.
+// Returns true on success; false when refused (already counted + warned here).
+function appendWrite(dst, text) {
+  const blocked = writeBlockedReason(path.dirname(dst));
+  if (blocked) { backupRefused.push(dst); warn(`REFUSED to append to ${dst}: its directory ${blocked}`); return false; }
+  ensureDir(path.dirname(dst));
+  try { writeFileSync(dst, text); } catch {
+    backupRefused.push(dst);
+    warn(`REFUSED to append to ${dst}: the write itself failed (is ${dst} or its directory writable?). The existing file is UNCHANGED — fix permissions, then re-run.`);
+    return false;
+  }
+  return true;
+}
+
 // The two ROOT-LEVEL APPENDS (.gitignore here, AGENTS.md below) were the last writers reading with
-// existsSync and writing with writeFileSync — no lstat between them. A symlinked .gitignore or
-// AGENTS.md therefore had its EXTERNAL target rewritten, on plain and force runs alike, exit 0:
-// the same hole the copy and [G] paths closed, in the two files an adopter is most likely to
-// symlink into a dotfiles repo. Refused, counted and named like every other link refusal.
-// Returns "unchanged" | "written" | "refused".
+// existsSync and writing with a bare writeFileSync — no lstat, no containment, no I/O guard. A
+// symlinked .gitignore or AGENTS.md had its EXTERNAL target rewritten (the two files an adopter is
+// most likely to symlink into a dotfiles repo), and an unwritable .gitignore threw uncaught mid-run.
+// Both now route their write through appendWrite: symlink refused here, containment + a non-throwing
+// counted write inside. Refused, counted and named like every other write. A failure never aborts
+// the run — the accounting still prints and the exit code reflects it. Returns "unchanged" |
+// "written" | "refused".
 function appendGitignore(target, lines, comment = "workflow-kit: lane declaration, ledger and pre-send rung sidecar are per-session, gitignored") {
   const gi = path.join(target, ".gitignore");
   if (isSymlinkAt(gi)) {
@@ -635,14 +672,21 @@ function appendGitignore(target, lines, comment = "workflow-kit: lane declaratio
     warn(`REFUSED to append to ${gi}: it is a SYMLINK (resolves to ${realpathOrSelf(gi)}), and init does not write through links. Replace the link with a regular file — or add these entries to ${realpathOrSelf(gi)} yourself — then re-run: ${lines.join(", ")}`);
     return "refused";
   }
-  let text = existsSync(gi) ? readFileSync(gi, "utf8") : "";
+  let text = "";
+  if (existsSync(gi)) {
+    try { text = readFileSync(gi, "utf8"); }
+    catch {
+      backupRefused.push(gi);
+      warn(`REFUSED to append to ${gi}: it exists but could not be read to preserve its contents (is it readable?). Nothing was written — fix permissions, then re-run.`);
+      return "refused";
+    }
+  }
   const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
   const add = lines.filter((l) => !have.has(l));
   if (!add.length) return "unchanged";
   if (text.length && !text.endsWith("\n")) text += "\n";
   text += (text.length ? "\n" : "") + `# ${comment}\n` + add.join("\n") + "\n";
-  writeFileSync(gi, text);
-  return "written";
+  return appendWrite(gi, text) ? "written" : "refused";
 }
 
 // Append the /thread-restart fallback pointer to AGENTS.md if absent (idempotent via a stable marker,
@@ -664,22 +708,55 @@ function appendAgentsPointer(target, kitRoot) {
   const fragment = readFileSync(path.join(kitRoot, "commands", "agents-pointer.md"), "utf8");
   const marker = "workflow-kit:thread-restart-pointer";
   let text;
-  try { text = readFileSync(agents, "utf8"); } catch { return "read-failed"; }
+  try { text = readFileSync(agents, "utf8"); }
+  catch {
+    backupRefused.push(agents);
+    warn(`REFUSED to append to ${agents}: it exists but could not be read to preserve its contents (is it readable?). Nothing was written — fix permissions, then re-run.`);
+    return "refused";
+  }
   if (text.includes(marker)) return "unchanged";
   if (text.length && !text.endsWith("\n")) text += "\n";
   text += "\n" + fragment.trimEnd() + "\n";
-  // Failure-ISOLATED like the Codex-prompt write: a read-only / unwritable AGENTS.md (an adopter can
-  // legitimately have one) must NOT abort a mostly-complete adopt after the load-bearing hooks +
-  // commands + pre-commit have already installed. Warn-and-continue via the return; main() logs it.
-  try { writeFileSync(agents, text); } catch { return "write-failed"; }
-  return "written";
+  // Routed through appendWrite (containment + a non-throwing counted write). A failure does NOT
+  // abort the adopt — the load-bearing hooks + commands + pre-commit are already installed and the
+  // run finishes — but it IS counted, so an unwritable AGENTS.md is a visible exit 1, not a silent
+  // exit 0 that claims the fallback pointer landed when it did not.
+  return appendWrite(agents, text) ? "written" : "refused";
 }
 
-function gitConfig(target, key, value) {
+// `git rev-parse <flag>` for the target, trimmed — or null if git cannot answer. rev-parse is
+// IMMUNE to GIT_CONFIG (the fail-closed seat verified this), so it resolves where git's writes
+// really go regardless of any config-file redirect in the environment.
+function gitRevParse(target, flag) {
+  try {
+    return execFileSync("git", ["-C", target, "rev-parse", flag], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch { return null; }
+}
+
+// ROOT-BATCH CURE (write-target trust): set a git config key AND PROVE it landed in the target's
+// OWN config — the resolved-EFFECT discipline that replaces trusting a NAME ENUMERATION. `git
+// config <key> <value>` obeys GIT_CONFIG (and any future write-redirect var), so a bare write can
+// silently land in a FOREIGN file while exiting 0. After the write we resolve the target's real
+// config path with rev-parse (immune) and read the value back with `git config --file <that path>`
+// (also immune — a bare `git config --get` is redirected by GIT_CONFIG too). The value is trusted
+// ONLY when it reads back from the target's own config. This closes GIT_CONFIG and every future
+// write-redirect var at once, without enumerating any of them. Returns true iff the write provably
+// landed in the target; false when it went elsewhere or git failed.
+function gitConfigVerified(target, key, value) {
   try {
     execFileSync("git", ["-C", target, "config", key, value], { stdio: ["ignore", "pipe", "pipe"] });
-    return true;
   } catch { return false; }
+  // core.hooksPath is a --local setting, which for a linked worktree lives in the COMMON config —
+  // so the read-back must resolve the common dir, not the per-worktree gitdir. rev-parse hands back
+  // a relative ".git" for a plain repo; resolve it against the target.
+  const commonDir = gitRevParse(target, "--git-common-dir");
+  if (commonDir === null) return false;
+  const configFile = path.resolve(target, commonDir, "config");
+  let readBack;
+  try {
+    readBack = execFileSync("git", ["-C", target, "config", "--file", configFile, "--get", key], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch { return false; }   // absent from the target's real config = the write escaped it
+  return readBack === value;
 }
 
 // Compare paths by realpath so the macOS /tmp -> /private/tmp symlink (where worktrees live) does not
@@ -688,27 +765,49 @@ function realpathOrSelf(p) {
   try { return realpathSync(p); } catch { return path.resolve(p); }
 }
 
-// The git-dir escape — the one writer that went through NONE of this file's protections. `git
-// config` writes into whatever git directory the target RESOLVES to, and a `.git` that is a
-// SYMLINK resolves into another repository entirely: core.hooksPath landed in THAT repo's config,
-// outside the install, from a run that exited 0. No per-file lstat, no containment check and no
-// backup covers it, because the write is git's, not ours.
+// The git-dir escape — a write git performs that goes through NONE of this file's protections.
+// `git config` writes into whatever git directory the target RESOLVES to, and a `.git` that is
+// NOT a plain directory can resolve into another repository entirely: core.hooksPath then landed in
+// THAT repo's config, outside the install, from a run that exited 0. No per-file lstat, no
+// containment check and no backup covers it, because the write is git's, not ours. This is a fast
+// PRE-CHECK with a targeted message; the read-back in gitConfigVerified is the categorical backstop
+// (but a `.git` POINTER is followed identically by the read-back's own rev-parse, so the pointer
+// escape is caught HERE, not there).
 //
-// The refusal keys on the SYMLINKED-`.git` SHAPE, never on the git dir's location alone: a linked
-// `git worktree` checkout legitimately keeps its git dir under the primary clone's common dir, and
-// its `.git` is a FILE ("gitdir: …"), not a link — refusing on location would break every worktree
-// adoptee. Returns the resolved git dir when it escapes the target, else null.
+// TWO escaping shapes, ONE legitimate shape that must keep working:
+//   · `.git` a SYMLINK into another repo's git dir — escape.
+//   · `.git` a regular FILE holding `gitdir: /elsewhere` (a plain gitdir pointer) — escape.
+//   · `.git` the FILE a `git worktree` writes ("gitdir: <primary>/.git/worktrees/<name>") — NOT an
+//     escape: its per-worktree gitdir is NESTED under the common dir's `worktrees/`, and
+//     core.hooksPath legitimately writes to that shared COMMON config (the adopter's own repo
+//     family). That nesting is the signal that tells a real worktree from a plain pointer — both
+//     have a git dir OUTSIDE the target, so location alone cannot, which is why a real worktree
+//     adoptee must be recognized by shape, not refused.
+// A plain `.git` DIRECTORY writes in place and is checked by the read-back alone. Returns the
+// resolved escaping git dir (for the message) when it escapes, else null.
 function escapingGitDir(target) {
-  if (!isSymlinkAt(path.join(target, ".git"))) return null;
-  let gitDir;
-  try {
-    gitDir = execFileSync("git", ["-C", target, "rev-parse", "--absolute-git-dir"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  } catch {
-    gitDir = path.join(target, ".git");   // git could not say; the link itself resolves well enough
-  }
-  const resolved = realpathOrSelf(gitDir);
+  const dotgit = path.join(target, ".git");
+  let st;
+  try { st = lstatSync(dotgit); } catch { return null; }   // no .git here — nothing to resolve
+  const isLink = st.isSymbolicLink();
+  const isFile = !isLink && st.isFile();
+  if (!isLink && !isFile) return null;   // a real .git DIRECTORY: writes land in <target>/.git
   const root = realpathOrSelf(target);
-  return (resolved === root || resolved.startsWith(root + path.sep)) ? null : resolved;
+  const absGitDir = gitRevParse(target, "--absolute-git-dir");
+  const commonDir = gitRevParse(target, "--git-common-dir");
+  if (absGitDir === null || commonDir === null) {
+    // git could not resolve it; fall back to the link/file's own realpath (covers a symlink whose
+    // target git dir is plain to resolve without git).
+    const resolved = realpathOrSelf(dotgit);
+    return (resolved === root || resolved.startsWith(root + path.sep)) ? null : resolved;
+  }
+  const absReal = realpathOrSelf(absGitDir);
+  const commonReal = realpathOrSelf(path.resolve(target, commonDir));
+  // A linked worktree: per-worktree gitdir nested under <common>/worktrees/. core.hooksPath writes
+  // to the common config — allowed, and gitConfigVerified confirms it landed there.
+  if (absReal.startsWith(path.join(commonReal, "worktrees") + path.sep)) return null;
+  // Otherwise the write lands in the common config; escape if that resolves outside the target.
+  return (commonReal === root || commonReal.startsWith(root + path.sep)) ? null : commonReal;
 }
 
 function isGitRepo(target) {
@@ -737,6 +836,14 @@ function main() {
   const badState = (args.stateDocs || []).filter((s) => { const n = path.posix.normalize(s); return s.startsWith("/") || s.includes("\\") || n === ".." || n.startsWith("../"); });
   if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }
 
+  // The FIRST write of the run is ensureDir(T) itself. A dangling symlink in T's own ancestry
+  // (a `--target` under a link that resolves nowhere) made mkdir throw a raw ENOENT here — before
+  // the accounting even exists — the one dangling-ancestor site the per-write guard could not cover
+  // because it runs earlier. Give it the same typed refusal the other sites give, as a hard exit.
+  {
+    const targetBlocked = resolveWithoutCreating(T).blocked;
+    if (targetBlocked) { console.error(`init: cannot create the target ${T}: it ${targetBlocked}`); process.exit(1); }
+  }
   ensureDir(T);
   staleKept = [];
   backupRefused = [];
@@ -820,16 +927,31 @@ function main() {
       // The remediation deliberately does NOT hand over the `git config` line the branch below
       // prints: running it by hand performs the very write refused here.
       backupRefused.push(path.join(T, ".git"));
-      warn(`REFUSED to set core.hooksPath: ${path.join(T, ".git")} is a SYMLINK whose git directory resolves OUTSIDE the install target (${escaped}) — the setting would be written into ANOTHER repository's config, arming its commits with ${T}/.githooks and leaving this one unbound. Replace the link with a real .git directory and re-run (a linked \`git worktree\` checkout, whose .git is a FILE, is unaffected).`);
-    } else if (gitConfig(T, "core.hooksPath", ".githooks")) {
+      warn(`REFUSED to set core.hooksPath: this repo's git directory resolves OUTSIDE the install target (${escaped}) — ${path.join(T, ".git")} is a symlink, or a \`.git\` file holding \`gitdir: /elsewhere\`, that sends git's writes there. The setting would be written into ANOTHER repository's config, arming its commits with ${T}/.githooks and leaving this one unbound. Replace it with a real .git directory and re-run (a linked \`git worktree\` checkout, whose .git points under its primary's worktrees/, is unaffected).`);
+    } else if (gitConfigVerified(T, "core.hooksPath", ".githooks")) {
       log(pcTrusted
         ? `  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`
         : `  core.hooksPath=.githooks set — but the pre-commit is an EXISTING, UNVERIFIED hook (see warning above); the every-lane guarantee depends on it, NOT confirmed`);
     } else {
-      warn(`could not set core.hooksPath — run: git -C ${T} config core.hooksPath .githooks`);
+      // The write did NOT read back from the target's OWN config: a GIT_CONFIG / write-redirect var
+      // sent it to a foreign file, or git could not write it. Either way the every-lane floor is
+      // NOT set here — a counted refusal, not a soft warn that exits 0 on an unarmed repo. This is
+      // the backstop that makes the write-target-trust categorical for any redirect var, named or
+      // not. No `git config …` remedy is offered: run by hand under the same redirect it repeats.
+      backupRefused.push(path.join(T, ".git"));
+      warn(`REFUSED to set core.hooksPath: the write did not read back from ${T}'s own git config — it was redirected to another file (a GIT_CONFIG / write-redirect variable in this environment) or git could not write it. The every-lane commit floor is NOT set here. Clear any GIT_CONFIG* variables, confirm git can write ${T}'s config, and re-run.`);
     }
   } else {
-    warn(`${T} is not a git repo yet — after 'git init', run: git config core.hooksPath .githooks (FM1: unset ⇒ the pre-commit control is silently absent)`);
+    // isGitRepo(T) came back false — but a Git LOCATION variable set to an EMPTY value makes git
+    // itself reject the tree ("not a git repository: ''") even when T IS a repo, so a blanket "not
+    // a git repo yet" would misdescribe the cause. gitLocationOverrides only counts NON-empty
+    // values (an empty one is not a relocation), so those runs land here; name the real cause.
+    const emptyGitVars = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"].filter((n) => Object.prototype.hasOwnProperty.call(process.env, n) && String(process.env[n]).trim() === "");
+    if (emptyGitVars.length) {
+      warn(`git could not resolve ${T} as a repository — ${emptyGitVars.join(", ")} ${emptyGitVars.length > 1 ? "are" : "is"} set to an EMPTY value, which git rejects. If ${T} is a git repo, clear the empty variable(s) (unset them, do not blank them) and re-run so core.hooksPath is set; otherwise run 'git init' first. (FM1: unset core.hooksPath ⇒ the pre-commit control is silently absent.)`);
+    } else {
+      warn(`${T} is not a git repo yet — after 'git init', run: git config core.hooksPath .githooks (FM1: unset ⇒ the pre-commit control is silently absent)`);
+    }
   }
 
   // 4. scripts: portable controls and the repair-event recorder (+ optional gate runners).
@@ -1395,8 +1517,7 @@ function main() {
   if (ptr === "written") log(`  AGENTS.md: /thread-restart fallback pointer appended`);
   else if (ptr === "unchanged") log(`  AGENTS.md: /thread-restart pointer already present (unchanged)`);
   else if (ptr === "absent") warn(`AGENTS.md absent — /thread-restart pointer NOT appended (generate AGENTS.md, then re-run)`);
-  else if (ptr === "refused") { /* refused, warned and counted at the site */ }
-  else warn(`could not ${ptr === "read-failed" ? "read" : "write"} AGENTS.md to append the /thread-restart pointer — the rest of the adopt is unaffected; fix AGENTS.md permissions and re-run`);
+  else if (ptr === "refused") { /* refused, warned and counted at the site — surfaced in the end-of-run report */ }
 
   // 8. .gitignore (lane declaration, ledger and rung sidecar are per-session).
   // The RUNG SIDECAR belongs in this list for the same reason as the declaration, and one reason of

@@ -159,7 +159,7 @@ test("the round controller pins the finite aggregate boundary", () => {
   assert.match(workflow, /Accepted harm in R1 or R2 permits one bounded batch/);
   assert.match(workflow, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
   assert.match(workflow, /R4, the final bookend/);
-  assert.match(workflow, /there is no R5, cycle, scope reset, or audit window/);
+  assert.match(workflow, /no R5, cycle, scope reset, or audit window/);
   assert.match(workflow, /automation checks shape and surfaces candidates, never semantic sameness/,
     "semantic finding classes remain declarations; automation is only a shape check and sensor");
 });

@@ -1002,8 +1002,8 @@ function aggregateWorld(events, standardEvents = []) {
         return !(allTerminal && (anyVirgin || (remainder && targetsRemainder)));
       };
       // The freshest un-discharged harms ride the lineage: panels COLLECTED after the anchor
-      // disposition but never adjudicated carry ground the successor must not shed (the R4
-      // bookend executed the shedding: the honest successor refused, the shedding one recorded).
+      // disposition but never adjudicated carry ground the successor must not shed (a measured
+      // defect: the honest successor refused while a shedding one recorded).
       const undisposedGround = [...new Set(state.panels_close
         .filter((close) => {
           const open = state.panels_open.find((candidate) => candidate.event_id === close.panel_open_event_id);
@@ -1451,7 +1451,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
   const event = jsonNormalize(rawEvent);
   if (!event || !validAggregateEnvelope(event)) {
     // One spelling per kind: the recorder's pre-checks and this derived name must agree, or a
-    // caller greps for a state that exists in two forms (R4 note).
+    // caller greps for a state that exists in two forms (a measured diagnosability defect).
     const kindName = rawEvent?.kind === "child_continuation" ? "continuation"
       : String(rawEvent?.kind ?? "event").replace(/_/g, "-");
     return { ok: false, state: `aggregate-${kindName}-malformed` };
