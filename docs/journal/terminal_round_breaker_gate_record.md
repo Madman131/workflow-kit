@@ -913,3 +913,58 @@ State: **npm test 275/275 · acceptance PASSED · WORKFLOW 25,078/25,088 (10 B) 
 inside caps · parity red = the standing pre-landing state.** Round accounting: R1 batch 1 · R2
 batch 2 · **R3 batch 3 (root_replacement — SPENT)**. The allowance is exhausted; R4 is the final
 bookend, GO xor STOP, no further batch.
+
+## terminal-round-breaker-2 · ROUND 4 · FINAL BOOKEND · candidate `1eac8412…` (tree `d1f0f7d3…`)
+
+Panel (mixed fleet): free (OPUS) · state-machine (FABLE) · fail-closed (OPUS) · doctrine (OPUS) ·
+adversarial (FABLE) + Codex external (receipt `TRB2-R4-9528cfaed710fa17`, quote verified against
+core/OPERATE.md:1) + Gemini design bookend (receipt `PIL-DONE-57258b57731b6931d8e594eb`).
+Verdicts: **5 GO (every internal seat), 2 NO-GO (both external).**
+
+`GATE ROUND 4 · changeset terminal-round-breaker-2 · verdict HOLD + ESCALATE · HARM-PASSING 1
+material (Owner risk call) · NOTES 6 · LADDER: STOP-AND-ESCALATE`
+
+### Disposition
+
+**DECLINED (design-mode misreads, refuted by the executing internal seats):** Gemini-1
+(intermediate-round followups are routed at THEIR OWN disposition, {id,route} inline — not carried
+to, nor lost by, the terminal continuation; the controller consumes no followup route) · Gemini-2
+(a clean collected-panel abandon uses the WINNING-OPEN anchor whose rule is `same(trigger_ids,
+ground)`; an empty ground legitimately matches empty triggers — M36's empty-refuses floor is the
+DISPOSITION anchor, a different path; the empty-ground continuation is constructible).
+
+**THE ONE MATERIAL FINDING — Codex, executed, confirmed by three internal executors and the
+changeset's own test (`tests/init-force.test.mjs:452`):** `gitConfigVerified` performs the
+`git config` write BEFORE proving the target, so with `GIT_CONFIG` set to a foreign repo the write
+LANDS in that repo's config (`core.hooksPath=.githooks`) once, THEN the read-back detects the
+mismatch and init refuses (counted, exit 1, target never falsely armed). The safety MECHANISM is
+fail-closed — no fail-open path exists for a plain repo, the read-back is categorical for any
+config-file redirect, and the location vars refuse up front (verified by the free, adversarial,
+and fail-closed seats, disabled-arm mutations binding). BUT the § 7 CATEGORICAL at contract:244
+("so no path or environment routes a write into another repository") is LITERALLY FALSE: a write
+IS routed there, transiently, before the refusal. Plus the fail-closed seat's F1: the sibling § 7
+sentence at :261-262 (worktree-symlink "conservatively refused") is also false-by-execution, in
+the SAFE direction (batch-3 made init correctly ADOPT it).
+
+**Adjudication (PM):** the harm is narrow-trigger (`GIT_CONFIG` is not git-exported to hooks),
+reversible (`core.hooksPath`), and signaled (exit 1) — not a clean accepted-blocker on the harm
+axis, which is why 5 seats including the three executors closed GO. But a T3 BINDING contract
+must not ship a literally-false safety categorical, and the fix cannot be made at a bookend (no
+batch). This is a risk-acceptance call the doctrine reserves to the Owner (`WORKFLOW § Gate`:
+"Owner judgment that changes intent or accepts risk remains HOLD + ESCALATE, never relabeled
+GO"). **Recorded as HOLD + ESCALATE, NOT a unilateral GO or STOP.** Two options put to the Owner:
+- (A) STOP → a small third Owner continuation: PIN the write to `git config --file
+  <resolved-common-dir>/config` (prevention — the write can no longer escape), true both § 7
+  sentences, quick gate. Makes the categorical literally true.
+- (B) ACCEPT as a contained residual (`HOLD—OWNER-ACCEPTED CONTAINMENT`): land breaker-2 with the
+  two § 7 sentences trued as a doc-only fast-follow, the narrow GIT_CONFIG write noted as the
+  accepted residual, prevention deferred to a backlog ticket.
+
+**NOTES (6):** the § 7:261-262 stale-safe sentence (rides whichever option) · the printed-CONTRACT
+redundant "child" (doctrine seat, momentary grandchild misread) · M54 test title still "intersect"
+vs "share" (cosmetic) · the parity rung (landing sync) · WORKFLOW at 10 B headroom · the accepted
+commit-subject-narration residual (successor discipline).
+
+State: **npm test 275/275 · acceptance PASSED · budgets in cap · parity red = pre-landing.** The
+cadence machinery held under the full bookend attack (endgame walls, terminality, reservation
+disclosure, § 3 semantics all verified). The changeset is one Owner risk-decision from terminal.
