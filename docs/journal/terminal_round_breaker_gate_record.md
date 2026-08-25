@@ -663,3 +663,127 @@ State: **npm test 259/259 · acceptance PASSED · WORKFLOW 25,064/25,088 · budg
 parity red = the standing pre-landing state.** Round accounting: R1 batch 1 (bounded, spent) ·
 remaining: R2 bounded · R3 root kind · R4 bookend. The R2 panel runs the ratified mixed fleet:
 free/doctrine/fail-closed at OPUS, state-machine/adversarial at FABLE, externals unchanged.
+
+## terminal-round-breaker-2 · ROUND 2 · candidate `53ac98e9c2b58954d48c75fe77c0f5dae7ae783d` (tree `4a8db816…`)
+
+Panel — THE FIRST FULL MIXED-FLEET ROUND (tiers per the Owner's ratification): free (OPUS) ·
+state-machine (FABLE) · fail-closed (OPUS) · doctrine-truth (OPUS) · adversarial walk-through
+(FABLE) + Codex external (receipt `TRB2-R2-1cb40149b714f415`, quote verified against
+core/FOUNDATIONS.md:1) + Gemini design bookend (receipt `PIL-DONE-371b88c6…`). Verdicts:
+six NO-GO, one GO (the Fable adversarial seat — every walk BLOCKED at named lines). One
+operational incident this round, logged as FM-2026-08-25-14: the first Codex launch hung on an
+empty prompt for ~an hour before the Owner's nudge surfaced it; killed, re-fired clean. One seat
+(fail-closed) disclosed that the CONTROLLER'S OWN COMMENTS narrating prior rounds folded it —
+accepted below as CI. Mixed-fleet ledger, this round's read: the three OPUS seats delivered the
+two deepest mechanism finds (the env-override git-dir fail-open; the rebase brick) and the
+sharpest truth pass; the FABLE seats delivered the widest execution volume (55 probes; the
+walk-through GO with every boundary held). Both tiers earned their seats.
+
+`GATE ROUND 2 · changeset terminal-round-breaker-2 · verdict NO-GO · HARM-PASSING 9 clustered ·
+NOTES 14 · LADDER: continue`
+
+### R2 accepted clusters (batch 2, ONE bounded batch — with the recurring doc-drift CLASS
+### killed by a mechanical pin, not another hand pass)
+
+- **CA · Contract-truth set (SIX-seat convergence on the cap alone):** § 2:73 and § 8 M47 still
+  say 1200 while the code caps 2600 — my own batch-1 edit trued the code and missed both
+  sentences, and a maintainer "restoring" 1200 makes every ledger holding a >1200-id row
+  UNREADABLE (M49's mutant proves it). Cure: both sentences trued; M48–M53 rows added (init
+  hardening included); M43's row gains the remainder clause; RECORDED/COLLECTED trued in
+  § 3/T12/M24 and the two controller comments; § 7's disclosed-limits rewritten BOTH directions
+  (the settings sentence is FALSE — that hole was closed in the same commit; the escapingGitDir
+  control gets its missing sentence); § 6's RUNG_ZERO description fixed; WORKFLOW:78's "restart
+  the required gates" disambiguated to the honest exit; T9 gains the open(r+1) reach the
+  mechanism has (twice-misread by design seats); § 2's refusal enumeration completed
+  (root-exit-unexpected, worker-superseded); the M47 test title; README:1281's stale no-force
+  instruction. THE CLASS CURE: two mechanical agreement pins — the contract's cap number must
+  equal the code's, and every M-id in the suite must have a § 8 row — so repair-introduced doc
+  drift reddens instead of waiting for a panel.
+- **CB · Env-override git-dir fail-open (failclosed-F1, executed three ways):** `git config`
+  resolves from GIT_DIR/GIT_COMMON_DIR/GIT_WORK_TREE before the filesystem, so the link-shape
+  guard never fires and init writes ANOTHER repo's config, exit 0, "binds every lane" printed,
+  the adopted repo silently unarmed — reachable from any git hook (git exports GIT_DIR). Cure:
+  refuse the config write when any Git-location override is observed (named, counted — § 4(a)'s
+  own rule applied to its sibling control), keeping the symlink refusal and real worktrees
+  working; the refusal report's "still its OLD content" wording trued for non-file entries (N3).
+- **CC · The unpinned legacy guard (failclosed-F4):** the legacy-branch `stoppedPathOverlap`
+  is deletable GREEN across all 259 tests yet holds back an executed permanent mutual brick.
+  Cure: M53 pins both polarities, deletion-red.
+- **CD · The base pin's bare refusal (Opus-free-F1 + state-machine-F3, executed):** a rebased/
+  merged lane bricks with an undiagnosable generic conflict — the cure's target was right, its
+  failure mode undisclosed. Cure: the panel-open diagnosis names the base mismatch and the two
+  honest exits (continue on the original base · close+successor); the deny text gains the
+  cause; contract § 3/§ 5 disclose the cost and the lane discipline (a gated changeset's base is
+  frozen — integrate upstream AFTER terminal); § 9 discloses the base-REF-must-keep-resolving
+  bound (state-machine-F4). Mechanism unchanged: rounds bind commits, and a rebased lane is a
+  new candidate lineage.
+- **CE · The `.bak` single-use-upgrade lockout (Gemini-3):** W7's differing-`.bak` refusal makes
+  the SECOND kit upgrade hard-fail (V1's backup blocks V2's). Cure: rotate a differing prior
+  `.bak` to the first free `<file>.bak.<n>` and save — nothing destroyed, upgrades flow,
+  hand-edits keep every generation; § 7 trued; both polarities tested.
+- **CF · Root-level append writes through symlinks (Codex-2; the standing disclosed limit):**
+  disclosed twice, flagged three times — cheaper to close than keep disclosing. Cure: lstat
+  refusal on the `.gitignore`/AGENTS.md append targets (counted, plain and force); the
+  disclosure line DELETED for these two (the thread-restart exemption remains).
+- **CG · The remainder-reopen unrelated-path grind (adversarial walk-3, executed 4 cycles):**
+  the remainder disjunct reopens the anchor for budgets that never touch the remainder. Cure:
+  reopening VIA remainder requires the new children's budgets to intersect the un-lifted
+  remainder (the virgin route is unchanged); M54 pins it.
+- **CH · The dangling-ancestor crash (free-F5 ≡ the standing worker residual, now § 7-tension):**
+  `resolveWithoutCreating` follows links, so a dangling `.claude` resolves INSIDE and `ensureDir`
+  throws a raw ENOENT after core/ already wrote. Fails closed but refuses nothing by name. Cure:
+  lstat-first in the walk — a dangling link component REFUSES typed and counted, no throw.
+- **CI · The controller narrates its own gate history (failclosed-F5 — it folded the seat):**
+  fourteen comments carry round attributions and a severity ranking, shipping this repo's gate
+  narration verbatim to every adopter. Cure: the attributions stripped, the mechanism rationale
+  kept — per § 0's own narration rule, applied to the mechanism's most-read file.
+
+**DECLINED (failed premise or mechanism, recorded):** Gemini-1 cap arithmetic (the maximum
+mandatory carry is 2500 ≤ 2600 — derived AND executed independently by two seats; only one
+collected-undisposed panel can exist) · Gemini-5 T10-omits-overlap (the arm re-runs all three
+overlap checks; M29/M40 pin it) · Gemini-6 close-reserves-unreceipted-opens (the UNION is
+deliberate — close-then-relabel protection over the program's declared surface; fail-closed
+direction; the recordation truing in CA states it honestly) · Codex sandbox EPERM (standing
+environment bound). **NOTES:** the relinked-worktree false positive (conservative by design,
+N4) · "W7/W8" are gate-record names, absent from the artifact by design (N6) · the gemini log's
+mid-panel growth was this program's own runner appending its attempt record (N5 — no foreign
+writer) · the at-cap flags stand (WORKFLOW 24 B · RUNG_ZERO 1 word — Owner sign-off material) ·
+frontier-review SKILL's sibling sentence + § 6/§ 8c omission (routed follow-up) · the doc-size
+headroom ledger entry for this changeset's 103 B (routed follow-up — the ledger sits in a
+script comment, not doctrine).
+
+Round accounting: R1 batch 1 (bounded, spent) · **R2 batch 2 (bounded — this disposition; the
+recurring doc-drift class is killed by CA's mechanical pins rather than a root batch)** ·
+remaining: R3 root kind · R4 bookend. Worker assignment: init cures (CB/CE/CF/CH) and the new
+pins (CC/CG/CA-pins) to the OPUS workers; controller/contract/diagnosis/comments (CA/CD/CG-code/
+CI) to the orchestrator.
+
+## terminal-round-breaker-2 · BATCH 2 COMPLETE (2026-08-25)
+
+All nine R2 clusters consumed in the one bounded batch. Orchestrator: CA's contract truth set
+(cap sentences trued to 2600 with the union arithmetic · M43/M47 rows corrected · M48–M54 rows
+added · RECORDED-terms truing through § 3/T12/M24 and the controller's discriminator comment ·
+§ 7 rewritten both directions · § 6's RUNG_ZERO description · T9's open-reach · the completed
+refusal enumeration · WORKFLOW's mis-tier line inside its one-byte budget · README's v1.6-era
+no-force instruction annotated) · CD's base-pin diagnosability (the named diagnosis with both
+exits, the deny cause, § 3's cost + lane discipline + ref bound, § 5's rebase discriminator) ·
+CG's remainder-intersect gate · CI's de-narration (16 gate-history attributions stripped from
+the shipped controller). Init worker (OPUS): CB env-override refusal importing the controller's
+OWN override predicate (no second hand-kept copy) · N3's report sentence trued · CE `.bak`
+rotation (three successive upgrades proven, generations preserved, non-regular squatters still
+refuse) · CF append-write lstat refusals · CH the dangling-ancestor typed refusal on one shared
+vocabulary — each proven red under a targeted revert; init-force 15→19; one over-reach caught by
+ACCEPTANCE and honestly reverted with the reasoning documented (failure-isolated families stay
+failure-isolated). Test worker (OPUS): M53 (the order-sensitive fixture isolating the legacy
+guard as sole refuser) · M54 (the exact-arm mutant) · the M47 title · and the two CLASS-KILLING
+agreement pins — cap number code↔contract and M-row completeness — observed RED before the
+contract edits landed mid-round and GREEN after, then proven against the old spellings via git
+(the drift class now reddens mechanically). Worker residuals routed: the empty-GIT_DIR
+diagnosis mismatch (pinned as current behavior; deviating from the shared predicate is not a
+worker's call) · the regular-file-ancestor ENOTDIR at non-isolated sites (pre-existing, now
+documented in the walk).
+
+State: **npm test 267/267 · acceptance PASSED · WORKFLOW 25,087/25,088 · budgets inside caps ·
+parity red = the standing pre-landing state.** Round accounting: R1 batch 1 · R2 batch 2 (both
+bounded, spent) · remaining: R3 (root kind only, if accepted harm exists — a clean panel closes
+GO at any round per the doctrine this program itself landed) · R4 bookend.

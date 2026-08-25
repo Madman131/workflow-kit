@@ -2106,3 +2106,76 @@
     INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, §§ 0-9)
     
     PIL-DONE-1c6a3454f0159d830ac505ce
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T13:38:19Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787664913-14648-210524403`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=46587; instrumented_payload=46740; inline_combined=50557; file=46813
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `0ddb85064e4225b4a8648ee9f8667055e6f1d687`
+- Artifact-Base: `53ac98e9c2b58954d48c75fe77c0f5dae7ae783d`
+- Artifact-SHA: `0ddb85064e4225b4a8648ee9f8667055e6f1d687`
+- Artifact-Ref: `refs/pil/gate-artifacts/0ddb85064e4225b4a8648ee9f8667055e6f1d687`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0-9)
+- Start: 2026-08-25T13:35:13Z
+- End: 2026-08-25T13:38:19Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-058b1415d2505046d1ce2fee
+    CANARIES: PIL-INGEST-0164292154a3 PIL-INGEST-02543bf9da4e PIL-INGEST-03afcef432d3
+    
+    Here is the independent cross-family audit of the `terminal_round_breaker_contract.md` design. 
+    
+    ### 1. BLOCKER: Trigger ID Cap Makes "Sole Exit" Shape-Impossible (Mechanism Correctness)
+    * **Section:** § 2 (`child_continuation`) and § 3 (T13, Terminal reservations)
+    * **Concrete Failure Scenario:** Round 1 accepts 50 finding ids and proceeds. Round 2 collects a full panel of 1200 finding ids, but the worker crashes and the program is abandoned (`close`) before disposition. To escape the resulting permanent path reservation, a `child_continuation` must be minted. The required trigger set for a `CLOSED` parent is defined as "a SUPERSET of the accepted set PLUS every collected-but-undisposed panel's raw finding ids" (50 + 1200 = 1250 ids).
+    * **Why it matters:** The 1250 required ids exceed the hard `cap 1200` defined in the event grammar. The continuation event will be unconditionally shape-refused. Because a `CLOSED` program permanently reserves its paths and "the sole exit is the reserving parent's own lineage", these paths are permanently bricked with no legal escape hatch. 
+    * **The Fix:** Increase the trigger ID cap to accommodate multiple rounds of history (e.g., 4800) or explicitly exclude the current round's collected-but-undisposed ids from counting against the historical accepted-set cap.
+    
+    ### 2. BLOCKER: Unbounded Ledger Growth via LLM Disclosure Text (Resource Exhaustion)
+    * **Section:** § 2 (`panel_close`), § 1, and REPO_INVARIANTS #1
+    * **Concrete Failure Scenario:** The system runs multiple rounds of repair, writing `panel_close` events to the shared ledger. Each event contains `pre_loaded`, mandated as "the seat's disclosure text" (which naturally includes large prompts, model responses, and diffs).
+    * **Why it matters:** The repair ledger (`.git/workflow-kit/repair-events-v1.jsonl`) is explicitly append-only, shared by all worktrees, and strictly forbids truncation ("Corrupt, truncated... FAILS CLOSED"). Writing full LLM disclosure texts from up to 12 seats per round directly into an un-truncatable JSONL file will rapidly bloat. On a constrained 2 GB box, this will exhaust disk space and permanently brick the repository's gating mechanism once writes fail.
+    * **The Fix:** Do not store raw `pre_loaded` textual evidence in the immutable ledger. Store large disclosure payloads in separate, ephemeral/rotatable artifact files and only record their deterministic sha256 receipt in the `panel_close` row.
+    
+    ### 3. HIGH: Upgrade Mechanism Permanently Bricks on Second Use (Deploy/Migration Ordering)
+    * **Section:** § 7 (Adopter upgrade rung)
+    * **Concrete Failure Scenario:** An adopter runs `init --force` to upgrade V1 to V2. Mechanism files are backed up (e.g., `guard.mjs` is copied to `guard.mjs.bak`). Later, the adopter runs `init --force` to upgrade V2 to V3. The updater attempts to back up the current V2 file to `guard.mjs.bak`.
+    * **Why it matters:** The V3 backup sees that `guard.mjs.bak` already exists and its bytes (V1) differ from the payload being backed up (V2). Section 7 rigidly mandates: "An existing `.bak` whose bytes differ from what this run would save is NEVER overwritten... a backup that cannot be taken refuses the overwrite". The V3 upgrade hard-fails. The automated upgrade path effectively becomes single-use, permanently blocking future updates.
+    * **The Fix:** Implement backup rotation (`.bak.1`, `.bak.2`) or permit overwriting an existing `.bak` file if its contents match a known prior version of the mechanism. The "never overwrite" lockout must be scoped exclusively to genuine, unrecognized hand-edits.
+    
+    ### 4. HIGH: Worker Handoff Gap During Active Review (Completeness Gaps)
+    * **Section:** § 3 (Transition table T9 vs T10)
+    * **Concrete Failure Scenario:** A worker successfully dispatches a batch (T8) and opens Round 2 (T10), moving the state to `open(r+1)`. The worker's session then crashes or hangs before achieving `panel_close`.
+    * **Why it matters:** T9 explicitly restricts `worker_handoff` strictly to the `From: dispatched(r)` state. It is not a legal transition from `open(r)`. A dead worker in the open state cannot be replaced. The only escape is to globally `close` (abandon) the program, which punitively reserves all paths and forces a `child_continuation` just to resume the interrupted review.
+    * **The Fix:** Add `worker_handoff` as a legal transition from `open(r)` in the transition table, allowing a new Owner-evidenced session to seamlessly take over a stalled open round without abandoning it.
+    
+    ### 5. MEDIUM: Subsequent Rounds Omit Overlap Guard (Concurrency / Lock Hazards)
+    * **Section:** § 3 (Transition table T10)
+    * **Concrete Failure Scenario:** Program A begins Round 1 on `file1.js` (passing the T1 overlap check). Program A completes R1 and opens R2 (T10). However, the worker dynamically expands the scope of R2 to include `file2.js`. Meanwhile, Program B has already started R1 on `file2.js`.
+    * **Why it matters:** T10 (`open(r+1)`) deliberately allows the tier to escalate and candidate to change, but entirely omits the "no ACTIVE program... owns any declared path" overlap guard that protects T1 and T3b (Refreeze). Program A silently overwrites Program B's lock on `file2.js`, violating the single-writer invariant and causing a concurrent write hazard.
+    * **The Fix:** Explicitly mandate "both overlap checks re-run" in the T10 guard column, identical to the strict requirement in T3b.
+    
+    ### 6. LOW: Close Mechanism Locks Unreviewed Paths (Mechanism Correctness)
+    * **Section:** § 3 (T12 Close)
+    * **Concrete Failure Scenario:** A program opens R1 on path `A`, collects a panel, and continues. The worker opens R2 on `A + B`. Before collecting R2's panel, the program is abandoned via `close`.
+    * **Why it matters:** T12 dictates that a close after *any* collected panel (which R1 satisfies) "reserves the UNION of the program's opens' changed paths." This permanently reserves both `A` and `B`, even though `B` was never reviewed or collected in any panel. This allows arbitrary paths to be locked by expanding scope in R2 and immediately closing.
+    * **The Fix:** The path reservation upon `close` should intersect strictly with the paths successfully subjected to a `panel_close`, rather than the raw `panel_open` union.
+    
+    ---
+    **Overall verdict and highest-risk thing to resolve first:**
+    The single highest-risk item is the **Trigger ID Cap Math Failure (Finding 1)**. It guarantees that any multi-round abandoned repair will permanently brick its paths via a mathematically un-satisfiable schema cap, fatally violating the design's "sole exit" invariant.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0-9)
+    PIL-DONE-371b88c6040d4b51b7e87c99

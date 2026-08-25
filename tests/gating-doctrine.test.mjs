@@ -13,7 +13,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1308,4 +1308,109 @@ test("what a seat RETURNS is left alone — only what a verifier ACCEPTS was cha
     assert.match(read(site), spec,
       `${site}'s OUTPUT SPEC must survive VERBATIM — it says what a seat RETURNS, not what a verifier ACCEPTS`);
   }
+});
+
+// ------------------------------------------- terminal-round-breaker · repair-introduced doc drift
+//
+// ⚠ THE CLASS THESE TWO PINS CURE, and why they are AGREEMENT pins rather than more presence pins.
+// Every other assertion in this file reads ONE surface and checks a clause is there. That shape
+// cannot see the defect that recurred across two rounds of the terminal-round-breaker changeset: a
+// REPAIR moves a number or adds a proven row in the code, and the prose that states it stays
+// behind. Both surfaces are individually well-formed, every existing pin is green, and the reader
+// who trusts the contract plans against a controller that does not exist.
+//
+// So neither pin below hand-lists an expected value. A hand-listed expectation is a THIRD MIRROR —
+// one more copy to drift — and it would have to be edited by the same maintainer who just forgot
+// to edit the doc, which is the very failure being cured. Both EXTRACT from each surface and
+// compare the surfaces to each other.
+//
+// Both carry canaries, because an extractor that silently stops matching turns an agreement pin
+// vacuous-green — the strictly worse failure, since the suite then actively asserts that the
+// surfaces agree while reading neither. Each canary proves the pattern BITES the exact spelling it
+// targets and does NOT bite a moved one, and each live extraction fails LOUD with a re-point
+// instruction rather than defaulting to a value.
+
+const BREAKER_CONTRACT = "docs/journal/terminal_round_breaker_contract.md";
+// DERIVED, not hand-listed: a third controller test file must be picked up without editing this
+// pin, or the completeness check silently stops covering it.
+const CONTROLLER_SUITE = readdirSync(path.join(ROOT, "tests"))
+  .filter((name) => /^terminal-round-breaker.*\.test\.mjs$/.test(name))
+  .sort().map((name) => path.join("tests", name));
+
+test("the trigger-id cap AGREES between the controller and every contract surface that states it", () => {
+  // The executed drift: the controller's envelope bound was raised to admit the panel's own
+  // measured shape while § 2's grammar row and § 8's M47 row both went on claiming the old
+  // number. Suite green both times — no pin compared the two.
+  const CAP_SITES = [
+    { label: "the controller's envelope bound", rel: "hooks/repair-dispatch-state.mjs",
+      pattern: /event\.trigger_ids\.length <= (\d+)/,
+      bites: "event.trigger_ids.length <= 2600 && new Set(event.trigger_ids).size",
+      decoy: "event.trigger_ids.length < 2600" },
+    { label: "§ 2's child_continuation grammar row", rel: BREAKER_CONTRACT,
+      pattern: /cap (\d+) = the /,
+      bites: "raw finding ids; cap 2600 = the union bound: a disposition's 1300-id universe",
+      decoy: "the trigger cap is 2600 ids" },
+    { label: "§ 8's M47 mutation row", rel: BREAKER_CONTRACT,
+      pattern: /\*\*M47\*\* the (\d+) trigger cap/,
+      bites: "**M47** the 2600 trigger cap — a 101-id exact carry accepts",
+      decoy: "**M47** the trigger cap (2600) — a 101-id exact carry accepts" },
+  ];
+  const found = CAP_SITES.map((site) => {
+    // Canary, both directions. Without the first, a pattern that can never match reads as
+    // agreement-by-absence; without the second, a pattern loose enough to catch any nearby digit
+    // would keep passing after the sentence it pins was rewritten around a different number.
+    assert.match(site.bites, site.pattern,
+      `${site.label}: the extractor cannot bite its own spelling — this pin is dead, not passing`);
+    assert.doesNotMatch(site.decoy, site.pattern,
+      `${site.label}: a MOVED spelling must fail LOUD, never silently read some other number`);
+    const hit = site.pattern.exec(read(site.rel));
+    assert.ok(hit, `${site.label} (${site.rel}): the cap is no longer findable — the spelling `
+      + "moved. RE-POINT this pattern; deleting the pin re-arms the drift it exists to catch.");
+    return { label: site.label, value: Number(hit[1]) };
+  });
+  assert.equal(new Set(found.map((site) => site.value)).size, 1,
+    `the trigger-id cap DISAGREES across surfaces — ${found.map((site) => `${site.label} = ${site.value}`).join(" · ")}`
+    + ". A reader plans against the doc; the ledger enforces the code.");
+});
+
+test("every M-row the controller suite asserts is carried in the contract's mutation matrix", () => {
+  // The same class, other direction: a repair proves new rows and § 8 — the document whose ONLY
+  // job is to say which behaviours are proven — is not extended. Five rows went missing this way
+  // in a single round, and a matrix missing its newest rows does not read as incomplete; it reads
+  // as the whole proof.
+  assert.ok(CONTROLLER_SUITE.length >= 2,
+    `expected the controller suite's test files, globbed: ${CONTROLLER_SUITE.join(", ") || "(none)"}`);
+  const titles = CONTROLLER_SUITE.flatMap((rel) => {
+    const found = [...raw(rel).matchAll(/^test\(\s*"([^"]+)"/gm)].map((hit) => hit[1]);
+    // Per-file, not in aggregate: one file's `test(` spelling could move while the other's
+    // carried the total past any global floor.
+    assert.ok(found.length, `${rel}: no test titles parsed — the test( spelling moved. RE-POINT this.`);
+    return found;
+  });
+  const ids = [...new Set(titles.flatMap((title) =>
+    [...title.matchAll(/\bM(\d+)\b/g)].map((hit) => Number(hit[1]))))].sort((a, b) => a - b);
+  assert.ok(ids.length >= 20,
+    `only ${ids.length} M-ids parsed from ${titles.length} titles — the id spelling moved. RE-POINT this.`);
+  // Sliced to the SECTION. A whole-file scan would pass on an id mentioned anywhere — § 8c's prose
+  // or § 0's rulings — which is not the same claim as "the matrix carries a row for it".
+  const matrix = /## 8 · Mutation matrix[\s\S]*?(?=\n## 8c ·)/.exec(raw(BREAKER_CONTRACT))?.[0] ?? "";
+  assert.ok(matrix, "§ 8 must be findable in the contract — RE-POINT this slice");
+  // The END boundary needs its own canary: a renamed § 8c would leave the lazy match running to
+  // EOF, and the slice would then satisfy every row from any later section. Naming the sections
+  // that must lie OUTSIDE it is the check a length heuristic cannot make.
+  for (const outside of ["## 8c ·", "## 9 ·"]) {
+    assert.ok(!matrix.includes(outside),
+      `the § 8 slice ran past its end and swallowed "${outside}" — RE-POINT the slice boundary`);
+  }
+  const flat = matrix.replace(/\s+/g, " ");
+  const row = (id) => new RegExp(`\\*\\*M${id}\\*\\*`).test(flat);
+  // Canary: the row test must bite a row that IS there and miss one that is not, or "no rows
+  // missing" is a statement about a regex that never fired.
+  assert.match("… **M47** the 2600 trigger cap …", /\*\*M47\*\*/,
+    "the row pattern cannot bite the matrix's own row spelling — dead pin");
+  assert.ok(!row(99999), "the row test must be able to go RED, or the completeness claim is empty");
+  const missing = ids.filter((id) => !row(id));
+  assert.deepEqual(missing, [],
+    `§ 8 is missing rows this suite PROVES: ${missing.map((id) => `M${id}`).join(", ")}`
+    + " — the matrix understates the proof while reading as complete");
 });

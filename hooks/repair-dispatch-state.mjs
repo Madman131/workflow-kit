@@ -142,8 +142,8 @@ function validAggregateKindShape(event) {
         // 2600 = the exact-carry bound the grammar itself admits: a disposition's id universe
         // is seat ids (12 x 100) PLUS PM findings (100) = 1300, and the CLOSED floor is additive
         // across two of those universes (accepted ∪ a later round's undisposed ground). The sole
-        // exit must never be SHAPE-impossible for a mandatory carry — the R1 panel executed a
-        // 1300-id STOP against the prior 1200 cap.
+        // exit must never be SHAPE-impossible for a mandatory carry — a 1300-id STOP was executed
+        // against the prior 1200 cap.
         event.trigger_ids.length <= 2600 && new Set(event.trigger_ids).size === event.trigger_ids.length &&
         event.trigger_ids.every((id) => text(id, 300)) &&
         ["split", "new_changeset", "material_scope"].includes(event.continuation_kind) &&
@@ -615,7 +615,7 @@ function aggregateWorld(events, standardEvents = []) {
     // An ACTIVE program binds its authorized repair set PLUS any undisposed open's changed
     // paths: a later round's panel mid-review is as bound as the first round's — leaving it
     // unbound let a concurrent open wedge a live program out of remediating its own reviewed
-    // surface (executed R3 finding).
+    // surface (a measured defect).
     const undisposed = program.panels_open.filter((open) =>
       !program.dispositions.some((disposition) => disposition.round === open.round))
       .flatMap((open) => open.changed_paths);
@@ -638,8 +638,8 @@ function aggregateWorld(events, standardEvents = []) {
   // stopped surface would stay bricked one generation after its reason was fixed. The lift is
   // COVERAGE-SCOPED: a DIRECT lineage child reaching TERMINAL-GO lifts only the paths inside
   // ITS OWN declared budget — never the whole union. A narrowly-scoped first child must not
-  // release its siblings' never-repaired surfaces to unrelated programs (executed R3 finding,
-  // four independent reproductions). A grandchild chain lifts nothing here by design: each
+  // release its siblings' never-repaired surfaces to unrelated programs (measured by
+  // independent executions). A grandchild chain lifts nothing here by design: each
   // generation's reservation is its own, exited through its own direct children.
   const liftedPaths = (program) => {
     const lifted = new Set();
@@ -648,7 +648,7 @@ function aggregateWorld(events, standardEvents = []) {
       const child = programs.get(lineage.task_id);
       if (child?.terminal !== "GO") continue;
       // Budget ∩ OPENED COVERAGE: a wide budget is a plan, not a repair — the lift releases only
-      // what the GO child's panels actually reviewed (the R4 bookend executed the gap: a child
+      // what the GO child's panels actually reviewed (the measured gap: a child
       // declared wide, opened narrow, and its GO released never-reviewed reserved surface).
       const repaired = new Set(child.panels_open.flatMap((open) => open.changed_paths));
       for (const entry of lineage.authorized_paths) if (repaired.has(entry)) lifted.add(entry);
@@ -657,7 +657,7 @@ function aggregateWorld(events, standardEvents = []) {
   };
   // The FULL ancestor chain of a lineage child, for the reservation exception: a grandchild
   // working its parent's reserved slice is also working its grandparent's — excepting only the
-  // direct parent made the exit lattice one-shot (the R4 bookend executed the nested lockout:
+  // direct parent made the exit lattice one-shot (the measured nested lockout:
   // the grandchild refused forever on the grandparent's unliftable reservation).
   const lineageAncestors = (taskId) => {
     const ancestors = new Set();
@@ -678,7 +678,7 @@ function aggregateWorld(events, standardEvents = []) {
   // its own program exists: the child's IDENTITIES were already reserved, but its PATHS were
   // not, and the window between a handoff (or an out-of-reservation continuation) and the
   // child's first open let a concurrent unrelated program snipe the surface and lock the child
-  // out of its own lineage (R3 finding). The exit is the child opening.
+  // out of its own lineage (a measured defect). The exit is the child opening.
   const pendingLineageOverlap = (paths, exceptTask = null) => [...childLineage.values()].some((lineage) =>
     lineage.task_id !== exceptTask && !programs.has(lineage.task_id) &&
     overlaps(paths, lineage.authorized_paths));
@@ -745,7 +745,7 @@ function aggregateWorld(events, standardEvents = []) {
         // A REFREEZE SUPERSEDE: the same round re-opened on a DIFFERENT frozen candidate while
         // the prior panel never closed — the cure for a mid-panel contaminated candidate, which
         // would otherwise reserve an unusable panel forever. FOUR bounds keep it from becoming
-        // the un-batched repair loop the panel measured: (1) at most ONE supersede per round —
+        // the un-batched repair loop this model retires: (1) at most ONE supersede per round —
         // repeated contamination is rig-class harm, and the exit is close+successor, never a
         // grind; (2) NEVER at the final bookend — a contaminated bookend ends via close+
         // successor, or the bookend would be refreezable-to-green; (3) the ROSTER and the
@@ -785,7 +785,7 @@ function aggregateWorld(events, standardEvents = []) {
             // THE BASE IS THE CHANGESET'S, NOT THE ROUND'S: every later round re-derives its
             // changed paths from ROUND 1's exact base, or a moved base reviews only the last
             // delta while the GO — and the lift's "opened coverage" — certifies the whole
-            // candidate (executed R1 finding, the round's deepest: "immutable base..frozen
+            // candidate (a measured defect: "immutable base..frozen
             // pair" was claimed but never enforced across rounds).
             row.base_ref !== state.panels_open[0].base_ref ||
             row.base_commit !== state.panels_open[0].base_commit ||
@@ -905,7 +905,7 @@ function aggregateWorld(events, standardEvents = []) {
         row.panel_open_event_id === latestOpen.event_id;
       if (!citesDisposition && !citesOpen) continue;
       state.closes.push(accept(row)); state.terminal = "CLOSED"; state.active = false;
-      // The reservation discriminator is WAS A PANEL COLLECTED, not was a disposition recorded:
+      // The reservation discriminator is WAS A RECEIPT RECORDED, not was a disposition recorded:
       // a close after a collected NO-GO panel abandons GROUND findings, and releasing that
       // surface free was the measured un-batched escape. A truly virgin program — no panel ever
       // collected — reserves nothing.
@@ -977,7 +977,7 @@ function aggregateWorld(events, standardEvents = []) {
       // ONE LIVE continuation per anchor — not one EVER. A standing continuation blocks a new
       // one unless every declared child is TERMINAL and at least one ended as a VIRGIN close
       // (opened, collected nothing, closed — so it holds no anchor of its own and its slice of
-      // the parent's reservation would otherwise be stranded forever; the R4 bookend executed
+      // the parent's reservation would otherwise be stranded forever; the measured brick was
       // that brick). A GO child needs no re-declaration (its coverage lifted); a STOP or
       // collected-CLOSED child carries its own anchor and exits through its own lineage.
       const anchorConsumed = (anchorId) => {
@@ -987,12 +987,19 @@ function aggregateWorld(events, standardEvents = []) {
         const allTerminal = children.every((child) => child?.terminal);
         const anyVirgin = children.some((child) =>
           child?.terminal === "CLOSED" && !child.panels_close.length);
+        // Reopening VIA remainder requires the NEW declaration to actually TARGET the
+        // remainder: an executed grind kept the anchor open indefinitely by declaring fresh
+        // unrelated budgets while the reserved surface sat untouched. The virgin route is
+        // unchanged (a stranded slice reopens regardless of the successor's budget).
+        const targetsRemainder = row.children.some((child) =>
+          (state.stopped_paths || []).some((entry) =>
+            !liftedPaths(state).has(entry) && child.authorized_paths.includes(entry)));
         // A successful PARTIAL repair must not lock the rest: when un-lifted remainder survives
         // on this parent's own reservation, the anchor reopens even with no virgin child
-        // (executed R1 finding — an all-GO split's narrow coverage stranded the remainder).
+        // (measured: an all-GO split's narrow coverage stranded the remainder).
         const lifted = liftedPaths(state);
         const remainder = (state.stopped_paths || []).some((entry) => !lifted.has(entry));
-        return !(allTerminal && (anyVirgin || remainder));
+        return !(allTerminal && (anyVirgin || (remainder && targetsRemainder)));
       };
       // The freshest un-discharged harms ride the lineage: panels COLLECTED after the anchor
       // disposition but never adjudicated carry ground the successor must not shed (the R4
@@ -1021,7 +1028,7 @@ function aggregateWorld(events, standardEvents = []) {
       } else {
         // The WINNING-OPEN anchor: only a CLOSED parent with NO disposition and a COLLECTED
         // panel — the reserving case whose reservation previously had NO constructible exit
-        // (T13 demanded a disposition id that does not exist; executed R3 finding). It mirrors
+        // (the anchor demanded a disposition id that does not exist — a measured brick). It mirrors
         // the close event's own anchor rule, and the successor inherits the un-adjudicated
         // GROUND: the union of the collected panels' raw finding ids.
         if (state.terminal !== "CLOSED" || state.latest !== null || !state.panels_close.length ||
@@ -1057,11 +1064,11 @@ function aggregateWorld(events, standardEvents = []) {
           row.children.some((child) => pendingLineageOverlap(child.authorized_paths, child.task_id)) ||
           // A pending budget over a LIVE program's bound surface wedges the victim's own
           // disposition and next open with a generic conflict, composing to a mutual brick (the
-          // R4 bookend executed both directions) — the same refuse-at-declaration courtesy,
+          // measured in both directions) — the same refuse-at-declaration courtesy,
           // pending-vs-active.
           row.children.some((child) => activePathOverlap(child.authorized_paths, row.task_id, rowSeq)) ||
           // …and pending-vs-STOPPED: a budget over another program's un-lifted reservation would
-          // permanently destroy that reservation's sole lineage exit (executed R1 finding). The
+          // permanently destroy that reservation's sole lineage exit (a measured defect). The
           // exception is the declarer's own NON-GO lineage chain — a STOP/CLOSED lineage
           // declares over its own and its non-GO ancestors' reservations (its anchors carry the
           // harm context down), while a GO node ENDS its lineage's claim: the GO-hop springboard
@@ -1094,7 +1101,7 @@ function aggregateWorld(events, standardEvents = []) {
       const standard = getStandard(row.parent_task_id, rowSeq);
       // ACTIVENESS binds at the handoff's own position now, not only at record time: the as-of
       // ordering makes it safe (a post-handoff close is invisible to this prefix), and without
-      // it a planted hash-valid row citing an INACTIVE parent minted lineage (R4 finding). A
+      // it a planted hash-valid row citing an INACTIVE parent minted lineage (a measured defect). A
       // pending child budget over a live program's surface refuses here for the same reason it
       // does at a continuation declaration.
       if (!standard?.ok || !standard.active || standard.changeset_id !== row.parent_changeset_id ||
@@ -1522,15 +1529,21 @@ export function recordAggregatePanelOpen(input,
     return { ok: false, state: "aggregate-worker-required", dispatch_event_id: state.active_dispatch.event_id };
   }
   // A refusal caused by a PENDING lineage budget was undiagnosable — the victim met a generic
-  // conflict naming nothing (R4 finding). Name the holder; the refusal itself stays the world's.
+  // conflict naming nothing (a measured defect). Name the holder; the refusal itself stays the world's.
   const pending = rows && derivePendingLineageBudgets(rows.aggregate, { standardEvents: rows.standard });
   // Matched against the DERIVED changed paths — a roster's seat order is legal input, and the
-  // seat-0 proxy returned the bare conflict for any roster not free-seat-first (executed R1
-  // finding, the R4 cure conditionally inert).
+  // seat-0 proxy returned the bare conflict for any roster not free-seat-first (measured: the
+  // earlier cure was conditionally inert).
   const holder = pending?.find((entry) => entry.task_id !== input.task_id &&
     entry.authorized_paths.some((entry2) => (evidence?.changed_paths ?? []).includes(entry2)));
   if (holder) {
     return { ...result, detail: `a PENDING lineage child (${holder.task_id}, parent ${holder.parent_task_id}) holds a declared budget over these paths until it opens` };
+  }
+  // The base pin's refusal was BARE — the panel that accepted the pin also executed its failure
+  // mode: a rebased/merged lane refuses with a generic conflict and no stated exit.
+  const firstOpen = state?.ok ? state.panels_open[0] : null;
+  if (firstOpen && (input.base_ref !== firstOpen.base_ref || input.base_commit !== firstOpen.base_commit)) {
+    return { ...result, detail: `this changeset's base is pinned to round 1's (${firstOpen.base_ref} @ ${String(firstOpen.base_commit).slice(0, 12)}…): a rebased or merged lane is a NEW candidate lineage — continue on the original base, or close and declare a successor` };
   }
   return result;
 }

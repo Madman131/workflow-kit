@@ -1857,7 +1857,7 @@ test("M43: ONE LIVE continuation per anchor — a stranded virgin child reopens 
     assert.ok(pendingReal.some((entry) => entry.task_id === "c43c"),
       "the re-declared child holds its pending budget");
     const mutant = await importMutant(mutantDir, [[
-      "        return !(allTerminal && (anyVirgin || remainder));",
+      "        return !(allTerminal && (anyVirgin || (remainder && targetsRemainder)));",
       "        return true;",
     ]]);
     const pendingMutant = mutant.derivePendingLineageBudgets(loaded.aggregate_events,
@@ -2146,7 +2146,7 @@ test("M46: legacy activeness binds AS-OF — an inactive-parent handoff is inert
   } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });
 
-test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS, 1201 ids refuse on shape", () => {
+test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS, 2601 ids refuse on shape", () => {
   const ctx = repo();
   try {
     const candidate = commit(ctx.dir, 1);
@@ -2387,7 +2387,8 @@ test("M49: CAP TRUTH AT THE EXECUTED SHAPE — the R1 panel's own 1300-id STOP c
 });
 
 // A STOPs over {x, y}; its continuation seeds child B with the {x} half ONLY; B opens x at full
-// coverage and GOes, so x is lifted and y stays reserved on A. The shared world for M50 and M51.
+// coverage and GOes, so x is lifted and y stays reserved on A — the un-lifted remainder is
+// exactly {y}. The shared world for M50, M51 and M54.
 function goHopWorld(ctx) {
   writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
   const aCand = commit(ctx.dir, "a50");
@@ -2595,5 +2596,177 @@ test("M52: the pending-hold diagnosis survives a NON-free-seat-first roster — 
     const stillSeen = open(expectedSeats(both), mutant);
     assert.match(stillSeen.detail ?? "", /c52/,
       "…and it still works free-seat-first, which is why the inertness was invisible");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+// ── batch 5 · the R2 panel's pins ──────────────────────────────────────────────────────────────
+
+test("M53: THE UNPINNED LEGACY GUARD — a handoff child budget over a STOPPED reservation refuses", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // WHY THIS ROW EXISTS. A deletion sweep found `stoppedPathOverlap(row.child.authorized_paths)`
+    // in the legacy_handoff branch removable GREEN across the whole suite — every other pin on
+    // that clause lives on the CONTINUATION branch, and the handoff branch had none of its own.
+    // The clause is not decoration: a handoff child budget over a live reservation is a squat on
+    // the reserved program's only lineage exit.
+    //
+    // The fixture is order-sensitive on purpose, and legitimately reachable: the aggregate program
+    // opens and STOPs on p BEFORE the standard rows exist, so the as-of legacy check (M34) sees
+    // nothing at its own ledger position. The standard parent then claims p and goes ACTIVE.
+    const stopCand = sideCandidate(ctx, "agg53-line", { "src/p.mjs": "export const p = 1;\n" });
+    const panel = openPanel(ctx, 1, stopCand, { task: "agg53", changeset: "agg53-cs" });
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const closed = closePanel(ctx, panel, stopCand, ["S53"], { task: "agg53", changeset: "agg53-cs" });
+    assert.equal(closed.ok, true, closed.state);
+    const stop = decide(ctx, closed, { task: "agg53", changeset: "agg53-cs", accepted: ["S53"],
+      terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+    assert.equal(stop.ok, true, stop.state);
+    assert.deepEqual(derive(ctx, "agg53").stopped_paths, ["src/p.mjs"], "p is RESERVED");
+
+    // Two ACTIVE REMEDIATE standard parents (LE2-style): one whose authorized set IS the reserved
+    // p, one on a surface nobody reserved. The handoff grammar pins child budget == handoff
+    // authorized set == the standard parent's authorized set, so the parent's own set is what
+    // decides which case a handoff is.
+    const manifest = fingerprintCandidate(ctx.dir, ["src/p.mjs"]);
+    const standardRow = (task, cs, authorized, at) => stamped({
+      type: "round_disposition", task_id: task, changeset_id: cs, round: 1,
+      candidate_sha: manifest.digest, candidate_manifest: manifest.records, verdict: "NO-GO",
+      disposition: "REMEDIATE", finding_ids: [`${task}-L1`], finding_class: "class-a",
+      ownership_area: "controller", original_trigger: "legacy trigger",
+      authorized_paths: authorized, introduced_by_prior_repair: false, new_scope: false,
+      repair_dispatch_event_id: null, root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: at, session_id: "legacy-s",
+    });
+    writeFileSync(repairLedgerPath(ctx.dir), [
+      standardRow("legacy-p", "legacy-p-cs", ["src/p.mjs"], "2099-01-01T00:09:00.000Z"),
+      standardRow("legacy-free", "legacy-free-cs", ["docs/free53.md"], "2099-01-01T00:09:01.000Z"),
+    ].map((row) => JSON.stringify(row)).join("\n") + "\n", { flag: "a" });
+
+    const handoff = (parent, cs, paths, child) => recordAggregateLegacyHandoff({
+      type: "aggregate_v2", kind: "legacy_handoff", task_id: parent, changeset_id: cs,
+      parent_task_id: parent, parent_changeset_id: cs, parent_candidate_sha: manifest.digest,
+      authorized_paths: paths, owner_evidence: "Owner handoff",
+      child: { task_id: child, changeset_id: `${child}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths },
+    }, options(ctx.dir));
+    // REFUSE: the child budget covers a path another program's STOP still reserves. The
+    // declaration-time active check cannot be the refuser here — it excepts the handoff's own
+    // parent, which is the only ACTIVE holder of p.
+    const squat = handoff("legacy-p", "legacy-p-cs", ["src/p.mjs"], "lh53p");
+    assert.equal(squat.ok, false, "a handoff may not budget a child over a live reservation");
+    assert.equal(squat.state, "aggregate-legacy-handoff-conflict");
+    // ACCEPT: the same handoff shape over an unreserved surface lands.
+    const free = handoff("legacy-free", "legacy-free-cs", ["docs/free53.md"], "lh53f");
+    assert.equal(free.ok, true, `an unreserved budget hands off freely: ${free.state}`);
+
+    // Disabled arm: delete the one clause the sweep found green-deletable. The squatting handoff
+    // lands and its child's budget becomes a PENDING hold over the reserved path — the mutual
+    // brick's first half, and the reason the clause is load-bearing rather than defensive.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const parentState = deriveRepairState(loaded.events, "legacy-p");
+    assert.equal(parentState.active, true, "the standard squatter parent must be ACTIVE");
+    const plantedSquat = stamped({
+      type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy-p", changeset_id: "legacy-p-cs",
+      recorded_at: "2099-01-01T00:09:30.000Z", session_id: "legacy-s",
+      parent_task_id: "legacy-p", parent_changeset_id: "legacy-p-cs",
+      parent_disposition_event_id: parentState.latest.event_id, parent_round: parentState.latest.round,
+      parent_candidate_sha: manifest.digest, authorized_paths: ["src/p.mjs"],
+      child: { task_id: "lh53p", changeset_id: "lh53p-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/p.mjs"] },
+      owner_evidence: "Owner handoff",
+    });
+    const squatRows = [...loaded.aggregate_events, plantedSquat];
+    assert.ok(!derivePendingLineageBudgets(squatRows, { standardEvents: loaded.events })
+      .some((entry) => entry.task_id === "lh53p"), "replay refuses the squatting handoff too");
+    const mutant = await importMutant(mutantDir, [[
+      "          stoppedPathOverlap(row.child.authorized_paths) ||\n", "",
+    ]]);
+    const landed = mutant.derivePendingLineageBudgets(squatRows, { standardEvents: loaded.events });
+    assert.ok(landed.some((entry) => entry.task_id === "lh53p"),
+      "without the clause the squat lands — a pending hold over another program's reservation");
+    // …and the positive control still holds under the mutant, so the arm removed ONE behaviour and
+    // not the whole branch.
+    assert.ok(landed.some((entry) => entry.task_id === "lh53f"),
+      "the unreserved handoff is unaffected by the deletion — the clause is path-specific");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M54: THE REMAINDER-INTERSECT GATE — reopening on remainder must TARGET the remainder; the virgin route is unchanged", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // A STOPs over {x, y}; child B repairs x and GOes ⇒ the un-lifted remainder is exactly {y}.
+    const world = goHopWorld(ctx);
+    const reopenA = (task, paths) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
+      parent_disposition_event_id: world.aStop.event_id, trigger_ids: ["A1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: task, changeset_id: `${task}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths }],
+    }, options(ctx.dir));
+
+    // REFUSE: the remainder disjunct is not a standing re-declaration licence. A successor whose
+    // budget is a FRESH UNRELATED path leaves y exactly as stranded as it found it, and the
+    // executed grind rode precisely this: each unrelated declaration kept the anchor open while
+    // the reserved surface was never approached.
+    const grind = reopenA("u54", ["src/unrelated.mjs"]);
+    assert.equal(grind.ok, false, "an unrelated budget may not reopen a consumed anchor");
+    assert.equal(grind.state, "aggregate-continuation-conflict");
+
+    // The disabled arm needs the ledger AS OF THE REFUSAL — the accepting polarities below would
+    // consume the anchor and mask the mutant's own acceptance.
+    const window = loadRepairEventsForProject(ctx.dir);
+    const aOpen = derive(ctx, "a50").panels_open.at(-1);
+    const plantedGrind = stamped({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
+      recorded_at: "2099-01-01T00:10:00.000Z", session_id: "planter",
+      parent_disposition_event_id: world.aStop.event_id,
+      parent_frozen_commit: aOpen.frozen_commit, parent_frozen_tree: aOpen.frozen_tree,
+      trigger_ids: ["A1"], continuation_kind: "new_changeset", owner_evidence: "grind",
+      children: [{ task_id: "u54", changeset_id: "u54-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/unrelated.mjs"] }],
+    });
+    const grindRows = [...window.aggregate_events, plantedGrind];
+    assert.ok(!derivePendingLineageBudgets(grindRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "u54"), "replay refuses the unrelated reopen too");
+
+    // ACCEPT: a successor that actually TARGETS the remainder reopens the anchor.
+    const targeted = reopenA("c54", ["src/y.mjs"]);
+    assert.equal(targeted.ok, true, `a remainder-targeting budget reopens: ${targeted.state}`);
+
+    // THE VIRGIN ROUTE IS UNCHANGED. c54 opens y, collects nothing, and is Owner-closed — its
+    // slice is stranded by the close itself, not by coverage arithmetic, so the anchor reopens
+    // for ANY budget. The intersect requirement rides the REMAINDER disjunct alone; making it a
+    // precondition of both would re-brick the stranded-slice case M43 pins.
+    const cCand = sideCandidate(ctx, "c54-line", { "src/y.mjs": "export const y = 'c54';\n" });
+    const cOpen = openPanel(ctx, 1, cCand, { task: "c54", changeset: "c54-cs",
+      lineage: { continuation: targeted.event_id } });
+    assert.equal(cOpen.opened.ok, true, cOpen.opened.state);
+    const cClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "c54", changeset_id: "c54-cs",
+      disposition_event_id: null, panel_open_event_id: cOpen.opened.event_id,
+      reason: "roster unassemblable", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-c54"));
+    assert.equal(cClose.ok, true, cClose.state);
+    const afterVirgin = reopenA("v54", ["docs/v54.md"]);
+    assert.equal(afterVirgin.ok, true,
+      `a virgin-stranded child reopens the anchor regardless of the new budget: ${afterVirgin.state}`);
+
+    // Disabled arm: strip the intersect requirement and the unrelated-path reopen lands — the
+    // 4-cycle grind, an anchor held open forever by budgets that never approach the reservation.
+    const mutant = await importMutant(mutantDir, [[
+      "        return !(allTerminal && (anyVirgin || (remainder && targetsRemainder)));",
+      "        return !(allTerminal && (anyVirgin || remainder));",
+    ]]);
+    assert.ok(mutant.derivePendingLineageBudgets(grindRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "u54"),
+    "without the intersect gate the unrelated reopen lands — the executed grind");
+    // …and the mutant must still admit the honest cases, or the arm proves nothing about scope.
+    const final = loadRepairEventsForProject(ctx.dir);
+    assert.ok(mutant.derivePendingLineageBudgets(final.aggregate_events,
+      { standardEvents: final.events }).some((entry) => entry.task_id === "v54"),
+    "the arm removes ONE requirement — the virgin and targeted routes are untouched by it");
   } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });

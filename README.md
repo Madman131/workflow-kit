@@ -1279,7 +1279,7 @@ it and nothing else. The skill says so
 where it states the cap, rather than implying a hook enforces it.
 
 Upgrading: re-run `init` with your original flags (no `--force` needed — the new files simply
-install); then fill the two new placeholders in `core/BINDINGS.md`.
+install) *(historical — since v2.16.0 a rerun that KEEPS differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)*; then fill the two new placeholders in `core/BINDINGS.md`.
 
 ## What's new in v1.5.1
 

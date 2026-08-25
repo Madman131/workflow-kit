@@ -13,7 +13,16 @@
 //     target's git directory into another repository, while a normal repo and a linked
 //     `git worktree` adoptee (git dir outside the root, .git a FILE) keep adopting;
 //   · the containment check answers BEFORE any mkdir, so a refused write leaves NO directory
-//     behind it inside a linked-out `.claude`.
+//     behind it inside a linked-out `.claude`;
+//   · that same write is refused when a Git LOCATION OVERRIDE (GIT_DIR / GIT_COMMON_DIR /
+//     GIT_WORK_TREE) is present, because git resolves its subject from the ENVIRONMENT before the
+//     filesystem — and the end-of-run report's closing sentence stays true for an entry that never
+//     held kit content;
+//   · a differing prior .bak ROTATES to .bak.<n> instead of refusing, so the SECOND and THIRD
+//     upgrades land while every generation of an adopter's edits survives;
+//   · the two root-level appends (.gitignore, AGENTS.md) lstat before they write;
+//   · a DANGLING intermediate directory link is a typed, counted refusal — never a raw ENOENT
+//     stack trace from mkdir.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -414,6 +423,147 @@ test("a linked .claude creates NOTHING outside: the containment check runs BEFOR
   } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
 });
 
+test("a Git LOCATION OVERRIDE in the environment refuses the core.hooksPath write", () => {
+  // git resolves its subject from GIT_DIR / GIT_COMMON_DIR / GIT_WORK_TREE BEFORE the filesystem,
+  // so with one of them set the target's `.git` is an ordinary directory, the link-shape refusal
+  // never fires, and `git config` writes ANOTHER repository's config: exit 0, "binds every lane"
+  // printed, and the adopted repo left with core.hooksPath unset — silently unarmed. git exports
+  // GIT_DIR to its own hooks, so a run from a hook, a `rebase --exec` or `bisect run` hits it.
+  const home = mkdtempSync(path.join(os.tmpdir(), "kit-force-gitenv-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-force-prompts-"));
+  const GIT_ENV = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"];
+  const runInit = (target, extraEnv = {}) => {
+    const env = { ...process.env, PATH: HERMETIC_PATH };
+    for (const n of GIT_ENV) delete env[n];   // hermetic: whatever ran this suite must not leak in
+    return spawnSync(process.execPath,
+      [path.join(KIT, "bin", "init.mjs"), "--target", target, "--repo-name", "adopter",
+        "--codex-prompts-dir", codexDir, "--skip-codex-lane"],
+      { encoding: "utf8", env: { ...env, ...extraEnv } });
+  };
+  try {
+    const other = path.join(home, "other");
+    const target = path.join(home, "adopter");
+    for (const d of [other, target]) execFileSync("git", ["init", "-q", d]);
+    const otherConfig = path.join(other, ".git", "config");
+    const before = readFileSync(otherConfig, "utf8");
+
+    // All three variables, one at a time — each alone is enough to move git's subject.
+    for (const [name, value] of [["GIT_DIR", path.join(other, ".git")],
+      ["GIT_COMMON_DIR", path.join(other, ".git")], ["GIT_WORK_TREE", other]]) {
+      const r = runInit(target, { [name]: value });
+      assert.equal(r.status, 1, `${name} must FAIL the run — it exited 0 writing someone else's config`);
+      assert.match(r.stderr, /REFUSED to set core\.hooksPath/, `${name}: refused at the site`);
+      assert.ok(r.stderr.includes(`(${name})`), `${name}: the deny NAMES the variable it observed`);
+      assert.match(r.stderr, /overwrite\(s\) were REFUSED/, `${name}: counted into the end-of-run report`);
+      assert.ok(r.stderr.includes(`· ${path.join(target, ".git")}`), `${name}: …and named there`);
+      assert.doesNotMatch(r.stdout, /core\.hooksPath=\.githooks/, `${name}: never claims the binding it did not make`);
+      assert.equal(readFileSync(otherConfig, "utf8"), before, `${name}: the OTHER repository's config is byte-identical`);
+    }
+    // Two at once: BOTH are named, so the remedy clears both.
+    const both = runInit(target, { GIT_DIR: path.join(other, ".git"), GIT_WORK_TREE: other });
+    assert.ok(both.stderr.includes("(GIT_DIR, GIT_WORK_TREE)"), "every observed override is listed");
+
+    // N3: the end-of-run report may not tell the adopter a `.git` entry "still holds its OLD
+    // content" — it never held kit content. The FILE half of that sentence stays true.
+    assert.doesNotMatch(both.stderr, /Each file above is UNCHANGED/, "the file-only claim is gone");
+    assert.match(both.stderr, /never carried kit content at all/, "…replaced by one true of both classes");
+    assert.match(both.stderr, new RegExp(`not kit v`), "…while still naming the version a kit file would carry");
+
+    // Polarity: with the variables ABSENT the same install sets core.hooksPath and exits 0, so the
+    // exit 1 above is the override's doing and not something general about this tree.
+    const clean = runInit(target);
+    assert.equal(clean.status, 0, `a clean environment adopts normally: ${clean.stderr}`);
+    assert.match(clean.stdout, /core\.hooksPath=\.githooks/, "…and the binding is made");
+    assert.equal(spawnSync("git", ["-C", target, "config", "--get", "core.hooksPath"], { encoding: "utf8" }).stdout.trim(),
+      ".githooks", "…in the ADOPTED repo");
+    assert.equal(readFileSync(otherConfig, "utf8"), before, "…still nothing written to the other repo");
+
+    // A PRESENT-but-EMPTY variable is not an override to the predicate this file shares with the
+    // controller, so it takes no refusal here. (git's own reader rejects an empty GIT_DIR outright
+    // — "not a git repository: ''" — so such a run reaches the ordinary not-a-repo warning instead
+    // and sets nothing. Nothing is misdirected either way, which is what this pins.)
+    const empty = runInit(target, { GIT_DIR: "" });
+    assert.doesNotMatch(empty.stderr, /Git LOCATION OVERRIDES/, "an empty variable is not an override");
+    assert.equal(readFileSync(otherConfig, "utf8"), before, "…and still nothing reaches the other repo");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
+test("the root-level APPENDS never write through a symlink: .gitignore and AGENTS.md", () => {
+  // The last two writers reading with existsSync and writing with writeFileSync, no lstat between
+  // them: a symlinked .gitignore or AGENTS.md — the two files an adopter is most likely to link
+  // into a dotfiles repo — had its EXTERNAL target rewritten, exit 0, plain and force alike.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-appends-"));
+  try {
+    for (const [name, external] of [[".gitignore", "their ignores\n"], ["AGENTS.md", "# their agents doc\n"]]) {
+      const local = path.join(dir, name);
+      const ext = path.join(outside, name);
+      writeFileSync(ext, external);
+      rmSync(local, { force: true });
+      symlinkSync(ext, local);
+
+      for (const args of [[], ["--force"]]) {
+        const r = run(args);
+        assert.equal(r.status, 1, `${name}: a symlinked append target fails the run (${args.join(" ") || "plain"})`);
+        assert.ok(r.stderr.includes(`REFUSED to append to ${local}`), `${name}: refused by name`);
+        assert.match(r.stderr, /is a SYMLINK \(resolves to /, `${name}: …naming the resolved target`);
+        assert.match(r.stderr, /overwrite\(s\) were REFUSED/, `${name}: …and counted`);
+        assert.equal(readFileSync(ext, "utf8"), external, `${name}: the EXTERNAL file is untouched`);
+        assert.ok(lstatSync(local).isSymbolicLink(), `${name}: the link itself is untouched`);
+      }
+      rmSync(local);
+    }
+
+    // Polarity: with regular files back, the same run appends exactly as before and exits 0.
+    writeFileSync(path.join(dir, ".gitignore"), "node_modules\n");
+    writeFileSync(path.join(dir, "AGENTS.md"), "# adopter agents doc\n");
+    const clean = run();
+    assert.equal(clean.status, 0, `regular files append as before: ${clean.stderr}`);
+    const gi = readFileSync(path.join(dir, ".gitignore"), "utf8");
+    assert.match(gi, /^node_modules$/m, "the adopter's own entries are preserved");
+    assert.match(gi, /\.claude\/task-lane\.json/, "…and the kit's are appended");
+    assert.match(readFileSync(path.join(dir, "AGENTS.md"), "utf8"), /workflow-kit:thread-restart-pointer/,
+      "the AGENTS.md pointer is appended");
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a DANGLING intermediate directory link is a typed refusal, never a raw ENOENT crash", () => {
+  // existsSync FOLLOWS links, so the ancestor walk read a dangling `.claude` as "not created yet",
+  // resolved the path INSIDE the target, passed containment — and ensureDir threw a raw ENOENT
+  // stack trace: exit 1 with no refusal report, after core/ had already been written, and nothing
+  // told the adopter what to fix.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-dangling-dir-"));
+  try {
+    const claude = path.join(dir, ".claude");
+    const nowhere = path.join(outside, "never-created");
+    rmSync(claude, { recursive: true, force: true });
+    symlinkSync(nowhere, claude);
+    assert.ok(!existsSync(claude), "precondition: the dangling link reads as absent to existsSync");
+
+    for (const args of [[], ["--force"]]) {
+      const r = run(args);
+      assert.equal(r.status, 1, `the dangling ancestor fails the run (${args.join(" ") || "plain"})`);
+      assert.doesNotMatch(r.stderr, /^ {4}at /m, "no raw stack trace");
+      assert.doesNotMatch(r.stderr, /Error: ENOENT/, "…and no uncaught mkdir error");
+      assert.match(r.stderr, /a DANGLING symlink \(→ .+\) that resolves NOWHERE/, "a typed refusal instead");
+      assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…counted into the end-of-run report");
+      assert.ok(r.stderr.includes(`· ${path.join(claude, "hooks", "guard-lane-authoring.mjs")}`), "…and named");
+      assert.ok(!existsSync(nowhere), "the link's target was NOT created");
+      assert.deepEqual(readdirSync(outside), [], "…and nothing at all appeared outside the install");
+    }
+
+    // Polarity: point the link at a real directory inside the repo and the install completes.
+    rmSync(claude);
+    const clean = run();
+    assert.equal(clean.status, 0, `with a real .claude the install completes: ${clean.stderr}`);
+    assert.ok(existsSync(path.join(claude, "hooks", "guard-lane-authoring.mjs")), "…into the repo");
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
 test("a linked .codex creates NOTHING outside either — the eager agents-dir mkdir is guarded too", () => {
   // The Codex lane creates `.codex/agents` EAGERLY (so an unwritable lane fails at that line rather
   // than deep in the template loop) — a mkdir ahead of every containment check, which built a
@@ -485,11 +635,12 @@ test("a PARSEABLE settings.json is never written through a symlink, and a changi
   } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
 });
 
-test("a second --force never destroys the only backup: a differing prior .bak refuses; identical is idempotent", () => {
-  // The reproduction: force #1 preserves the hand edit in .bak; force #2 (with different flags or a
-  // newer hand edit) re-backed-up the CURRENT file over it — both runs exit 0 and the only copy of
-  // the original edit is gone. Now a prior .bak whose bytes differ from what this run would save
-  // there is never overwritten.
+test("a second --force never destroys the only backup: the prior .bak ROTATES, identical is idempotent", () => {
+  // The reproduction: force #1 preserves the hand edit in .bak; force #2 re-backed-up the CURRENT
+  // file over it — both runs exit 0 and the only copy of the original edit is gone. Refusing force
+  // #2 fixed that and broke upgrades instead (see the three-run test below), so the prior .bak is
+  // now ROTATED to .bak.1 and this run's copy takes the .bak slot: nothing destroyed, nothing
+  // blocked. What still refuses is a backup that genuinely cannot be taken.
   const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
   try {
     // The [G] path (backupBeforeOverwrite → saveBackup).
@@ -503,18 +654,32 @@ test("a second --force never destroys the only backup: a differing prior .bak re
     const v2 = readFileSync(doc, "utf8").replace("{{OWNER_PROFILE}}", "profile TWO");
     writeFileSync(doc, v2);
     r = run(["--force"]);
-    assert.equal(r.status, 1, "force #2 REFUSES rather than destroy the only copy of edit ONE");
-    assert.match(r.stderr, /prior backup at .+ would be destroyed/);
-    assert.ok(r.stderr.includes(`· ${doc}`), "…counted and named");
-    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v1, "the .bak still holds the FIRST hand edit");
-    assert.equal(readFileSync(doc, "utf8"), v2, "…and the doc itself is untouched too");
+    assert.equal(r.status, 0, `force #2 ROTATES rather than refuse or destroy: ${r.stderr}`);
+    assert.match(r.stderr, /rotated: the earlier backup is kept at /, "the rotation is disclosed");
+    assert.equal(readFileSync(`${doc}.bak.1`, "utf8"), v1, "edit ONE survives, rotated one slot down");
+    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v2, "…and edit TWO takes the .bak slot");
+    assert.doesNotMatch(r.stderr, /were REFUSED/, "…with nothing refused");
 
-    // Idempotence: when the current bytes MATCH the prior .bak, the backup is already in place and
-    // the run completes clean.
-    writeFileSync(doc, v1);
+    // Idempotence: when the current bytes MATCH the prior .bak, nothing rotates and nothing is
+    // written — no `.bak.2` litter on a rerun that has nothing new to preserve.
+    writeFileSync(doc, v2);
     r = run(["--force"]);
     assert.equal(r.status, 0, `an identical prior .bak is idempotent: ${r.stderr}`);
-    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v1, "…and it is left exactly as it was");
+    assert.equal(readFileSync(`${doc}.bak`, "utf8"), v2, "…the .bak is left exactly as it was");
+    assert.ok(!existsSync(`${doc}.bak.2`), "…and no further generation is created");
+
+    // A backup that cannot be taken STILL refuses and counts: a symlink in the rotation slot is
+    // the same "init does not write through links" hazard as one in the .bak slot itself.
+    const v3 = readFileSync(doc, "utf8").replace("{{IRREVERSIBLE_ASSET}}", "the ledger");
+    writeFileSync(doc, v3);
+    rmSync(`${doc}.bak.1`);
+    symlinkSync(path.join(dir, "core", "GATES.md"), `${doc}.bak.1`);
+    r = run(["--force"]);
+    assert.equal(r.status, 1, "an unrotatable prior backup refuses the overwrite and fails the run");
+    assert.match(r.stderr, /is a SYMLINK — init does not write through links, and rotating/, "…named at the site");
+    assert.ok(r.stderr.includes(`· ${doc}`), "…counted and named in the report");
+    assert.equal(readFileSync(doc, "utf8"), v3, "…and the doc is UNCHANGED");
+    rmSync(`${doc}.bak.1`);
 
     // The copyGuarded path pays the same rule (mechanism hook, two successive hand edits).
     const guard = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
@@ -524,9 +689,42 @@ test("a second --force never destroys the only backup: a differing prior .bak re
     assert.equal(r.status, 0, r.stderr);
     writeFileSync(guard, kitGuard + "// edit B\n");
     r = run(["--force"]);
-    assert.equal(r.status, 1, "the copy path refuses the clobber the same way");
-    assert.equal(readFileSync(`${guard}.bak`, "utf8"), kitGuard + "// edit A\n", "edit A survives");
-    assert.equal(readFileSync(guard, "utf8"), kitGuard + "// edit B\n", "edit B untouched");
+    assert.equal(r.status, 0, `the copy path rotates the same way: ${r.stderr}`);
+    assert.equal(readFileSync(`${guard}.bak.1`, "utf8"), kitGuard + "// edit A\n", "edit A survives");
+    assert.equal(readFileSync(`${guard}.bak`, "utf8"), kitGuard + "// edit B\n", "edit B is preserved too");
+    assert.equal(readFileSync(guard, "utf8"), kitGuard, "…and the kit's bytes land in the file itself");
+  } finally { cleanup(); }
+});
+
+test("THREE successive upgrades all land: the .bak slot is not single-use", () => {
+  // The lockout the rotation cures, at its own shape. V1→V2 leaves .bak=V1; the second upgrade
+  // wants to save V2 there, finds a differing file — and under the old refusal EVERY later upgrade
+  // hard-failed, permanently, on a tree whose only sin was having been upgraded once. An adopter's
+  // remedy was to delete the backup that exists to protect them.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  try {
+    const guard = path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs");
+    const kitGuard = readFileSync(path.join(KIT, "hooks", "guard-lane-authoring.mjs"), "utf8");
+    const V1 = kitGuard + "// generation ONE\n";
+    const V2 = kitGuard + "// generation TWO\n";
+
+    writeFileSync(guard, V1);
+    let r = run(["--force"]);
+    assert.equal(r.status, 0, `upgrade 1: ${r.stderr}`);
+    writeFileSync(guard, V2);
+    r = run(["--force"]);
+    assert.equal(r.status, 0, `upgrade 2 must not hard-fail on the tree upgrade 1 left: ${r.stderr}`);
+    const V3 = kitGuard + "// generation THREE\n";
+    writeFileSync(guard, V3);
+    r = run(["--force"]);
+    assert.equal(r.status, 0, `upgrade 3 lands as well: ${r.stderr}`);
+
+    // Every generation is still on disk: .bak always holds THIS run's copy, and the numbered slots
+    // fill in rotation order (.bak.1 is the first generation moved aside, .bak.2 the next).
+    assert.equal(readFileSync(`${guard}.bak`, "utf8"), V3, ".bak holds the most recent edit");
+    assert.equal(readFileSync(`${guard}.bak.1`, "utf8"), V1, ".bak.1 still holds the FIRST edit");
+    assert.equal(readFileSync(`${guard}.bak.2`, "utf8"), V2, ".bak.2 holds the second");
+    assert.equal(readFileSync(guard, "utf8"), kitGuard, "…and the file itself is the kit's version");
   } finally { cleanup(); }
 });
 

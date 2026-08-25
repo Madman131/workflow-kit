@@ -19,7 +19,7 @@
 
 import { execFileSync } from "node:child_process";
 import {
-  chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync,
+  chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, statSync, writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,6 +28,9 @@ import { fileURLToPath } from "node:url";
 // never a second hand-kept copy here. A paraphrase drifted from the original once already and made
 // init announce ARMED on repos where the hook was unconditionally dormant.
 import { ownerContract } from "../hooks/guard-owner-comms.mjs";
+// Same rule, same source: the controller already owns "which environment variables relocate git",
+// and a second hand-kept list here would drift from the one the guards enforce.
+import { gitLocationOverrides } from "../hooks/repair-dispatch-state.mjs";
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // The Codex prompt is USER-GLOBAL (Codex reads prompts from ~/.codex/prompts, not the repo). Default
@@ -233,16 +236,52 @@ function isSymlinkAt(p) { try { return lstatSync(p).isSymbolicLink(); } catch { 
 // even when an existing symlinked ancestor (`.claude` → elsewhere) puts it outside. The containment
 // check has to answer BEFORE mkdir runs, or the escape is already carved into the external
 // directory, so it cannot rely on the parent existing.
+//
+// The walk is LSTAT-FIRST for the reason every other check here is: existsSync FOLLOWS links, so a
+// DANGLING `.claude` read as "nothing here yet", the walk resolved the path INSIDE the target,
+// containment passed — and ensureDir then threw a raw ENOENT stack trace, exit 1 with no refusal
+// report, after core/ had already been written. A link that resolves NOWHERE is a REFUSAL with a
+// sentence, not a crash. Returns { resolved } or { blocked: <why, with the remedy> }.
 function resolveWithoutCreating(p) {
   let cur = path.resolve(p);
   const tail = [];
   for (;;) {
-    if (existsSync(cur)) return path.join(realpathOrSelf(cur), ...tail);
+    let link = null;
+    try { link = lstatSync(cur); } catch { /* nothing at this component at all — keep walking up */ }
+    if (link) {
+      let real = null;
+      try { real = statSync(cur); } catch { /* a link whose target is not there */ }
+      if (!real) {
+        let to = "?";
+        try { to = readlinkSync(cur); } catch { /* unreadable link: the path alone names it */ }
+        return { blocked: `is reached through ${cur}, a DANGLING symlink (→ ${to}) that resolves NOWHERE — creating it would build this install's tree at the link's target, outside the repo. Replace the link with a real directory and re-run.` };
+      }
+      // A REGULAR FILE where a directory must be is deliberately NOT refused here. Two call sites
+      // are failure-ISOLATED by design — the agents install and the user-global Codex prompt write
+      // let their mkdir throw into their own try/catch, warn, and let the adopt finish — and
+      // acceptance pins both. Refusing here would fail the whole run over an isolated write.
+      // Only the DANGLING case above is this walk's to answer.
+      return { resolved: path.join(realpathOrSelf(cur), ...tail) };
+    }
     const up = path.dirname(cur);
-    if (up === cur) return path.join(cur, ...tail);   // reached the filesystem root: nothing exists
+    if (up === cur) return { resolved: path.join(cur, ...tail) };   // filesystem root: nothing exists
     tail.unshift(path.basename(cur));
     cur = up;
   }
+}
+
+// ONE answer for "may this run create things inside <dir>?" — null when it may, else the sentence
+// saying why not, remedy included. Every write path asks this BEFORE its first mkdir.
+function writeBlockedReason(dir) {
+  const r = resolveWithoutCreating(dir);
+  if (r.blocked) return r.blocked;
+  const inside = writeRoots.some((root) => {
+    const rr = resolveWithoutCreating(root);
+    if (rr.blocked) return false;   // a root we cannot resolve contains nothing — fail closed
+    return r.resolved === rr.resolved || r.resolved.startsWith(rr.resolved + path.sep);
+  });
+  return inside ? null
+    : `resolves OUTSIDE the install target (${r.resolved}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`;
 }
 
 // The roots this run may write under — the repo target plus the user-global Codex prompts dir —
@@ -253,22 +292,37 @@ function resolveWithoutCreating(p) {
 // compares by its real path — and by the SAME rule on both sides, so a root that does not exist
 // yet is not a spurious mismatch. An empty roots list refuses everything — fail closed, not open.
 let writeRoots = [];
-function dirContainedInWriteRoots(dir) {
-  const parent = resolveWithoutCreating(dir);
-  return writeRoots.some((root) => {
-    const r = resolveWithoutCreating(root);
-    return parent === r || parent.startsWith(r + path.sep);
-  });
-}
-function containedInWriteRoots(dst) { return dirContainedInWriteRoots(path.dirname(dst)); }
 
-// ONE writer for every `<dst>.bak`, refusing rather than damaging. Two refusals beyond a plain
-// write failure: a symlink in the .bak slot would send the bytes into the link's target, and a
-// prior .bak holding DIFFERENT content may be the ONLY copy of an adopter's hand edit (taken by
-// an earlier --force) — a second --force must not destroy the one thing the backup exists to
-// preserve. Identical content passes (an idempotent rerun). Returns true when the backup is in
-// place; false = refused, already warned here — the CALLER records the refusal and must not
-// overwrite dst.
+// ONE writer for every `<dst>.bak`, preserving rather than damaging — and never at the price of
+// the SECOND upgrade. Refusing a differing prior .bak protected the first hand edit and then made
+// every later upgrade impossible: V1→V2 leaves .bak=V1, so V2→V3 wants to save V2, finds V1, and
+// hard-fails the run forever after. A backup slot that can hold exactly one generation is not a
+// backup system. So a differing prior .bak is ROTATED to the first free `<dst>.bak.<n>` and this
+// run's copy takes the .bak slot: nothing is destroyed, upgrades flow, and every generation of an
+// adopter's edits stays on disk in order (.bak = most recent, .bak.1 older, and so on).
+// What still REFUSES is a backup that genuinely cannot be taken: a symlink in the .bak slot or in
+// a rotation slot (init does not write through links, and rotating onto one would destroy it), a
+// non-regular file squatting in the .bak slot (it is not a backup generation and moving an
+// adopter's directory aside is not this function's call), a rotation or write that fails, or
+// generations piled past the cap. Identical content passes untouched (an idempotent rerun).
+// Returns true when the backup is in place; false = refused, already warned here — the CALLER
+// records the refusal and must not overwrite dst.
+const BAK_ROTATION_LIMIT = 100;
+// The first `<bak>.<n>` with NOTHING at it (lstat, so a dangling link counts as occupied). Returns
+// null when the rotation cannot be done safely — warned here.
+function freeRotationSlot(bak) {
+  for (let n = 1; n <= BAK_ROTATION_LIMIT; n++) {
+    const slot = `${bak}.${n}`;
+    let st = null;
+    try { st = lstatSync(slot); } catch { return slot; }
+    if (st.isSymbolicLink()) {
+      warn(`REFUSED: ${slot} is a SYMLINK — init does not write through links, and rotating the earlier backup onto it would destroy the link. Move it aside and re-run.`);
+      return null;
+    }
+  }
+  warn(`REFUSED: ${bak}.1 through ${bak}.${BAK_ROTATION_LIMIT} are all taken — that is ${BAK_ROTATION_LIMIT} kept backup generations. Move the old ones aside and re-run.`);
+  return null;
+}
 function saveBackup(dst, bytes) {
   const bak = `${dst}.bak`;
   const data = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
@@ -280,8 +334,19 @@ function saveBackup(dst, bytes) {
     let same = false;
     try { same = readFileSync(bak).equals(data); } catch { /* unreadable/non-file: not provably same */ }
     if (same) return true;
-    warn(`REFUSED: a prior backup at ${bak} would be destroyed (its content differs from what this run would save there) — it may be the only copy of an earlier hand edit. Move it aside first, then re-run.`);
-    return false;
+    let st = null;
+    try { st = lstatSync(bak); } catch { /* raced away between the two calls: treated as unrotatable */ }
+    if (!st || !st.isFile()) {
+      warn(`REFUSED: a prior backup at ${bak} would be destroyed (it is not a regular file, so it cannot be rotated aside) — it may be the only copy of an earlier hand edit. Move it aside first, then re-run.`);
+      return false;
+    }
+    const slot = freeRotationSlot(bak);
+    if (!slot) return false;
+    try { renameSync(bak, slot); } catch {
+      warn(`REFUSED: could not rotate the earlier backup ${bak} to ${slot} — nothing was overwritten. Free ${slot} and re-run.`);
+      return false;
+    }
+    warn(`rotated: the earlier backup is kept at ${slot}; this run's backup takes ${bak}`);
   }
   try { writeFileSync(bak, data); } catch {
     warn(`REFUSED: could not write the backup ${bak} — the existing file is untouched. Free ${bak} and re-run.`);
@@ -323,9 +388,10 @@ function copyGuarded(src, dst, force, mechanism = true) {
   // runs BEFORE any mkdir: creating the parent first refused each FILE write but had already built
   // the directory tree inside the external target (with `.claude` linked out, a dozen directories
   // an adopter never asked for, in someone else's repo). A refusal creates nothing.
-  if (!containedInWriteRoots(dst)) {
+  const blocked = writeBlockedReason(path.dirname(dst));
+  if (blocked) {
     backupRefused.push(dst);
-    warn(`REFUSED: the directory holding ${dst} resolves OUTSIDE the install target (${resolveWithoutCreating(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
+    warn(`REFUSED: the directory holding ${dst} ${blocked}`);
     return "refused";
   }
   ensureDir(path.dirname(dst));
@@ -416,9 +482,10 @@ function writeWithBackup(dst, text) {
   }
   // Same intermediate-directory containment as copyGuarded, same reason, same accounting — and
   // like copyGuarded it answers BEFORE the mkdir, so a refusal leaves no directory behind it.
-  if (!containedInWriteRoots(dst)) {
+  const blocked = writeBlockedReason(path.dirname(dst));
+  if (blocked) {
     backupRefused.push(dst);
-    warn(`REFUSED to overwrite ${dst}: its directory resolves OUTSIDE the install target (${resolveWithoutCreating(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
+    warn(`REFUSED to overwrite ${dst}: its directory ${blocked}`);
     return false;
   }
   ensureDir(path.dirname(dst));
@@ -470,9 +537,10 @@ function mergeSettings(targetSettings, kitSettings, force) {
   // reached writeFileSync directly, so with `.claude` linked out the registrations were created
   // inside the external directory while every copyGuarded write beside them refused. Checked
   // before the mkdir below, and counted like every other refusal.
-  if (!containedInWriteRoots(targetSettings)) {
+  const blockedDir = writeBlockedReason(path.dirname(targetSettings));
+  if (blockedDir) {
     backupRefused.push(targetSettings);
-    warn(`REFUSED to write ${targetSettings}: its directory resolves OUTSIDE the install target (${resolveWithoutCreating(path.dirname(targetSettings))}) — a symlinked intermediate directory would carry the registrations out of the repo. Replace it with a real directory and re-run.`);
+    warn(`REFUSED to write ${targetSettings}: its directory ${blockedDir}`);
     return "skipped";
   }
   let existing = {};
@@ -554,8 +622,19 @@ function mergeSettings(targetSettings, kitSettings, force) {
   return "written";
 }
 
+// The two ROOT-LEVEL APPENDS (.gitignore here, AGENTS.md below) were the last writers reading with
+// existsSync and writing with writeFileSync — no lstat between them. A symlinked .gitignore or
+// AGENTS.md therefore had its EXTERNAL target rewritten, on plain and force runs alike, exit 0:
+// the same hole the copy and [G] paths closed, in the two files an adopter is most likely to
+// symlink into a dotfiles repo. Refused, counted and named like every other link refusal.
+// Returns "unchanged" | "written" | "refused".
 function appendGitignore(target, lines, comment = "workflow-kit: lane declaration, ledger and pre-send rung sidecar are per-session, gitignored") {
   const gi = path.join(target, ".gitignore");
+  if (isSymlinkAt(gi)) {
+    backupRefused.push(gi);
+    warn(`REFUSED to append to ${gi}: it is a SYMLINK (resolves to ${realpathOrSelf(gi)}), and init does not write through links. Replace the link with a regular file — or add these entries to ${realpathOrSelf(gi)} yourself — then re-run: ${lines.join(", ")}`);
+    return "refused";
+  }
   let text = existsSync(gi) ? readFileSync(gi, "utf8") : "";
   const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
   const add = lines.filter((l) => !have.has(l));
@@ -573,6 +652,14 @@ function appendGitignore(target, lines, comment = "workflow-kit: lane declaratio
 // 8 KiB-capped entry doc) well under cap.
 function appendAgentsPointer(target, kitRoot) {
   const agents = path.join(target, "AGENTS.md");
+  // lstat BEFORE existsSync, for appendGitignore's reason and one more: existsSync FOLLOWS links,
+  // so a DANGLING AGENTS.md link read "absent" and returned quietly while a write through it would
+  // have created the link's external target.
+  if (isSymlinkAt(agents)) {
+    backupRefused.push(agents);
+    warn(`REFUSED to append to ${agents}: it is a SYMLINK (resolves to ${realpathOrSelf(agents)}), and init does not write through links. Replace the link with a regular file — or add the /thread-restart pointer to ${realpathOrSelf(agents)} yourself — then re-run.`);
+    return "refused";
+  }
   if (!existsSync(agents)) return "absent"; // init generates AGENTS.md before this runs; guard anyway
   const fragment = readFileSync(path.join(kitRoot, "commands", "agents-pointer.md"), "utf8");
   const marker = "workflow-kit:thread-restart-pointer";
@@ -654,7 +741,7 @@ function main() {
   staleKept = [];
   backupRefused = [];
   // The two places this run is allowed to create files: the repo target and the user-global Codex
-  // prompts dir. Everything else a write resolves into is an escape (see containedInWriteRoots).
+  // prompts dir. Everything else a write resolves into is an escape (see writeBlockedReason).
   writeRoots = [T, args.codexPromptsDir];
   log(`workflow-kit init → ${T}`);
   const remaining = []; // generated files still carrying unfilled placeholders
@@ -708,7 +795,19 @@ function main() {
     if (same) warn(`existing .githooks/pre-commit KEPT — its content matches the kit's version (OK).`);
     else warn(`existing .githooks/pre-commit KEPT and its content DIFFERS from the kit's — the every-lane commit floor is NOT the kit's control (it may be stale or a no-op that lets undeclared commits through). Re-run with --force to install the kit's version.`);
   }
-  if (isGitRepo(T)) {
+  // ENVIRONMENT BEFORE FILESYSTEM. `git config` resolves its subject from GIT_DIR /
+  // GIT_COMMON_DIR / GIT_WORK_TREE before it ever looks for a `.git`, so with any of them set the
+  // link-shape refusal below never fires (the target's `.git` is a perfectly ordinary directory)
+  // and the setting lands in whatever repository they select — the adopted repo left silently
+  // UNARMED while the run printed "binds every lane" and exited 0. Git exports GIT_DIR to its own
+  // hooks, so a run from a hook, a `rebase --exec` or a `bisect run` script hits this by accident.
+  // Nothing here can tell an intentional override from an inherited one, so the write is refused
+  // whenever one is present, naming what it observed — the controller's observed_overrides shape.
+  const gitOverrides = gitLocationOverrides(process.env);
+  if (gitOverrides.length) {
+    backupRefused.push(path.join(T, ".git"));
+    warn(`REFUSED to set core.hooksPath: Git LOCATION OVERRIDES are present in this environment (${gitOverrides.join(", ")}), and \`git config\` resolves its target from THOSE before the filesystem — the setting would be written into whatever repository they select, not ${T}, leaving this one silently unarmed. Re-run with them cleared: env -u ${gitOverrides.join(" -u ")} node bin/init.mjs …`);
+  } else if (isGitRepo(T)) {
     // FM3/subdir footgun: `git config` writes to the repo the target belongs to. If T is a SUBDIR of a
     // larger repo, core.hooksPath is set on the PARENT pointing at parent/.githooks while the hook was
     // written under T/.githooks — unreachable. Warn rather than silently misconfigure.
@@ -1025,7 +1124,7 @@ function main() {
       // linked `.codex`: a directory created before the containment check is the escape the copy
       // below refuses one line later. Not contained ⇒ create nothing and let that refusal count it.
       const codexAgents = path.join(T, ".codex", "agents");
-      if (dirContainedInWriteRoots(codexAgents)) ensureDir(codexAgents);
+      if (!writeBlockedReason(codexAgents)) ensureDir(codexAgents);
       const codexCfg = copyGuarded(path.join(KIT_ROOT, "codex", "config.toml"), cfgDst, force, false);
       // A KEPT config.toml may already declare `hooks`. Codex accepts registrations in either that
       // file or `.codex/hooks.json` and warns when both do, so an adopter carrying their own is
@@ -1296,6 +1395,7 @@ function main() {
   if (ptr === "written") log(`  AGENTS.md: /thread-restart fallback pointer appended`);
   else if (ptr === "unchanged") log(`  AGENTS.md: /thread-restart pointer already present (unchanged)`);
   else if (ptr === "absent") warn(`AGENTS.md absent — /thread-restart pointer NOT appended (generate AGENTS.md, then re-run)`);
+  else if (ptr === "refused") { /* refused, warned and counted at the site */ }
   else warn(`could not ${ptr === "read-failed" ? "read" : "write"} AGENTS.md to append the /thread-restart pointer — the rest of the adopt is unaffected; fix AGENTS.md permissions and re-run`);
 
   // 8. .gitignore (lane declaration, ledger and rung sidecar are per-session).
@@ -1406,8 +1506,11 @@ function main() {
     console.error(`\ninit: ${backupRefused.length} overwrite(s) were REFUSED (a symlinked target, an escaping directory, or a backup that could not be taken — see each warning above):`);
     for (const f of backupRefused) console.error(`  · ${f}`);
     console.error(
-      `Each file above is UNCHANGED on disk — still its OLD content, not kit v${KIT_VERSION}. ` +
-      `Resolve the cause each warning names (replace the symlink or linked directory, move the blocking .bak aside), then re-run.`);
+      `Nothing above was written by this run. Every entry naming a kit FILE is UNCHANGED on disk — ` +
+      `still its OLD content, not kit v${KIT_VERSION}; every entry naming something else (a \`.git\` whose ` +
+      `core.hooksPath write was refused) never carried kit content at all, and that repository is ` +
+      `untouched too. Resolve the cause each warning names (replace the symlink or linked directory, ` +
+      `move the blocking .bak aside, clear the Git location overrides), then re-run.`);
     process.exitCode = 1;
   }
   if (staleKept.length) {
