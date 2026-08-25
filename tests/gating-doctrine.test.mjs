@@ -680,18 +680,26 @@ test("the finite aggregate cadence agrees between every live surface", () => {
   // lists are (a tree-derived list goes vacuous the moment a surface drops the rule). Each must
   // appear in the doc AND in what the hook prints, or the two hand the agent divergent cadences.
   const FINITE_CADENCE = [
-    /R1 (?:or|and) R2 (?:permits|may dispatch) one bounded batch/i,
-    /R3 (?:accepted harm )?requires (?:one )?root replacement, simplification, or (?:genuine )?split/i,
-    /R4(?:,| is) the final aggregate bookend/i,
+    /R1(?: or |\/| and )R2 (?:each )?(?:permits?|may dispatch) one bounded batch(?: each)?/i,
+    /R3 (?:accepted harm )?(?:requires|permits only) (?:one )?root[- ]replacement[,\/](?: simplification,)? ?(?:simplification\/)?(?:or )?(?:genuine )?split/i,
+    /R4(?:,| is| closes)? the final (?:aggregate )?(?:GO\/STOP )?bookend/i,
     /no R5/i,
+    /refr(?:ee|o)ze[^.]{0,80}(?:grants nothing|never grants a batch)/i,
   ];
+  // PROTOCOLS.md restates the cadence in the reference layer, so it is a STATING surface and is
+  // pinned with the rest — a co-edit of one surface and its own literal pin must not pass while
+  // the surfaces disagree.
+  const protocols = read("skills/orchestrate/PROTOCOLS.md").replace(/\s+/g, " ");
   for (const tok of FINITE_CADENCE) {
     assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the finite cadence token ${tok}`);
     assert.match(hook, tok, `the hook must PRINT the same finite cadence token ${tok}`);
   }
+  for (const tok of FINITE_CADENCE.slice(0, 4)) {
+    assert.match(protocols, tok, `PROTOCOLS.md restates the cadence, so it must carry the token ${tok}`);
+  }
   // The retired LINEAR ladder must be GONE from BOTH — a reader/agent meets whichever they get, and
   // both shipping is worse than either. These are the shapes THIS chip retired.
-  const RETIRED = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /two-cycle window/i, /process audit on the exact bytes/i];
+  const RETIRED = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /two-cycle window/i, /process audit on (?:the|those) exact bytes/i];
   for (const dead of RETIRED) {
     assert.doesNotMatch(ctrl, dead, `core/WORKFLOW.md still states the retired linear ladder ${dead}`);
     assert.doesNotMatch(hook, dead, `the hook still prints the retired linear ladder ${dead}`);

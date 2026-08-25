@@ -623,8 +623,9 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     // this run omitted --source-dirs. That reset widens the guard, so it is the dangerous direction.
     for (const b of bystanders) {
       assert.doesNotMatch(readFileSync(b, "utf8"), new RegExp(MINE),
-        `--force also destroyed the local edit in ${path.basename(b)} — the radius is the whole [P] class`);
-      assert.ok(!existsSync(`${b}.bak`), `…and left no .bak for ${path.basename(b)}`);
+        `--force also replaced the local edit in ${path.basename(b)} — the radius is the whole [P] class`);
+      assert.match(readFileSync(`${b}.bak`, "utf8"), new RegExp(MINE),
+        `…but since v2.16.0 the differing MECHANISM file is backed up first (${path.basename(b)}.bak holds the edit)`);
     }
     assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")), {},
       "--force rewrote kit.config.json from THIS run's flags: the narrowed executedPathDirs is gone (guard widened)");

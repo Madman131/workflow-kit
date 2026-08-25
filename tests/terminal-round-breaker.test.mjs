@@ -74,8 +74,11 @@ const TIER_SEATS = {
   T3: [["free", "free"], ["a", "angle:a"], ["b", "angle:b"], ["c", "angle:c"], ["external", "external"]],
 };
 function expectedSeats(paths, tier = "T2") {
+  // The external seat carries a second family: T2/T3 rosters owe the mechanical family floor
+  // (two distinct family values), matching the decorrelation the tier exists for.
   return TIER_SEATS[tier].map(([seat_id, role]) => ({
-    seat_id, role, family: "codex", pass_type: role === "external" ? "folded" : "free", paths,
+    seat_id, role, family: role === "external" ? "claude" : "codex",
+    pass_type: role === "external" ? "folded" : "free", paths,
   }));
 }
 function receivedSeats(expected, candidate, findingIds = []) {
@@ -379,7 +382,7 @@ test("LE2: a legacy handoff binds the CURRENT winning standard disposition — a
       type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy", changeset_id: "legacy-cs",
       parent_task_id: "legacy", parent_changeset_id: "legacy-cs",
       parent_candidate_sha: manifest.digest, authorized_paths: ["src/x.mjs"],
-      child: { task_id: "agg-child", changeset_id: "agg-cs", tier: "T2", authorized_paths: ["src/x.mjs"] },
+      child: { task_id: "agg-child", changeset_id: "agg-cs", tier: "T2", budget: "one changeset", authorized_paths: ["src/x.mjs"] },
       owner_evidence: "Owner handoff", parent_disposition_event_id: dispositionId, parent_round: round,
     }, options(ctx.dir));
     // The recorder derives current state itself; the derivation is what must refuse a stale replay
@@ -390,7 +393,7 @@ test("LE2: a legacy handoff binds the CURRENT winning standard disposition — a
       parent_task_id: "legacy", parent_changeset_id: "legacy-cs",
       parent_disposition_event_id: r1.event_id, parent_round: 1,
       parent_candidate_sha: manifest.digest, authorized_paths: ["src/x.mjs"],
-      child: { task_id: "stale-child", changeset_id: "stale-cs", tier: "T2", authorized_paths: ["src/x.mjs"] },
+      child: { task_id: "stale-child", changeset_id: "stale-cs", tier: "T2", budget: "one changeset", authorized_paths: ["src/x.mjs"] },
       owner_evidence: "stale citation",
     });
     const loaded = loadRepairEventsForProject(ctx.dir);
@@ -450,7 +453,7 @@ test("four-bucket partition: followups carry inline routing, accepted means bloc
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
       parent_disposition_event_id: state.latest.event_id, trigger_ids,
       continuation_kind: "new_changeset", owner_evidence: "Owner follow-on",
-      children: [{ task_id: "next-task", changeset_id: "next-cs", tier, authorized_paths: ["src/x.mjs"] }],
+      children: [{ task_id: "next-task", changeset_id: "next-cs", tier, budget: "one follow-on changeset", authorized_paths: ["src/x.mjs"] }],
     }, options(ctx.dir));
     assert.equal(successor(["REAL-1"], "T2").ok, false,
       "a GO successor cannot inherit a non-followup id");
@@ -479,7 +482,7 @@ test("declared STOP at any round + the successor tier floor (no lower baseline)"
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
       parent_disposition_event_id: state.latest.event_id, trigger_ids: ["CRIT-1"],
       continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
-      children: [{ task_id: "next-task", changeset_id: "next-cs", tier, authorized_paths: ["src/x.mjs"] }],
+      children: [{ task_id: "next-task", changeset_id: "next-cs", tier, budget: "one follow-on changeset", authorized_paths: ["src/x.mjs"] }],
     }, options(ctx.dir));
     assert.equal(successor("T2").ok, false, "a T3 parent's successor cannot declare a T2 baseline");
     const ok = successor("T3");
@@ -511,6 +514,7 @@ for (const rounds of [12, 20]) {
           const exit = recordAggregateRootExit({
             type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "cs-1",
             disposition_event_id: decided.event_id, shared_mechanism: "one shared root",
+            symptom_explanation: "earlier fixes were symptoms", owner_state_yield_seams: ["state seam"],
             replacement: "one replacement", removed_workarounds: ["the cycle"],
             trigger_matrix: ["terminal bookend"],
           }, options(ctx.dir));

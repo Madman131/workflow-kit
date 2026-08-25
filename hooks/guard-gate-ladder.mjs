@@ -229,7 +229,8 @@ export const CONTRACT =
   `dispatch one bounded batch each. R3 accepted harm requires root replacement, simplification, or split, a root-exit\n` +
   `record, and exactly one batch 3. R4 is the final aggregate bookend: zero accepted blockers is GO;\n` +
   `any accepted blocker is STOP. R4 has no outgoing dispatch; no R5, cycle, scope reset, or process-\n` +
-  `audit window exists. A parent-linked Owner child never resets the terminal parent's count. A REMEDIATE discharges only when the finding's\n` +
+  `audit window exists. A contaminated unclosed panel may be refrozen ONCE per round (never the\n` +
+  `bookend, roster and scope pinned); refreezing grants nothing and resets nothing. A parent-linked Owner child never resets the terminal parent's count. A REMEDIATE discharges only when the finding's\n` +
   `OWN trigger is re-run and no longer fires —\n` +
   `a new test passing is not discharge; the ORIGINAL reproduction, dead, is.\n\n` +
   `<n> is a CONVERSATION fact — the number of reviewer verdicts dispositioned for this changeset.\n` +

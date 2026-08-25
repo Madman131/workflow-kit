@@ -1,4 +1,25 @@
-# workflow-kit — v2.7.0
+# workflow-kit — v2.16.0
+
+## What's new in v2.16.0 — the terminal aggregate controller
+
+The circular repair cadence is replaced by a finite aggregate one, mechanically walled: one frozen
+candidate + one complete precommitted panel + one aggregate PM disposition per round; at most
+three repair batches per changeset (the third a root replacement, simplification, or split, with
+its recorded root exit); one final bookend closing GO or STOP with no outgoing dispatch; Owner
+continuation as a typed, parent-linked successor that never resets the parent. New standard-round
+minting is retired — stored standard programs replay, close, or hand off to an aggregate child.
+
+**Upgrading an existing adopter — read before rerunning init.** A plain `init` rerun now FAILS
+(exit 1) when it keeps mechanism files that differ from this kit — controller, guards, recorder,
+scripts, core docs, installed tests, and the gate-machinery skills (orchestrate, frontier-review)
+with their shims and reviewer agents — instead of exiting 0 while shipping none of the fix. To
+upgrade, re-run with `--force`: differing mechanism files are backed up to `<file>.bak` first (a
+backup that cannot be taken refuses the overwrite); `[G]` docs regenerate with their own backups;
+the personal skills (humanize, the ritual set) stay yours. After `--force`, re-trust the changed
+hooks in the Codex lane interactively — `codex exec` skips untrusted hooks silently — then verify:
+`node scripts/check-codex-hooks-armed.mjs`. A release touching the canonical `/orchestrate`
+package is complete only when the user install is re-synced:
+`node scripts/sync-user-orchestrate-skill.mjs --install`.
 
 ## What's new in v2.7.0 — an incomplete reserved list routes to the human by default
 

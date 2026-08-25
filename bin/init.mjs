@@ -220,14 +220,20 @@ function isSegment(s) { return typeof s === "string" && s.length > 0 && !s.inclu
 
 function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 
-// Copy refusing to clobber unless force. Returns "written" | "skipped".
+// Copy refusing to clobber unless force. Returns "written" | "skipped" | "refused".
 // A MECHANISM skip COMPARES BYTES: a kept file identical to this kit is a completed install, but a
-// kept MECHANISM file that DIFFERS — controller, guard, recorder, doctrine, orchestrate assets — is
-// a stale install this rerun did not upgrade, and a rerun that keeps old mechanism bytes while
-// exiting 0 tells an upgrading adopter the upgrade happened. Those keeps are collected and FAIL the
-// run at the end. Convenience files an adopter legitimately edits (the thread-restart commands, the
-// Codex lane config) pass `mechanism: false` and stay a plain keep.
-const staleKept = [];
+// kept MECHANISM file that DIFFERS — the controller, guards, recorder, scripts, core doctrine,
+// installed tests, and the GATE-MACHINERY skills (orchestrate, frontier-review) with their shims
+// and reviewer agents — is a stale install this rerun did not upgrade, and a rerun that keeps old
+// mechanism bytes while exiting 0 tells an upgrading adopter the upgrade happened. Those keeps are
+// collected and FAIL the run at the end. Convenience surfaces an adopter legitimately localizes —
+// the thread-restart commands, the Codex lane config, and the personal skills (humanize and the
+// ritual set, which name the adopter's own Owner) — pass `mechanism: false` and stay a plain keep.
+// Under --force, a DIFFERING mechanism file is backed up to `<dst>.bak` BEFORE overwrite: the
+// files this flag replaces include an adopter's customized pre-commit hook and gate runners, and
+// destroying the only copy of a hand edit is not an upgrade. A backup that cannot be taken REFUSES
+// the overwrite rather than proceeding — same rule as the [G] path.
+let staleKept = [];
 function copyGuarded(src, dst, force, mechanism = true) {
   if (existsSync(dst) && !force) {
     if (mechanism) {
@@ -242,10 +248,25 @@ function copyGuarded(src, dst, force, mechanism = true) {
     warn(`exists, kept (use --force to overwrite): ${dst}`);
     return "skipped";
   }
+  if (force && mechanism && existsSync(dst)) {
+    let differs = true;
+    try { differs = !readFileSync(src).equals(readFileSync(dst)); } catch { /* unreadable = differs */ }
+    if (differs) {
+      try { copyFileSync(dst, `${dst}.bak`); }
+      catch {
+        warn(`REFUSED: could not back up ${dst} before overwrite — the existing file is untouched. Free ${dst}.bak and re-run.`);
+        return "refused";
+      }
+      warn(`backed up: ${dst}.bak (your edited version; the kit's replaces it)`);
+    }
+  }
   ensureDir(path.dirname(dst));
   copyFileSync(src, dst);
   return "written";
 }
+// The gate-machinery skill set — doctrine an agent EXECUTES, upgraded with the kit. The personal
+// skills stay adopter-owned.
+const MECHANISM_SKILLS = new Set(["orchestrate", "frontier-review"]);
 
 // --force is GLOBAL and it is also the remedy init itself recommends for a stale hook ("re-run with
 // --force to update"). That combination silently destroys hand-authored content in the `[G]` files —
@@ -427,6 +448,7 @@ function main() {
   if (badState.length) { console.error(`init: --state-docs must be in-repo relative paths (no absolute, no escaping ".."); got ${JSON.stringify(badState)}.`); process.exit(2); }
 
   ensureDir(T);
+  staleKept = [];
   log(`workflow-kit init → ${T}`);
   const remaining = []; // generated files still carrying unfilled placeholders
   const remainingTokens = new Map(); // dst -> the specific placeholder names still unfilled
@@ -583,10 +605,10 @@ function main() {
   // must not abort the run before the guards are registered, which would leave hook files on disk
   // with zero registrations: exactly the silent fail-open mergeSettings' own read-back exists to stop.
   try {
-    for (const name of bodyNames) copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force, () => true, false);
+    for (const name of bodyNames) copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force, () => true, MECHANISM_SKILLS.has(name));
     for (const name of claudeShims) {
       const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
-      copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, false);
+      copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, MECHANISM_SKILLS.has(name));
       installedShims.push(["claude", name, dst]);
     }
     log(bodyNames.length || claudeShims.length
@@ -613,7 +635,7 @@ function main() {
       // Failure-ISOLATED, exactly like the /thread-restart Codex prompt: this is the ONE install
       // target outside the repo, and an unwritable ~/.codex must never abort a mostly-complete adopt.
       try {
-        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force, false) === "written") cInstalled++; else cKept++;
+        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force, MECHANISM_SKILLS.has(name)) === "written") cInstalled++; else cKept++;
         installedShims.push(["codex", name, dst]);
       } catch (e) {
         cFailed++;
@@ -673,7 +695,7 @@ function main() {
       : [];
     let aInstalled = 0, aKept = 0;
     for (const name of agentFiles) {
-      if (copyGuarded(path.join(agentsSrc, name), path.join(T, ".claude", "agents", name), force, false) === "written") aInstalled++; else aKept++;
+      if (copyGuarded(path.join(agentsSrc, name), path.join(T, ".claude", "agents", name), force) === "written") aInstalled++; else aKept++;
     }
     if (agentFiles.length) {
       log(`  .claude/agents/: ${aInstalled} review-seat agent(s) installed, ${aKept} kept${aKept ? " — may be STALE; --force to update" : ""} (Claude lane only)`);
@@ -1103,6 +1125,23 @@ function main() {
   // rather than destroys), kept portable files are overwritten in place with NO backup, and any
   // CHANGED HOOK is DISARMED in the Codex lane until a human re-trusts it interactively — a plain
   // `codex exec` skips an untrusted hook silently.
+  // AFTER a --force that replaced Codex-lane hooks, the dangerous state is CURRENT-BUT-DISARMED —
+  // and it would otherwise exit 0. Verify out loud instead of assuming; a check that cannot run
+  // says so rather than staying silent.
+  if (force && codexLaneOk) {
+    const armedCheck = path.join(T, "scripts", "check-codex-hooks-armed.mjs");
+    if (existsSync(armedCheck)) {
+      try {
+        execFileSync(process.execPath, [armedCheck], { cwd: T, stdio: ["ignore", "pipe", "pipe"] });
+        log(`  codex hooks: armed-check PASSED after --force`);
+      } catch (error) {
+        console.error(`\ninit: the Codex lane's hooks are NOT verified armed after this --force ` +
+          `upgrade (${String(error?.stdout || error?.message || "check failed").toString().trim().split("\n")[0]}). ` +
+          `A changed hook is DISARMED until a human re-trusts it interactively; \`codex exec\` skips ` +
+          `untrusted hooks SILENTLY. Re-trust, then: node scripts/check-codex-hooks-armed.mjs`);
+      }
+    }
+  }
   if (staleKept.length) {
     console.error(`\ninit: ${staleKept.length} installed mechanism file(s) are STALE against kit v${KIT_VERSION} and were NOT upgraded:`);
     for (const f of staleKept) console.error(`  · ${f}`);

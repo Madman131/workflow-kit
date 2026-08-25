@@ -27,7 +27,15 @@ function readInput(file) {
 }
 
 export function recordEvent(input, options) {
-  if (input.type === "aggregate_v2") return recordAggregateEvent(input, options);
+  if (input.type === "aggregate_v2") {
+    // An older installed controller predating the aggregate grammar exports no
+    // recordAggregateEvent — a typed refusal, never a TypeError: version skew between the
+    // recorder and the controller is a deploy-order fact the operator can act on.
+    if (typeof recordAggregateEvent !== "function") {
+      return { ok: false, state: "repair-controller-version-skew" };
+    }
+    return recordAggregateEvent(input, options);
+  }
   if (input.type === "round_disposition") return recordRoundDisposition(input, options);
   if (input.type === "root_cause_exit") return recordRootCauseExit(input, options);
   if (input.type === "adherence_audit") return recordAdherenceAudit(input, options);
@@ -56,6 +64,10 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
       if (!result.ok) {
         const action = {
           "repair-session-missing": ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`,
+          "repair-controller-version-skew": " — the installed controller beside this recorder predates the aggregate grammar; upgrade the install (init --force; re-trust changed hooks in the Codex lane) before recording aggregate events",
+          "aggregate-close-self-authorized": " — this close's session id is one the program ADMITTED as a worker (a verification or handoff replacement); record the close from a session distinct from every admitted worker (degraded mode: the Owner's keyboard)",
+          "aggregate-terminal": " — the program is terminal (GO, STOP, or Owner-closed); continuation is a typed child_continuation successor, never another round",
+          "aggregate-worker-required": " — the current batch's brief is confirmed but no worker session is admitted; run confirm-repair-brief.mjs --verify from the working session first",
           "repair-close-self-authorized": " — this close is not eligible: an eligible close names a close-kind owner_extension at the CURRENT round and candidate, and NEITHER that row NOR the close itself may carry a session id this program admitted as a worker. One of yours does. The check compares supplied session IDS, not actors",
           "repair-close-unauthorized": ' — record an owner_extension with "authority_kind":"close" at the CURRENT round and candidate, from a session this program has not admitted as a worker, then name its exact event_id as "owner_close_event_id"',
         }[result.state] ?? "";

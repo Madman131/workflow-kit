@@ -645,10 +645,15 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     assert.match(consultText, /^tools: \[\]$/m, "frontier-consult carries the literal tools: [] line (the packet cage)");
     assert.match(readFileSync(cold, "utf8"), /^tools: Read, Grep, Glob$/m,
       "cold-reviewer keeps its read-only toolset (NOT caged — it must verify claims against the code)");
-    // idempotent: a plain re-run keeps user edits (mutated first, so a regressed overwrite cannot hide)
+    // A plain re-run still KEEPS user edits — and since v2.16.0 it FAILS (exit 1) while doing so:
+    // the frontier-review body and the agent seat are MECHANISM files, so a stale keep is a
+    // failing state, never a silent success. Mutated first, so a regressed overwrite cannot hide.
     const edited = {};
     for (const p of [body, consult]) { edited[p] = readFileSync(p, "utf8") + "\n<!-- user edit: keep me -->\n"; writeFileSync(p, edited[p]); }
-    run();
+    const staleRerun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(staleRerun.status, 1, "a plain re-run over stale mechanism keeps FAILS");
+    assert.match(staleRerun.stdout + staleRerun.stderr, /KEPT BUT STALE/, "…naming the keeps");
     for (const p of [body, consult]) assert.equal(readFileSync(p, "utf8"), edited[p], `re-run KEEPS the user-edited ${p} (no clobber without --force)`);
     // The cage check reads the INSTALLED file (a kept agent may be edited or stale). Probe it at
     // SEVERAL points, not one: a check proven against a single broken shape is proven against that
@@ -698,7 +703,8 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     run(["--force"]);
     assert.equal(readFileSync(consult, "utf8"), readFileSync(path.join(KIT, "agents", "frontier-consult.md"), "utf8"),
       "--force restores the kit's frontier-consult verbatim");
-    assert.ok(!existsSync(`${consult}.bak`), "[P] assets get NO .bak on --force (only [G] files do) — documented in PORTABILITY");
+    assert.ok(!existsSync(`${consult}.bak`),
+      "an IDENTICAL mechanism [P] asset gets NO .bak on --force — backups exist for differing files only (that polarity is pinned in the v2.1.1 upgrade test), never as noise");
     const clean = initSays();
     assert.doesNotMatch(clean, /cage is NOT confirmed/, "no cage warning against a healthy installed seat (discriminates, no cry-wolf)");
     assert.match(clean, /cage \("tools: \[\]"\) is present/, "…and it says so positively, so silence is never the only evidence");

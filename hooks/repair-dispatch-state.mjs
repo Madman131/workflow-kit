@@ -27,6 +27,17 @@ const AUTHORITY_KINDS = ["rounds", "scope", "close"];
 const DISPOSITIONS = new Set(["REMEDIATE", "DEFER", "DECLINE", "ESCALATE", "NOTE"]);
 const GIT_SHA = /^[0-9a-f]{40}$/;
 const ID64 = /^[0-9a-f]{64}$/;
+const TIER_RANK = { T2: 2, T3: 3 };
+
+// EVERY event is normalized through a JSON round-trip BEFORE it is hashed or written. `stable()`
+// renders an explicitly-undefined key into the HASH while `JSON.stringify` omits it from the
+// BYTES — so without this, the write path itself could mint a row the reader permanently rejects,
+// bricking the whole ledger from one idiomatic caller input. A value JSON cannot carry (a cycle,
+// a BigInt) returns null and the recorder refuses with a typed -malformed state instead of
+// throwing.
+function jsonNormalize(event) {
+  try { return JSON.parse(JSON.stringify(event)); } catch { return null; }
+}
 
 function plain(v) { return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype; }
 function text(v, max = 500) { return typeof v === "string" && v.trim().length > 0 && v.length <= max; }
@@ -101,6 +112,7 @@ function validAggregateKindShape(event) {
         (event.authorized_paths.length === 0 || Boolean(sortedPaths(event.authorized_paths)));
     case "root_exit":
       return ID64.test(event.disposition_event_id || "") && text(event.shared_mechanism, 1000) &&
+        text(event.symptom_explanation, 1000) && strings(event.owner_state_yield_seams, { itemMax: 500 }) &&
         text(event.replacement, 1200) && strings(event.removed_workarounds, { itemMax: 500 }) &&
         strings(event.trigger_matrix, { itemMax: 700 });
     case "dispatch":
@@ -120,7 +132,9 @@ function validAggregateKindShape(event) {
         text(event.new_worker_session_id, 200) && text(event.owner_evidence, 1000);
     case "child_continuation":
       // trigger_ids may be EMPTY: a GO-lineage follow-on with no routed adjacents carries none.
-      return ID64.test(event.parent_disposition_event_id || "") && Array.isArray(event.trigger_ids) &&
+      return ID64.test(event.parent_disposition_event_id || "") &&
+        GIT_SHA.test(event.parent_frozen_commit || "") && GIT_SHA.test(event.parent_frozen_tree || "") &&
+        Array.isArray(event.trigger_ids) &&
         event.trigger_ids.length <= 100 && new Set(event.trigger_ids).size === event.trigger_ids.length &&
         event.trigger_ids.every((id) => text(id, 300)) &&
         ["split", "new_changeset", "material_scope"].includes(event.continuation_kind) &&
@@ -132,8 +146,9 @@ function validAggregateKindShape(event) {
         ID64.test(event.parent_candidate_sha || "") && Boolean(sortedPaths(event.authorized_paths)) &&
         aggregateChildShape(event.child) && text(event.owner_evidence, 1000);
     case "close":
-      return ID64.test(event.disposition_event_id || "") && text(event.reason, 1000) &&
-        text(event.owner_evidence, 1000);
+      return ((ID64.test(event.disposition_event_id || "") && event.panel_open_event_id === undefined) ||
+        (event.disposition_event_id === null && ID64.test(event.panel_open_event_id || ""))) &&
+        text(event.reason, 1000) && text(event.owner_evidence, 1000);
     default:
       return false;
   }
@@ -162,11 +177,19 @@ export function gitSubjectPresent(projectRoot, { env = process.env } = {}) {
   for (;;) {
     // lstat, not stat: a SYMLINKED `.git` is a subject that may be present, and it is also the
     // tamper shape the ledger reader already fails closed on. Both reasons point the same way.
-    try { lstatSync(path.join(dir, ".git")); return true; } catch {}
+    // ONLY ENOENT continues the walk. Any other error — EACCES, ELOOP, ENOTDIR — is a subject
+    // this control could not SEE, and unseen resolves toward PRESENT: an unreadable ancestor
+    // must never buy the blind relief.
+    try { lstatSync(path.join(dir, ".git")); return true; }
+    catch (error) { if (error?.code !== "ENOENT") return true; }
     const parent = path.dirname(dir);
     if (parent === dir) return false;
     dir = parent;
   }
+}
+
+export function gitLocationOverrides(env = process.env) {
+  return GIT_LOCATION_ENV.filter((name) => typeof env?.[name] === "string" && env[name].trim() !== "");
 }
 
 export function resolveGitCommon(projectRoot, { execGit = execFileSync } = {}) {
@@ -282,7 +305,9 @@ function appendTypedEvent(file, event, allowed) {
   return { ok: true, event_id: id, idempotent: false };
 }
 
-function appendRepairEvent(file, event) {
+function appendRepairEvent(file, rawEvent) {
+  const event = jsonNormalize(rawEvent);
+  if (!event) return { ok: false, state: "repair-round-malformed" };
   return appendTypedEvent(file, event, (candidate) => EVENT_TYPES.has(candidate.type));
 }
 
@@ -321,9 +346,14 @@ function cleanGitCandidate(projectRoot, commit, tree, options = {}) {
   const candidate = exactGitCandidate(projectRoot, commit, tree, options);
   if (!candidate) return null;
   try {
+    // TRACKED cleanliness only. An untracked file cannot alter the committed candidate the seats
+    // review, and requiring `-uall`-clean made the controller unusable in any tree holding rig
+    // material or scratch notes — this repository included. What untracked files a packet may
+    // expose to a seat is packet discipline, not candidate identity.
     const dirty = String((options.execGit || execFileSync)("git",
-      ["status", "--porcelain", "--untracked-files=all"], { cwd: projectRoot, encoding: "utf8" })).trim();
-    return dirty ? null : candidate;
+      ["status", "--porcelain"], { cwd: projectRoot, encoding: "utf8" }))
+      .split("\n").filter((line) => line && !line.startsWith("?? "));
+    return dirty.length ? null : candidate;
   } catch { return null; }
 }
 
@@ -381,7 +411,10 @@ function receivedSeatShape(received) {
     received.raw_finding_ids.every((id) => text(id, 300)) &&
     (received.verdict !== "NO-GO" || received.raw_finding_ids.length > 0) &&
     text(received.artifact_receipt, 500) && ID64.test(received.artifact_sha256 || "") &&
-    typeof received.pre_loaded === "boolean" && ["candidate-only", "folded-history"].includes(received.packet_scope);
+    // pre_loaded is a LOG the Owner spot-checks, never one bit: false, true, or the seat's own
+    // disclosure text of what arrived that nobody sent.
+    (typeof received.pre_loaded === "boolean" || text(received.pre_loaded, 500)) &&
+    ["candidate-only", "folded-history"].includes(received.packet_scope);
 }
 
 function receivedSeatsShape(value) {
@@ -395,9 +428,14 @@ function expectedPanelShape(tier, seats, changedPaths) {
       !seats.every((seat) => expectedSeatShape(seat, changedPaths))) return false;
   const angles = new Set(seats.filter((seat) => seat.role.startsWith("angle:")).map((seat) => seat.role));
   const free = seats.find((seat) => seat.role === "free");
+  // FAMILY FLOOR: T2/T3 owe cross-family decorrelation, so a roster whose every seat declares one
+  // family cannot open. Family names stay data — the floor counts DISTINCT values (substitution's
+  // actual family where present), it never recognises brands.
+  const families = new Set(seats.map((seat) => seat.substitution?.actual_family || seat.family));
   return free?.pass_type === "free" && same(free.paths, changedPaths) &&
     seats.filter((seat) => seat.role.startsWith("angle:")).every((seat) => seat.pass_type === "free") &&
-    seats.some((seat) => seat.role === "external") && angles.size >= (tier === "T3" ? 3 : 2);
+    seats.some((seat) => seat.role === "external") && angles.size >= (tier === "T3" ? 3 : 2) &&
+    families.size >= 2;
 }
 
 function receivedSeatMatches(expected, received, commit, tree) {
@@ -411,7 +449,7 @@ function receivedSeatMatches(expected, received, commit, tree) {
     received.raw_finding_ids.every((id) => text(id, 300)) &&
     (received.verdict !== "NO-GO" || received.raw_finding_ids.length > 0) &&
     text(received.artifact_receipt, 500) && ID64.test(received.artifact_sha256 || "") &&
-    typeof received.pre_loaded === "boolean" &&
+    (typeof received.pre_loaded === "boolean" || text(received.pre_loaded, 500)) &&
     ["candidate-only", "folded-history"].includes(received.packet_scope) &&
     (received.pass_type !== "free" || received.packet_scope === "candidate-only");
 }
@@ -420,6 +458,12 @@ function aggregatePanelComplete(open, close) {
   if (!open || !close || !Array.isArray(close.received_seats) ||
       close.received_seats.length !== open.expected_seats.length ||
       new Set(close.received_seats.map((seat) => seat?.seat_id)).size !== close.received_seats.length) return false;
+  // Cross-seat finding ids must be globally unique AT CLOSE, while the close is still refusable
+  // and recomposable. Enforced only at disposition time, a collision landed a durable close no
+  // disposition could ever cite — a permanent, in-band-unrecoverable deadlock two independent
+  // seats each labelling their first finding "F1" would wander into.
+  const allIds = close.received_seats.flatMap((seat) => Array.isArray(seat?.raw_finding_ids) ? seat.raw_finding_ids : []);
+  if (new Set(allIds).size !== allIds.length) return false;
   const received = new Map(close.received_seats.map((seat) => [seat.seat_id, seat]));
   if (!open.expected_seats.every((seat) => receivedSeatMatches(seat, received.get(seat.seat_id),
     open.frozen_commit, open.frozen_tree))) return false;
@@ -476,7 +520,8 @@ function aggregateRows(events) {
 function aggregateChildShape(child) {
   const paths = sortedPaths(child?.authorized_paths);
   return plain(child) && text(child.task_id, 120) && text(child.changeset_id, 120) &&
-    ["T2", "T3"].includes(child.tier) && paths && same(paths, child.authorized_paths);
+    ["T2", "T3"].includes(child.tier) && text(child.budget, 300) &&
+    paths && same(paths, child.authorized_paths);
 }
 
 function aggregateWorld(events, standardEvents = []) {
@@ -490,9 +535,16 @@ function aggregateWorld(events, standardEvents = []) {
   const usedTasks = new Set(standardIdentities.map((row) => row.event.task_id));
   const usedChangesets = new Set(standardIdentities.map((row) => row.event.changeset_id));
   const parentContinuations = new Set(), standardStates = new Map();
+  // REPLAY CONSISTENCY: any standard identity whose derivation FAILS poisons the whole world —
+  // fail CLOSED, matching activeRepairPathOwners' direction. Silently dropping the failed task
+  // instead made one bad standard row erase a legacy child's entire lineage (fail-OPEN) while
+  // the ownership query on the same input denied everything.
+  let poisoned = false;
   const getStandard = (taskId) => {
     if (!standardStates.has(taskId)) standardStates.set(taskId, deriveRepairState(standardEvents, taskId));
-    return standardStates.get(taskId);
+    const derived = standardStates.get(taskId);
+    if (!derived?.ok) poisoned = true;
+    return derived;
   };
   const overlaps = (left, right) => left.some((candidate) => right.includes(candidate));
   const activePathOverlap = (paths, exceptTask = null) => {
@@ -504,8 +556,12 @@ function aggregateWorld(events, standardEvents = []) {
     return [...programs.values()].some((program) => program.task_id !== exceptTask && program.active &&
       overlaps(paths, program.authorized_paths));
   };
-  const stoppedPathOverlap = (paths) => [...programs.values()].some((program) =>
-    program.terminal === "STOP" && overlaps(paths, program.stopped_paths || []));
+  // A terminal reservation yields ONLY to the reserving program's own lineage: a child whose
+  // continuation names THAT parent may work the paths; any other lineage child may not — an
+  // unrelated parent's successor must never be a skeleton key over someone else's STOP.
+  const stoppedPathOverlap = (paths, exceptParentTask = null) => [...programs.values()].some((program) =>
+    (program.terminal === "STOP" || (program.terminal === "CLOSED" && program.stopped_paths?.length)) &&
+    program.task_id !== exceptParentTask && overlaps(paths, program.stopped_paths || []));
   const lineageChangesetUsed = (changesetId) => [...childLineage.values()]
     .some((lineage) => lineage.changeset_id === changesetId);
   const accept = (row) => { accepted.set(row.event_id, row); return row; };
@@ -521,34 +577,58 @@ function aggregateWorld(events, standardEvents = []) {
           !same(paths, row.changed_paths) || !expectedPanelShape(row.tier, row.expected_seats, paths)) continue;
       if (!state) {
         const lineageId = row.child_continuation_event_id ?? row.legacy_handoff_event_id ?? null;
+        // An aggregate program colliding with a STANDARD identity is not silently dropped — the
+        // record path refuses creating one, so a collision on replay means a standard row was
+        // appended out-of-band AFTER the program existed. Dropping the program then would
+        // retroactively erase its terminal state and its STOP reservation (fail-open); the whole
+        // history is instead invalid (fail-closed, consistently).
+        if (usedTasks.has(row.task_id) || usedChangesets.has(row.changeset_id)) {
+          if (standardIdentities.some((identity) => identity.event.task_id === row.task_id ||
+              identity.event.changeset_id === row.changeset_id)) { poisoned = true; }
+          continue;
+        }
+        const lineage = lineageId !== null ? childLineage.get(row.task_id) : null;
         if (row.round !== 1 || row.phase !== "repair_round" || row.incoming_dispatch_event_id !== null ||
-            row.incoming_worker_event_id !== null || usedTasks.has(row.task_id) ||
-            usedChangesets.has(row.changeset_id) || activePathOverlap(paths, row.task_id) ||
+            row.incoming_worker_event_id !== null || activePathOverlap(paths, row.task_id) ||
             (lineageId === null && stoppedPathOverlap(paths))) continue;
         if (lineageId !== null) {
-          const lineage = childLineage.get(row.task_id);
+          // A child's opened paths are a SUBSET of its declared lineage budget — exact equality
+          // demanded predicting the child's future diff at continuation time, and a wrong guess
+          // burned the one continuation forever.
           if (!lineage || lineage.event_id !== lineageId || lineage.changeset_id !== row.changeset_id ||
-              lineage.tier !== row.tier || !same(lineage.authorized_paths, paths)) continue;
+              lineage.tier !== row.tier ||
+              !paths.every((entry) => lineage.authorized_paths.includes(entry))) continue;
+          if (stoppedPathOverlap(paths, lineage.parent_task_id ?? null)) continue;
         } else if (childLineage.has(row.task_id)) continue;
-        const created = { ok: true, task_id: row.task_id, changeset_id: row.changeset_id,
+        const created = { ok: true, task_id: row.task_id, changeset_id: row.changeset_id, tier: row.tier,
           panels_open: [], panels_close: [], dispositions: [], root_exits: [], dispatches: [],
           workers: [], worker_handoffs: [], latest: null, active_dispatch: null, active_worker: null,
           closes: [], terminal: null, active: false, authorized_paths: [], stopped_paths: [],
           lineage_event_id: lineageId };
         programs.set(row.task_id, created); usedTasks.add(row.task_id); usedChangesets.add(row.changeset_id);
       } else {
-        // A REFREEZE SUPERSEDE: the same round re-opened on a DIFFERENT frozen candidate while the
-        // prior panel never closed — the cure for a mid-panel contaminated candidate, which would
-        // otherwise reserve an unusable panel forever (the round could neither close nor rerun).
-        // It re-carries the superseded open's exact entry evidence, because a refreeze changes the
-        // CANDIDATE, never how the round was entered — and it grants nothing: no disposition was
-        // reached, so no batch is consumed, and the round count does not move.
-        const prior = [...state.panels_open].reverse().find((open) => open.round === row.round);
+        // A REFREEZE SUPERSEDE: the same round re-opened on a DIFFERENT frozen candidate while
+        // the prior panel never closed — the cure for a mid-panel contaminated candidate, which
+        // would otherwise reserve an unusable panel forever. FOUR bounds keep it from becoming
+        // the un-batched repair loop the panel measured: (1) at most ONE supersede per round —
+        // repeated contamination is rig-class harm, and the exit is close+successor, never a
+        // grind; (2) NEVER at the final bookend — a contaminated bookend ends via close+
+        // successor, or the bookend would be refreezable-to-green; (3) the ROSTER and the
+        // CHANGED-PATH SET are pinned to the superseded open — a refreeze changes candidate
+        // BYTES, never membership or scope; (4) both path-overlap checks re-run. It grants
+        // nothing: no disposition was reached, no batch is consumed, the round does not move.
+        const priorOpens = state.panels_open.filter((open) => open.round === row.round);
+        const prior = priorOpens.at(-1);
         const roundClosed = prior && state.panels_close.some((close) =>
           state.panels_open.find((open) => open.event_id === close.panel_open_event_id)?.round === row.round);
         if (prior && !state.terminal && !roundClosed && state.changeset_id === row.changeset_id &&
+            priorOpens.length < 2 && prior.phase !== "final_bookend" &&
             (row.frozen_commit !== prior.frozen_commit || row.frozen_tree !== prior.frozen_tree) &&
             row.phase === prior.phase && row.tier === prior.tier &&
+            same(row.expected_seats, prior.expected_seats) &&
+            same(paths, prior.changed_paths) &&
+            !activePathOverlap(paths, row.task_id) &&
+            !stoppedPathOverlap(paths, state.lineage_event_id ? childLineage.get(row.task_id)?.parent_task_id ?? null : null) &&
             row.incoming_dispatch_event_id === prior.incoming_dispatch_event_id &&
             row.incoming_worker_event_id === prior.incoming_worker_event_id &&
             row.child_continuation_event_id === prior.child_continuation_event_id &&
@@ -556,12 +636,16 @@ function aggregateWorld(events, standardEvents = []) {
           state.panels_open.push(accept(row));
           continue;
         }
+        // TIER CONTINUITY: a later round may ESCALATE the tier, never lower it — without this a
+        // T3 program's terminal panel could be a T2 panel, with no batch spent and no record.
         if (state.changeset_id !== row.changeset_id || state.terminal || !state.latest ||
             state.latest.terminal_state !== "CONTINUE" || row.round !== state.latest.round + 1 ||
             row.phase !== (row.round === 4 ? "final_bookend" : "repair_round") ||
+            (TIER_RANK[row.tier] ?? 0) < (TIER_RANK[state.tier] ?? 0) ||
             row.incoming_dispatch_event_id !== state.active_dispatch?.event_id ||
             row.incoming_worker_event_id !== state.active_worker?.event_id ||
             row.child_continuation_event_id !== null || row.legacy_handoff_event_id !== null) continue;
+        if ((TIER_RANK[row.tier] ?? 0) > (TIER_RANK[state.tier] ?? 0)) state.tier = row.tier;
       }
       const current = programs.get(row.task_id);
       if (!current.panels_open.some((open) => open.round === row.round)) current.panels_open.push(accept(row));
@@ -606,7 +690,11 @@ function aggregateWorld(events, standardEvents = []) {
         // control harm the batch model must not carry forward. Declared, never inferred.
         valid = row.remediation_kind === null && row.authorized_paths.length === 0;
       } else if (open.round < 3) {
-        valid = row.terminal_state === "CONTINUE" && row.remediation_kind === "bounded" && paths.length > 0;
+        // Same-class or repair-generated recurrence may force the terminal kind EARLY — the PM
+        // may declare a root kind at R1/R2; bounded stays the default.
+        valid = row.terminal_state === "CONTINUE" &&
+          ["bounded", "root_replacement", "simplification", "split"].includes(row.remediation_kind) &&
+          paths.length > 0;
       } else if (open.round === 3) {
         valid = row.terminal_state === "CONTINUE" &&
           ["root_replacement", "simplification", "split"].includes(row.remediation_kind) && paths.length > 0;
@@ -623,19 +711,42 @@ function aggregateWorld(events, standardEvents = []) {
         if (state.terminal === "STOP") state.stopped_paths = [...open.changed_paths];
       }
     } else if (row.kind === "close") {
-      if (!state || state.changeset_id !== row.changeset_id || !state.active ||
-          row.disposition_event_id !== state.latest?.event_id || !text(row.reason, 1000) ||
-          !text(row.owner_evidence, 1000) || row.session_id === state.active_worker?.worker_session_id) continue;
+      // ABANDON, reworked on three measured defects. (1) Eligibility compares against EVERY
+      // admitted worker session — verifications AND handoff replacements — not the one current
+      // worker, which was null in the window right after a disposition (any constrained session
+      // could release itself). (2) A program with NO disposition — an unassemblable roster, a
+      // cancelled round — closes by citing its winning panel_open; before, such a program was
+      // permanently unabandonable. (3) A close AFTER any disposition RESERVES the latest winning
+      // open's changed paths exactly as a STOP does: close-then-relabel was an unlimited
+      // fresh-budget restart over the same paths. A virgin close (no disposition ever) reserves
+      // nothing — nothing was ground. The session comparison remains records-not-deters: it
+      // refuses the admitted ID, never the actor behind it.
+      if (!state || state.terminal || state.changeset_id !== row.changeset_id ||
+          !text(row.reason, 1000) || !text(row.owner_evidence, 1000)) continue;
+      const admittedSessions = new Set([
+        ...state.workers.map((worker) => worker.worker_session_id),
+        ...state.worker_handoffs.map((handoff) => handoff.new_worker_session_id),
+      ]);
+      if (admittedSessions.has(row.session_id)) continue;
+      const latestOpen = state.panels_open.at(-1) || null;
+      const citesDisposition = state.latest && row.disposition_event_id === state.latest.event_id &&
+        row.panel_open_event_id === undefined;
+      const citesOpen = !state.latest && latestOpen && row.disposition_event_id === null &&
+        row.panel_open_event_id === latestOpen.event_id;
+      if (!citesDisposition && !citesOpen) continue;
       state.closes.push(accept(row)); state.terminal = "CLOSED"; state.active = false;
+      if (state.dispositions.length && latestOpen) state.stopped_paths = [...latestOpen.changed_paths];
       state.authorized_paths = []; state.active_dispatch = null; state.active_worker = null;
     } else if (row.kind === "root_exit") {
       if (!state || state.terminal || state.changeset_id !== row.changeset_id ||
           !ID64.test(row.disposition_event_id || "") ||
-          state.root_exits.length || !text(row.shared_mechanism, 1000) || !text(row.replacement, 1200) ||
+          state.root_exits.length || !text(row.shared_mechanism, 1000) ||
+          !text(row.symptom_explanation, 1000) || !strings(row.owner_state_yield_seams, { itemMax: 500 }) ||
+          !text(row.replacement, 1200) ||
           !strings(row.removed_workarounds, { itemMax: 500 }) ||
           !strings(row.trigger_matrix, { itemMax: 700 })) continue;
       const disposition = state.dispositions.find((candidate) => candidate.event_id === row.disposition_event_id);
-      if (disposition?.round === 3 && disposition.terminal_state === "CONTINUE" &&
+      if (disposition?.terminal_state === "CONTINUE" &&
           ["root_replacement", "simplification", "split"].includes(disposition.remediation_kind)) state.root_exits.push(accept(row));
     } else if (row.kind === "dispatch") {
       if (!state || state.changeset_id !== row.changeset_id || state.terminal || state.active_dispatch ||
@@ -648,12 +759,16 @@ function aggregateWorld(events, standardEvents = []) {
           disposition.panel_close_event_id !== row.panel_close_event_id ||
           disposition.terminal_state !== "CONTINUE" || row.source_round !== disposition.round ||
           row.next_round !== disposition.round + 1 || !same(row.authorized_paths, disposition.authorized_paths)) continue;
-      if (disposition.round === 3) {
+      if (["root_replacement", "simplification", "split"].includes(disposition.remediation_kind)) {
         const exit = state.root_exits.find((candidate) => candidate.event_id === row.root_exit_event_id);
         if (!exit || exit.disposition_event_id !== disposition.event_id) continue;
       } else if (row.root_exit_event_id !== null) continue;
       state.active_dispatch = accept(row); state.dispatches.push(row);
     } else if (row.kind === "worker") {
+      // The handoff-admitted session re-running the documented --verify ritual is IDEMPOTENT,
+      // not a conflict: its admission already stands via the handoff row.
+      if (state?.active_worker && row.worker_session_id === state.active_worker.worker_session_id &&
+          row.dispatch_event_id === state.active_dispatch?.event_id) continue;
       if (!state || state.changeset_id !== row.changeset_id || state.active_worker ||
           !ID64.test(row.dispatch_event_id || "") || !text(row.worker_session_id, 200)) continue;
       const dispatch = state.dispatches.find((candidate) => candidate.event_id === row.dispatch_event_id);
@@ -682,13 +797,20 @@ function aggregateWorld(events, standardEvents = []) {
           !text(row.owner_evidence, 1000) || !Array.isArray(row.children) ||
           parentContinuations.has(row.parent_disposition_event_id)) continue;
       const followupIds = state.latest.finding_dispositions.followup.map((entry) => entry.id);
+      // Set-equality is ORDER-INSENSITIVE — a STOP successor listing the identical accepted ids
+      // in another order is the same declaration, not a different one.
       const triggerOk = state.terminal === "STOP"
-        ? same(row.trigger_ids, state.latest.finding_dispositions.accepted)
+        ? same([...row.trigger_ids].sort(), [...state.latest.finding_dispositions.accepted].sort())
         : state.terminal === "GO"
           ? row.trigger_ids.every((id) => followupIds.includes(id))
           : row.trigger_ids.every((id) =>
               state.latest.finding_dispositions.accepted.includes(id) || followupIds.includes(id));
       if (!triggerOk) continue;
+      // The successor binds the exact parent terminal candidate — lineage anchored to bytes, not
+      // only to an event id.
+      const parentOpen = state.panels_open.at(-1);
+      if (!parentOpen || row.parent_frozen_commit !== parentOpen.frozen_commit ||
+          row.parent_frozen_tree !== parentOpen.frozen_tree) continue;
       const countOk = row.continuation_kind === "split"
         ? row.children.length >= 2 && row.children.length <= 8 : row.children.length === 1;
       if (!countOk || !row.children.every(aggregateChildShape)) continue;
@@ -706,7 +828,9 @@ function aggregateWorld(events, standardEvents = []) {
           childChangesets.some((id) => usedChangesets.has(id) || lineageChangesetUsed(id))) continue;
       const continuation = accept(row); continuations.set(row.event_id, continuation);
       parentContinuations.add(row.parent_disposition_event_id);
-      for (const child of row.children) childLineage.set(child.task_id, { ...child, event_id: row.event_id });
+      for (const child of row.children) {
+        childLineage.set(child.task_id, { ...child, event_id: row.event_id, parent_task_id: row.task_id });
+      }
     } else if (row.kind === "legacy_handoff") {
       if (!text(row.parent_task_id, 120) || !text(row.parent_changeset_id, 120) ||
           !text(row.owner_evidence, 1000) || !aggregateChildShape(row.child) ||
@@ -729,18 +853,18 @@ function aggregateWorld(events, standardEvents = []) {
           !same(row.authorized_paths, standard.latest.authorized_paths) ||
           !same(row.child.authorized_paths, row.authorized_paths)) continue;
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
-      childLineage.set(row.child.task_id, { ...row.child, event_id: row.event_id });
+      childLineage.set(row.child.task_id, { ...row.child, event_id: row.event_id, parent_task_id: row.parent_task_id });
       continuations.set(row.event_id, handoff);
     }
   }
-  return { programs, accepted, continuations, childLineage, legacyHandedOff };
+  return poisoned ? null : { programs, accepted, continuations, childLineage, legacyHandedOff };
 }
 
 export function deriveAggregateRepairState(events, taskId, { standardEvents = [] } = {}) {
   if (!text(taskId, 120)) return { ok: false, state: "repair-history-invalid" };
   const world = aggregateWorld(events, standardEvents);
   if (!world) return { ok: false, state: "repair-history-invalid" };
-  return world.programs.get(taskId) || { ok: true, task_id: taskId, changeset_id: null,
+  return world.programs.get(taskId) || { ok: true, task_id: taskId, changeset_id: null, tier: null,
     panels_open: [], panels_close: [], dispositions: [], root_exits: [], dispatches: [],
     workers: [], worker_handoffs: [], closes: [], latest: null, active_dispatch: null, active_worker: null,
     terminal: null, active: false, authorized_paths: [], stopped_paths: [], lineage_event_id: null };
@@ -847,12 +971,12 @@ function nextRoundAuthority({ verdicts, exits, extensions, dispatches }, nextRou
   const scopeExtension = addedPaths.length > 0
     ? [...extensions].reverse().find((e) => e.after_round === preceding.round && e.authority_kind === "scope") || null
     : null;
-  // THE ONE ROUND-THRESHOLD GATE LEFT, and it is not a threshold: a root exit is owed once a
-  // MECHANICAL trigger has fired, at whatever round that happened. The round >= 4 / >= 7 / >= 9
-  // walls that used to stand here decided the cadence, which is the procedure's call — they were
-  // written against a linear ladder the procedure no longer runs, so they gated a repo by a shape
-  // it had stopped having. Sequence, exact-reference binding and refreeze invalidation stay: those
-  // enforce that the history is intact, never how long it may get.
+  // STORED-HISTORY REPLAY ONLY. New standard rounds are retired; the live cadence is the
+  // aggregate controller's, which WALLS the count mechanically — four rounds, three batches, one
+  // terminal bookend. What survives here is replay integrity for pre-existing programs: a root
+  // exit is owed once a MECHANICAL trigger fired, sequence and exact-reference binding hold, and
+  // refreeze invalidation stands. Nothing in this function decides how long a LIVE ladder runs —
+  // the aggregate grammar does, by refusing a fifth round outright.
   if (triggerRound > 0 && (!rootExit || evidence.root_cause_exit_event_id !== rootExit.event_id)) {
     return { ok: false, state: "repair-root-cause-exit-missing" };
   }
@@ -1053,10 +1177,27 @@ function controllerRows(file) {
     aggregate: all.filter((row) => row.event.type === AGGREGATE_EVENT_TYPE) };
 }
 
-function appendEligibleAggregate(file, event, conflictState = "aggregate-transition-conflict") {
+function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-transition-conflict") {
+  // Normalized at the boundary: what is HASHED is exactly what is WRITTEN (see jsonNormalize).
+  const event = jsonNormalize(rawEvent);
+  if (!event || !validAggregateEnvelope(event)) {
+    return { ok: false, state: `aggregate-${String(rawEvent?.kind ?? "event").replace(/_/g, "-")}-malformed` };
+  }
   const before = controllerRows(file);
   if (!before) return { ok: false, state: "repair-ledger-unavailable" };
   const id = eventId(event);
+  // A RETRY differing only in its timestamp (a caller that died between write and read-back and
+  // re-recorded) is the SAME transition — return the standing winner idempotently rather than a
+  // conflict no caller can interpret.
+  const logicalTwin = (candidateRow) => {
+    if (candidateRow.event.kind !== event.kind) return false;
+    const a = { ...candidateRow.event, recorded_at: null };
+    const b = { ...event, recorded_at: null };
+    return same(a, b);
+  };
+  const priorWorld = aggregateWorld(before.aggregate, before.standard);
+  const priorTwin = before.aggregate.find((candidateRow) => priorWorld?.accepted.has(candidateRow.event_id) && logicalTwin(candidateRow));
+  if (priorTwin) return { ok: true, event_id: priorTwin.event_id, idempotent: true };
   const candidate = { event_id: id, event };
   const prospective = aggregateWorld([...before.aggregate, candidate], before.standard);
   if (!prospective?.accepted.has(id)) return { ok: false, state: conflictState };
@@ -1064,9 +1205,9 @@ function appendEligibleAggregate(file, event, conflictState = "aggregate-transit
   if (!appended.ok) return appended;
   const after = controllerRows(file);
   const world = after && aggregateWorld(after.aggregate, after.standard);
-  return world?.accepted.has(id)
-    ? { ok: true, event_id: id, idempotent: appended.idempotent }
-    : { ok: false, state: conflictState };
+  if (world?.accepted.has(id)) return { ok: true, event_id: id, idempotent: appended.idempotent };
+  const winner = after?.aggregate.find((candidateRow) => world?.accepted.has(candidateRow.event_id) && logicalTwin(candidateRow));
+  return winner ? { ok: true, event_id: winner.event_id, idempotent: true } : { ok: false, state: conflictState };
 }
 
 export function recordAggregatePanelOpen(input,
@@ -1085,12 +1226,23 @@ export function recordAggregatePanelOpen(input,
   }
   const event = { ...base, kind: "panel_open", round: input.round, phase: input.phase, tier: input.tier,
     frozen_commit: candidate.commit, frozen_tree: candidate.tree, ...evidence,
-    expected_seats: structuredClone(input.expected_seats),
+    expected_seats: input.expected_seats,
     incoming_dispatch_event_id: input.incoming_dispatch_event_id ?? null,
     incoming_worker_event_id: input.incoming_worker_event_id ?? null,
     child_continuation_event_id: input.child_continuation_event_id ?? null,
     legacy_handoff_event_id: input.legacy_handoff_event_id ?? null };
-  return appendEligibleAggregate(repairLedgerPath(projectRoot, { execGit }), event, "aggregate-panel-open-conflict");
+  const file = repairLedgerPath(projectRoot, { execGit });
+  const result = appendEligibleAggregate(file, event, "aggregate-panel-open-conflict");
+  if (result.ok || result.state !== "aggregate-panel-open-conflict") return result;
+  // The conflict state collapses ~15 mechanical causes into one string; the two an honest caller
+  // hits most get their own names so the refusal is diagnosable without reading the derivation.
+  const rows = controllerRows(file);
+  const state = rows && deriveAggregateRepairState(rows.aggregate, input.task_id, { standardEvents: rows.standard });
+  if (state?.ok && state.terminal) return { ok: false, state: "aggregate-terminal", terminal: state.terminal };
+  if (state?.ok && state.latest?.terminal_state === "CONTINUE" && state.active_dispatch && !state.active_worker) {
+    return { ok: false, state: "aggregate-worker-required", dispatch_event_id: state.active_dispatch.event_id };
+  }
+  return result;
 }
 
 export function recordAggregatePanelClose(input,
@@ -1100,11 +1252,12 @@ export function recordAggregatePanelClose(input,
   const open = rows?.aggregate.find((row) => row.event_id === input?.panel_open_event_id)?.event;
   const candidate = open && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
   const evidence = open && panelGitEvidence(projectRoot, open.base_ref, open.base_commit, open.frozen_commit, { execGit });
+  const still = evidence && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
-  if (!base || !open || !candidate || !evidence || !same(evidence.changed_paths, open.changed_paths) ||
+  if (!base || !open || !candidate || !evidence || !still || !same(evidence.changed_paths, open.changed_paths) ||
       !Array.isArray(input.received_seats)) return { ok: false, state: "aggregate-panel-close-malformed" };
   const event = { ...base, kind: "panel_close", panel_open_event_id: input.panel_open_event_id,
-    received_seats: structuredClone(input.received_seats) };
+    received_seats: input.received_seats };
   return appendEligibleAggregate(file, event, "aggregate-panel-close-conflict");
 }
 
@@ -1121,8 +1274,8 @@ export function recordAggregateDisposition(input,
     return { ok: false, state: "aggregate-disposition-malformed" };
   }
   const event = { ...base, kind: "disposition", panel_close_event_id: input.panel_close_event_id,
-    pm_findings: structuredClone(input.pm_findings ?? []),
-    finding_dispositions: structuredClone(input.finding_dispositions),
+    pm_findings: input.pm_findings ?? [],
+    finding_dispositions: input.finding_dispositions,
     terminal_state: input.terminal_state, remediation_kind: input.remediation_kind ?? null,
     authorized_paths: [...input.authorized_paths] };
   return appendEligibleAggregate(file, event, "aggregate-disposition-conflict");
@@ -1135,9 +1288,11 @@ export function recordAggregateRootExit(input,
     return { ok: false, state: "aggregate-root-exit-malformed" };
   }
   const event = { ...base, kind: "root_exit", disposition_event_id: input.disposition_event_id,
-    shared_mechanism: input.shared_mechanism, replacement: input.replacement,
-    removed_workarounds: structuredClone(input.removed_workarounds),
-    trigger_matrix: structuredClone(input.trigger_matrix) };
+    shared_mechanism: input.shared_mechanism, symptom_explanation: input.symptom_explanation,
+    owner_state_yield_seams: input.owner_state_yield_seams,
+    replacement: input.replacement,
+    removed_workarounds: input.removed_workarounds,
+    trigger_matrix: input.trigger_matrix };
   return appendEligibleAggregate(repairLedgerPath(projectRoot, { execGit }), event,
     "aggregate-root-exit-conflict");
 }
@@ -1156,26 +1311,50 @@ export function recordAggregateWorkerHandoff(input,
 export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
-  if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children)) {
+  if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
+      !input.children.every(aggregateChildShape)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
+  // The parent terminal candidate is DERIVED, never caller-supplied — callers do not mint
+  // trusted pointers.
+  const file = repairLedgerPath(projectRoot, { execGit });
+  const rows = controllerRows(file);
+  if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
+  const state = deriveAggregateRepairState(rows.aggregate, input.task_id, { standardEvents: rows.standard });
+  const parentOpen = state.ok ? (state.panels_open ?? []).at(-1) : null;
+  if (!parentOpen) return { ok: false, state: "aggregate-continuation-malformed" };
   const event = { ...base, kind: "child_continuation",
     parent_disposition_event_id: input.parent_disposition_event_id,
-    trigger_ids: structuredClone(input.trigger_ids),
-    continuation_kind: input.continuation_kind, children: structuredClone(input.children),
+    parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
+    trigger_ids: input.trigger_ids,
+    continuation_kind: input.continuation_kind, children: input.children,
     owner_evidence: input.owner_evidence };
-  return appendEligibleAggregate(repairLedgerPath(projectRoot, { execGit }), event,
-    "aggregate-continuation-conflict");
+  return appendEligibleAggregate(file, event, "aggregate-continuation-conflict");
 }
 
 export function recordAggregateClose(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
-  if (!base) return { ok: false, state: "aggregate-close-malformed" };
-  const event = { ...base, kind: "close", disposition_event_id: input.disposition_event_id,
+  if (!base || !text(input.reason, 1000) || !text(input.owner_evidence, 1000)) {
+    return { ok: false, state: "aggregate-close-malformed" };
+  }
+  const file = repairLedgerPath(projectRoot, { execGit });
+  const rows = controllerRows(file);
+  if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
+  const state = deriveAggregateRepairState(rows.aggregate, input.task_id, { standardEvents: rows.standard });
+  if (state.ok) {
+    const admitted = new Set([
+      ...(state.workers ?? []).map((worker) => worker.worker_session_id),
+      ...(state.worker_handoffs ?? []).map((handoff) => handoff.new_worker_session_id),
+    ]);
+    // Named at record time so the refusal is diagnosable; the derivation enforces it regardless.
+    if (admitted.has(sessionId)) return { ok: false, state: "aggregate-close-self-authorized" };
+  }
+  const event = { ...base, kind: "close",
+    disposition_event_id: input.disposition_event_id ?? null,
+    ...(input.panel_open_event_id !== undefined ? { panel_open_event_id: input.panel_open_event_id } : {}),
     reason: input.reason, owner_evidence: input.owner_evidence };
-  return appendEligibleAggregate(repairLedgerPath(projectRoot, { execGit }), event,
-    "aggregate-close-conflict");
+  return appendEligibleAggregate(file, event, "aggregate-close-conflict");
 }
 
 export function recordAggregateLegacyHandoff(input,
@@ -1398,7 +1577,7 @@ export function validateAggregateDispatch(declaration,
       declaration.next_round !== disposition.round + 1 || targetKind !== "brief") {
     return { ok: false, state: "aggregate-dispatch-unavailable" };
   }
-  if (disposition.round === 3) {
+  if (["root_replacement", "simplification", "split"].includes(disposition.remediation_kind)) {
     const exit = state.root_exits.find((row) => row.event_id === declaration.root_exit_event_id &&
       row.disposition_event_id === disposition.event_id);
     if (!exit) return { ok: false, state: "aggregate-root-exit-required" };
@@ -1661,5 +1840,6 @@ export function loadRepairEventsForProject(projectRoot, options = {}) {
   // walk can prove. `gitSubjectPresent` resolves every uncertainty toward "a subject may be
   // present", so the relief needs the walk to come up empty, not the world to be empty.
   const subject = file !== null || gitSubjectPresent(projectRoot, options);
-  return { ok: false, state: subject ? "repair-ledger-unavailable" : "repair-ledger-no-subject", events: null };
+  return { ok: false, state: subject ? "repair-ledger-unavailable" : "repair-ledger-no-subject",
+    observed_overrides: gitLocationOverrides(options.env ?? process.env), events: null };
 }

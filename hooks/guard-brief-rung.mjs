@@ -447,9 +447,19 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "aggregate-worker-conflict": `this aggregate dispatch already has a different verified worker. Use the admitted worker or record the explicit aggregate worker_handoff.`,
     "aggregate-panel-open-conflict": `this round already has its immutable panel, the identity is reserved, or an active/STOPped predecessor owns the paths. Use the first panel or an Owner-attributed continuation; do not rename the task to reset the ladder.`,
     "repair-program-handed-off": `this standard repair program has been atomically handed to an aggregate child. The old worker authority is revoked; use the child identity and its own confirmed dispatch.`,
+    "aggregate-terminal": `this aggregate program is TERMINAL (GO, STOP, or Owner-closed). No later panel, disposition, or dispatch may follow — continuation is an Owner-linked successor changeset (a typed child_continuation naming the exact terminal parent), never another round of the closed ladder.`,
+    "aggregate-worker-required": `this program's current batch has a confirmed dispatch but NO admitted worker session. Run \`confirm-repair-brief.mjs --verify\` from the working session against the current receipt (a lone worker verifies from its OWN session), then retry.`,
+    "aggregate-close-self-authorized": `this close's session id is one this program has ADMITTED as a worker (a verification or a handoff replacement). The abandon path requires a session distinct from every admitted worker — in degraded mode, the Owner's keyboard. The check compares supplied session IDS, never the actor behind them: it stops the honest case and records the rest.`,
+    "aggregate-panel-close-conflict": `this panel_close does not bind the round's WINNING open with the complete expected seat set — a superseded (refrozen) open cannot close, a shrunk or altered roster cannot close, duplicate finding ids across seats cannot close, and a second close of the same open is inert. Recompose the close against the winning panel_open.`,
+    "aggregate-disposition-conflict": `this disposition does not cite an unused panel_close of the current round with a complete four-bucket partition and a round-legal terminal_state/remediation_kind. The partition must resolve EVERY seat and PM finding id exactly once across accepted/declined/note/followup, and each followup entry carries its inline route.`,
+    "aggregate-close-conflict": `this close does not cite the program's latest disposition (or, for a program with no disposition, its winning panel_open), or the program is already terminal.`,
+    "aggregate-continuation-conflict": `this continuation does not bind the exact terminal parent — its latest disposition, terminal candidate, trigger ids per the terminal kind (STOP: the accepted set; GO: routed follow-ups only), globally unused child identities, and child tiers at or above the parent's.`,
+    "aggregate-legacy-handoff-conflict": `this legacy handoff does not bind the CURRENT winning standard disposition/candidate/round with matching paths, or its child identity is already reserved.`,
+    "aggregate-worker-handoff-conflict": `this worker handoff does not cite the immutable active dispatch and the prior worker's exact admission, or no active worker stands to replace.`,
+    "aggregate-root-exit-conflict": `this root exit does not cite a CONTINUE disposition whose remediation kind is root_replacement, simplification, or split, or an exit already stands for this program.`,
     "repair-changeset-reset": `this task already owns a different durable changeset id. A refreeze, finding split, or reviewer swap cannot mint a new round allowance.`,
     "repair-scope-unapproved": `${SIDECAR} declares new repair scope without the exact typed Owner scope event ID. Scope expansion remains an Owner decision.`,
-    "repair-root-cause-exit-missing": `a root-cause trigger has FIRED in this history — a repair introduced the harm, or two consecutive NO-GOs shared a finding class — and ${SIDECAR} names no exact typed root-cause exit event ID. Record the exit for the diagnosed replacement mechanism with \`record-repair-event.mjs\`, then declare its event ID. (This gate follows the TRIGGER, not the round number; how many rounds a cycle runs is the procedure's call, not this hook's.)`,
+    "repair-root-cause-exit-missing": `a root-cause trigger has FIRED in this history — a repair introduced the harm, or two consecutive NO-GOs shared a finding class — and ${SIDECAR} names no exact typed root-cause exit event ID. Record the exit for the diagnosed replacement mechanism with \`record-repair-event.mjs\`, then declare its event ID. (For LIVE aggregate programs the cadence is walled mechanically — four rounds, three batches, one terminal bookend; this stored-standard route only replays.)`,
     "repair-ledger-unavailable": `this repository could hold a repair ledger and this control could not read it, so it fails closed. TWO causes, and they need different fixes. (1) The ledger itself is corrupt, truncated, symlinked, non-regular, or unwritable: PRESERVE it and repair it — copy it aside, find the row that will not parse or whose transition is out of order (append-only JSONL, one event per line), and fix that row. Do NOT delete it to unblock a write; that discards every round's history to clear one message, and the history is the only record of what was authorized. (2) Git could not be RUN or could not resolve this tree — \`git\` missing from the hook's PATH, or a Git-location environment variable pointing somewhere unusable. Nothing is wrong with the ledger then; restore Git access and retry. Run \`git rev-parse --git-common-dir\` here to tell the two apart.`,
     "repair-close-invalid": `the repair close does not name the CURRENT round, carries no reason, or names no close-authorization event ID. A close ends an ACTIVE repair program in band; it must say which round it ends and why. Record it with \`node scripts/record-repair-event.mjs --event <json>\`.`,
     "repair-close-self-authorized": `this close is not ELIGIBLE. All three conditions, in full: the \`owner_extension\` it names carries \`"authority_kind":"close"\`; that row sits at the CURRENT round with the CURRENT candidate; and NEITHER row carries a session id this program has admitted as a worker. Re-record both events with \`node scripts/record-repair-event.mjs --event <json>\` from a session holding no worker admission on this program. What that third condition refuses is the ADMITTED SESSION ID, never the actor behind it: \`session_id\` is caller-supplied, so this stops the honest case, not a caller that picks a name it has not used. What it buys over a deleted ledger is a legible row.`,
@@ -590,7 +600,10 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
           `proceeded UNCHECKED by it. If you expected this tree to be governed, the hook is ` +
           `running somewhere you did not intend.`);
       } else if (!controller.ok) {
-        emit(denyReason(controller.state, { dispatch: { kind: "source", target: sourceTargets[0] } }));
+        const overrides = controller.observed_overrides?.length
+          ? ` Git location overrides observed in this environment: ${controller.observed_overrides.join(", ")} — the control reads the subject THEY select, which may not be the tree you meant.`
+          : "";
+        emit(denyReason(controller.state, { dispatch: { kind: "source", target: sourceTargets[0] } }) + overrides);
         return exit(0);
       } else {
         for (const target of sourceTargets) {
@@ -610,10 +623,14 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     // JUDGE THE SIDECAR FIRST — every dispatch, before anything touches the trail. A patch envelope
     // is applied as a unit, so deciding on the first match would let a second brief in the same
     // envelope ride the first one's sidecar.
+    // In a tree where the control can SEE no subject, a BUILD brief is ordinary work — evaluate
+    // against an empty history rather than denying on a ledger that cannot exist in view. Repair
+    // declarations still refuse (they bind ledger events that are absent).
+    const noSubject = controller.state === "repair-ledger-no-subject";
     const verdicts = dispatches.map((d) => ({ d, v: sidecarState(sidecar, {
       ageMin: ageMin ?? 0, sessionId: input?.session_id, dispatch: d,
-      events: controller.ok ? controller.events : null,
-      aggregateEvents: controller.ok ? controller.aggregate_events : null, taskId,
+      events: controller.ok ? controller.events : (noSubject ? [] : null),
+      aggregateEvents: controller.ok ? controller.aggregate_events : (noSubject ? [] : null), taskId,
     }) }));
     const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
     if (blocked) {

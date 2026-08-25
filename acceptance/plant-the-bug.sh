@@ -365,10 +365,16 @@ SK_CODEX_SHA="$(shasum "$SK_CODEX" | awk '{print $1}')"
 FR_BODY_SHA="$(shasum "$FR_BODY" | awk '{print $1}')"
 AG_CONSULT_SHA="$(shasum "$AG_CONSULT" | awk '{print $1}')"
 AGENTS_SHA1="$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')"
-node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
+# The edits above split across the two classes: commands/humanize-class skills are adopter-owned
+# (plain keeps), while the frontier-review body and the agent definition are MECHANISM — since
+# v2.16.0 a plain rerun that keeps them stale FAILS (exit 1) naming the keeps, instead of claiming
+# an upgrade it did not do. The files are still KEPT either way, which the SHA asserts below prove.
+RERUN_OUT="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
   --state-docs docs/state.md --memory-dir "$WORK/mem" \
-  --codex-prompts-dir "$CODEX_PROMPTS" >/dev/null 2>&1 && ok "re-run init exits 0 (idempotent)" || bad "re-run init should exit 0"
+  --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)" && bad "re-run over stale MECHANISM keeps must exit 1" || ok "re-run FAILS (exit 1) on stale mechanism keeps — never a silent claim"
+echo "$RERUN_OUT" | grep -q "KEPT BUT STALE" && ok "…and names the stale keeps" || bad "…must name the stale keeps"
+echo "$RERUN_OUT" | grep -q "A plain rerun never claims the new controller" && ok "…and states the rule" || bad "…must state the rule"
 assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$ADOPTER/AGENTS.md")" "AGENTS pointer still appears exactly once after re-run (no duplication)"
 assert_eq "$CLAUDE_EDIT_SHA" "$(shasum "$CMD_CLAUDE" | awk '{print $1}')" "re-run KEEPS a user-edited Claude command (no clobber without --force)"
 assert_eq "$CODEX_EDIT_SHA"  "$(shasum "$CMD_CODEX" | awk '{print $1}')" "re-run KEEPS a user-edited Codex prompt (no clobber without --force)"

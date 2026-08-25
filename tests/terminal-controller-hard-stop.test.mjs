@@ -237,6 +237,7 @@ test("aggregate controller enforces PM authority, three batches, final STOP, han
         const exit = recordAggregateRootExit({
           type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
           disposition_event_id: decided.event_id, shared_mechanism: "one shared controller defect",
+          symptom_explanation: "prior fixes patched symptoms", owner_state_yield_seams: ["owner/state seam"],
           replacement: "one finite state machine", removed_workarounds: ["circular cadence"],
           trigger_matrix: ["R4 has no outgoing dispatch"],
         }, options(ctx.dir));
@@ -270,8 +271,8 @@ test("aggregate controller enforces PM authority, three batches, final STOP, han
       parent_disposition_event_id: decided.event_id, trigger_ids: ["FINAL-1"],
       continuation_kind: "split", owner_evidence: "Owner split",
       children: [
-        { task_id: "child-a", changeset_id: "child-a-change", tier: "T2", authorized_paths: candidate.paths },
-        { task_id: "child-b", changeset_id: "child-b-change", tier: "T2", authorized_paths: ["src/y.mjs"] },
+        { task_id: "child-a", changeset_id: "child-a-change", tier: "T2", budget: "one changeset", authorized_paths: candidate.paths },
+        { task_id: "child-b", changeset_id: "child-b-change", tier: "T2", budget: "one changeset", authorized_paths: ["src/y.mjs"] },
       ],
     }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
@@ -293,7 +294,7 @@ test("aggregate controller enforces PM authority, three batches, final STOP, han
       parent_changeset_id: "collision-parent-change", parent_candidate_sha: legacyManifest.digest,
       authorized_paths: ["briefs/round-4.md"], owner_evidence: "collision attempt",
       child: { task_id: "collision-child", changeset_id: "child-a-change", tier: "T2",
-        authorized_paths: ["briefs/round-4.md"] },
+        budget: "one changeset", authorized_paths: ["briefs/round-4.md"] },
     }, options(ctx.dir)).state, "aggregate-legacy-handoff-conflict",
     "legacy handoff cannot overwrite a continuation's pending child changeset");
     const collisionCloseAuthority = recordOwnerExtension({
@@ -309,8 +310,8 @@ test("aggregate controller enforces PM authority, three batches, final STOP, han
       parent_disposition_event_id: decided.event_id, trigger_ids: ["FINAL-1"],
       continuation_kind: "split", owner_evidence: "conflicting child reservation",
       children: [
-        { task_id: "child-c", changeset_id: "child-a-change", tier: "T2", authorized_paths: ["src/z.mjs"] },
-        { task_id: "child-d", changeset_id: "child-d-change", tier: "T2", authorized_paths: ["src/w.mjs"] },
+        { task_id: "child-c", changeset_id: "child-a-change", tier: "T2", budget: "one changeset", authorized_paths: ["src/z.mjs"] },
+        { task_id: "child-d", changeset_id: "child-d-change", tier: "T2", budget: "one changeset", authorized_paths: ["src/w.mjs"] },
       ],
     }, options(ctx.dir)).state, "aggregate-continuation-conflict",
     "a continuation reserves child changeset ids before panel open");
@@ -485,6 +486,7 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
     const exit = recordAggregateRootExit({
       type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
       disposition_event_id: decided.event_id, shared_mechanism: "one root",
+      symptom_explanation: "symptoms only", owner_state_yield_seams: ["one seam"],
       replacement: "one replacement", removed_workarounds: ["patch loop"], trigger_matrix: ["final stop"],
     }, options(ctx.dir));
     assert.equal(exit.ok, true, exit.state);
@@ -517,8 +519,9 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
     const continuation = (trigger, child, at) => stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: at, session_id: "mutant", parent_disposition_event_id: decided.event_id,
+      parent_frozen_commit: candidate.commit, parent_frozen_tree: candidate.tree,
       trigger_ids: [trigger], continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
-      children: [{ task_id: child, changeset_id: `${child}-change`, tier: "T2", authorized_paths: candidate.paths }],
+      children: [{ task_id: child, changeset_id: `${child}-change`, tier: "T2", budget: "one changeset", authorized_paths: candidate.paths }],
     });
     const wrong = continuation("WRONG", "wrong-child", "2099-01-01T00:00:04.000Z");
     const correct = continuation("FINAL", "correct-child", "2099-01-01T00:00:05.000Z");
@@ -589,14 +592,14 @@ test("legacy rows replay and close or atomically hand off, but new standard mint
       type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy", changeset_id: "legacy-change",
       parent_task_id: "legacy", parent_changeset_id: "legacy-change",
       parent_candidate_sha: manifest.digest, authorized_paths: ["src/x.mjs"],
-      child: { task_id: "legacy", changeset_id: "reused-change", tier: "T2",
+      child: { task_id: "legacy", changeset_id: "reused-change", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/x.mjs"] }, owner_evidence: "invalid identity reuse",
     }, options(ctx.dir)).state, "aggregate-legacy-handoff-conflict");
     assert.equal(recordAggregateLegacyHandoff({
       type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy", changeset_id: "legacy-change",
       parent_task_id: "legacy", parent_changeset_id: "legacy-change",
       parent_candidate_sha: manifest.digest, authorized_paths: ["src/x.mjs"],
-      child: { task_id: "unique-child", changeset_id: "legacy-change", tier: "T2",
+      child: { task_id: "unique-child", changeset_id: "legacy-change", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/x.mjs"] }, owner_evidence: "invalid changeset reuse",
     }, options(ctx.dir)).state, "aggregate-legacy-handoff-conflict");
 
@@ -604,7 +607,7 @@ test("legacy rows replay and close or atomically hand off, but new standard mint
       type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy", changeset_id: "legacy-change",
       parent_task_id: "legacy", parent_changeset_id: "legacy-change",
       parent_candidate_sha: manifest.digest, authorized_paths: ["src/x.mjs"],
-      child: { task_id: "aggregate-child", changeset_id: "aggregate-change", tier: "T2",
+      child: { task_id: "aggregate-child", changeset_id: "aggregate-change", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/x.mjs"] }, owner_evidence: "Owner legacy handoff",
     }, options(ctx.dir));
     assert.equal(handoff.ok, true, handoff.state);

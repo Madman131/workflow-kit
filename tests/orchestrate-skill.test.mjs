@@ -214,7 +214,7 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     // "re-point this test") rather than silently searching an empty string, which is the only
     // reason it is tolerable — and this release's own note was caught by these pins immediately
     // after the re-point, quoting a retracted spelling it was describing.
-    "README.md § v2.7.0": section(readme, "# workflow-kit — v2.7.0", "## What's new in v2.6.1", "README"),
+    "README.md § v2.7.0": section(readme, `# workflow-kit — v${readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim()}`, "## What's new in v2.6.1", "README"),
     "README.md § v2.6.1": section(readme, "## What's new in v2.6.1", "## What's new in v2.6.0", "README"),
     "README.md § v2.6.0": section(readme, "## What's new in v2.6.0", "## What's new in v2.5.0", "README"),
     "README.md § v2.5.0": section(readme, "## What's new in v2.5.0", "## What's new in v2.4.0", "README"),
