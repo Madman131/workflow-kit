@@ -1,9 +1,9 @@
 # RUNG ZERO — the six checks that run before any gate
 
-Word budget: 2925 (**Owner-ratified 2026-08-12**, twice: from an author-set 2650, then 2900; its own number,
-never summed with the body's. **Why:** the first number was set before any reviewer had run and gate
-findings cost words to fix; after eight cuts the only material left was the incident bank, and **a cap
-may never force deleting doctrine.** Headroom is for the editor after you. *2900→2925 bought the screen below.*)
+Word budget: 2925 (**Owner-ratified 2026-08-12**, raised twice from 2650; its own
+number, never summed with the body's. **Why:** the first number predated any reviewer, gate findings
+cost words to fix, and after eight cuts only the incident bank remained — **a cap may never force
+deleting doctrine.** Headroom is for the editor after you.)
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. **Run this BEFORE the deterministic rungs
 and before any seat is spawned.**
@@ -14,11 +14,12 @@ shapes to recognise, not evidence you can check. **A rule here is load-bearing o
 gives it an artifact.**
 
 **Why it exists.** Deep gates get spent on artifacts a five-minute check would have rejected or
-reshaped first. The rounds that follow are not too careful — they are aimed at the wrong thing, and
-they find real defects in work that should not have reached them. Rung zero is those checks.
+reshaped first — those rounds are not too careful, they are aimed at the wrong thing, finding real
+defects in work that should never have reached them. Rung zero is those checks.
 
-**Precedence and the carve-outs** (irreversible · prod write · gate-ran-lighter-than-mandate)
-**screen FIRST and never exit as a NOTE; then RULE #1** (`core/FOUNDATIONS.md` § Principles): harm
+**Precedence (`core/WORKFLOW.md` § Gate — the FULL set, not this line) and the carve-outs**
+(irreversible · prod write · gate-ran-lighter-than-mandate) **screen FIRST — a FINDING in those
+classes never exits as a NOTE; then RULE #1** (`core/FOUNDATIONS.md` § Principles): harm
 to the Owner/user, product's usability, or code's FUNCTIONALITY — plus its mechanism, a causal
 path, not a diagnosis. Everything else is a NOTE — **recorded**, never dropped. **Noting is free; chasing owes the
 work.**
@@ -244,8 +245,8 @@ this whole method exists to delete:
   declared doctrine never learns these checks exist and no control detects the mismatch. Closing it
   means landing these rules in a repo's own docs — **a controlling-document change owing its own
   tier.**
-- Nothing here is mechanically enforced. `core/WORKFLOW.md § Gate` says the rounds half outright —
-  *"No hook infers it; a round-counting hook was retired"*. **That no control reads a freeze or checks
-  who gave a GO is an OBSERVATION about the shipped controls, not a clause you can cite** — check it
-  against your own repo rather than inheriting it here. **Rung zero is cheap because it is honest
-  about being a checklist, not a control.**
+- Nothing HERE is mechanically enforced — the controller walls the ROUND COUNT of a RECORDED
+  program when its hook is ARMED (upgrades disarm hooks until re-trusted), and `panel_open` DOES
+  read its freeze. **That no control checks who gave a GO is an OBSERVATION about the shipped
+  controls, not a clause you can cite** — check your own repo rather than inheriting it here. **Rung zero is cheap because it is honest about being a
+  checklist, not a control.**

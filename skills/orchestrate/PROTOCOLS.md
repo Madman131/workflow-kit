@@ -29,12 +29,10 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Vary the installed LAYOUT too.** A sensor was inert in every adopted repo — it resolved a sibling
   path existing only in the source tree. Four rounds missed it: every observer stood in the one tree
   where the bug is invisible.
-- **A bounded continuation past the last round needs BOTH halves:** pre-commit that round N is the last
-  whatever it says (which stops verdict-chasing), AND carve out the one severity that can never ship
-  under that bound — a fail-open in a shipped control stops the PR and escalates (which stops the
-  bound becoming a loophole). **The bound binds the artifact JUDGED, not the changeset forever:**
-  material entering afterwards owes its own review, announced as NEW SCOPE, not as a round of the
-  closed ladder. A bound silencing review of unreviewed text is itself the loophole.
+- **R1/R2 each permit one bounded batch; R3 permits only one root-replacement/simplification/split
+  batch; R4 is the final GO/STOP bookend — no R5.** New material after GO or STOP is NEW SCOPE
+  owing its own review: an explicit Owner parent-linked child changeset — never a round of the
+  closed ladder, never silence, and never a reset of the terminal parent.
 - **When ONE class survives repeated rounds, diagnose PLUMBING or CONCEPT before re-fixing.** If the
   recurrence is bespoke logic sitting beside the real grammar, relocating it INTO that one shared
   grammar may resolve the duplicate-logic objection — then RE-EVALUATE the original objection, since

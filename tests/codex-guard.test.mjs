@@ -940,9 +940,17 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
   // docs claim the two lanes hold byte-identical files.
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-upgrade-"));
   const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-codex-prompts-"));
+  // `codex` deliberately OFF the PATH: with the CLI reachable, the post-force armed-check spends a
+  // real model call whose verdict tracks this machine's codex auth state, not the code under test.
+  // Without it the check ABSTAINS fast — which after --force is a FAILING state (see below).
+  const HERMETIC_PATH = [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter);
   const init = (...extra) => {
-    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "u", "--codex-prompts-dir", codexDir, ...extra], { encoding: "utf8" });
-    assert.equal(r.status, 0, r.stderr);
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "u", "--codex-prompts-dir", codexDir, ...extra], { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
+    // BOTH runs exit 1, each for a reason the body's assertions then distinguish: a plain rerun
+    // over the v2.0-shaped adopter is a STALE INSTALL (fails since v2.16.0), and a --force run
+    // ends in the post-force armed-check, which cannot verify a hermetic adopter and now FAILS
+    // the run rather than warning (exit 0 after --force would claim controls it never verified).
+    assert.equal(r.status, 1, r.stderr);
     return `${r.stdout}\n${r.stderr}`;
   };
   try {
@@ -968,6 +976,9 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
       readFileSync(path.join(dir, ".codex", "hooks", "guard-cross-repo-writes.mjs"), "utf8"),
       "--force brings both lanes to this kit version");
     assert.doesNotMatch(forced, /two lanes' hooks are NOT identical/, "…and the warning stops (it is not a permanent scold)");
+    // The forced run's OWN exit 1 is the armed-check's doing, not a leftover split: the upgraded
+    // hooks are CURRENT-BUT-DISARMED until a human re-trusts them, and init says so.
+    assert.match(forced, /NOT verified armed/, "the post-force armed-check failure is the named cause");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
 

@@ -1,4 +1,28 @@
-# workflow-kit — v2.7.0
+# workflow-kit — v2.16.0
+
+## What's new in v2.16.0 — the terminal aggregate controller
+
+The circular repair cadence is replaced by a finite aggregate one — mechanically walled for a
+RECORDED T2/T3 program under an ARMED hook: one frozen
+candidate + one complete precommitted panel + one aggregate PM disposition per round; at most
+three repair batches per changeset (the third a root replacement, simplification, or split, with
+its recorded root exit); one final bookend closing GO or STOP with no outgoing dispatch; Owner
+continuation as a typed, parent-linked successor that never resets the parent. New standard-round
+minting is retired — stored standard programs replay, close, or hand off to an aggregate child.
+
+**Upgrading an existing adopter — read before rerunning init.** A plain `init` rerun now FAILS
+(exit 1) when it keeps mechanism files that differ from this kit — controller, guards, recorder,
+scripts, core docs, installed tests, and the gate-machinery skills (orchestrate, frontier-review)
+with their shims and reviewer agents — instead of exiting 0 while shipping none of the fix. To
+upgrade, re-run with `--force`: EVERY differing file it overwrites — mechanism and personal alike
+— is backed up to `<file>.bak` first, a backup that cannot be taken refuses the overwrite, and
+each refusal is counted into a nonzero exit. `[G]` docs regenerate with their own backups. A
+forced run whose post-run armed-check cannot verify the Codex lane also exits 1 — an unverified
+lane is named, never silent. After `--force`, re-trust the changed
+hooks in the Codex lane interactively — `codex exec` skips untrusted hooks silently — then verify:
+`node scripts/check-codex-hooks-armed.mjs`. A release touching the canonical `/orchestrate`
+package is complete only when the user install is re-synced:
+`node scripts/sync-user-orchestrate-skill.mjs --install`.
 
 ## What's new in v2.7.0 — an incomplete reserved list routes to the human by default
 
@@ -586,7 +610,7 @@ enumeration check that searched a broad slice rather than parsing the list, so a
 could stay green; and the helper's own canary, which in its first draft stripped every occurrence
 and so could never fire.
 
-**Upgrading: a plain `init` re-run — do NOT pass `--force`.** This release adds files and edits
+**Upgrading: a plain `init` re-run — do NOT pass `--force`.** *(historical — since v2.16.0 a plain rerun over differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)* This release adds files and edits
 nothing an adopter already has, so a plain re-run ships the repo-local half in full: the body, both
 reference layers and the Claude shim all land, and a hand-edited `[P]` file is preserved (executed
 on an adopter created from v2.2.1). `--force` would buy nothing here and **destroys hand-edited
@@ -681,7 +705,7 @@ that kept failing get an external trigger instead of a rule.**
 - **A retired control, recorded so it is not rebuilt.** Commit-time gate-adjudication records were
   built, NO-GO'd twice and discarded: round counting is a *conversation* fact, not a *tree* fact, and
   the measured refutation was one permit followed by 8 accepted commits with zero dispositions. It is
-  why `core/WORKFLOW.md` says no hook counts rounds, and it bounds what `pre-commit` may claim: **a
+  why `core/WORKFLOW.md` said no hook counts rounds *(historical — since v2.16.0 the controller WALLS a recorded program's rounds from its ledger: recorded transitions, never inference from the tree)*, and it bounds what `pre-commit` may claim: **a
   commit-time hook is a tripwire for forgetting, never a boundary.**
 - **Two stale claims corrected while in the neighbourhood.** `core/WORKFLOW.md` said the gate-ladder
   sensor was "Claude lane only" — it has registered in **both** lanes since v2.1 — and described the
@@ -777,7 +801,11 @@ protected.) It also rewrites `.claude/kit.config.json` from the flags you pass *
 and pinned by test: a `--force` re-run on an adopter carrying hand-edited `[P]` files destroys them
 with no backup and resets a configured `executedPathDirs: ["app"]` to `{}`. (`kit.config.json` and
 the `[G]` files do get a `.bak` — but only when their new content actually DIFFERS; identical content
-is rewritten with the same bytes and gets none.) **Commit before you run it.**
+is rewritten with the same bytes and gets none.) *(Historical note — superseded in v2.16.0:
+`--force` now backs up EVERY differing file it overwrites to `<file>.bak`, refuses any overwrite
+whose backup cannot be taken, and counts each refusal into a nonzero exit. The sentences above
+record v2.1.1 behavior; the `executedPathDirs` reset is unchanged and still bites.)* **Commit
+before you run it.**
 
 **What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the
 template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and shorthand rows are replaced by
@@ -983,7 +1011,7 @@ names it. **Neither enforces anything.** `--skip-codex-lane` omits both.
 
 1. **Drop `--risk-tokens` from your saved `init` invocation.** This is no longer optional — the run
    now fails with exit 2. Nothing replaces it; leave your `kit.config.json` alone.
-2. **Re-run `init` with your original flags — and do NOT add `--force`.** Unlike v1.7, this release
+2. **Re-run `init` with your original flags — and do NOT add `--force`.** *(historical — since v2.16.0 a plain rerun over differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)* Unlike v1.7, this release
    edits **no** `[P]` file you already have: the entire installable delta is two brand-new files, and
    `init` writes new files without `--force`. So `--force` buys you only a refreshed version stamp in
    `core/OWNER_COMMS.md`, and it **costs** you the hand-authored content of every `[G]` file —
@@ -1245,11 +1273,13 @@ model's name).
 (`core/REVIEW.md` payload contract and pass-types, `core/GATES.md` § Model · effort matrix,
 `core/WORKFLOW.md` § Gate). **One rule here is genuinely new and lives only in the skill body**: the
 one-firing-per-changeset budget. It is not in `core/`, and **nothing counts it** — round count is a
-conversation fact, so the cap binds the agent that reads it and nothing else. The skill says so
+conversation fact *(historical justification — since v2.16.0 a RECORDED program's ROUNDS are
+ledger-walled; the FIRING count here remains uncounted)*, so the cap binds the agent that reads
+it and nothing else. The skill says so
 where it states the cap, rather than implying a hook enforces it.
 
 Upgrading: re-run `init` with your original flags (no `--force` needed — the new files simply
-install); then fill the two new placeholders in `core/BINDINGS.md`.
+install) *(historical — since v2.16.0 a rerun that KEEPS differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)*; then fill the two new placeholders in `core/BINDINGS.md`.
 
 ## What's new in v1.5.1
 
@@ -1482,7 +1512,7 @@ hook, and it regenerates *every* `[G]` file — including a `core/OWNER_COMMS.md
 `.claude/kit.config.json` whose families you configured (regenerating that with no family flags resets
 it to `{}`, which *widens* your write guard). Since v1.3, `init` writes a `.bak` beside any such file
 before overwriting it and says so on the console, so the upgrade path is recoverable rather than
-silently destructive. Prefer a re-run without `--force` unless you actually want the kit's versions
+silently destructive. Prefer a re-run without `--force` *(historical — since v2.16.0 a plain rerun over differing mechanism files exits 1 naming `--force`; see the v2.16.0 upgrade section)* unless you actually want the kit's versions
 back.
 
 ## What's new in v1.2.1

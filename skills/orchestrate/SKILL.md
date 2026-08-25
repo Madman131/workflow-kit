@@ -79,13 +79,13 @@ into a private worktree.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
-   fold-check (`/frontier-review`). Ledger every round by changeset. Rounds run in cycles of at most
-   three harm-bearing rounds (the CIRCULAR cadence); at each soft stop, one root assessment + one
-   bounded remediation, whose NO-GO bookend is the next cycle's round 1. Enter root assessment
-   earlier on two consecutive same-class Rule-1 harms or a repair-introduced harm. After two
-   completed cycles, a process audit on the exact bytes gates continuation — its GO buys one more
-   two-cycle window; NO-GO or exhaustion returns to the Owner. The absolute count never
-   resets. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
+   fold-check (`/frontier-review`). Precommit one panel, collect it, then PM-disposition it once.
+   R1/R2 permit one bounded batch each — a root kind may be declared EARLY on same-class or
+   repair-generated recurrence; R3 accepted harm requires root replacement,
+   simplification, or split plus root exit and one batch 3; R4 is the final GO/STOP bookend and
+   has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No R5,
+   cycle, reset, or process-audit continuation. An Owner child links to a terminal parent without
+   resetting it. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
    scope/disposition/root call; on disagreement zoomed-out CONTROLS; KISS; carve-outs screen
    first, then RULE #1** (`core/FOUNDATIONS.md` § Principles; cite document+section). Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
@@ -112,9 +112,10 @@ discipline of any shared checkout.
 
 ⚠ **One rung on this page is enforced WHEN ITS HOOK IS ARMED; the rest is honour-system. That rung
 is TRUST-GATED: upgrading a hook marks it CHANGED and DISARMS it until re-approved, and an untrusted
-hook is skipped SILENTLY — so an upgrade turns it off until you approve it again.** The controller reads
-typed author-recorded rounds; no hook infers them, reads a freeze, or checks who gave a GO — except
-`guard-brief-rung`, which denies a brief WRITE lacking a fresh, session- and
+hook is skipped SILENTLY.** The controller reads
+typed author-recorded rounds, `panel_open` DOES read its freeze, and for a RECORDED program the
+armed hook walls the cadence (terminal states, batch caps, path ownership). No control checks who
+gave a GO. `guard-brief-rung` denies a brief WRITE lacking a fresh, session- and
 target-bound, SINGLE-USE record of executed checks — proving such a RECORD EXISTS, never that its
 commands were run or were the right ones. The kit ships controls for the declaration and the commit
 floor, and their lane, trust, fresh-clone and bypass limits are in `PORTABILITY.md` — and a rung you

@@ -505,18 +505,26 @@ test("a plain init re-run ships NONE of v1.7's edits to existing [P] files — s
     ];
     const marker = "<!-- PRE-UPGRADE MARKER -->\n";
     for (const t of targets) writeFileSync(t, marker + readFileSync(t, "utf8"));
-    run(["--skip-codex-prompt"]);
+    // Since v2.16.0 a plain re-run that keeps a stale MECHANISM file ([P] core doc) FAILS instead
+    // of exiting 0 — the keep itself is unchanged, which is what this test pins.
+    const stale = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(stale.status, 1, "a plain re-run over a stale [P] core doc FAILS rather than claiming the upgrade");
+    assert.match(stale.stdout + stale.stderr, /KEPT BUT STALE/, "…and names the stale keep");
     for (const t of targets) {
       assert.ok(readFileSync(t, "utf8").startsWith(marker),
         `a plain re-run KEEPS the already-installed ${path.basename(t)} (this is why --force is required)`);
     }
-    run(["--skip-codex-prompt", "--force"]);
+    // Since v2.16.0 a hermetic forced rerun exits 1 (post-force armed-check unverifiable) and a
+    // differing [P] file gets a .bak first — the subject here is the installed bytes.
+    spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--force"], { encoding: "utf8" });
     for (const [t, src] of [
       [targets[0], path.join(KIT, "core", "ARTIFACT_CLASS.md")],
       [targets[1], path.join(KIT, "skills", "frontier-review", "INVOKE.md")],
     ]) {
       assert.equal(readFileSync(t, "utf8"), readFileSync(src, "utf8"),
-        `--force is what actually installs the kit's current ${path.basename(t)} ([P]: overwritten, no .bak)`);
+        `--force is what actually installs the kit's current ${path.basename(t)}`);
     }
     // The note carries the instruction. Scoped to the v1.7 section so a neighbouring release's
     // instruction cannot satisfy it.
@@ -571,11 +579,15 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     writeFileSync(body, readFileSync(body, "utf8")
       .replace(/^- \*\*A buried ask\*\*[\s\S]*?label it\.\n/m, ""));
 
-    run(["--owner-name", "Alex", "--skip-codex-prompt"]);
+    // A plain re-run still ships NOTHING — and since v2.16.0 it also FAILS (stale mechanism keeps:
+    // the rolled-back WORKFLOW.md and the edited hook bystanders), instead of exiting 0 in silence.
+    const plainRerun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--owner-name", "Alex", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(plainRerun.status, 1, "a plain re-run over stale mechanism files FAILS rather than claiming the upgrade");
     assert.doesNotMatch(readFileSync(doc, "utf8"), /DECISION NEEDED/,
       "a plain re-run ships rule 8 to NOBODY who already has the doc (this is why --force is required)");
     assert.doesNotMatch(readFileSync(body, "utf8"), /buried ask/,
-      "…and ships the /humanize miss to nobody either, while exiting 0");
+      "…and ships the /humanize miss to nobody either");
     assert.match(readFileSync(doc, "utf8"), /workflow-kit v2\.1\.0/,
       "…leaving the doc stamped with the OLD version, exactly as the note warns");
 
@@ -589,7 +601,12 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     assert.equal(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs?.[0], "app",
       "…and the write guard is still narrowed going in, so a widening after this is --force's doing");
 
-    run(["--owner-name", "Alex", "--skip-codex-prompt", "--force"]);
+    const forced = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--owner-name", "Alex", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+    // Since v2.16.0 the hermetic forced rerun exits 1 — the post-force armed-check cannot verify
+    // the Codex lane and says so, instead of exiting 0 with the lane silently disarmed.
+    assert.equal(forced.status, 1, "the forced rerun exits 1 in a hermetic adopter (armed-check unverifiable)");
+    assert.match(forced.stdout + forced.stderr, /NOT verified armed/, "…and names the reason");
     assert.match(readFileSync(doc, "utf8"), /DECISION NEEDED/, "--force is what actually installs rule 8");
     assert.match(readFileSync(body, "utf8"), /buried ask/, "…and the /humanize miss with it");
     // The property is "the stamp MOVED to this kit's version", not "the stamp says 2.1.1" — the
@@ -605,8 +622,13 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
       "[G]: the hand-written Owner profile is REPLACED by the regenerated template");
     assert.match(readFileSync(`${doc}.bak`, "utf8"), new RegExp(PROFILE),
       "…but recoverable — the .bak holds it, which is why the note says diff the .bak");
-    assert.ok(!existsSync(`${body}.bak`),
-      "[P]: the /humanize body is overwritten with NO .bak — an adopter who edited it has only git");
+    // Inverted at v2.16.0 BY DESIGN: --force now backs up EVERY differing overwrite, the personal
+    // [P] class included — the B2 data-loss instruction ("--force is safe for your skills") is
+    // finally true because the mechanism changed, not the prose.
+    assert.ok(existsSync(`${body}.bak`),
+      "[P]: since v2.16.0 the differing /humanize body gets a .bak before the force-overwrite");
+    assert.doesNotMatch(readFileSync(`${body}.bak`, "utf8"), /buried ask/,
+      "…and the .bak holds the PRE-upgrade body, not the new one");
 
     // The blast radius itself, now mechanical rather than reported: --force is not scoped to the
     // files a release edits. Two UNRELATED [P] files from two other classes lose their local edits
@@ -614,8 +636,9 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     // this run omitted --source-dirs. That reset widens the guard, so it is the dangerous direction.
     for (const b of bystanders) {
       assert.doesNotMatch(readFileSync(b, "utf8"), new RegExp(MINE),
-        `--force also destroyed the local edit in ${path.basename(b)} — the radius is the whole [P] class`);
-      assert.ok(!existsSync(`${b}.bak`), `…and left no .bak for ${path.basename(b)}`);
+        `--force also replaced the local edit in ${path.basename(b)} — the radius is the whole [P] class`);
+      assert.match(readFileSync(`${b}.bak`, "utf8"), new RegExp(MINE),
+        `…but since v2.16.0 the differing MECHANISM file is backed up first (${path.basename(b)}.bak holds the edit)`);
     }
     assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")), {},
       "--force rewrote kit.config.json from THIS run's flags: the narrowed executedPathDirs is gone (guard widened)");
@@ -631,9 +654,9 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     assert.match(section, /--force/, "the v2.1.1 upgrade instruction must require --force, or it installs nothing");
     assert.match(section, /\.bak/, "…and must name the .bak, because --force is what puts the Owner's own words there");
     // The blast radius, not just the requirement. A note that says "--force is required" and stops
-    // reads as if the operation were scoped to this release's two files; it is global, it destroys
-    // every hand-edited [P] file with no backup, and it rewrites the config that bounds the write
-    // guard. A reader who learns that only by losing something learned it too late.
+    // reads as if the operation were scoped to this release's two files; it is global (since
+    // v2.16.0 every differing overwrite is backed up first), and it rewrites the config that
+    // bounds the write guard. A reader who learns that only by losing something learned it too late.
     // Scoped to the SENTENCE, not the word: a bare /global/ here was satisfied by the unrelated
     // "user-global Codex prompts" three lines down, and survived a mutation that struck the claim.
     assert.match(section, /`--force` is GLOBAL/,

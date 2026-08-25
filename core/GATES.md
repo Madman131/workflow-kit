@@ -476,8 +476,9 @@ panels then **demonstrated** it. The decisive result: one permit of an `initial`
 schema forces to carry no findings — followed by **8 consecutive code commits, all accepted, 1 permit
 in history, zero dispositions recorded.** The originating incident reproduced **unchanged**. Counting
 permits counts *records the agent chose to write*, not verdicts, so no commit-boundary control closes
-it. **This is why `core/WORKFLOW.md` § Gate says no hook infers rounds** — that clause is a conclusion
-from evidence, not a preference.
+it. **This is why no hook INFERS rounds — the aggregate controller in `core/WORKFLOW.md` § Gate
+RECORDS declared round transitions in its own ledger and walls what was recorded, never deriving a
+round from the tree** — a conclusion from evidence, not a preference.
 
 **Two further lessons worth more than the code.**
 1. **Each patch round opened a new hole.** Unblocking a false-block on `git commit --amend` exempted

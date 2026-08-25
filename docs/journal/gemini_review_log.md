@@ -1746,3 +1746,493 @@
         }
       ]
     }
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T03:33:56Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787628690-30052-3023720928`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=28345; instrumented_payload=28447; inline_combined=32264; file=28520
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `b92ca4f416edfb13e3b03cade45d42da7bc0abf6`
+- Artifact-Base: `956c62c4201cd9292704895c061545651b01b5eb`
+- Artifact-SHA: `b92ca4f416edfb13e3b03cade45d42da7bc0abf6`
+- Artifact-Ref: `refs/pil/gate-artifacts/b92ca4f416edfb13e3b03cade45d42da7bc0abf6`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, Sections 1 through 9)
+- Start: 2026-08-25T03:31:30Z
+- End: 2026-08-25T03:33:56Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-8faf3128da2651c1bfbd2fb6
+    CANARIES: PIL-INGEST-01dea8bda4c3 PIL-INGEST-02b2fd7a4364
+    
+    Here is the cross-family audit of the terminal round breaker contract.
+    
+    ### 1. INTER-SECTION CONTRADICTIONS: Cyclic Hash Dependency (TOCTOU) on GO Disposition
+    **Severity:** BLOCKER
+    **Sections:** § 2 (`separate_successor_finding`) vs. § 3 (T4)
+    **Concrete Scenario:** T4's guard for `aggregate_disposition GO` demands that every accepted-adjacent ID "carries a `separate_successor_finding` row". However, § 2 dictates that a `separate_successor_finding` event must bind/cite "the GO disposition". In an append-only ledger where event IDs are SHA-256 hashes of the payload (Invariant #1), you cannot write the separate rows first because they cannot cite a GO disposition hash that doesn't exist yet. If you write the GO disposition first, T4 rejects it because the separate rows are missing.
+    **Why it matters:** It is mathematically impossible to achieve a `TERMINAL-GO` state if the panel has ever accepted an adjacent finding. The repair is permanently deadlocked at the end of the round.
+    **Fix:** Break the cycle. `separate_successor_finding` must cite the `panel_close` event instead of the GO disposition, or the routing fields must be embedded directly within the `aggregate_disposition` array payload rather than existing as separate events.
+    
+    ### 2. MECHANISM CORRECTNESS / COMPLETENESS GAPS: Missing Transitions for Core Events
+    **Severity:** BLOCKER
+    **Sections:** § 2 (Event Grammar) vs. § 3 (Transition table)
+    **Concrete Scenario:** Section 2 defines three critical event kinds: `root_cause_exit`, `worker_handoff`, and `separate_successor_finding`. However, Section 3's transition table completely omits them. A strict event-sourced state machine will reject events lacking defined transitions. Furthermore, T8 strictly requires that "batch 3 cites a valid `root_cause_exit`". Conversely, T3 specifies a transition triggered by a "rig failure", but no such event kind exists in § 2's grammar.
+    **Why it matters:** Because `root_cause_exit` has no transition, it cannot be appended to the ledger. Because it cannot be appended, T8's guard will always fail, permanently bricking batch 3 dispatch. Similarly, `worker_handoff` cannot be executed (bricking repair if a worker dies), and the worker has no vocabulary to report the T3 "rig failure".
+    **Fix:** Add explicit transition rows in § 3 for `root_cause_exit` (e.g., `disposed(3)` → `disposed(3)`), `worker_handoff` (`dispatched(r)` → `dispatched(r)`), and `separate_successor_finding`. Define a formal event kind in § 2 for rig failures.
+    
+    ### 3. DATA-SAFETY / MECHANISM CORRECTNESS: Deadlock on Contaminated Rig Failure
+    **Severity:** HIGH
+    **Sections:** § 8 (M13) vs. § 3 (T2 & T3)
+    **Concrete Scenario:** M13 claims that a rig failure which mutates the candidate (e.g. a changed fixture) "consumes the batch". To consume a batch, the system must progress through disposition and dispatch. However, the system is trapped in `open(r)`: `panel_close` (T2) refuses to fire because it requires "candidate unchanged", and the T3 rerun refuses because it requires "candidate bytes UNCHANGED".
+    **Why it matters:** If a test runner crashes and dumps a log into the workspace mid-inspection, changing the candidate bytes, the repair is permanently deadlocked. It cannot close, cannot rerun, and cannot consume the batch as M13 claims.
+    **Fix:** Introduce a `panel_abort` event (or a variant of `panel_close`) that explicitly accepts a changed candidate due to rig contamination, immediately bypassing standard completeness checks and forcing a NO-GO disposition to consume the batch.
+    
+    ### 4. COMPLETENESS GAPS: Orphaned State on Round 4 Non-Blocking Harms
+    **Severity:** HIGH
+    **Sections:** § 3 (T11 Final Bookend)
+    **Concrete Scenario:** At round 4 (`closed(4)`), T11 defines only two paths: GO ("zero accepted") or STOP ("any PM-accepted blocking harm"). It explicitly states "NO batch kind is legal at r=4". If the disposition contains *only* accepted non-blocking harms (e.g., an `adjacent` finding), it is neither GO (has accepted IDs) nor STOP (has no blocking harms).
+    **Why it matters:** The disposition falls entirely through the transition table. The event is rejected, and the task is stranded in `closed(4)` forever with no legal batch to dispatch and no terminal state to enter.
+    **Fix:** T11 must define the fallback transition for non-blocking accepted harms (e.g., forcing a `TERMINAL-GO` with mandatory successor routing, or a `TERMINAL-STOP` if routing is unavailable).
+    
+    ### 5. CONCURRENCY / LOCK HAZARDS: Overlapping Aggregate Path Ownership
+    **Severity:** MEDIUM
+    **Sections:** § 3 (T1) vs. § 3 (Resolution order)
+    **Concrete Scenario:** T1's guard allows `panel_open` if "no active standard program owns any declared path". It completely fails to check if another active *aggregate* program owns the path.
+    **Why it matters:** Two separate aggregate tasks can successfully emit `panel_open` for the same files concurrently. Both will transition to `open(1)` and dispatch workers that have write authority over the exact same paths, leading to silent data overwriting.
+    **Fix:** Update the T1 guard to check that NO active program (neither standard nor aggregate) owns any of the declared paths.
+    
+    ***
+    
+    **Highest-risk thing to resolve first:** The Cyclic Hash Dependency (TOCTOU) on the GO disposition (Finding 1). It structurally breaks the core append-only ledger model for successful repairs and must be redesigned before any implementation begins.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, Sections 1 through 9)
+    
+    PIL-DONE-d84de599e9a5fa60f99b64b8
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T05:38:51Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787636150-60335-230745355`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=34437; instrumented_payload=34590; inline_combined=38407; file=34663
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `424b85601aed27d1baba866fb808385f77c6d0bd`
+- Artifact-Base: `8df1b587b9ba4041bda4e996c4f27ce46e18c96d`
+- Artifact-SHA: `424b85601aed27d1baba866fb808385f77c6d0bd`
+- Artifact-Ref: `refs/pil/gate-artifacts/424b85601aed27d1baba866fb808385f77c6d0bd`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: Entire `docs/journal/terminal_round_breaker_contract.md`, focusing on Section 2 (Event Grammar) and Section 3 (Transition table, Resolution order, and Replay constraints) against the provided Epistemic and Repo INVARIANTS.
+- Start: 2026-08-25T05:35:50Z
+- End: 2026-08-25T05:38:51Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-723755fd170e26df885413b5
+    CANARIES: PIL-INGEST-01af6e68e9ec PIL-INGEST-02a86df13e43 PIL-INGEST-031852e60369
+    
+    Here are the decorrelated blind spots the same-family panel waved through, ranked by severity. The design contains a massive validate-at-X-but-stamp-at-Y vulnerability and critical state-machine completeness gaps.
+    
+    **1. BLOCKER — MECHANISM CORRECTNESS / DATA-LOSS WINDOW (Validate-at-X-but-stamp-at-Y)**
+    * **Section:** 3 (Transition T3b: `open(r) unclosed -> panel_open r (REFREEZE)`)
+    * **Concrete failure scenario:** A candidate fails a panel seat. The worker fixes the candidate mid-panel but accidentally modifies a sensitive file `auth.js` outside the initially declared paths. A refreeze is triggered. Because T3b explicitly dictates that the `changed-path set` is *"PINNED to the superseded open"*, the new `panel_open` event inherits the old `changed_paths`. The panel resumes, and T2's `panel_close` verifies coverage ONLY against the pinned paths (completely ignoring `auth.js`). The disposition goes GO, and the unreviewed `auth.js` modification is shipped to the root.
+    * **Why it matters:** This is a textbook validate-at-X-but-stamp-at-Y mismatch and a direct violation of Invariant 5 (authoritative source-of-truth). By pinning a stale derived copy of the paths rather than re-deriving them from the new candidate, the mechanism silently drops the path delta, allowing an agent to smuggle unreviewed file writes past the panel.
+    * **Fix:** T3b MUST re-derive `changed_paths` from the new candidate's immutable `base..frozen` pair. Since the entire panel must re-run anyway ("the superseded open can no longer close"), pinning the old paths provides no benefit. If the newly derived paths exceed the parent budget, the refreeze must be refused.
+    
+    **2. HIGH — COMPLETENESS GAP / PERMANENT RESOURCE LOCK (Unlifted Ancestor Reservations)**
+    * **Section:** 3 (Terminal reservations, disclosed in full) & T13 (`child_continuation`)
+    * **Concrete failure scenario:** Task A encounters a blocking harm and is STOPped. This permanently reserves its paths (`foo.js`) repo-wide. A `child_continuation` creates Task B to fix it. Task B succeeds and hits `TERMINAL-GO`. However, because GO does not reserve paths, and there is absolutely no transition that clears an ancestor's reservation upon a child's success, Task A's STOP reservation remains permanently projected by the ledger replay.
+    * **Why it matters:** A successful repair via lineage does not unbrick the files. Once a path is STOPped, it is locked repo-wide forever against unrelated tasks. Six months later, a completely different task attempting to edit those files will be refused unless it falsely declares itself a lineage descendant of the ancient, already-fixed task.
+    * **Fix:** Ledger replay projection must recursively lift or garbage-collect a parent's terminal reservation when any of its descendant lineages reaches `TERMINAL-GO`.
+    
+    **3. HIGH — INVARIANT VIOLATION / UNENFORCED POLICY (Vacuous Child Budgets)**
+    * **Section:** 2 (`child_continuation`) vs 3 (T1)
+    * **Concrete failure scenario:** A `child_continuation` declares an explicit, tight `authorized-path` budget (`[A]`). The child then executes a `panel_open` (T1) requesting paths `[A, B]`. The T1 guard only verifies that no active program owns the paths and that they are covered by the parent's reservation. T1 NEVER intersects the requested paths with the child's explicit budget. `[B]` passes the active-program check and opens successfully.
+    * **Why it matters:** The spec boldly claims *"authorized-path SUPERSET the child's opens must stay inside"*, but the ONLY deterministic layer that can enforce this (T1) fails to check it. This violates Epistemic Rules 1 and 2 (a stated policy is unenforced until a deterministic layer checks it), making the lineage budget a vacuous declaration.
+    * **Fix:** Add an explicit guard to T1: "If opening via a lineage exception, the declared `changed_paths` MUST be a strict subset of the child's declared `authorized-path` budget."
+    
+    **4. MEDIUM — UNBOUNDED GROWTH / RESOURCE EXHAUSTION (O(N) Hook Parsing without Compaction)**
+    * **Section:** 3 (Resolution order) & Repo Invariants (1 & 10)
+    * **Concrete failure scenario:** The Git-common ledger (`repair-events-v1.jsonl`) accumulates massive JSON payloads (`panel_close` disclosure logs, `disposition` inline routing texts) across all worktrees over the repository's lifetime, with no TTL or snapshotting. Every tool-bound file write must call the hook to *"resolve the ACTIVE aggregate program BY TASK first"*, forcing the hook to parse the entire O(N) ledger from the beginning on every write.
+    * **Why it matters:** On a small 2 GB box (as explicitly noted in the constraints), this unbounded O(N) parsing inside the write path will eventually exhaust memory (OOM) or cause massive IO delays, timing out agent file writes and bricking the repo.
+    * **Fix:** Introduce a snapshotting mechanism (e.g. `repair-events-v1-snapshot.json`) that compacts terminal state, or maintain an O(1) materialized view for the hooks to check active reservations without parsing historical logs.
+    
+    **5. LOW — INTER-SECTION CONTRADICTION (Escalation Authority)**
+    * **Section:** 2 (`panel_open`) vs 3 (T10)
+    * **Concrete failure scenario:** Section 2 explicitly states that *"tier itself is declared and Owner-ratified upstream"*, anchoring tier authority strictly to the Owner. However, T10 (`dispatched(r) -> open(r+1)`) mechanically contradicts this by granting the worker the ability to arbitrarily escalate the tier (*"tier may ESCALATE, never lower"*).
+    * **Why it matters:** Allowing an agent to mechanically escalate the tier forces the round into stricter requirements (e.g., demanding 3 angles instead of 2) without Owner ratification, which can deadlock the round if those extra seats aren't available.
+    * **Fix:** Remove "tier may ESCALATE" from T10 and strictly pin the tier across all rounds to the originally Owner-ratified tier.
+    
+    **Highest-risk thing to resolve first:**
+    The T3b Refreeze Path Pinning (Blocker #1). It completely undermines the integrity of the review panel by creating a trivial bypass for shipping unreviewed file modifications.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: Entire `docs/journal/terminal_round_breaker_contract.md`, focusing on Section 2 (Event Grammar) and Section 3 (Transition table, Resolution order, and Replay constraints) against the provided Epistemic and Repo INVARIANTS.
+    PIL-DONE-7b69f19c941766d957fab018
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T07:18:10Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787642047-53606-55391141`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=37233; instrumented_payload=37386; inline_combined=41203; file=37459
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `bc6159bdab3559870a7f8626cabb68ef2c7da473`
+- Artifact-Base: `0052059555f6387888847973ad63545ee236ae7e`
+- Artifact-SHA: `bc6159bdab3559870a7f8626cabb68ef2c7da473`
+- Artifact-Ref: `refs/pil/gate-artifacts/bc6159bdab3559870a7f8626cabb68ef2c7da473`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 1-9 inclusive) and REPO_INVARIANTS
+- Start: 2026-08-25T07:14:07Z
+- End: 2026-08-25T07:18:10Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-b88614b300204bf7a6cfd422
+    CANARIES: PIL-INGEST-018ebe00e376 PIL-INGEST-024cd02389f0 PIL-INGEST-03633f52ddf0
+    
+    Here are the confirmed blind spots and architectural failures missed by the prior panel, ranked by severity.
+    
+    ### 1. BLOCKER: SILENT DATA-LOSS / SECURITY BYPASS VIA REFREEZE PATH-PINNING
+    **Category:** 4. MECHANISM CORRECTNESS & 6. INVARIANT VIOLATIONS
+    **Section:** 3 (Transition table T3b) and 5 (Rig-vs-candidate discriminator).
+    **Concrete failure:** During a panel review, a candidate is contaminated mid-panel (e.g., an agent touches an out-of-scope file to fix a build error). This triggers a T3b REFREEZE to capture the new commit. However, T3b explicitly mandates that the `changed-path set PINNED to the superseded open` must be enforced. Consequently, the new `panel_open` event copies the original, restricted path list (e.g., `[auth.js]`) while pointing to the new frozen commit which actually modifies additional files (e.g., `[auth.js, backdoor.js]`). When the panel closes, T2 only verifies that the explicitly declared `changed_paths` were covered. 
+    **Why it matters:** The system explicitly blinds the panel to the new files. The out-of-scope modifications are completely ignored by the reviewers, automatically approved via a GO disposition, and merged without ever being reviewed. This defeats the entire purpose of the terminal round breaker.
+    **Fix:** T3b must dynamically re-derive the actual changed paths of the new candidate and assert they are an exact match (or strict subset) of the superseded open's budget, actively refusing the refreeze if the candidate expands its footprint.
+    
+    ### 2. HIGH: INVERTED SESSION ELIGIBILITY CREATING ORPHAN LOCKS & GRIEFING
+    **Category:** 1. INTER-SECTION CONTRADICTIONS & 3. CONCURRENCY / LOCK HAZARDS
+    **Section:** 3 (Transition table T12), 3 (T9), and 2 (close).
+    **Concrete failure:** The eligibility guard for the `close` (Abandon) event is explicitly defined as `session ∉ every admitted worker session`. This inverted logic creates a dual failure:
+    A) An actively admitted worker that encounters a fundamentally unfixable task CANNOT cleanly abandon it because its session *is* in the admitted set (evaluating to FALSE). The worker must halt, permanently locking the paths as an orphan because the active program retains write authority and there is "no reaper" (Invariant 10).
+    B) When a worker is replaced via `worker_handoff` (T9), its session is explicitly *revoked*. Because it is no longer in the admitted set, the revoked worker's session now perfectly satisfies `session ∉ admitted set`. 
+    **Why it matters:** The authorized worker is permanently blocked from cleaning up its own deadlocks, while a revoked/obsolete session is unexpectedly granted the authority to issue a `close`, permanently reserving the paths and instantly bricking the new worker's active program.
+    **Fix:** The `close` guard must require the session to either *be* the currently active admitted worker OR an Owner-evidenced override.
+    
+    ### 3. HIGH: NON-ATOMIC OVERWRITE LEAVES REPO BRICKED ON FAILURE
+    **Category:** 5. DATA-SAFETY / LOSS WINDOWS
+    **Section:** 7 (Adopter upgrade rung).
+    **Concrete failure:** When an adopter runs `init --force` to upgrade, the script iterates through differing mechanism files, backing up and overwriting them in place. If a failure occurs midway through the loop (e.g., an EACCES error on file 10 of 20), the script counts the refusal, finishes the loop, and "forces exit 1". However, files 1 through 9 have already been irrevocably overwritten.
+    **Why it matters:** There is no rollback mechanism for a partial failure. The repository is abandoned in an unrunnable, mixed-version state (explicitly noted as "never reads as a clean adopt"), crippling the adopter's gate machinery and requiring manual, piecemeal restoration from `.bak` files.
+    **Fix:** The upgrade must perform all backups and file generation into a temporary staging directory first, and then atomically swap the directories. Alternatively, explicitly trap the error and roll back the modified files before exiting.
+    
+    ### 4. MEDIUM: TOCTOU SNIPE WINDOW IN LEGACY MIGRATION
+    **Category:** 3. CONCURRENCY / LOCK HAZARDS
+    **Section:** 2 (legacy_handoff) and 3 (T1, T15).
+    **Concrete failure:** T15 dictates that `legacy_handoff` atomically ends standard ownership and creates a child lineage. However, unlike `STOP` or a collected `close`, `legacy_handoff` does *not* generate a terminal reservation. Between the moment the legacy standard program is ended and the moment the new aggregate child successfully writes its first `panel_open` (T1), the paths are completely unprotected in the public pool. 
+    **Why it matters:** An unrelated, concurrent aggregate task can issue a `panel_open` in that exact window, snipe the paths, and permanently lock the migrated child out of its own lineage.
+    **Fix:** `legacy_handoff` must explicitly emit a terminal reservation for the standard program's paths, which the child lineage can then safely claim under the T1 parent exception.
+    
+    ### 5. MEDIUM: RESOURCE EXHAUSTION VIA IDEMPOTENT APPEND-ONLY RETRIES
+    **Category:** 2. UNBOUNDED GROWTH / RESOURCE EXHAUSTION
+    **Section:** 2 (Event grammar) and Repo Invariant 1.
+    **Concrete failure:** The design relies on an "append-only JSONL" ledger where "every accepted event is fsync'd". It claims that "A retry differing only in its timestamp converges idempotently on the standing winner". Because the ledger is strictly append-only, converging idempotently only protects the *reader's* projection; the *writer* still physically appends the full JSON payload to the disk for every retry. 
+    **Why it matters:** A stuck agent in a tight retry loop (e.g., repeatedly failing a guard but injecting a new timestamp) will continuously append duplicate JSON events, easily exhausting the storage on a small (2 GB) box and causing a hard system outage.
+    **Fix:** Implement a bounded local retry cache (rejecting payloads that differ only by timestamp before the disk write phase), or enforce a hard cap on total ledger size/row-count per task.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 1-9 inclusive) and REPO_INVARIANTS
+    PIL-DONE-40e4d7d90f068bfa0dcc21a8
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T08:05:20Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787644898-24818-229118455`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=41647; instrumented_payload=41800; inline_combined=45617; file=41873
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `27d92905f28ac4b2877131815bd92a361d75371e`
+- Artifact-Base: `1ceddb0f70716ba9e08a5636569c155a7e9052b0`
+- Artifact-SHA: `27d92905f28ac4b2877131815bd92a361d75371e`
+- Artifact-Ref: `refs/pil/gate-artifacts/27d92905f28ac4b2877131815bd92a361d75371e`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: Entirety of `docs/journal/terminal_round_breaker_contract.md` (§ 0 through § 9, including INVARIANTS and REPO_INVARIANTS).
+- Start: 2026-08-25T08:01:38Z
+- End: 2026-08-25T08:05:20Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-7b9df7d582b57502da516249
+    
+    CANARIES: PIL-INGEST-015b1ac5b5bb PIL-INGEST-027d837e1c75 PIL-INGEST-03e03156e9f2
+    
+    Here is the independent cross-family audit of the Terminal Round Breaker contract. 
+    
+    ### 1. BLOCKER: CONCURRENCY / LOCK HAZARDS — TOCTOU on `seq` Append
+    * **Section:** § 3 Replay stability ("Every ledger row carries `seq`, its position in the one shared file") & § 2 Event grammar.
+    * **Failure Scenario:** The controller must read the ledger to determine the current length $N$, construct the new JSON event payload with `"seq": N+1`, hash it for the `event_id`, and append it. Because there is no process-wide write lock (e.g., `flock`) specified for this read-modify-write cycle, two concurrent writers (e.g., an automated worker and an Owner close) will both read length $N$, mint events with `"seq": N+1`, and append them. 
+    * **Why it matters:** The file will contain duplicate sequence numbers. Since the parser "derives cross-stream order by `seq`", duplicate `seq` values permanently corrupt the ledger's deterministic cross-stream ordering and likely fail the whole ledger closed.
+    * **Fix:** Mandate an exclusive file lock (`flock` on the `.jsonl` file or a parallel `.lock` file) held across the entire read-compute-hash-append boundary, OR drop `seq` from the hashed payload and infer it dynamically at parse time from the physical line number.
+    
+    ### 2. HIGH: UNBOUNDED GROWTH / RESOURCE EXHAUSTION — O(N) Ledger Parsing
+    * **Section:** § 3 Replay stability & REPO_INVARIANTS #1.
+    * **Failure Scenario:** The `.git/workflow-kit/repair-events-v1.jsonl` ledger is purely append-only with no compaction, snapshotting, or truncation mechanics defined. Every event, including multi-kilobyte `panel_close` payloads carrying hundreds of finding IDs, accumulates permanently ("inert audit residue, never history-breaking").
+    * **Why it matters:** Every controller invocation or hook execution must parse this ever-growing JSONL file into memory from start to finish to project state. On a small (2 GB) box, this unbounded O(N) growth will eventually cause unacceptable latency and fatal OOMs, permanently bricking the repository's workflow mechanism once the file exceeds V8 memory limits.
+    * **Fix:** Introduce a ledger compaction / snapshotting mechanism that writes a checkpoint of active state and prunes terminal programs, or enforce a strict max-bytes rotation policy.
+    
+    ### 3. HIGH: DATA-SAFETY / LOSS WINDOWS — Silent Drop of Follow-ups on `STOP`
+    * **Section:** § 2 Event grammar (`child_continuation`).
+    * **Failure Scenario:** If a program reaches round 4 and the PM partitions findings into both `accepted` (blockers) and `followup` (non-blockers), the disposition MUST be `STOP`. When creating the successor via `child_continuation`, the trigger IDs rule states: `(STOP: the accepted set, order-insensitive)`. 
+    * **Why it matters:** Unlike the `CLOSED` rule which explicitly mandates "a SUPERSET of the accepted set ... plus routed follow-ups", the `STOP` rule completely omits follow-ups. The routed follow-ups are silently dropped and lost during the lineage transition; the successor cannot legally adopt them.
+    * **Fix:** Update the `child_continuation` STOP trigger ID rule to explicitly include routed follow-ups: `(STOP: the accepted set, order-insensitive, plus routed follow-ups)`.
+    
+    ### 4. MEDIUM: INVARIANT VIOLATIONS + DEPLOY/MIGRATION ORDERING — Bricking Sibling Worktrees
+    * **Section:** § 2 Event grammar & § 7 Adopter upgrade rung.
+    * **Failure Scenario:** The ledger is shared globally across the local repository in the `.git/` directory. An upgraded v2.16.0 checkout writes an `aggregate_v2` row. The design deliberately dictates that "a pre-2.16.0 reader fails CLOSED on the first aggregate row it meets". 
+    * **Why it matters:** Upgrading a *single* worktree and emitting one v2 event acts as a destructive schema migration for *all* other v2.15.0 worktrees sharing that `.git` directory. Active standard programs in those sibling worktrees are instantly paralyzed because they can no longer parse the ledger, violating the Deploy-order safety invariant ("must not assume a migration... created by a step that runs after the deploy").
+    * **Fix:** Write `aggregate_v2` events to a separate file (e.g., `repair-events-v2.jsonl`), or have v2.15.0 readers gracefully ignore unknown envelope types instead of failing the entire ledger parse.
+    
+    ### 5. MEDIUM: INTER-SECTION CONTRADICTIONS — `close` Anchor for No-Disposition Programs
+    * **Section:** § 3 Transition table (T12) vs § 2 Event grammar (`close`).
+    * **Failure Scenario:** An Owner attempts to abandon a program stuck at `closed(1)` (a panel was collected, but no disposition was reached). § 2 explicitly allows this: "for a program with NO disposition, its winning panel_open". However, the T12 guard in § 3 restricts this exception to virgin closes only: "cites the latest disposition or (virgin) the winning open".
+    * **Why it matters:** If the T12 guard is enforced literally as written, the Owner cannot close the stuck program. They cannot cite a disposition (none exists) and they cannot cite the winning open (because a panel was collected, so it is not virgin). The program is permanently deadlocked.
+    * **Fix:** Reconcile T12 with § 2. Remove the `(virgin)` qualifier in T12 so it reads: "cites the latest disposition or (if none) the winning open".
+    
+    ### 6. LOW: MECHANISM CORRECTNESS — Refreeze `EQUAL` Rejects Shrinking Scopes
+    * **Section:** § 5 Rig-vs-candidate discriminator & § 3 Transition table (T3b).
+    * **Failure Scenario:** A candidate is contaminated mid-panel. The worker reverts an accidental, unnecessary file modification, *shrinking* the footprint of changed paths. The worker triggers `panel_open r (REFREEZE)`. 
+    * **Why it matters:** § 5 dictates that the re-derived changed paths "must EQUAL the superseded open's". Because the footprint shrank, it does not exactly equal the original set, and the refreeze refuses. The stated intent is only to prevent a candidate "whose footprint grew" from riding the refreeze, but strict equality erroneously blocks safe, footprint-shrinking corrections.
+    * **Fix:** Relax the refreeze changed-path constraint from exact equality to a SUBSET check: "must be a subset of (≤) the superseded open's changed paths".
+    
+    ***
+    
+    **OVERALL VERDICT & HIGHEST RISK**
+    The single highest-risk thing to resolve first is the **TOCTOU concurrency hazard on ledger appends**. Without an explicit file lock encompassing the read-of-length and the write-of-payload, concurrent writes from different agents/worktrees will mint identical `seq` numbers, corrupting the deterministic cross-stream ordering and bricking the shared ledger.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: Entirety of `docs/journal/terminal_round_breaker_contract.md` (§ 0 through § 9, including INVARIANTS and REPO_INVARIANTS).
+    
+    PIL-DONE-944f6af9303e87662289933f
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T12:50:09Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787662017-26409-1545124600`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=45152; instrumented_payload=45305; inline_combined=49122; file=45378
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `342397b1638c95b4f1571464f85167c42717633b`
+- Artifact-Base: `bf5831e2985cac67fad806b457b9938c037b81e0`
+- Artifact-SHA: `342397b1638c95b4f1571464f85167c42717633b`
+- Artifact-Ref: `refs/pil/gate-artifacts/342397b1638c95b4f1571464f85167c42717633b`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, §§ 0-9)
+- Start: 2026-08-25T12:46:57Z
+- End: 2026-08-25T12:50:09Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-3637631a92ac180a5a8ddf5e
+    CANARIES: PIL-INGEST-015efe898d7a PIL-INGEST-0261669de014 PIL-INGEST-03d9a720d9a0
+    
+    Here is the cross-family audit. The same-family panel waved through severe mechanical deadlocks, cross-section contradictions, and unbounded growth traps. The design as written bricks its own adoption path and punishes successful repairs. 
+    
+    ### 1. BLOCKER: Inter-Section Contradictions / Mechanism Correctness — Standard Reader Blindness to Legacy Handoff
+    **Section:** § 2 (Event grammar) vs § 3 (T15 `legacy_handoff`)
+    **Concrete failure scenario:** § 2 states "The upgraded reader filters the envelope [`aggregate_v2`] out of the standard projection." However, § 3 (T15) claims the `legacy_handoff` event (which ships *inside* this very envelope as an aggregate kind) "atomically ends standard ownership." Because the standard reader filters out all `aggregate_v2` envelopes before projection, the standard state machine never sees the handoff.
+    **Why it matters:** The standard program remains globally ACTIVE in the standard projection forever. When the new aggregate child attempts to start (T1), the guard checks "no ACTIVE program of either grammar owns any declared path," sees the immortal standard program still holding the paths, and permanently refuses. The migration pathway deadlocks completely.
+    **Fix:** The standard projection reader must specifically intercept and parse the `aggregate_v2` envelope to extract `legacy_handoff` events before dropping the rest, or `legacy_handoff` must be dual-emitted as a bare standard event type.
+    
+    ### 2. BLOCKER: Concurrency / Completeness Gaps — Write Authority resolves BY TASK ignoring split changesets
+    **Section:** § 3 (Resolution order & `child_continuation` split)
+    **Concrete failure scenario:** § 3 states "Every write-authority query resolves the ACTIVE aggregate program BY TASK first, then decides target scope." However, § 2 allows a `split` child continuation to create 2–8 disjoint children. These children share the same parent `task` but use distinct `changeset` identifiers, meaning a single `task` can have multiple simultaneously ACTIVE aggregate programs. 
+    **Why it matters:** Resolving "BY TASK first" assumes a 1:1 mapping. The guard will either crash upon finding multiple active programs for the task, or arbitrarily pick the first one. If it picks Child A, a worker legally admitted to Child B will have its legitimate writes rejected (`repair-worker-path-unauthorized`), breaking concurrent split workflows.
+    **Fix:** Write-authority queries must resolve strictly by the composite `(task, changeset)` identity, matching the state machine's core definition ("States per (task, changeset)"). The worker session payload must provide both.
+    
+    ### 3. BLOCKER: Unbounded Growth / Invariant Violation — The 1200 Trigger Cap Traps Multi-Round Accumulations
+    **Section:** § 2 (`child_continuation` trigger ids)
+    **Concrete failure scenario:** The hard cap for a CLOSED program's trigger list is 1200 ("the 12-seat × 100-id ground bound, so the sole exit is never shape-impossible"). However, if a program is CLOSED after round 2 or 3, the rule requires the trigger list to be "a SUPERSET of the accepted set PLUS every collected-but-undisposed panel's raw finding ids." The `accepted` ids from prior rounds (e.g., 50) are summed with the current round's raw ids (e.g., 1180). This sum (1230) exceeds the static 1200 cap.
+    **Why it matters:** The `child_continuation` event will be shape-refused. Because a stopped/closed surface is ONLY released via its lineage, these paths become permanently bricked in the repository with no available exit.
+    **Fix:** Increase the cap to `3600` (accounting for the 3 allowed batches of accumulation) or validate the ground bounds per-panel rather than applying a flat sum cap.
+    
+    ### 4. HIGH: Data-Safety / Completeness Gaps — The "Virgin Close" Requirement Punishes Successful Partial Repairs
+    **Section:** § 3 (Terminal reservations, disclosed in full)
+    **Concrete failure scenario:** The text dictates: "a new continuation is admissible when every child of the standing one is terminal and at least one ended as a VIRGIN close." If a user creates a split to partially repair a parent, and all children successfully reach `TERMINAL-GO`, they are terminal but *none* ended as a virgin close.
+    **Why it matters:** If the user later attempts to declare a *new* continuation to repair the parent's remaining reserved paths, the guard will refuse it because the "virgin close" condition is false. A successful partial repair permanently locks the remainder of the parent's paths. The user is forced to manufacture a dummy child and abandon it just to satisfy this broken clause.
+    **Fix:** Remove the "and at least one ended as a VIRGIN close" constraint for general sequential continuations. That clause was intended as an escape hatch for *abandoned* pending children, not as a restriction on all sequential repairs.
+    
+    ### 5. HIGH: Mechanism Correctness — Refreeze's Strict Equality Check Deadlocks Shrunk Footprints
+    **Section:** § 3 (T3b Refreeze guard)
+    **Concrete failure scenario:** A mid-panel candidate change is allowed one refreeze. The rule dictates: "The refreeze's changed paths are RE-DERIVED... and must EQUAL the superseded open's". If a user realizes they accidentally included an unrelated file and executes `git reset HEAD <file>` to *shrink* the footprint, the re-derived paths are a strict subset. The equality check fails.
+    **Why it matters:** The refreeze is refused. The original `panel_close` cannot complete because the candidate was changed (the bracket check fails). The program is permanently deadlocked in `open(r)` and the round is burned. The user must abandon (`close`) the entire program.
+    **Fix:** Change the refreeze path constraint from `must EQUAL` to `SUBSET OR EQUAL`.
+    
+    ### 6. MEDIUM: Completeness Gaps — Missing `worker_handoff` transition for mid-panel crashes
+    **Section:** § 3 (T9 / Transition table)
+    **Concrete failure scenario:** Transition T9 restricts `worker_handoff` exclusively to the `dispatched(r)` state. If the worker machine dies while the program is in `open(r)` (waiting for the panel to close), the state machine has no valid transition to accept a new worker session.
+    **Why it matters:** The owner cannot hand off the worker until the current panel and PM disposition completely finish and push the state to `dispatched(r+1)`. If the dead worker was also running the local agents/processes that drive the panel, the panel will never close, resulting in a total deadlock that can only be resolved by a virgin `close` and `child_continuation`.
+    **Fix:** Allow `worker_handoff` during `open(r)`, `closed(r)`, and `disposed(r)` states, preserving the session replacement logic without altering the aggregate state.
+    
+    ---
+    
+    **HIGHEST-RISK ITEM TO RESOLVE FIRST:**
+    Finding 1 (Standard Reader Blindness to Legacy Handoff). It is a structural contradiction that completely breaks the v2.16.0 standard-to-aggregate migration path on day one, trapping users with immortal standard programs blocking their new aggregate pipelines.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, §§ 0-9)
+    
+    PIL-DONE-1c6a3454f0159d830ac505ce
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T13:38:19Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787664913-14648-210524403`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=46587; instrumented_payload=46740; inline_combined=50557; file=46813
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `0ddb85064e4225b4a8648ee9f8667055e6f1d687`
+- Artifact-Base: `53ac98e9c2b58954d48c75fe77c0f5dae7ae783d`
+- Artifact-SHA: `0ddb85064e4225b4a8648ee9f8667055e6f1d687`
+- Artifact-Ref: `refs/pil/gate-artifacts/0ddb85064e4225b4a8648ee9f8667055e6f1d687`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0-9)
+- Start: 2026-08-25T13:35:13Z
+- End: 2026-08-25T13:38:19Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-058b1415d2505046d1ce2fee
+    CANARIES: PIL-INGEST-0164292154a3 PIL-INGEST-02543bf9da4e PIL-INGEST-03afcef432d3
+    
+    Here is the independent cross-family audit of the `terminal_round_breaker_contract.md` design. 
+    
+    ### 1. BLOCKER: Trigger ID Cap Makes "Sole Exit" Shape-Impossible (Mechanism Correctness)
+    * **Section:** § 2 (`child_continuation`) and § 3 (T13, Terminal reservations)
+    * **Concrete Failure Scenario:** Round 1 accepts 50 finding ids and proceeds. Round 2 collects a full panel of 1200 finding ids, but the worker crashes and the program is abandoned (`close`) before disposition. To escape the resulting permanent path reservation, a `child_continuation` must be minted. The required trigger set for a `CLOSED` parent is defined as "a SUPERSET of the accepted set PLUS every collected-but-undisposed panel's raw finding ids" (50 + 1200 = 1250 ids).
+    * **Why it matters:** The 1250 required ids exceed the hard `cap 1200` defined in the event grammar. The continuation event will be unconditionally shape-refused. Because a `CLOSED` program permanently reserves its paths and "the sole exit is the reserving parent's own lineage", these paths are permanently bricked with no legal escape hatch. 
+    * **The Fix:** Increase the trigger ID cap to accommodate multiple rounds of history (e.g., 4800) or explicitly exclude the current round's collected-but-undisposed ids from counting against the historical accepted-set cap.
+    
+    ### 2. BLOCKER: Unbounded Ledger Growth via LLM Disclosure Text (Resource Exhaustion)
+    * **Section:** § 2 (`panel_close`), § 1, and REPO_INVARIANTS #1
+    * **Concrete Failure Scenario:** The system runs multiple rounds of repair, writing `panel_close` events to the shared ledger. Each event contains `pre_loaded`, mandated as "the seat's disclosure text" (which naturally includes large prompts, model responses, and diffs).
+    * **Why it matters:** The repair ledger (`.git/workflow-kit/repair-events-v1.jsonl`) is explicitly append-only, shared by all worktrees, and strictly forbids truncation ("Corrupt, truncated... FAILS CLOSED"). Writing full LLM disclosure texts from up to 12 seats per round directly into an un-truncatable JSONL file will rapidly bloat. On a constrained 2 GB box, this will exhaust disk space and permanently brick the repository's gating mechanism once writes fail.
+    * **The Fix:** Do not store raw `pre_loaded` textual evidence in the immutable ledger. Store large disclosure payloads in separate, ephemeral/rotatable artifact files and only record their deterministic sha256 receipt in the `panel_close` row.
+    
+    ### 3. HIGH: Upgrade Mechanism Permanently Bricks on Second Use (Deploy/Migration Ordering)
+    * **Section:** § 7 (Adopter upgrade rung)
+    * **Concrete Failure Scenario:** An adopter runs `init --force` to upgrade V1 to V2. Mechanism files are backed up (e.g., `guard.mjs` is copied to `guard.mjs.bak`). Later, the adopter runs `init --force` to upgrade V2 to V3. The updater attempts to back up the current V2 file to `guard.mjs.bak`.
+    * **Why it matters:** The V3 backup sees that `guard.mjs.bak` already exists and its bytes (V1) differ from the payload being backed up (V2). Section 7 rigidly mandates: "An existing `.bak` whose bytes differ from what this run would save is NEVER overwritten... a backup that cannot be taken refuses the overwrite". The V3 upgrade hard-fails. The automated upgrade path effectively becomes single-use, permanently blocking future updates.
+    * **The Fix:** Implement backup rotation (`.bak.1`, `.bak.2`) or permit overwriting an existing `.bak` file if its contents match a known prior version of the mechanism. The "never overwrite" lockout must be scoped exclusively to genuine, unrecognized hand-edits.
+    
+    ### 4. HIGH: Worker Handoff Gap During Active Review (Completeness Gaps)
+    * **Section:** § 3 (Transition table T9 vs T10)
+    * **Concrete Failure Scenario:** A worker successfully dispatches a batch (T8) and opens Round 2 (T10), moving the state to `open(r+1)`. The worker's session then crashes or hangs before achieving `panel_close`.
+    * **Why it matters:** T9 explicitly restricts `worker_handoff` strictly to the `From: dispatched(r)` state. It is not a legal transition from `open(r)`. A dead worker in the open state cannot be replaced. The only escape is to globally `close` (abandon) the program, which punitively reserves all paths and forces a `child_continuation` just to resume the interrupted review.
+    * **The Fix:** Add `worker_handoff` as a legal transition from `open(r)` in the transition table, allowing a new Owner-evidenced session to seamlessly take over a stalled open round without abandoning it.
+    
+    ### 5. MEDIUM: Subsequent Rounds Omit Overlap Guard (Concurrency / Lock Hazards)
+    * **Section:** § 3 (Transition table T10)
+    * **Concrete Failure Scenario:** Program A begins Round 1 on `file1.js` (passing the T1 overlap check). Program A completes R1 and opens R2 (T10). However, the worker dynamically expands the scope of R2 to include `file2.js`. Meanwhile, Program B has already started R1 on `file2.js`.
+    * **Why it matters:** T10 (`open(r+1)`) deliberately allows the tier to escalate and candidate to change, but entirely omits the "no ACTIVE program... owns any declared path" overlap guard that protects T1 and T3b (Refreeze). Program A silently overwrites Program B's lock on `file2.js`, violating the single-writer invariant and causing a concurrent write hazard.
+    * **The Fix:** Explicitly mandate "both overlap checks re-run" in the T10 guard column, identical to the strict requirement in T3b.
+    
+    ### 6. LOW: Close Mechanism Locks Unreviewed Paths (Mechanism Correctness)
+    * **Section:** § 3 (T12 Close)
+    * **Concrete Failure Scenario:** A program opens R1 on path `A`, collects a panel, and continues. The worker opens R2 on `A + B`. Before collecting R2's panel, the program is abandoned via `close`.
+    * **Why it matters:** T12 dictates that a close after *any* collected panel (which R1 satisfies) "reserves the UNION of the program's opens' changed paths." This permanently reserves both `A` and `B`, even though `B` was never reviewed or collected in any panel. This allows arbitrary paths to be locked by expanding scope in R2 and immediately closing.
+    * **The Fix:** The path reservation upon `close` should intersect strictly with the paths successfully subjected to a `panel_close`, rather than the raw `panel_open` union.
+    
+    ---
+    **Overall verdict and highest-risk thing to resolve first:**
+    The single highest-risk item is the **Trigger ID Cap Math Failure (Finding 1)**. It guarantees that any multi-round abandoned repair will permanently brick its paths via a mathematically un-satisfiable schema cap, fatally violating the design's "sole exit" invariant.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0-9)
+    PIL-DONE-371b88c6040d4b51b7e87c99
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T17:19:16Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787678070-80264-2290731606`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=49732; instrumented_payload=49885; inline_combined=53702; file=49958
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `efc89a0e5e24d20fcfb11322230038a456738819`
+- Artifact-Base: `31f8c20a8cdc596e574b373c25678a723225df4d`
+- Artifact-SHA: `efc89a0e5e24d20fcfb11322230038a456738819`
+- Artifact-Ref: `refs/pil/gate-artifacts/efc89a0e5e24d20fcfb11322230038a456738819`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0 through 9)
+- Start: 2026-08-25T17:14:30Z
+- End: 2026-08-25T17:19:16Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-266e4f6e52ea8aee7104381b
+    CANARIES: PIL-INGEST-015b333338f9 PIL-INGEST-02fbf69368da PIL-INGEST-03d90de23876
+    
+    Here is the independent cross-family review of the design, ranked by severity.
+    
+    ### 1. BLOCKER: Transitive Lift Failure / Generational Lock Leak
+    **Section:** 3 · Transition table (Terminal reservations prose)
+    **Failure Scenario:** A multi-generational repair goes deep (e.g., Gen 1 → Gen 2 → Gen 3). Gen 1 works on file `A`, fails, and STOPs, reserving `A`. Gen 1 spawns Gen 2 (budget `A`), which opens `A` (excepting its ancestor chain), fails, and STOPs, reserving `A`. Gen 2 spawns Gen 3 (budget `A`), which opens `A`, successfully repairs it, and reaches `TERMINAL-GO`. Per the explicit rule, *"a grandchild's GO lifts only its own parent's reservation, never across generations"*. Gen 3's GO lifts Gen 2's reservation on `A`. However, Gen 1's reservation on `A` remains intact.
+    **Why it matters (Mechanism Correctness / Unbounded Lock):** Because Gen 1's direct child (Gen 2) is already `TERMINAL-STOP`, Gen 1 can never receive a GO from it. The successfully repaired file `A` is permanently locked repository-wide by Gen 1. Unlocking it would require the user to spawn a new direct child of Gen 1 to re-repair the exact same file that Gen 3 already fixed. The design correctly made the `OPEN` exception transitive across the whole ancestor chain, but intentionally restricted the `LIFT` to direct children, fundamentally bricking the repository on any successful 3+ generation lineage.
+    **Fix:** A `TERMINAL-GO` must transitively lift the intersected budget for the entire non-GO ancestor chain, OR a GO node must be permitted to discharge any ancestor's reservation it fulfilled.
+    
+    ### 2. HIGH: `.git` File Directory Traversal / Write Escape
+    **Section:** 7 · Adopter upgrade rung
+    **Failure Scenario:** An attacker or compromised repository provides a `.git` that is a regular FILE (not a symlink) containing the Git worktree directive `gitdir: /home/user/.ssh/` or `/etc/`. The `init --force` upgrade script performs an `lstat` check, sees it is not a symlink, and permits the operation. The script then executes `git config`, which natively parses the `.git` file, follows the `gitdir:` directive, and writes the Git configuration to the arbitrary external path.
+    **Why it matters (Data-Safety / Invariant Violation):** The design explicitly claims *"no path or environment routes a write into another repository"* and relies solely on environment variable checks and *"link-shape keying"* to prevent escapes. It completely misses that Git natively treats regular files named `.git` as valid pointers, providing a trivial bypass to overwrite files completely outside the sandbox.
+    **Fix:** The upgrade guard must explicitly read and parse `.git` if it is a regular file. If it contains a `gitdir:` directive, the resolved destination path must be validated to fall strictly within the declared write roots before allowing `git config` to execute.
+    
+    ### 3. MEDIUM: TOCTOU Race Condition in Adopter Upgrade File Replacement
+    **Section:** 7 · Adopter upgrade rung
+    **Failure Scenario:** The upgrade script validates safety by calling `realpath` on the overwrite's destination parent, followed by an `lstat` on the destination. An attacker (or concurrent misbehaving process) monitors these filesystem calls and, immediately after the `realpath`/`lstat` checks complete, swaps the parent directory with a symlink pointing outside the install roots. The script then writes the `.bak` or new file to the hijacked path.
+    **Why it matters (Concurrency / Lock Hazards):** This is a classic Time-Of-Check to Time-Of-Use (TOCTOU) lock hazard. It bypasses the bounds checks ("no overwrite path bypasses the backup machinery"), silently allowing file overwrites in privileged system locations.
+    **Fix:** After validating the directory, open it to obtain a file descriptor. Use `openat()` (or explicit `O_NOFOLLOW` with secure path resolution on the final write) to perform the backup and write operations, ensuring the path cannot be swapped mid-flight.
+    
+    ***
+    
+    **Overall Verdict & Priorities**
+    The design introduces a sophisticated ledger and strict invariants but fails critically on deep lineage state resolution and Git worktree sanitization. The single highest-risk thing to resolve first is the **Transitive Lift Failure**, as it guarantees that any successful 3+ generation repair will permanently brick the files it successfully fixed, destroying the core value proposition of the system.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0 through 9)
+    
+    PIL-DONE-fa2f221109674db068974eea

@@ -265,15 +265,19 @@ grep -q '^tools: \[\]$' "$AG_COLD" && bad "cold-reviewer must NOT be tool-less (
 # init verifies the INSTALLED seat (it must not certify a file it never looked at), probed at
 # SEVERAL points. A check proven against ONE broken shape is proven against that shape only: a
 # relaxed anchor and a whole-file scope both survive a single-mutation suite.
-# Every run asserts EXIT STATUS too — a crashed init prints no warning, which would otherwise read
-# as the healthy direction passing.
+# Every probe asserts EXIT STATUS too — a crashed init prints no warning, which would otherwise
+# read as the healthy direction passing. The status assert must run at TOP LEVEL: inside a $(...)
+# capture or a pipeline stage, `bad` increments a subshell's COPY of FAILURES that dies with the
+# subshell, so a wrong exit code stayed green — which is how these probes kept asserting exit 0
+# after a kept-but-differing MECHANISM file became a FAILING state (exit 1). Each probe therefore
+# declares the exit code it expects and stores the output in a global for the caller to grep.
 cp "$AG_CONSULT" "$WORK/consult.orig"
-init_out() { # -> stdout+stderr of a plain re-run; fails loudly if init did not exit 0
-  local out rc
-  out="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)"
+INIT_PROBE_OUT=""
+init_probe() { # $1=expected-rc  $2=label   → sets INIT_PROBE_OUT to the re-run's stdout+stderr
+  local rc
+  INIT_PROBE_OUT="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)"
   rc=$?
-  [ "$rc" -eq 0 ] || bad "init exited $rc during the cage probe (a crash is not a clean result)"
-  printf '%s' "$out"
+  assert_eq "$1" "$rc" "$2"
 }
 fm_swap() { # replace the frontmatter cage line with $1
   node -e '
@@ -284,7 +288,10 @@ fm_swap() { # replace the frontmatter cage line with $1
 CAGE_OK=1
 for LINE in "tools: '*'" "tools: [Read]" "tools: Read, Bash, Write" "# tools: []"; do
   fm_swap "$LINE"
-  init_out | grep -q 'packet-only cage is NOT confirmed' || { bad "init must warn when the frontmatter reads: $LINE"; CAGE_OK=0; }
+  # exit 1, not 0: the swapped consult seat is a kept-but-DIFFERING mechanism file, so the plain
+  # re-run reports the stale keep and FAILS — the cage warning rides alongside that failure.
+  init_probe 1 "cage probe [$LINE]: the re-run exits 1 on the stale mechanism keep"
+  printf '%s' "$INIT_PROBE_OUT" | grep -q 'packet-only cage is NOT confirmed' || { bad "init must warn when the frontmatter reads: $LINE"; CAGE_OK=0; }
 done
 [ "$CAGE_OK" = 1 ] && ok "init WARNS on every uncaged frontmatter shape probed (4), reading the INSTALLED file"
 # THE false pass a whole-file grep allows: frontmatter GRANTS tools while a body line spells the
@@ -294,13 +301,17 @@ node -e '
   fs.writeFileSync(p, fs.readFileSync(process.argv[2],"utf8").replace(/^tools: \[\]$/m, "tools: Read, Bash, Write")
     + "\nMaintainer note — the kit default for this seat is:\ntools: []\n");
 ' "$AG_CONSULT" "$WORK/consult.orig"
-init_out | grep -q 'packet-only cage is NOT confirmed' && ok "a BODY line spelling 'tools: []' does NOT certify a frontmatter that grants tools (frontmatter-scoped)" || bad "whole-file scope: init certified an uncaged seat because the body mentioned the cage"
+init_probe 1 "body-line probe: the re-run exits 1 on the stale mechanism keep"
+printf '%s' "$INIT_PROBE_OUT" | grep -q 'packet-only cage is NOT confirmed' && ok "a BODY line spelling 'tools: []' does NOT certify a frontmatter that grants tools (frontmatter-scoped)" || bad "whole-file scope: init certified an uncaged seat because the body mentioned the cage"
 # …and the converse — spellings YAML reads as an empty list must NOT warn (a cry-wolf check is one
 # adopters learn to ignore).
 NOFALSE=1
 for LINE in "tools: []  " "tools: [] # none at all" "tools: [ ]"; do
   fm_swap "$LINE"
-  init_out | grep -q 'cage is NOT confirmed' && { bad "false warning against a genuinely empty list: $LINE"; NOFALSE=0; }
+  # still exit 1: the spellings are cage-EQUIVALENT but not byte-identical to the kit's seat, so
+  # the stale-keep failure stands — what must NOT appear is the cage warning itself.
+  init_probe 1 "empty-list probe [$LINE]: the re-run exits 1 on the stale mechanism keep"
+  printf '%s' "$INIT_PROBE_OUT" | grep -q 'cage is NOT confirmed' && { bad "false warning against a genuinely empty list: $LINE"; NOFALSE=0; }
 done
 [ "$NOFALSE" = 1 ] && ok "no FALSE cage warning for the empty-list spellings YAML accepts (3 probed)"
 # ABSENCE IS NOT A PASS: the skill names a subagent_type, so a seat that is not installed dead-ends
@@ -310,15 +321,15 @@ done
 cp "$WORK/consult.orig" "$AG_CONSULT"
 cp "$FR_BODY" "$WORK/frbody.orig"
 sed -i.bak 's/subagent_type: "frontier-consult"/subagent_type: "frontier-consult-v2"/' "$FR_BODY" && rm -f "$FR_BODY.bak"
-ABSENT_OUT="$(init_out)"
-printf '%s' "$ABSENT_OUT" | grep -q 'frontier-consult-v2' && printf '%s' "$ABSENT_OUT" | grep -q 'is NOT installed' \
+init_probe 1 "renamed-seat probe: the re-run exits 1 (the sed-edited frontier-review body is a stale mechanism keep)"
+printf '%s' "$INIT_PROBE_OUT" | grep -q 'frontier-consult-v2' && printf '%s' "$INIT_PROBE_OUT" | grep -q 'is NOT installed' \
   && ok "a named seat that is NOT installed is REPORTED (zero checks must not read as zero failures)" \
   || bad "init stayed silent about a subagent_type the skill names but the adopter does not have"
-printf '%s' "$ABSENT_OUT" | grep -q 'cage ("tools: \[\]") is present' && bad "init certified a cage on a seat it never checked" || ok "…and it does not also certify a cage it never saw"
+printf '%s' "$INIT_PROBE_OUT" | grep -q 'cage ("tools: \[\]") is present' && bad "init certified a cage on a seat it never checked" || ok "…and it does not also certify a cage it never saw"
 cp "$WORK/frbody.orig" "$FR_BODY"
-CAGE_CLEAN="$(init_out)"
-printf '%s' "$CAGE_CLEAN" | grep -q 'cage is NOT confirmed' && bad "init warns about a healthy caged seat (cry-wolf)" || ok "no cage warning against a healthy installed seat (discriminates)"
-printf '%s' "$CAGE_CLEAN" | grep -q 'cage ("tools: \[\]") is present' && ok "…and init states the cage POSITIVELY (silence is never the only evidence)" || bad "init should affirm a healthy cage, not merely stay quiet"
+init_probe 0 "healthy probe: with every mechanism file restored, the plain re-run exits 0"
+printf '%s' "$INIT_PROBE_OUT" | grep -q 'cage is NOT confirmed' && bad "init warns about a healthy caged seat (cry-wolf)" || ok "no cage warning against a healthy installed seat (discriminates)"
+printf '%s' "$INIT_PROBE_OUT" | grep -q 'cage ("tools: \[\]") is present' && ok "…and init states the cage POSITIVELY (silence is never the only evidence)" || bad "init should affirm a healthy cage, not merely stay quiet"
 
 echo
 echo "(agents failure-isolation) a failed agents install must NOT abort the HOOK REGISTRATION that follows"
@@ -365,10 +376,16 @@ SK_CODEX_SHA="$(shasum "$SK_CODEX" | awk '{print $1}')"
 FR_BODY_SHA="$(shasum "$FR_BODY" | awk '{print $1}')"
 AG_CONSULT_SHA="$(shasum "$AG_CONSULT" | awk '{print $1}')"
 AGENTS_SHA1="$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')"
-node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
+# The edits above split across the two classes: commands/humanize-class skills are adopter-owned
+# (plain keeps), while the frontier-review body and the agent definition are MECHANISM — since
+# v2.16.0 a plain rerun that keeps them stale FAILS (exit 1) naming the keeps, instead of claiming
+# an upgrade it did not do. The files are still KEPT either way, which the SHA asserts below prove.
+RERUN_OUT="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter \
   --remote-url git@github.com:you/adopter.git --source-dirs src,policy \
   --state-docs docs/state.md --memory-dir "$WORK/mem" \
-  --codex-prompts-dir "$CODEX_PROMPTS" >/dev/null 2>&1 && ok "re-run init exits 0 (idempotent)" || bad "re-run init should exit 0"
+  --codex-prompts-dir "$CODEX_PROMPTS" 2>&1)" && bad "re-run over stale MECHANISM keeps must exit 1" || ok "re-run FAILS (exit 1) on stale mechanism keeps — never a silent claim"
+echo "$RERUN_OUT" | grep -q "KEPT BUT STALE" && ok "…and names the stale keeps" || bad "…must name the stale keeps"
+echo "$RERUN_OUT" | grep -q "A plain rerun never claims the new controller" && ok "…and states the rule" || bad "…must state the rule"
 assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$ADOPTER/AGENTS.md")" "AGENTS pointer still appears exactly once after re-run (no duplication)"
 assert_eq "$CLAUDE_EDIT_SHA" "$(shasum "$CMD_CLAUDE" | awk '{print $1}')" "re-run KEEPS a user-edited Claude command (no clobber without --force)"
 assert_eq "$CODEX_EDIT_SHA"  "$(shasum "$CMD_CODEX" | awk '{print $1}')" "re-run KEEPS a user-edited Codex prompt (no clobber without --force)"
@@ -561,7 +578,11 @@ cp "$ADOPTER/core/OWNER_COMMS.md" "$WORK/OWNER_COMMS.armed"
 sed -i.bak 's/^## How to talk to Alex — Owner, not a developer$/## Owner notes/' "$ADOPTER/core/OWNER_COMMS.md" && rm -f "$ADOPTER/core/OWNER_COMMS.md.bak"
 mk_transcript "AR" "$LONG_ANSWER"
 assert_eq allow "$(comms_decision "" "")" "a RETITLED heading leaves the sensor dormant (it parses one exact shape)"
-INIT_SAYS="$(node "$KIT/bin/init.mjs" --target "$ADOPTER" --repo-name adopter --codex-prompts-dir "$CODEX_PROMPTS" 2>&1 | grep 'core/OWNER_COMMS.md:')"
+# rc 1: the idempotency section's user edits to the frontier-review body and the consult agent are
+# still on disk as differing mechanism keeps, so the re-run fails on them — while still printing
+# the sensor-state line this probe reads.
+init_probe 1 "the retitled-heading re-run exits 1 (stale mechanism keeps from the idempotency section persist)"
+INIT_SAYS="$(printf '%s' "$INIT_PROBE_OUT" | grep 'core/OWNER_COMMS.md:')"
 if printf '%s' "$INIT_SAYS" | grep -q 'DORMANT'; then
   ok "init AGREES with the hook on a retitled heading (reports DORMANT, not a false ARMED)"
 else

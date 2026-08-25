@@ -13,7 +13,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -304,7 +304,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(r, /under-reporting is the failure mode this rule creates/);
 });
 
-test("the retired chase machinery is gone and the bounded root-cause controller replaces it", () => {
+test("the retired chase machinery is gone and the finite aggregate controller replaces it", () => {
   // A ladder doc that carries BOTH contracts is worse than one carrying the old one: the reader
   // meets whichever comes first. These are absence pins, so each names a spelling the OLD text
   // actually used — an absence pin whose phrase never appeared would be green by construction.
@@ -317,11 +317,11 @@ test("the retired chase machinery is gone and the bounded root-cause controller 
     "the open-referent WORTH IT? is retired: it let the process answer about itself");
   // …and the replacement is present, or the assertions above pass on a gutted file.
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
-  assert.match(w, /A cycle is at most three harm-bearing rounds/);
-  assert.match(w, /at the soft stop, one root assessment \+ one bounded root remediation/);
-  assert.match(w, /After two completed cycles the first continuing harm-bearing bookend takes its normal review, then a \*\*process audit on those exact bytes\*\*/);
-  assert.match(w, /Audit `GO` buys one more \*\*two-cycle window\*\*/);
-  assert.match(w, /audit NO-GO or window exhaustion returns to the Owner/);
+  assert.match(w, /`panel_open` binds the clean frozen commit\/tree/);
+  assert.match(w, /Accepted harm in R1 or R2 permits one bounded batch/);
+  assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
+  assert.match(w, /R4, the final bookend/);
+  assert.match(w, /no R5, cycle, scope reset, or audit window; root batches exist only where root-kind dispositions do/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -484,14 +484,22 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // the rule would go VACUOUS the moment a surface lost it entirely — the surface drops out of its
   // own denominator and the pin passes by finding nothing, which is this repo's named fail-open
   // (a blind verification tool returns success). A maintained list cannot fail that way.
-  const STATES = ["core/WORKFLOW.md", "hooks/guard-gate-ladder.mjs"];
+  // PROTOCOLS, SKILL and CHIP_BRIEF became STATING surfaces in the terminal-round-breaker
+  // changeset (each restates a cadence component in the reference layer) — moved here by the
+  // deliberate edit this comment block demands, so the conversion is visible to a reviewer.
+  const STATES = ["core/WORKFLOW.md", "hooks/guard-gate-ladder.mjs",
+    "skills/orchestrate/PROTOCOLS.md", "skills/orchestrate/SKILL.md",
+    "skills/orchestrate/CHIP_BRIEF.md"];
   const POINTS = ["core/OPERATE.md"];
 
   const contractOf = (rel) => rel.endsWith(".mjs") ? printed(rel) : read(rel);
   for (const rel of STATES) {
     const t = contractOf(rel);
     assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
-    assert.match(t, /root-cause/i, `${rel} states the round controller and must carry the root-cause boundary`);
+    // root[- ](cause|exit|replacement|kind): the root boundary's live spellings across the five
+    // stating surfaces — SKILL says "root exit", CHIP_BRIEF "root-kind dispatch", PROTOCOLS
+    // "root-replacement/simplification/split".
+    assert.match(t, /root[- ](?:cause|exit|replacement|kind)/i, `${rel} states the round controller and must carry the root boundary`);
     // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
     assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
       `${rel} still prints the retired rounds rule`);
@@ -661,7 +669,7 @@ test("the hook's printed contract tracks WORKFLOW's emission block, or drift red
     "…and a RAW scan must NOT see it, or this canary is not reproducing the gap it documents");
 });
 
-test("the round controller's CADENCE agrees between the surfaces that STATE it, or drift reddens", () => {
+test("the finite aggregate cadence agrees between every live surface", () => {
   // WHY THIS IS ITS OWN PIN. "the round controller is stated in one shape everywhere" (above) checks
   // each STATES surface IN ISOLATION — carries /root-cause/, lacks a retired spelling — but never
   // that the doc and the hook AGREE on the cadence. That is exactly the gap the KO16 reconciliation
@@ -674,33 +682,77 @@ test("the round controller's CADENCE agrees between the surfaces that STATE it, 
   // Derive the controller ¶ from the doc rather than re-listing it here — a hand-listed copy would
   // be the third mirror this file exists to delete. `[\s\S]*?` stops at the first sentence end so
   // the capture is the cadence body, not the zoom-out/KISS tail that follows it.
-  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?never inherit this authority\./.exec(w)?.[0] ?? "";
+  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?dominant defect source\*\*\)\./.exec(w)?.[0] ?? "";
   assert.ok(ctrl, "the controller ¶ must be findable in core/WORKFLOW.md — re-point this test");
   // The circular cadence as CONCEPTS, hand-maintained for the SAME reason the sibling one-shape
   // lists are (a tree-derived list goes vacuous the moment a surface drops the rule). Each must
   // appear in the doc AND in what the hook prints, or the two hand the agent divergent cadences.
-  const CIRCULAR_CADENCE = [
-    /at most three harm-bearing rounds/i, // the per-cycle bound
-    /two-cycle window/i,                  // what an audit GO buys — the widest divergence from the linear unlock
-    /process audit/i,                     // the after-two-completed-cycles gate
-    /returns to the Owner/i,              // the escalation boundary
+  const FINITE_CADENCE = [
+    /R1(?: or |\/| and )R2 (?:each )?(?:permits?|may dispatch) one bounded batch(?: each)?/i,
+    /R3 (?:accepted harm )?(?:requires|permits only) (?:one )?root[- ]replacement[,\/](?: simplification,)? ?(?:simplification\/)?(?:or )?(?:genuine )?split/i,
+    /R4(?:,| is| closes)? the final (?:aggregate )?(?:GO\/STOP )?bookend/i,
+    /no R5/i,
+    /refr(?:ee|o)ze[^.]{0,80}(?:grants nothing|never grants a batch)/i,
   ];
-  for (const tok of CIRCULAR_CADENCE) {
-    assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the circular cadence token ${tok}`);
-    assert.match(hook, tok, `the hook must PRINT the same circular cadence token ${tok}, or it hands a divergent wall`);
+  // PROTOCOLS.md restates the cadence in the reference layer, so it is a STATING surface and is
+  // pinned with the rest — a co-edit of one surface and its own literal pin must not pass while
+  // the surfaces disagree.
+  const protocols = read("skills/orchestrate/PROTOCOLS.md").replace(/\s+/g, " ");
+  // SKILL.md restates the same cadence in its step 5, so it joins the agreement loop with the
+  // same four concept tokens — the changeset's own stated reason for pinning PROTOCOLS applies
+  // to it verbatim (a literal-phrase pin proves a spelling, never the agreement).
+  const skill = read("skills/orchestrate/SKILL.md").replace(/\s+/g, " ");
+  for (const tok of FINITE_CADENCE) {
+    assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the finite cadence token ${tok}`);
+    assert.match(hook, tok, `the hook must PRINT the same finite cadence token ${tok}`);
   }
+  for (const tok of FINITE_CADENCE.slice(0, 4)) {
+    assert.match(protocols, tok, `PROTOCOLS.md restates the cadence, so it must carry the token ${tok}`);
+    assert.match(skill, tok, `SKILL.md restates the cadence, so it must carry the token ${tok}`);
+  }
+  // CHIP_BRIEF states one cadence COMPONENT — the root-exit binding of a dispatch — and its pin
+  // once reinforced the wrong rule ("the R3 root-exit ID"): a brief-writer composing an R1
+  // root-kind repair brief omitted the field and met a deny text describing a state they were not
+  // in. Both surfaces must agree the binding is ROOT-KIND-keyed, any round — never R3-keyed.
+  const chipBrief = read("skills/orchestrate/CHIP_BRIEF.md").replace(/\s+/g, " ");
+  const denyTexts = raw("hooks/guard-brief-rung.mjs").replace(/\s+/g, " ");
+  for (const [rel, t] of [["skills/orchestrate/CHIP_BRIEF.md", chipBrief], ["hooks/guard-brief-rung.mjs", denyTexts]]) {
+    assert.match(t, /root[- ]kind dispatch/i, `${rel} must key the root-exit binding to the DISPATCH KIND`);
+    assert.doesNotMatch(t, /R3 root-exit ID|post-R3 root_exit/i, `${rel} still keys the root-exit binding to R3`);
+  }
+  // The any-round terminal rules joined the STATED cadence at R3: they were mechanism-only
+  // (T4/T5) and their absence produced a doctrine deadlock a panel executed — a PM with a clean
+  // R1 panel read "R4 always runs" with no license to close GO, chasing redundant panels or
+  // wedging the ladder. WORKFLOW and the decision-time hook state both; the early-root trigger
+  // set carries BOTH its triggers on every surface that names it.
+  assert.match(ctrl, /at ANY round Critical\/fail-open STOPS and zero accepted closes/,
+    "WORKFLOW states both any-round terminal rules in the accepted-definition parenthetical");
+  assert.match(hook, /closes GO at ANY round/, "the hook prints GO-at-any-round");
+  assert.match(hook, /Critical\/fail-open harm STOPS at any round/i, "the hook prints the STOP carve-out");
+  for (const [rel, t] of [["core/WORKFLOW.md", ctrl], ["hooks/guard-gate-ladder.mjs", hook],
+    ["skills/orchestrate/SKILL.md", skill]]) {
+    assert.match(t, /same-class or\s+repair-generated recurrence/,
+      `${rel} names BOTH early-root triggers — dropping repair-generated forfeits the early root on the commonest recurrence`);
+  }
+  // The <n> definition survived only on the hook after WORKFLOW's parenthetical retired; it now
+  // defines the aggregate ROUND, and the retired verdict-count meaning must be GONE — a PM
+  // numbering rounds by verdicts reads a first 4-seat panel as the terminal bookend.
+  assert.match(hook, /<n> is the aggregate ROUND/, "the hook defines <n> as the ROUND");
+  assert.match(hook, /seat verdicts are inputs to a round, never rounds/, "…and severs the verdict-count reading");
+  assert.doesNotMatch(hook, /the number of reviewer verdicts dispositioned/,
+    "the retired verdict-count definition of <n> must not survive anywhere in the printed contract");
   // The retired LINEAR ladder must be GONE from BOTH — a reader/agent meets whichever they get, and
   // both shipping is worse than either. These are the shapes THIS chip retired.
-  const RETIRED_LINEAR = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /unlocks Rounds 7[–-]8/i, /Round 9 returns to the Owner/i];
-  for (const dead of RETIRED_LINEAR) {
+  const RETIRED = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /two-cycle window/i, /process audit on (?:the|those) exact bytes/i];
+  for (const dead of RETIRED) {
     assert.doesNotMatch(ctrl, dead, `core/WORKFLOW.md still states the retired linear ladder ${dead}`);
     assert.doesNotMatch(hook, dead, `the hook still prints the retired linear ladder ${dead}`);
   }
   // Canary: an absence check is decoration unless its regex can actually match the thing it forbids.
   // Prove each against the exact retired spelling, so a regex that silently never matches (the
   // fail-open) is caught HERE instead of passing the absence checks above for free.
-  const RETIRED_SAMPLE = "Rounds 1–3 are ordinary; Rounds 4–6 require its exit packet; PASS unlocks Rounds 7–8 only; Round 9 returns to the Owner.";
-  for (const dead of RETIRED_LINEAR) {
+  const RETIRED_SAMPLE = "Rounds 1–3 are ordinary; Rounds 4–6 require its exit packet; a process audit on the exact bytes buys a two-cycle window.";
+  for (const dead of RETIRED) {
     assert.match(RETIRED_SAMPLE, dead, `the retired-ladder regex ${dead} must match the spelling it forbids, or it is a dead absence pin`);
   }
 });
@@ -797,9 +849,15 @@ test("the retired commit-time adjudication control is recorded as DO NOT REBUILD
   assert.match(g, /8 consecutive code commits, all accepted, 1 permit in history, zero dispositions recorded/);
   // The generalisation that bounds what the kit's own commit floor may claim.
   assert.match(g, /A commit-time hook is a tripwire for \*forgetting\*, never a boundary/);
-  // …and it must connect to the WORKFLOW clause it justifies, or the two drift apart.
-  assert.match(g, /This is why `core\/WORKFLOW\.md` § Gate says no hook infers rounds/);
-  assert.match(read("core/WORKFLOW.md"), /no hook infers it/);
+  // …and it must connect to the mechanism that superseded the retired control, or the two drift
+  // apart. The old anchor was WORKFLOW's "`<n>` … no hook infers it" parenthetical; the aggregate
+  // controller retired that claim's premise (recorded rounds ARE walled), so the lesson now cites
+  // the record-not-infer boundary directly and WORKFLOW pins the surviving half: automation checks
+  // shape, never semantics.
+  assert.match(g, /This is why no hook INFERS rounds/);
+  assert.match(g, /never deriving a round from the tree/);
+  assert.match(read("core/WORKFLOW.md"),
+    /automation checks shape and surfaces candidates, never semantic sameness/);
 });
 
 test("the shipped gate runner's DEFAULT effort agrees with the matrix it serves", () => {
@@ -1250,4 +1308,144 @@ test("what a seat RETURNS is left alone — only what a verifier ACCEPTS was cha
     assert.match(read(site), spec,
       `${site}'s OUTPUT SPEC must survive VERBATIM — it says what a seat RETURNS, not what a verifier ACCEPTS`);
   }
+});
+
+// ------------------------------------------- terminal-round-breaker · repair-introduced doc drift
+//
+// ⚠ THE CLASS THESE TWO PINS CURE, and why they are AGREEMENT pins rather than more presence pins.
+// Every other assertion in this file reads ONE surface and checks a clause is there. That shape
+// cannot see the defect that recurred across two rounds of the terminal-round-breaker changeset: a
+// REPAIR moves a number or adds a proven row in the code, and the prose that states it stays
+// behind. Both surfaces are individually well-formed, every existing pin is green, and the reader
+// who trusts the contract plans against a controller that does not exist.
+//
+// So neither pin below hand-lists an expected value. A hand-listed expectation is a THIRD MIRROR —
+// one more copy to drift — and it would have to be edited by the same maintainer who just forgot
+// to edit the doc, which is the very failure being cured. Both EXTRACT from each surface and
+// compare the surfaces to each other.
+//
+// Both carry canaries, because an extractor that silently stops matching turns an agreement pin
+// vacuous-green — the strictly worse failure, since the suite then actively asserts that the
+// surfaces agree while reading neither. Each canary proves the pattern BITES the exact spelling it
+// targets and does NOT bite a moved one, and each live extraction fails LOUD with a re-point
+// instruction rather than defaulting to a value.
+
+const BREAKER_CONTRACT = "docs/journal/terminal_round_breaker_contract.md";
+// DERIVED, not hand-listed: a third controller test file must be picked up without editing this
+// pin, or the completeness check silently stops covering it.
+const CONTROLLER_SUITE = readdirSync(path.join(ROOT, "tests"))
+  .filter((name) => /^terminal-round-breaker.*\.test\.mjs$/.test(name))
+  .sort().map((name) => path.join("tests", name));
+
+test("the trigger-id cap AGREES between the controller and every contract surface that states it", () => {
+  // The executed drift: the controller's envelope bound was raised to admit the panel's own
+  // measured shape while § 2's grammar row and § 8's M47 row both went on claiming the old
+  // number. Suite green both times — no pin compared the two.
+  const CAP_SITES = [
+    { label: "the controller's envelope bound", rel: "hooks/repair-dispatch-state.mjs",
+      pattern: /event\.trigger_ids\.length <= (\d+)/,
+      bites: "event.trigger_ids.length <= 2600 && new Set(event.trigger_ids).size",
+      decoy: "event.trigger_ids.length < 2600" },
+    { label: "§ 2's child_continuation grammar row", rel: BREAKER_CONTRACT,
+      pattern: /cap (\d+) = the /,
+      bites: "raw finding ids; cap 2600 = the union bound: a disposition's 1300-id universe",
+      decoy: "the trigger cap is 2600 ids" },
+    { label: "§ 8's M47 mutation row", rel: BREAKER_CONTRACT,
+      pattern: /\*\*M47\*\* the (\d+) trigger cap/,
+      bites: "**M47** the 2600 trigger cap — a 101-id exact carry accepts",
+      decoy: "**M47** the trigger cap (2600) — a 101-id exact carry accepts" },
+  ];
+  const found = CAP_SITES.map((site) => {
+    // Canary, both directions. Without the first, a pattern that can never match reads as
+    // agreement-by-absence; without the second, a pattern loose enough to catch any nearby digit
+    // would keep passing after the sentence it pins was rewritten around a different number.
+    assert.match(site.bites, site.pattern,
+      `${site.label}: the extractor cannot bite its own spelling — this pin is dead, not passing`);
+    assert.doesNotMatch(site.decoy, site.pattern,
+      `${site.label}: a MOVED spelling must fail LOUD, never silently read some other number`);
+    const hit = site.pattern.exec(read(site.rel));
+    assert.ok(hit, `${site.label} (${site.rel}): the cap is no longer findable — the spelling `
+      + "moved. RE-POINT this pattern; deleting the pin re-arms the drift it exists to catch.");
+    return { label: site.label, value: Number(hit[1]) };
+  });
+  assert.equal(new Set(found.map((site) => site.value)).size, 1,
+    `the trigger-id cap DISAGREES across surfaces — ${found.map((site) => `${site.label} = ${site.value}`).join(" · ")}`
+    + ". A reader plans against the doc; the ledger enforces the code.");
+});
+
+test("every M-row the controller suite asserts is carried in the contract's mutation matrix", () => {
+  // The same class, other direction: a repair proves new rows and § 8 — the document whose ONLY
+  // job is to say which behaviours are proven — is not extended. Five rows went missing this way
+  // in a single round, and a matrix missing its newest rows does not read as incomplete; it reads
+  // as the whole proof.
+  assert.ok(CONTROLLER_SUITE.length >= 2,
+    `expected the controller suite's test files, globbed: ${CONTROLLER_SUITE.join(", ") || "(none)"}`);
+  const titles = CONTROLLER_SUITE.flatMap((rel) => {
+    const found = [...raw(rel).matchAll(/^test\(\s*"([^"]+)"/gm)].map((hit) => hit[1]);
+    // Per-file, not in aggregate: one file's `test(` spelling could move while the other's
+    // carried the total past any global floor.
+    assert.ok(found.length, `${rel}: no test titles parsed — the test( spelling moved. RE-POINT this.`);
+    return found;
+  });
+  const ids = [...new Set(titles.flatMap((title) =>
+    [...title.matchAll(/\bM(\d+)\b/g)].map((hit) => Number(hit[1]))))].sort((a, b) => a - b);
+  assert.ok(ids.length >= 20,
+    `only ${ids.length} M-ids parsed from ${titles.length} titles — the id spelling moved. RE-POINT this.`);
+  // Sliced to the SECTION. A whole-file scan would pass on an id mentioned anywhere — § 8c's prose
+  // or § 0's rulings — which is not the same claim as "the matrix carries a row for it".
+  const matrix = /## 8 · Mutation matrix[\s\S]*?(?=\n## 8c ·)/.exec(raw(BREAKER_CONTRACT))?.[0] ?? "";
+  assert.ok(matrix, "§ 8 must be findable in the contract — RE-POINT this slice");
+  // The END boundary needs its own canary: a renamed § 8c would leave the lazy match running to
+  // EOF, and the slice would then satisfy every row from any later section. Naming the sections
+  // that must lie OUTSIDE it is the check a length heuristic cannot make.
+  for (const outside of ["## 8c ·", "## 9 ·"]) {
+    assert.ok(!matrix.includes(outside),
+      `the § 8 slice ran past its end and swallowed "${outside}" — RE-POINT the slice boundary`);
+  }
+  const flat = matrix.replace(/\s+/g, " ");
+  const row = (id) => new RegExp(`\\*\\*M${id}\\*\\*`).test(flat);
+  // Canary: the row test must bite a row that IS there and miss one that is not, or "no rows
+  // missing" is a statement about a regex that never fired.
+  assert.match("… **M47** the 2600 trigger cap …", /\*\*M47\*\*/,
+    "the row pattern cannot bite the matrix's own row spelling — dead pin");
+  assert.ok(!row(99999), "the row test must be able to go RED, or the completeness claim is empty");
+  const missing = ids.filter((id) => !row(id));
+  assert.deepEqual(missing, [],
+    `§ 8 is missing rows this suite PROVES: ${missing.map((id) => `M${id}`).join(", ")}`
+    + " — the matrix understates the proof while reading as complete");
+});
+
+test("§ 3's continuation-admissibility clause AGREES with the code on the HONEST guarantee (budget must SHARE the remainder)", () => {
+  // THE THIRD FACE of the terminal-round-breaker doc-drift class, and the one the first two pins
+  // could not see. The cap pin caught a NUMBER; the M-row pin caught a MISSING ROW; neither could
+  // catch a row that is PRESENT and states the wrong SEMANTICS. § 3 drifted a third way: it once
+  // said the remainder disjunct required the successor to "repair" / "actually target" the
+  // remainder — a guarantee the shipped controller does NOT make. The code admits any successor
+  // whose BUDGET shares a remainder path (the child may then open elsewhere: a fully-reviewed
+  // no-op, never a release), and lifts the surface ONLY when a GO child actually opened it. A
+  // reader who plans against "must repair to reopen" builds a wall the controller will not hold.
+  //
+  // So this pin asserts the admissibility clause states the ACTUAL, weaker guarantee: the budget
+  // must SHARE the un-lifted remainder. It is scoped to that ONE clause — a whole-§3 scan would
+  // pass on the innocent "declared budget binds" sentence two clauses later, the exact pin-the-
+  // word-not-the-sentence trap this file is built around. The stop-lookahead ends the slice before
+  // that sentence, so "budget" must appear in the ADMISSIBILITY clause itself to satisfy the pin.
+  const s3 = read(BREAKER_CONTRACT);
+  const clause = /One LIVE continuation per anchor[\s\S]*?(?=A PENDING child's declared budget)/.exec(s3)?.[0] ?? "";
+  assert.ok(clause, "the § 3 admissibility clause must be findable — RE-POINT this slice");
+  // The slice must END before the pending-budget sentence, or "budget" leaks in from outside the
+  // clause and the pin passes for the wrong reason (the reflow-blind sibling trap, path-specific).
+  assert.ok(!clause.includes("A PENDING child's declared budget"),
+    "the admissibility slice ran past its clause and swallowed the pending-budget sentence — RE-POINT the boundary");
+  const SHARES_REMAINDER = /budget[\s\S]*?remainder|remainder[\s\S]*?budget|shares?\s+[\s\S]*?remainder/i;
+  // Canary, both directions. Without the first the pattern could be dead (agreement-by-absence);
+  // without the second it would keep passing after the clause was rewritten back to the OVERSTATED
+  // spelling, which is the precise regression this pin exists to catch.
+  assert.match("the new declaration's budget SHARES a path with that remainder", SHARES_REMAINDER,
+    "the pattern must bite the TRUED spelling, or this agreement pin is dead");
+  assert.doesNotMatch("a successful PARTIAL repair must not lock the rest", SHARES_REMAINDER,
+    "the pattern must MISS the overstated spelling, or it cannot catch the drift it names");
+  assert.match(clause, SHARES_REMAINDER,
+    "§ 3 must state the budget-SHARES-remainder guarantee the code makes — not 'must repair/target', "
+    + "which promises a wall the controller does not hold (M43/M54 in § 8 carry the same trued spelling)");
 });

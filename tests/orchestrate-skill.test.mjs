@@ -137,27 +137,29 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
   pin(body, "**evidence escalates them, appetite does not.**", "evidence not appetite");
 });
 
-test("the round controller pins ordinary, root-cause, audit, and Owner boundaries", () => {
+test("the round controller pins the finite aggregate boundary", () => {
   const body = readFileSync(BODY, "utf8");
-  pin(body, "Rounds run in cycles of at most three harm-bearing rounds", "circular per-cycle bound");
-  pin(body, "at each soft stop, one root assessment + one bounded remediation", "soft-stop root assessment + bounded remediation");
-  pin(body, "a process audit on the exact bytes gates continuation — its GO buys one more two-cycle window", "two-cycle process-audit window is the bounded extension");
-  pin(body, "The absolute count never resets", "round count cannot be reset by artifact churn");
+  pin(body, "R1/R2 permit one bounded batch each", "two bounded repair rounds");
+  pin(body, "R3 accepted harm requires root replacement,", "terminal root batch");
+  pin(body, "simplification, or split plus root exit", "terminal root batch kinds");
+  pin(body, "R4 is the final GO/STOP bookend and has no dispatch", "terminal bookend");
+  pin(body, "No R5, cycle, reset, or process-audit continuation", "no controller escape");
+  pin(body, "a root kind may be declared EARLY on same-class or", "the early-root declaration");
 
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
-  pin(brief, "Repair briefs declare task, changeset, candidate, next round, findings/class/ownership/trigger/paths/flags",
+  pin(brief, "Aggregate repair briefs declare",
     "repair dispatch declaration fields");
-  pin(brief, "whichever typed exit/audit/Owner event IDs",
-    "typed evidence is procedure-recorded, never machine-gated at fixed rounds");
+  pin(brief, "the exact PM disposition and panel-close",
+    "typed evidence is procedure-recorded and candidate-bound");
   pin(brief, "The worker puts `session_id` in `--verify`; the write guard binds",
     "worker verifies the persisted brief receipt");
   pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
 
   const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");
-  assert.match(workflow, /A cycle is at most three harm-bearing rounds/);
-  assert.match(workflow, /at latest by the third harm-bearing round/);
-  assert.match(workflow, /After two completed cycles the first continuing harm-bearing bookend takes its normal review, then a \*\*process audit on those exact bytes\*\*/);
-  assert.match(workflow, /audit NO-GO or window exhaustion returns to the Owner/);
+  assert.match(workflow, /Accepted harm in R1 or R2 permits one bounded batch/);
+  assert.match(workflow, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
+  assert.match(workflow, /R4, the final bookend/);
+  assert.match(workflow, /no R5, cycle, scope reset, or audit window/);
   assert.match(workflow, /automation checks shape and surfaces candidates, never semantic sameness/,
     "semantic finding classes remain declarations; automation is only a shape check and sensor");
 });
@@ -213,7 +215,12 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     // "re-point this test") rather than silently searching an empty string, which is the only
     // reason it is tolerable — and this release's own note was caught by these pins immediately
     // after the re-point, quoting a retracted spelling it was describing.
-    "README.md § v2.7.0": section(readme, "# workflow-kit — v2.7.0", "## What's new in v2.6.1", "README"),
+    // L7 correction (R2): the single VERSION-derived slice spanned every release note down to
+    // v2.6.1 under a label that said v2.7.0, and silently re-pointed on each bump. Split: the
+    // moving title anchor now covers ONLY the current note (loud-fail on each release, as before),
+    // and the v2.7.0 entry gets its own fixed anchors like every other historical section.
+    "README.md § current": section(readme, `# workflow-kit — v${readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim()}`, "## What's new in v2.7.0", "README"),
+    "README.md § v2.7.0": section(readme, "## What's new in v2.7.0", "## What's new in v2.6.1", "README"),
     "README.md § v2.6.1": section(readme, "## What's new in v2.6.1", "## What's new in v2.6.0", "README"),
     "README.md § v2.6.0": section(readme, "## What's new in v2.6.0", "## What's new in v2.5.0", "README"),
     "README.md § v2.5.0": section(readme, "## What's new in v2.5.0", "## What's new in v2.4.0", "README"),

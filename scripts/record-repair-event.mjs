@@ -14,7 +14,7 @@ const controllerPath = [
 ].find((candidate) => existsSync(candidate));
 if (!controllerPath) throw new Error("repair controller is not installed beside this recorder");
 const {
-  recordAdherenceAudit, recordOwnerExtension, recordRepairClose, recordRootCauseExit,
+  recordAdherenceAudit, recordAggregateEvent, recordOwnerExtension, recordRepairClose, recordRootCauseExit,
   recordRoundDisposition,
 } = await import(pathToFileURL(controllerPath).href);
 
@@ -27,6 +27,15 @@ function readInput(file) {
 }
 
 export function recordEvent(input, options) {
+  if (input.type === "aggregate_v2") {
+    // An older installed controller predating the aggregate grammar exports no
+    // recordAggregateEvent — a typed refusal, never a TypeError: version skew between the
+    // recorder and the controller is a deploy-order fact the operator can act on.
+    if (typeof recordAggregateEvent !== "function") {
+      return { ok: false, state: "repair-controller-version-skew" };
+    }
+    return recordAggregateEvent(input, options);
+  }
   if (input.type === "round_disposition") return recordRoundDisposition(input, options);
   if (input.type === "root_cause_exit") return recordRootCauseExit(input, options);
   if (input.type === "adherence_audit") return recordAdherenceAudit(input, options);
@@ -55,10 +64,24 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
       if (!result.ok) {
         const action = {
           "repair-session-missing": ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`,
+          "repair-controller-version-skew": " — the installed controller beside this recorder predates the aggregate grammar; upgrade the install (init --force; re-trust changed hooks in the Codex lane) before recording aggregate events",
+          "aggregate-close-self-authorized": " — this close's session id is one the program ADMITTED as a worker (a verification or handoff replacement); record the close from a session distinct from every admitted worker (degraded mode: the Owner's keyboard)",
+          "aggregate-terminal": " — the program is terminal (GO, STOP, or Owner-closed); continuation is a typed child_continuation successor, never another round",
+          "aggregate-worker-required": " — the current batch's brief is confirmed but no worker session is admitted; run confirm-repair-brief.mjs --verify from the working session first",
           "repair-close-self-authorized": " — this close is not eligible: an eligible close names a close-kind owner_extension at the CURRENT round and candidate, and NEITHER that row NOR the close itself may carry a session id this program admitted as a worker. One of yours does. The check compares supplied session IDS, not actors",
           "repair-close-unauthorized": ' — record an owner_extension with "authority_kind":"close" at the CURRENT round and candidate, from a session this program has not admitted as a worker, then name its exact event_id as "owner_close_event_id"',
-        }[result.state] ?? "";
-        console.error(`repair event rejected: ${result.state}${result.expected ? ` (expected ${result.expected})` : ""}${action}`);
+          "aggregate-dispatch-unavailable": " — no accepted CONTINUE disposition currently authorizes a batch: the program is terminal, the round is already dispatched, or the cited disposition/panel-close ids do not bind the winning rows; derive the program state and re-read its latest disposition",
+          "aggregate-root-exit-required": " — this dispatch cites a ROOT-KIND disposition (root_replacement, simplification or split, any round), so it must carry that disposition's exact root_exit event id",
+          "aggregate-root-exit-unexpected": " — only a root-kind dispatch may carry a root_exit event id; drop the field or fix the disposition's remediation kind",
+          "aggregate-worker-superseded": " — this session's admission was REVOKED by an Owner-evidenced worker handoff; the replacement session holds the batch now",
+          "repair-history-invalid": " — the ledger's derivation failed CLOSED (a corrupt row, a hash mismatch, or a standard identity that no longer derives); this needs row-level repair, not a retry — preserve the file and inspect it",
+        }[result.state] ?? (
+          // The closed grammar makes the remaining two suffix classes total: shape refusals and
+          // first-wins/citation refusals. Name the class so no aggregate state ships bare.
+          /-malformed$/.test(result.state) ? " — the event failed TOTAL shape validation before any transition was judged; compare the input field-by-field against its kind's bind list in the design contract (a `detail` field, when present below, names the failed precondition class)"
+          : /-conflict$/.test(result.state) ? " — the transition lost first-wins adjudication or an exact reference does not bind the current winning rows; derive the program state and re-derive every cited event id from the WINNERS, never from your own last write"
+          : "");
+        console.error(`repair event rejected: ${result.state}${result.expected ? ` (expected ${result.expected})` : ""}${result.detail ? ` [${result.detail}]` : ""}${action}`);
         process.exitCode = 1;
       } else {
         console.log(JSON.stringify(result));
