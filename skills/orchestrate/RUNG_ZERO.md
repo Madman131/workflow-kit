@@ -245,9 +245,8 @@ this whole method exists to delete:
   declared doctrine never learns these checks exist and no control detects the mismatch. Closing it
   means landing these rules in a repo's own docs — **a controlling-document change owing its own
   tier.**
-- Nothing HERE is mechanically enforced — the installed controller now walls the ROUND
-  COUNT itself; `core/WORKFLOW.md § Gate`'s *"no hook infers it"* covers the conversational `<n>`.
-  **That no control reads a freeze or checks
-  who gave a GO is an OBSERVATION about the shipped controls, not a clause you can cite** — check it
-  against your own repo rather than inheriting it here. **Rung zero is cheap because it is honest
-  about being a checklist, not a control.**
+- Nothing HERE is mechanically enforced — the controller walls the ROUND COUNT of a RECORDED
+  program when its hook is ARMED (upgrades disarm hooks until re-trusted), and `panel_open` DOES
+  read its freeze. **That no control checks who gave a GO is an OBSERVATION about the shipped
+  controls, not a clause you can cite** — check your own repo rather than inheriting it here. **Rung zero is cheap because it is honest about being a
+  checklist, not a control.**

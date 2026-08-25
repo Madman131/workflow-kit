@@ -29,9 +29,8 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Vary the installed LAYOUT too.** A sensor was inert in every adopted repo — it resolved a sibling
   path existing only in the source tree. Four rounds missed it: every observer stood in the one tree
   where the bug is invisible.
-- **The finite controller has one terminal bookend, not a continuation window.** R1/R2 each permit
-  one bounded batch; R3 permits only one root-replacement/simplification/split batch after its root exit; R4 is the final GO/STOP
-  bookend and has no dispatch — no R5. New material after GO or STOP is NEW SCOPE
+- **R1/R2 each permit one bounded batch; R3 permits only one root-replacement/simplification/split
+  batch; R4 is the final GO/STOP bookend — no R5.** New material after GO or STOP is NEW SCOPE
   owing its own review: an explicit Owner parent-linked child changeset — never a round of the
   closed ladder, never silence, and never a reset of the terminal parent.
 - **When ONE class survives repeated rounds, diagnose PLUMBING or CONCEPT before re-fixing.** If the

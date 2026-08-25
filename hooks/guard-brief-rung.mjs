@@ -441,8 +441,8 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "standard-mint-retired": `new standard repair rounds are retired. Preserve the stored program: either close it through its eligible Owner close + repair_close exit, or record an aggregate_v2 legacy_handoff to the exact parent disposition and continue through the aggregate controller.`,
     "aggregate-dispatch-malformed": `the aggregate repair declaration is incomplete. Supply the exact aggregate controller, task, changeset, disposition, panel-close, next-round and root-exit fields carried by the recorded transition.`,
     "aggregate-dispatch-unavailable": `the named aggregate disposition cannot dispatch this brief: it is absent, stale, terminal, already dispatched, or does not lead to the declared next round. Use the current accepted disposition and its exact panel-close receipt.`,
-    "aggregate-root-exit-required": `batch 3 requires the exact post-R3 root_exit receipt before its repair brief can be confirmed.`,
-    "aggregate-root-exit-unexpected": `only the R3 root-replacement or split dispatch may carry a root_exit receipt.`,
+    "aggregate-root-exit-required": `a root-kind dispatch (root_replacement, simplification or split, any round) requires its exact root_exit receipt before its repair brief can be confirmed.`,
+    "aggregate-root-exit-unexpected": `only a root-kind dispatch may carry a root_exit receipt.`,
     "aggregate-dispatch-conflict": `this aggregate transition already has a different repair brief. The first eligible dispatch wins; use its exact receipt rather than creating another batch.`,
     "aggregate-worker-conflict": `this aggregate dispatch already has a different verified worker. Use the admitted worker or record the explicit aggregate worker_handoff.`,
     "aggregate-panel-open-conflict": `this round already has its immutable panel, the identity is reserved, or an active/STOPped predecessor owns the paths. Use the first panel or an Owner-attributed continuation; do not rename the task to reset the ladder.`,
@@ -456,11 +456,11 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "aggregate-continuation-conflict": `this continuation does not bind the exact terminal parent — its latest disposition, terminal candidate, trigger ids per the terminal kind (STOP: the accepted set; GO: routed follow-ups only), globally unused child identities, and child tiers at or above the parent's.`,
     "aggregate-legacy-handoff-conflict": `this legacy handoff does not bind the CURRENT winning standard disposition/candidate/round with matching paths, or its child identity is already reserved.`,
     "aggregate-worker-handoff-conflict": `this worker handoff does not cite the immutable active dispatch and the prior worker's exact admission, or no active worker stands to replace.`,
-    "aggregate-root-exit-conflict": `this root exit does not cite a CONTINUE disposition whose remediation kind is root_replacement, simplification, or split, or an exit already stands for this program.`,
+    "aggregate-root-exit-conflict": `this root exit does not cite a CONTINUE disposition whose remediation kind is root_replacement, simplification, or split, or an exit already stands for that disposition.`,
     "repair-changeset-reset": `this task already owns a different durable changeset id. A refreeze, finding split, or reviewer swap cannot mint a new round allowance.`,
     "repair-scope-unapproved": `${SIDECAR} declares new repair scope without the exact typed Owner scope event ID. Scope expansion remains an Owner decision.`,
     "repair-root-cause-exit-missing": `a root-cause trigger has FIRED in this history — a repair introduced the harm, or two consecutive NO-GOs shared a finding class — and ${SIDECAR} names no exact typed root-cause exit event ID. Record the exit for the diagnosed replacement mechanism with \`record-repair-event.mjs\`, then declare its event ID. (For LIVE aggregate programs the cadence is walled mechanically — four rounds, three batches, one terminal bookend; this stored-standard route only replays.)`,
-    "repair-ledger-unavailable": `this repository could hold a repair ledger and this control could not read it, so it fails closed. TWO causes, and they need different fixes. (1) The ledger itself is corrupt, truncated, symlinked, non-regular, or unwritable: PRESERVE it and repair it — copy it aside, find the row that will not parse or whose transition is out of order (append-only JSONL, one event per line), and fix that row. Do NOT delete it to unblock a write; that discards every round's history to clear one message, and the history is the only record of what was authorized. (2) Git could not be RUN or could not resolve this tree — \`git\` missing from the hook's PATH, or a Git-location environment variable pointing somewhere unusable. Nothing is wrong with the ledger then; restore Git access and retry. Run \`git rev-parse --git-common-dir\` here to tell the two apart.`,
+    "repair-ledger-unavailable": `this repository could hold a repair ledger and this control could not read it, so it fails closed. TWO causes, and they need different fixes. (1) The ledger itself is corrupt, truncated, symlinked, non-regular, or unwritable: PRESERVE it and repair it — copy it aside, find the row that will not parse or whose transition is out of order (append-only JSONL, one event per line), and fix that row. Do NOT delete it to unblock a write; that discards every round's history to clear one message, and the history is the only record of what was authorized. (2) Git could not be RUN or could not resolve this tree — \`git\` missing from the hook's PATH, or a Git-location environment variable pointing somewhere unusable. Nothing is wrong with the ledger then; restore Git access and retry. (3) VERSION SKEW across checkouts: the ledger holds aggregate rows a pre-2.16.0 reader fails closed on — every worktree SHARES the Git-common ledger but each carries its OWN hook copies, so upgrading one checkout is not upgrading the repo. Run \`init --force\` in EACH checkout (re-trust changed hooks in the Codex lane), then retry. Run \`git rev-parse --git-common-dir\` here to tell the causes apart.`,
     "repair-close-invalid": `the repair close does not name the CURRENT round, carries no reason, or names no close-authorization event ID. A close ends an ACTIVE repair program in band; it must say which round it ends and why. Record it with \`node scripts/record-repair-event.mjs --event <json>\`.`,
     "repair-close-self-authorized": `this close is not ELIGIBLE. All three conditions, in full: the \`owner_extension\` it names carries \`"authority_kind":"close"\`; that row sits at the CURRENT round with the CURRENT candidate; and NEITHER row carries a session id this program has admitted as a worker. Re-record both events with \`node scripts/record-repair-event.mjs --event <json>\` from a session holding no worker admission on this program. What that third condition refuses is the ADMITTED SESSION ID, never the actor behind it: \`session_id\` is caller-supplied, so this stops the honest case, not a caller that picks a name it has not used. What it buys over a deleted ledger is a legible row.`,
     "repair-close-unauthorized": `this repair close names no close-authorization row that is ELIGIBLE. All three conditions, in full: the named \`owner_extension\` carries \`"authority_kind":"close"\`; it sits at the CURRENT round with the CURRENT candidate; and neither it nor the close carries a session id this program has admitted as a worker. Record that row with \`node scripts/record-repair-event.mjs --event <json>\`, then have the close name its exact event ID. Closing releases the program's global path ownership, so the ledger keeps a CLAIMED authorization beside it rather than nothing at all. Read that literally: \`session_id\` is caller-supplied, so the row records who a release SAYS it came from, never who it came from. It is a legible record, not an authenticated one.`,
@@ -582,6 +582,17 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     // writes are the two bootstraps: requiring an admission to create its own identity or input
     // would be a circular control. Shell writes remain outside this tool-bound tripwire, disclosed
     // in the header rather than hidden behind a universal claim.
+    // Announced on EVERY deny surface below, not one: a control reading an override-selected
+    // subject must say so wherever it refuses, or the operator debugs the wrong tree.
+    const overrides = controller.observed_overrides?.length
+      ? ` Git location overrides observed in this environment: ${controller.observed_overrides.join(", ")} — the control reads the subject THEY select, which may not be the tree you meant.`
+      : "";
+    // ONE emission per run. The harness reads stdout as a single JSON object, so a notice followed
+    // by a deny must fold into the deny's reason — two objects on one stream is a parse failure
+    // wearing a disclosure's name. A pending notice flushes alone only when nothing denies.
+    let pendingNotice = null;
+    const say = (reason) => emit(pendingNotice ? `${pendingNotice}\n\n${reason}` : reason);
+    const finish = () => { if (pendingNotice) notice(pendingNotice); return exit(0); };
     if (sourceTargets.length) {
       // THE ONE SANCTIONED RELIEF, and it is stated out loud rather than taken quietly. A tree in
       // which the control's own walk finds no `.git` above it and no Git location override has no
@@ -593,17 +604,14 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       // reads its verdict as "blind" instead of "violated". Anything else — a ledger that exists
       // and cannot be read, git off the PATH inside a real repo — still denies.
       if (controller.state === "repair-ledger-no-subject") {
-        notice(`the repair-round control is BLIND here: it found no Git repository at or above ` +
+        pendingNotice = (`the repair-round control is BLIND here: it found no Git repository at or above ` +
           `${root} and no Git location override, so it can SEE no repair ledger to enforce — ` +
           `blindness is a property of what this control can see, never of what can exist, and a ` +
           `subject it cannot see is not proven absent. ${sourceTargets.length} source write(s) ` +
           `proceeded UNCHECKED by it. If you expected this tree to be governed, the hook is ` +
           `running somewhere you did not intend.`);
       } else if (!controller.ok) {
-        const overrides = controller.observed_overrides?.length
-          ? ` Git location overrides observed in this environment: ${controller.observed_overrides.join(", ")} — the control reads the subject THEY select, which may not be the tree you meant.`
-          : "";
-        emit(denyReason(controller.state, { dispatch: { kind: "source", target: sourceTargets[0] } }) + overrides);
+        say(denyReason(controller.state, { dispatch: { kind: "source", target: sourceTargets[0] } }) + overrides);
         return exit(0);
       } else {
         for (const target of sourceTargets) {
@@ -611,14 +619,14 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
             task_id: taskId, session_id: input?.session_id, target,
           }, { projectRoot: root });
           if (!admitted.ok) {
-            emit(denyReason(admitted.state, { dispatch: { kind: "source", target } }));
+            say(denyReason(admitted.state, { dispatch: { kind: "source", target } }) + overrides);
             return exit(0);
           }
         }
       }
     }
 
-    if (!dispatches.length) return exit(0);   // no brief/send dispatch owes the verification rung
+    if (!dispatches.length) return finish();  // no brief/send dispatch owes the verification rung
 
     // JUDGE THE SIDECAR FIRST — every dispatch, before anything touches the trail. A patch envelope
     // is applied as a unit, so deciding on the first match would let a second brief in the same
@@ -634,10 +642,10 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     }) }));
     const blocked = verdicts.find(({ v }) => !ALLOW_STATES.has(v.state));
     if (blocked) {
-      emit(denyReason(blocked.v.state, {
+      say(denyReason(blocked.v.state, {
         dispatch: blocked.d,
         detail: blocked.v.named ?? (blocked.v.ageMin !== undefined ? Math.abs(Math.round(blocked.v.ageMin)) : undefined),
-      }));
+      }) + overrides);
       return exit(0);
     }
 
@@ -657,7 +665,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       if (v.state === "status-declared") {
         if (!writeLedger(root, { decision: "allow", state: v.state, kind: d.kind, target: d.target,
           sessionId: input?.session_id ?? "", cls: "status" })) {
-          emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+          say(denyReason("ledger-error", { dispatch: d })); return exit(0);
         }
         continue;
       }
@@ -665,32 +673,32 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       if (!writeLedger(root, { decision: "attempt", state: v.state, kind: d.kind, target: d.target,
         sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
         nonce: sidecar.nonce, attempt, repair: v.repair })) {
-        emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+        say(denyReason("ledger-error", { dispatch: d })); return exit(0);
       }
 
       const rows = ledgerRows((() => {
         try { return readFileSync(path.join(root, LEDGER), "utf8"); } catch { return undefined; }
       })());
-      if (rows === null) { emit(denyReason("adjudication-unreadable", { dispatch: d })); return exit(0); }
+      if (rows === null) { say(denyReason("adjudication-unreadable", { dispatch: d })); return exit(0); }
       const ruling = adjudicateFirst(rows, sidecar.nonce, attempt);
       if (!ruling.won) {
         // Our attempt row is already in the trail and stays there as the refusal's own record.
         if (!writeLedger(root, { decision: "deny", state: "rung-already-spent", kind: d.kind,
           target: d.target, sessionId: input?.session_id ?? "", cls: "load-bearing",
           nonce: sidecar.nonce, attempt })) {
-          emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+          say(denyReason("ledger-error", { dispatch: d })); return exit(0);
         }
-        emit(denyReason(ruling.reason === "no-attempt-row" ? "adjudication-unreadable" : "rung-already-spent",
+        say(denyReason(ruling.reason === "no-attempt-row" ? "adjudication-unreadable" : "rung-already-spent",
           { dispatch: d, detail: ruling.winner }));
         return exit(0);
       }
       if (!writeLedger(root, { decision: "allow", state: v.state, kind: d.kind, target: d.target,
         sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
         nonce: sidecar.nonce, attempt, repair: v.repair })) {
-        emit(denyReason("ledger-error", { dispatch: d })); return exit(0);
+        say(denyReason("ledger-error", { dispatch: d })); return exit(0);
       }
     }
-    return exit(0);
+    return finish();
   });
 }
 

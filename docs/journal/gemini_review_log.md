@@ -1819,3 +1819,69 @@
     INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, Sections 1 through 9)
     
     PIL-DONE-d84de599e9a5fa60f99b64b8
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T05:38:51Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787636150-60335-230745355`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=34437; instrumented_payload=34590; inline_combined=38407; file=34663
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `424b85601aed27d1baba866fb808385f77c6d0bd`
+- Artifact-Base: `8df1b587b9ba4041bda4e996c4f27ce46e18c96d`
+- Artifact-SHA: `424b85601aed27d1baba866fb808385f77c6d0bd`
+- Artifact-Ref: `refs/pil/gate-artifacts/424b85601aed27d1baba866fb808385f77c6d0bd`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: Entire `docs/journal/terminal_round_breaker_contract.md`, focusing on Section 2 (Event Grammar) and Section 3 (Transition table, Resolution order, and Replay constraints) against the provided Epistemic and Repo INVARIANTS.
+- Start: 2026-08-25T05:35:50Z
+- End: 2026-08-25T05:38:51Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-723755fd170e26df885413b5
+    CANARIES: PIL-INGEST-01af6e68e9ec PIL-INGEST-02a86df13e43 PIL-INGEST-031852e60369
+    
+    Here are the decorrelated blind spots the same-family panel waved through, ranked by severity. The design contains a massive validate-at-X-but-stamp-at-Y vulnerability and critical state-machine completeness gaps.
+    
+    **1. BLOCKER — MECHANISM CORRECTNESS / DATA-LOSS WINDOW (Validate-at-X-but-stamp-at-Y)**
+    * **Section:** 3 (Transition T3b: `open(r) unclosed -> panel_open r (REFREEZE)`)
+    * **Concrete failure scenario:** A candidate fails a panel seat. The worker fixes the candidate mid-panel but accidentally modifies a sensitive file `auth.js` outside the initially declared paths. A refreeze is triggered. Because T3b explicitly dictates that the `changed-path set` is *"PINNED to the superseded open"*, the new `panel_open` event inherits the old `changed_paths`. The panel resumes, and T2's `panel_close` verifies coverage ONLY against the pinned paths (completely ignoring `auth.js`). The disposition goes GO, and the unreviewed `auth.js` modification is shipped to the root.
+    * **Why it matters:** This is a textbook validate-at-X-but-stamp-at-Y mismatch and a direct violation of Invariant 5 (authoritative source-of-truth). By pinning a stale derived copy of the paths rather than re-deriving them from the new candidate, the mechanism silently drops the path delta, allowing an agent to smuggle unreviewed file writes past the panel.
+    * **Fix:** T3b MUST re-derive `changed_paths` from the new candidate's immutable `base..frozen` pair. Since the entire panel must re-run anyway ("the superseded open can no longer close"), pinning the old paths provides no benefit. If the newly derived paths exceed the parent budget, the refreeze must be refused.
+    
+    **2. HIGH — COMPLETENESS GAP / PERMANENT RESOURCE LOCK (Unlifted Ancestor Reservations)**
+    * **Section:** 3 (Terminal reservations, disclosed in full) & T13 (`child_continuation`)
+    * **Concrete failure scenario:** Task A encounters a blocking harm and is STOPped. This permanently reserves its paths (`foo.js`) repo-wide. A `child_continuation` creates Task B to fix it. Task B succeeds and hits `TERMINAL-GO`. However, because GO does not reserve paths, and there is absolutely no transition that clears an ancestor's reservation upon a child's success, Task A's STOP reservation remains permanently projected by the ledger replay.
+    * **Why it matters:** A successful repair via lineage does not unbrick the files. Once a path is STOPped, it is locked repo-wide forever against unrelated tasks. Six months later, a completely different task attempting to edit those files will be refused unless it falsely declares itself a lineage descendant of the ancient, already-fixed task.
+    * **Fix:** Ledger replay projection must recursively lift or garbage-collect a parent's terminal reservation when any of its descendant lineages reaches `TERMINAL-GO`.
+    
+    **3. HIGH — INVARIANT VIOLATION / UNENFORCED POLICY (Vacuous Child Budgets)**
+    * **Section:** 2 (`child_continuation`) vs 3 (T1)
+    * **Concrete failure scenario:** A `child_continuation` declares an explicit, tight `authorized-path` budget (`[A]`). The child then executes a `panel_open` (T1) requesting paths `[A, B]`. The T1 guard only verifies that no active program owns the paths and that they are covered by the parent's reservation. T1 NEVER intersects the requested paths with the child's explicit budget. `[B]` passes the active-program check and opens successfully.
+    * **Why it matters:** The spec boldly claims *"authorized-path SUPERSET the child's opens must stay inside"*, but the ONLY deterministic layer that can enforce this (T1) fails to check it. This violates Epistemic Rules 1 and 2 (a stated policy is unenforced until a deterministic layer checks it), making the lineage budget a vacuous declaration.
+    * **Fix:** Add an explicit guard to T1: "If opening via a lineage exception, the declared `changed_paths` MUST be a strict subset of the child's declared `authorized-path` budget."
+    
+    **4. MEDIUM — UNBOUNDED GROWTH / RESOURCE EXHAUSTION (O(N) Hook Parsing without Compaction)**
+    * **Section:** 3 (Resolution order) & Repo Invariants (1 & 10)
+    * **Concrete failure scenario:** The Git-common ledger (`repair-events-v1.jsonl`) accumulates massive JSON payloads (`panel_close` disclosure logs, `disposition` inline routing texts) across all worktrees over the repository's lifetime, with no TTL or snapshotting. Every tool-bound file write must call the hook to *"resolve the ACTIVE aggregate program BY TASK first"*, forcing the hook to parse the entire O(N) ledger from the beginning on every write.
+    * **Why it matters:** On a small 2 GB box (as explicitly noted in the constraints), this unbounded O(N) parsing inside the write path will eventually exhaust memory (OOM) or cause massive IO delays, timing out agent file writes and bricking the repo.
+    * **Fix:** Introduce a snapshotting mechanism (e.g. `repair-events-v1-snapshot.json`) that compacts terminal state, or maintain an O(1) materialized view for the hooks to check active reservations without parsing historical logs.
+    
+    **5. LOW — INTER-SECTION CONTRADICTION (Escalation Authority)**
+    * **Section:** 2 (`panel_open`) vs 3 (T10)
+    * **Concrete failure scenario:** Section 2 explicitly states that *"tier itself is declared and Owner-ratified upstream"*, anchoring tier authority strictly to the Owner. However, T10 (`dispatched(r) -> open(r+1)`) mechanically contradicts this by granting the worker the ability to arbitrarily escalate the tier (*"tier may ESCALATE, never lower"*).
+    * **Why it matters:** Allowing an agent to mechanically escalate the tier forces the round into stricter requirements (e.g., demanding 3 angles instead of 2) without Owner ratification, which can deadlock the round if those extra seats aren't available.
+    * **Fix:** Remove "tier may ESCALATE" from T10 and strictly pin the tier across all rounds to the originally Owner-ratified tier.
+    
+    **Highest-risk thing to resolve first:**
+    The T3b Refreeze Path Pinning (Blocker #1). It completely undermines the integrity of the review panel by creating a trivial bypass for shipping unreviewed file modifications.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: Entire `docs/journal/terminal_round_breaker_contract.md`, focusing on Section 2 (Event Grammar) and Section 3 (Transition table, Resolution order, and Replay constraints) against the provided Epistemic and Repo INVARIANTS.
+    PIL-DONE-7b69f19c941766d957fab018

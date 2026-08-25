@@ -26,7 +26,7 @@ memory of the program**. Everything needed on its first turn is in the brief or 
 4. **Scope** — what ships and what does NOT. Name artifacts.
 5. **Process** — ordered rungs and pre-decided skips. Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
-   event IDs, next round, and the R3 root-exit ID when required. Stored standard programs are
+   event IDs, next round, and the root-exit ID for any root-kind dispatch. Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
    standard round. Post-write, the orchestrator confirms bytes (`confirm-repair-brief
    --confirm`), sending only the receipt/path. The worker puts `session_id` in `--verify`; the write guard binds

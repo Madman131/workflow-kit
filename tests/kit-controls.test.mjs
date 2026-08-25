@@ -332,7 +332,13 @@ test("a plain init re-run KEEPS a stale installed [P] control and FAILS, naming 
       "…and carries the Codex re-trust consequence beside the --force remedy");
     assert.ok(readFileSync(installed, "utf8").startsWith(marker),
       "a plain re-run still KEEPS the already-installed control (this is why --force is required)");
-    run(["--skip-codex-prompt", "--force"]);
+    // Since v2.16.0 a hermetic forced rerun exits 1 — the post-force armed-check cannot verify
+    // the Codex lane, and an unverifiable lane is a named failure, not a silent success. The
+    // subject here is the byte replacement, so assert the exit contract and read the bytes.
+    const forcedRun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+    assert.equal(forcedRun.status, 1, "a hermetic forced rerun exits 1 (armed-check unverifiable)");
+    assert.match(forcedRun.stdout + forcedRun.stderr, /NOT verified armed/, "…and says why");
     assert.ok(!readFileSync(installed, "utf8").startsWith(marker),
       "--force is what actually replaces the installed control");
     // The note must therefore carry --force. Scoped to the v1.6.1 section so a neighbouring
@@ -699,8 +705,11 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     assert.match(absent, /"frontier-consult-v2".*is NOT installed/s, "a named seat that is NOT installed is reported, not silently skipped");
     assert.doesNotMatch(absent, /cage \("tools: \[\]"\) is present/, "…and init does not also certify a cage it never checked");
     writeFileSync(body, bodyText);
-    // --force restores the kit's verbatim agent ([P] class: overwritten, no .bak) and the check clears.
-    run(["--force"]);
+    // --force restores the kit's verbatim agent and the check clears. Since v2.16.0 the forced
+    // rerun exits 1 in a hermetic adopter (armed-check unverifiable) and DIFFERING [P] files get a
+    // .bak — the subject here is the restored bytes, so run via spawnSync and read them.
+    spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--codex-prompts-dir", codexDir, "--force"], { encoding: "utf8" });
     assert.equal(readFileSync(consult, "utf8"), readFileSync(path.join(KIT, "agents", "frontier-consult.md"), "utf8"),
       "--force restores the kit's frontier-consult verbatim");
     assert.ok(!existsSync(`${consult}.bak`),
@@ -955,7 +964,10 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     // recommends for a stale hook ("re-run with --force"). --force is GLOBAL, so without a backup it
     // silently destroys the hand-written Owner doc AND resets the source-dir family to defaults.
     writeFileSync(doc, readFileSync(doc, "utf8").replace("{{OWNER_PROFILE}}", "They read fast and hate preamble."));
-    run(["--force"]);   // note: no --owner-name and no family flags this time
+    // No --owner-name and no family flags this time. Exit 1 since v2.16.0 (hermetic armed-check);
+    // the subject is the backups, which land regardless.
+    spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--force"], { encoding: "utf8" });
     assert.ok(existsSync(`${doc}.bak`), "--force leaves a .bak of the previous OWNER_COMMS");
     assert.match(readFileSync(`${doc}.bak`, "utf8"), /They read fast and hate preamble\./,
       "the hand-written Owner profile is recoverable, not lost");
@@ -971,7 +983,9 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     mkdirSync(`${doc}.bak`);          // a directory here makes the backup write fail
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
       "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
-    assert.equal(r.status, 0, "init still completes the rest of the adopt");
+    // Since v2.16.0 a refused backup is COUNTED into a nonzero exit — a mixed-version tree must
+    // not read as a clean adopt (the rest of the run still completes; the exit names the state).
+    assert.equal(r.status, 1, "a run containing a refused backup exits 1, never 0");
     assert.match(r.stderr, /REFUSED to overwrite/, "init says plainly that it refused");
     assert.match(readFileSync(doc, "utf8"), /the customer corpus/,
       "the un-backup-able file is left UNCHANGED rather than destroyed");
@@ -1006,7 +1020,9 @@ test("init verifies the INSTALLED shims, and a shim naming no body is a failure 
     // A shim naming NO body at all: zero matches must not read as zero failures.
     writeFileSync(shim, "---\nname: humanize\n---\nNo body reference here at all.\n");
     assert.match(runOut([]), /names NO \.agents\/skills/, "a shim with zero body references is a failure, not a vacuous pass");
-    run(["--force"]); // restore for any later assertions in this test file
+    // Restore for any later assertions in this test file (exit 1 is the hermetic norm — ignored).
+    spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--force"], { encoding: "utf8" });
   } finally { cleanup(); }
 });
 

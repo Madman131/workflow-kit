@@ -2,7 +2,8 @@
 
 ## What's new in v2.16.0 — the terminal aggregate controller
 
-The circular repair cadence is replaced by a finite aggregate one, mechanically walled: one frozen
+The circular repair cadence is replaced by a finite aggregate one — mechanically walled for a
+RECORDED T2/T3 program under an ARMED hook: one frozen
 candidate + one complete precommitted panel + one aggregate PM disposition per round; at most
 three repair batches per changeset (the third a root replacement, simplification, or split, with
 its recorded root exit); one final bookend closing GO or STOP with no outgoing dispatch; Owner
@@ -13,9 +14,11 @@ minting is retired — stored standard programs replay, close, or hand off to an
 (exit 1) when it keeps mechanism files that differ from this kit — controller, guards, recorder,
 scripts, core docs, installed tests, and the gate-machinery skills (orchestrate, frontier-review)
 with their shims and reviewer agents — instead of exiting 0 while shipping none of the fix. To
-upgrade, re-run with `--force`: differing mechanism files are backed up to `<file>.bak` first (a
-backup that cannot be taken refuses the overwrite); `[G]` docs regenerate with their own backups;
-the personal skills (humanize, the ritual set) stay yours. After `--force`, re-trust the changed
+upgrade, re-run with `--force`: EVERY differing file it overwrites — mechanism and personal alike
+— is backed up to `<file>.bak` first, a backup that cannot be taken refuses the overwrite, and
+each refusal is counted into a nonzero exit. `[G]` docs regenerate with their own backups. A
+forced run whose post-run armed-check cannot verify the Codex lane also exits 1 — an unverified
+lane is named, never silent. After `--force`, re-trust the changed
 hooks in the Codex lane interactively — `codex exec` skips untrusted hooks silently — then verify:
 `node scripts/check-codex-hooks-armed.mjs`. A release touching the canonical `/orchestrate`
 package is complete only when the user install is re-synced:
@@ -798,7 +801,11 @@ protected.) It also rewrites `.claude/kit.config.json` from the flags you pass *
 and pinned by test: a `--force` re-run on an adopter carrying hand-edited `[P]` files destroys them
 with no backup and resets a configured `executedPathDirs: ["app"]` to `{}`. (`kit.config.json` and
 the `[G]` files do get a `.bak` — but only when their new content actually DIFFERS; identical content
-is rewritten with the same bytes and gets none.) **Commit before you run it.**
+is rewritten with the same bytes and gets none.) *(Historical note — superseded in v2.16.0:
+`--force` now backs up EVERY differing file it overwrites to `<file>.bak`, refuses any overwrite
+whose backup cannot be taken, and counts each refusal into a nonzero exit. The sentences above
+record v2.1.1 behavior; the `executedPathDirs` reset is unchanged and still bites.)* **Commit
+before you run it.**
 
 **What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the
 template, so your `{{OWNER_PROFILE}}`, `{{IRREVERSIBLE_ASSET}}` and shorthand rows are replaced by

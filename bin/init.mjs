@@ -229,11 +229,14 @@ function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 // collected and FAIL the run at the end. Convenience surfaces an adopter legitimately localizes —
 // the thread-restart commands, the Codex lane config, and the personal skills (humanize and the
 // ritual set, which name the adopter's own Owner) — pass `mechanism: false` and stay a plain keep.
-// Under --force, a DIFFERING mechanism file is backed up to `<dst>.bak` BEFORE overwrite: the
-// files this flag replaces include an adopter's customized pre-commit hook and gate runners, and
-// destroying the only copy of a hand edit is not an upgrade. A backup that cannot be taken REFUSES
-// the overwrite rather than proceeding — same rule as the [G] path.
+// Under --force, ANY existing file whose bytes differ is backed up to `<dst>.bak` BEFORE
+// overwrite — mechanism and convenience alike: the files this flag replaces include an adopter's
+// customized pre-commit hook, gate runners and personal skills, and destroying the only copy of a
+// hand edit is not an upgrade. A backup that cannot be taken REFUSES the overwrite rather than
+// proceeding — same rule as the [G] path — and every refusal is collected into the end-of-run
+// failure report: a refused upgrade that exits 0 tells an upgrading adopter the upgrade happened.
 let staleKept = [];
+let backupRefused = [];
 function copyGuarded(src, dst, force, mechanism = true) {
   if (existsSync(dst) && !force) {
     if (mechanism) {
@@ -248,12 +251,13 @@ function copyGuarded(src, dst, force, mechanism = true) {
     warn(`exists, kept (use --force to overwrite): ${dst}`);
     return "skipped";
   }
-  if (force && mechanism && existsSync(dst)) {
+  if (force && existsSync(dst)) {
     let differs = true;
     try { differs = !readFileSync(src).equals(readFileSync(dst)); } catch { /* unreadable = differs */ }
     if (differs) {
       try { copyFileSync(dst, `${dst}.bak`); }
       catch {
+        backupRefused.push(dst);
         warn(`REFUSED: could not back up ${dst} before overwrite — the existing file is untouched. Free ${dst}.bak and re-run.`);
         return "refused";
       }
@@ -293,6 +297,7 @@ function backupBeforeOverwrite(dst, nextText) {
 // the write happened, so callers report honestly rather than assuming.
 function writeWithBackup(dst, text) {
   if (backupBeforeOverwrite(dst, text) === "FAILED") {
+    backupRefused.push(dst);
     warn(`REFUSED to overwrite ${dst}: its previous content could not be backed up (is ${dst}.bak writable?). The existing file is UNCHANGED — move it aside yourself, then re-run.`);
     return false;
   }
@@ -449,6 +454,7 @@ function main() {
 
   ensureDir(T);
   staleKept = [];
+  backupRefused = [];
   log(`workflow-kit init → ${T}`);
   const remaining = []; // generated files still carrying unfilled placeholders
   const remainingTokens = new Map(); // dst -> the specific placeholder names still unfilled
@@ -1121,13 +1127,15 @@ function main() {
   // kept-but-different above still runs the OLD controller, guard, recorder or doctrine while this
   // run printed the new version's name — exiting 0 here is how an adopter "upgrades" without
   // upgrading and never learns it. The remediation is explicit about its costs because --force is
-  // GLOBAL: [G] docs are regenerated with a backup first (a backup that cannot be taken REFUSES
-  // rather than destroys), kept portable files are overwritten in place with NO backup, and any
-  // CHANGED HOOK is DISARMED in the Codex lane until a human re-trusts it interactively — a plain
-  // `codex exec` skips an untrusted hook silently.
-  // AFTER a --force that replaced Codex-lane hooks, the dangerous state is CURRENT-BUT-DISARMED —
-  // and it would otherwise exit 0. Verify out loud instead of assuming; a check that cannot run
-  // says so rather than staying silent.
+  // GLOBAL: every kept file whose content differs — [G] doc or portable copy alike — is backed up
+  // to .bak first (a backup that cannot be taken REFUSES rather than destroys, and fails the run),
+  // and any CHANGED HOOK is DISARMED in the Codex lane until a human re-trusts it interactively —
+  // a plain `codex exec` skips an untrusted hook silently.
+  // AFTER a --force that replaced Codex-lane hooks, the dangerous state is CURRENT-BUT-DISARMED.
+  // Verify out loud, and FAIL the run when the verification does not pass — an exit 0 there told
+  // an adopter the upgrade completed while its Codex-lane controls were dead, which is the same
+  // manufactured assurance the check itself exists to stop. An ABSTAIN counts as not-verified for
+  // the same reason a clean `codex exec` proves nothing.
   if (force && codexLaneOk) {
     const armedCheck = path.join(T, "scripts", "check-codex-hooks-armed.mjs");
     if (existsSync(armedCheck)) {
@@ -1139,17 +1147,29 @@ function main() {
           `upgrade (${String(error?.stdout || error?.message || "check failed").toString().trim().split("\n")[0]}). ` +
           `A changed hook is DISARMED until a human re-trusts it interactively; \`codex exec\` skips ` +
           `untrusted hooks SILENTLY. Re-trust, then: node scripts/check-codex-hooks-armed.mjs`);
+        process.exitCode = 1;
       }
     }
+  }
+  // A REFUSED backup is a FAILING state, not a warning: every file it names still carries its OLD
+  // content, so the run did not deliver the upgrade it printed — and the refusal warnings scrolled
+  // past hundreds of lines ago. Repeat them where the exit code is decided.
+  if (backupRefused.length) {
+    console.error(`\ninit: ${backupRefused.length} --force overwrite(s) were REFUSED because their .bak backup could not be taken:`);
+    for (const f of backupRefused) console.error(`  · ${f}`);
+    console.error(
+      `Each file above is UNCHANGED on disk — still its OLD content, not kit v${KIT_VERSION}. ` +
+      `Clear the .bak path(s) (or move the file aside yourself), then re-run with --force.`);
+    process.exitCode = 1;
   }
   if (staleKept.length) {
     console.error(`\ninit: ${staleKept.length} installed mechanism file(s) are STALE against kit v${KIT_VERSION} and were NOT upgraded:`);
     for (const f of staleKept) console.error(`  · ${f}`);
     console.error(
       `A plain rerun never claims the new controller. To upgrade, re-run with --force — GLOBAL: ` +
-      `[G] docs regenerate with a backup (refusing if the backup fails); kept portable files are ` +
-      `overwritten in place with NO backup; changed hooks are DISARMED in the Codex lane until ` +
-      `re-trusted interactively (then verify: node scripts/check-codex-hooks-armed.mjs).`);
+      `every kept file whose content differs is backed up to .bak before overwrite (a backup that ` +
+      `cannot be taken REFUSES the overwrite and fails the run); changed hooks are DISARMED in the ` +
+      `Codex lane until re-trusted interactively (then verify: node scripts/check-codex-hooks-armed.mjs).`);
     process.exitCode = 1;
   }
 }

@@ -80,10 +80,11 @@ into a private worktree.
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
    fold-check (`/frontier-review`). Precommit one panel, collect it, then PM-disposition it once.
-   R1/R2 permit one bounded batch each; R3 accepted harm requires root replacement,
+   R1/R2 permit one bounded batch each — a root kind may be declared EARLY on same-class
+   recurrence; R3 accepted harm requires root replacement,
    simplification, or split plus root exit and one batch 3; R4 is the final GO/STOP bookend and
-   has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No cycles,
-   R5, reset, or process-audit continuation. An Owner child links to a terminal parent without
+   has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No R5,
+   cycle, reset, or process-audit continuation. An Owner child links to a terminal parent without
    resetting it. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
    scope/disposition/root call; on disagreement zoomed-out CONTROLS; KISS; carve-outs screen
    first, then RULE #1** (`core/FOUNDATIONS.md` § Principles; cite document+section). Round events:

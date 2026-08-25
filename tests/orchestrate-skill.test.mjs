@@ -143,7 +143,8 @@ test("the round controller pins the finite aggregate boundary", () => {
   pin(body, "R3 accepted harm requires root replacement,", "terminal root batch");
   pin(body, "simplification, or split plus root exit", "terminal root batch kinds");
   pin(body, "R4 is the final GO/STOP bookend and has no dispatch", "terminal bookend");
-  pin(body, "No cycles, R5, reset, or process-audit continuation", "no controller escape");
+  pin(body, "No R5, cycle, reset, or process-audit continuation", "no controller escape");
+  pin(body, "a root kind may be declared EARLY on same-class recurrence", "the early-root declaration");
 
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
   pin(brief, "Aggregate repair briefs declare",
@@ -156,9 +157,9 @@ test("the round controller pins the finite aggregate boundary", () => {
 
   const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");
   assert.match(workflow, /Accepted harm in R1 or R2 permits one bounded batch/);
-  assert.match(workflow, /Accepted harm in R3 requires one root replacement, simplification, or genuine split/);
-  assert.match(workflow, /R4, the final aggregate bookend/);
-  assert.match(workflow, /there is no R5, cycle, scope reset, audit window/);
+  assert.match(workflow, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
+  assert.match(workflow, /R4, the final bookend/);
+  assert.match(workflow, /there is no R5, cycle, scope reset, or audit window/);
   assert.match(workflow, /automation checks shape and surfaces candidates, never semantic sameness/,
     "semantic finding classes remain declarations; automation is only a shape check and sensor");
 });
@@ -214,7 +215,12 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
     // "re-point this test") rather than silently searching an empty string, which is the only
     // reason it is tolerable — and this release's own note was caught by these pins immediately
     // after the re-point, quoting a retracted spelling it was describing.
-    "README.md § v2.7.0": section(readme, `# workflow-kit — v${readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim()}`, "## What's new in v2.6.1", "README"),
+    // L7 correction (R2): the single VERSION-derived slice spanned every release note down to
+    // v2.6.1 under a label that said v2.7.0, and silently re-pointed on each bump. Split: the
+    // moving title anchor now covers ONLY the current note (loud-fail on each release, as before),
+    // and the v2.7.0 entry gets its own fixed anchors like every other historical section.
+    "README.md § current": section(readme, `# workflow-kit — v${readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim()}`, "## What's new in v2.7.0", "README"),
+    "README.md § v2.7.0": section(readme, "## What's new in v2.7.0", "## What's new in v2.6.1", "README"),
     "README.md § v2.6.1": section(readme, "## What's new in v2.6.1", "## What's new in v2.6.0", "README"),
     "README.md § v2.6.0": section(readme, "## What's new in v2.6.0", "## What's new in v2.5.0", "README"),
     "README.md § v2.5.0": section(readme, "## What's new in v2.5.0", "## What's new in v2.4.0", "README"),

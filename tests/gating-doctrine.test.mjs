@@ -319,9 +319,9 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
   assert.match(w, /Before review, `panel_open` binds the clean frozen commit\/tree/);
   assert.match(w, /Accepted harm in R1 or R2 permits one bounded batch/);
-  assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or genuine split/);
-  assert.match(w, /R4, the final aggregate bookend/);
-  assert.match(w, /there is no R5, cycle, scope reset, audit window/);
+  assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
+  assert.match(w, /R4, the final bookend/);
+  assert.match(w, /there is no R5, cycle, scope reset, or audit window; a root exit is keyed to ITS disposition/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -484,14 +484,22 @@ test("the round controller is stated in one shape everywhere it is stated at all
   // the rule would go VACUOUS the moment a surface lost it entirely — the surface drops out of its
   // own denominator and the pin passes by finding nothing, which is this repo's named fail-open
   // (a blind verification tool returns success). A maintained list cannot fail that way.
-  const STATES = ["core/WORKFLOW.md", "hooks/guard-gate-ladder.mjs"];
+  // PROTOCOLS, SKILL and CHIP_BRIEF became STATING surfaces in the terminal-round-breaker
+  // changeset (each restates a cadence component in the reference layer) — moved here by the
+  // deliberate edit this comment block demands, so the conversion is visible to a reviewer.
+  const STATES = ["core/WORKFLOW.md", "hooks/guard-gate-ladder.mjs",
+    "skills/orchestrate/PROTOCOLS.md", "skills/orchestrate/SKILL.md",
+    "skills/orchestrate/CHIP_BRIEF.md"];
   const POINTS = ["core/OPERATE.md"];
 
   const contractOf = (rel) => rel.endsWith(".mjs") ? printed(rel) : read(rel);
   for (const rel of STATES) {
     const t = contractOf(rel);
     assert.ok(t, `${rel}: nothing extracted to pin — re-point this test`);
-    assert.match(t, /root-cause|root-exit/i, `${rel} states the round controller and must carry the root boundary`);
+    // root[- ](cause|exit|replacement|kind): the root boundary's live spellings across the five
+    // stating surfaces — SKILL says "root exit", CHIP_BRIEF "root-kind dispatch", PROTOCOLS
+    // "root-replacement/simplification/split".
+    assert.match(t, /root[- ](?:cause|exit|replacement|kind)/i, `${rel} states the round controller and must carry the root boundary`);
     // The retired shape must be GONE from every one of them, or a reader meets whichever they open.
     assert.doesNotMatch(t, /ONE remediation round; a second is the Owner's call/i,
       `${rel} still prints the retired rounds rule`);
@@ -690,12 +698,27 @@ test("the finite aggregate cadence agrees between every live surface", () => {
   // pinned with the rest — a co-edit of one surface and its own literal pin must not pass while
   // the surfaces disagree.
   const protocols = read("skills/orchestrate/PROTOCOLS.md").replace(/\s+/g, " ");
+  // SKILL.md restates the same cadence in its step 5, so it joins the agreement loop with the
+  // same four concept tokens — the changeset's own stated reason for pinning PROTOCOLS applies
+  // to it verbatim (a literal-phrase pin proves a spelling, never the agreement).
+  const skill = read("skills/orchestrate/SKILL.md").replace(/\s+/g, " ");
   for (const tok of FINITE_CADENCE) {
     assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the finite cadence token ${tok}`);
     assert.match(hook, tok, `the hook must PRINT the same finite cadence token ${tok}`);
   }
   for (const tok of FINITE_CADENCE.slice(0, 4)) {
     assert.match(protocols, tok, `PROTOCOLS.md restates the cadence, so it must carry the token ${tok}`);
+    assert.match(skill, tok, `SKILL.md restates the cadence, so it must carry the token ${tok}`);
+  }
+  // CHIP_BRIEF states one cadence COMPONENT — the root-exit binding of a dispatch — and its pin
+  // once reinforced the wrong rule ("the R3 root-exit ID"): a brief-writer composing an R1
+  // root-kind repair brief omitted the field and met a deny text describing a state they were not
+  // in. Both surfaces must agree the binding is ROOT-KIND-keyed, any round — never R3-keyed.
+  const chipBrief = read("skills/orchestrate/CHIP_BRIEF.md").replace(/\s+/g, " ");
+  const denyTexts = raw("hooks/guard-brief-rung.mjs").replace(/\s+/g, " ");
+  for (const [rel, t] of [["skills/orchestrate/CHIP_BRIEF.md", chipBrief], ["hooks/guard-brief-rung.mjs", denyTexts]]) {
+    assert.match(t, /root[- ]kind dispatch/i, `${rel} must key the root-exit binding to the DISPATCH KIND`);
+    assert.doesNotMatch(t, /R3 root-exit ID|post-R3 root_exit/i, `${rel} still keys the root-exit binding to R3`);
   }
   // The retired LINEAR ladder must be GONE from BOTH — a reader/agent meets whichever they get, and
   // both shipping is worse than either. These are the shapes THIS chip retired.
@@ -805,9 +828,15 @@ test("the retired commit-time adjudication control is recorded as DO NOT REBUILD
   assert.match(g, /8 consecutive code commits, all accepted, 1 permit in history, zero dispositions recorded/);
   // The generalisation that bounds what the kit's own commit floor may claim.
   assert.match(g, /A commit-time hook is a tripwire for \*forgetting\*, never a boundary/);
-  // …and it must connect to the WORKFLOW clause it justifies, or the two drift apart.
-  assert.match(g, /This is why `core\/WORKFLOW\.md` § Gate says no hook infers rounds/);
-  assert.match(read("core/WORKFLOW.md"), /no hook infers it/);
+  // …and it must connect to the mechanism that superseded the retired control, or the two drift
+  // apart. The old anchor was WORKFLOW's "`<n>` … no hook infers it" parenthetical; the aggregate
+  // controller retired that claim's premise (recorded rounds ARE walled), so the lesson now cites
+  // the record-not-infer boundary directly and WORKFLOW pins the surviving half: automation checks
+  // shape, never semantics.
+  assert.match(g, /This is why no hook INFERS rounds/);
+  assert.match(g, /never deriving a round from the tree/);
+  assert.match(read("core/WORKFLOW.md"),
+    /automation checks shape and surfaces candidates, never semantic sameness/);
 });
 
 test("the shipped gate runner's DEFAULT effort agrees with the matrix it serves", () => {
