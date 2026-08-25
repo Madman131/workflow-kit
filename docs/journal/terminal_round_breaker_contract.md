@@ -238,10 +238,16 @@ lstat-first on plain AND forced runs — refuses the write; every overwrite's de
 must realpath inside the install's declared write roots (the repo target and the prompts dir;
 an unresolvable root set fails closed, and a DANGLING ancestor link refuses TYPED and counted,
 never a raw throw); the root-level appends (`.gitignore`, the AGENTS.md pointer) carry the same
-lstat refusal; and the `git config` write refuses when the target's `.git` is a symlink
-resolving outside the install OR when any Git-location environment override
-(`GIT_DIR`/`GIT_COMMON_DIR`/`GIT_WORK_TREE`) is observed — named like the controller's own
-`observed_overrides` — so no path or environment routes a write into another repository. A
+lstat refusal; and the `git config` write is guarded two ways: the target's `.git` is refused up front when it
+is a symlink or a regular-file pointer resolving outside the install, and any Git-location
+environment override (`GIT_DIR`/`GIT_COMMON_DIR`/`GIT_WORK_TREE`) is refused before the write
+(named like the controller's own `observed_overrides`); then, categorically, the value is READ
+BACK from the target's own config file (via `git config --file <resolved>`, immune to
+`GIT_CONFIG`) and the run REFUSES, counted, exit 1, if it did not land in the target — so no
+environment can UNDETECTABLY arm a foreign repo or leave the target falsely armed. The one
+residual, disclosed: a `GIT_CONFIG` redirect writes `core.hooksPath` into the redirected config
+ONCE before the read-back refuses (reversible, signaled) — detection, not yet prevention; pinning
+the write to `--file <resolved>` is the banked prevention follow-up. A
 symlinked `.claude/settings.json` refuses the merge (plain: a named warning printing the
 RESOLVED target; forced: counted, exit 1); a present-but-unparseable one is backed up
 byte-for-byte before regeneration, and a forced merge that would CHANGE a regular settings
@@ -258,8 +264,9 @@ exit 1 (the skip suppresses writes, never the accounting). `copyTree(core/)` fil
 into an adopter. After a `--force` with the Codex lane installed, init runs the armed-check; a
 lane it cannot verify armed is named AND exits 1. Disclosed limits: the convenience-class
 Codex thread-restart prompt is outside the skip accounting by design, and a real worktree
-adoptee whose `.git` FILE was hand-replaced by a symlink is conservatively refused (the one
-false positive the link-shape keying buys). The upgrade is NOT atomic: a mid-run failure leaves earlier files
+adoptee is ADOPTED whether its `.git` is a file or a hand-replaced symlink — `escapingGitDir`
+resolves the `<common>/worktrees/<name>` nesting rather than keying on link shape, so the old
+false positive is gone; only a plain pointer resolving outside the install is refused. The upgrade is NOT atomic: a mid-run failure leaves earlier files
 already replaced — recoverable file-by-file from their `.bak`s, loudly, at exit 1 — and a
 staging-directory atomic swap is a banked successor, not this changeset's machinery. The recorder refuses aggregate events against a
 pre-aggregate controller with `repair-controller-version-skew`. Full adopter upgrades remain
