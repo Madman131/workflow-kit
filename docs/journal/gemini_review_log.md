@@ -1955,3 +1955,79 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 1-9 inclusive) and REPO_INVARIANTS
     PIL-DONE-40e4d7d90f068bfa0dcc21a8
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T08:05:20Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787644898-24818-229118455`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=41647; instrumented_payload=41800; inline_combined=45617; file=41873
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `27d92905f28ac4b2877131815bd92a361d75371e`
+- Artifact-Base: `1ceddb0f70716ba9e08a5636569c155a7e9052b0`
+- Artifact-SHA: `27d92905f28ac4b2877131815bd92a361d75371e`
+- Artifact-Ref: `refs/pil/gate-artifacts/27d92905f28ac4b2877131815bd92a361d75371e`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: Entirety of `docs/journal/terminal_round_breaker_contract.md` (§ 0 through § 9, including INVARIANTS and REPO_INVARIANTS).
+- Start: 2026-08-25T08:01:38Z
+- End: 2026-08-25T08:05:20Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-7b9df7d582b57502da516249
+    
+    CANARIES: PIL-INGEST-015b1ac5b5bb PIL-INGEST-027d837e1c75 PIL-INGEST-03e03156e9f2
+    
+    Here is the independent cross-family audit of the Terminal Round Breaker contract. 
+    
+    ### 1. BLOCKER: CONCURRENCY / LOCK HAZARDS — TOCTOU on `seq` Append
+    * **Section:** § 3 Replay stability ("Every ledger row carries `seq`, its position in the one shared file") & § 2 Event grammar.
+    * **Failure Scenario:** The controller must read the ledger to determine the current length $N$, construct the new JSON event payload with `"seq": N+1`, hash it for the `event_id`, and append it. Because there is no process-wide write lock (e.g., `flock`) specified for this read-modify-write cycle, two concurrent writers (e.g., an automated worker and an Owner close) will both read length $N$, mint events with `"seq": N+1`, and append them. 
+    * **Why it matters:** The file will contain duplicate sequence numbers. Since the parser "derives cross-stream order by `seq`", duplicate `seq` values permanently corrupt the ledger's deterministic cross-stream ordering and likely fail the whole ledger closed.
+    * **Fix:** Mandate an exclusive file lock (`flock` on the `.jsonl` file or a parallel `.lock` file) held across the entire read-compute-hash-append boundary, OR drop `seq` from the hashed payload and infer it dynamically at parse time from the physical line number.
+    
+    ### 2. HIGH: UNBOUNDED GROWTH / RESOURCE EXHAUSTION — O(N) Ledger Parsing
+    * **Section:** § 3 Replay stability & REPO_INVARIANTS #1.
+    * **Failure Scenario:** The `.git/workflow-kit/repair-events-v1.jsonl` ledger is purely append-only with no compaction, snapshotting, or truncation mechanics defined. Every event, including multi-kilobyte `panel_close` payloads carrying hundreds of finding IDs, accumulates permanently ("inert audit residue, never history-breaking").
+    * **Why it matters:** Every controller invocation or hook execution must parse this ever-growing JSONL file into memory from start to finish to project state. On a small (2 GB) box, this unbounded O(N) growth will eventually cause unacceptable latency and fatal OOMs, permanently bricking the repository's workflow mechanism once the file exceeds V8 memory limits.
+    * **Fix:** Introduce a ledger compaction / snapshotting mechanism that writes a checkpoint of active state and prunes terminal programs, or enforce a strict max-bytes rotation policy.
+    
+    ### 3. HIGH: DATA-SAFETY / LOSS WINDOWS — Silent Drop of Follow-ups on `STOP`
+    * **Section:** § 2 Event grammar (`child_continuation`).
+    * **Failure Scenario:** If a program reaches round 4 and the PM partitions findings into both `accepted` (blockers) and `followup` (non-blockers), the disposition MUST be `STOP`. When creating the successor via `child_continuation`, the trigger IDs rule states: `(STOP: the accepted set, order-insensitive)`. 
+    * **Why it matters:** Unlike the `CLOSED` rule which explicitly mandates "a SUPERSET of the accepted set ... plus routed follow-ups", the `STOP` rule completely omits follow-ups. The routed follow-ups are silently dropped and lost during the lineage transition; the successor cannot legally adopt them.
+    * **Fix:** Update the `child_continuation` STOP trigger ID rule to explicitly include routed follow-ups: `(STOP: the accepted set, order-insensitive, plus routed follow-ups)`.
+    
+    ### 4. MEDIUM: INVARIANT VIOLATIONS + DEPLOY/MIGRATION ORDERING — Bricking Sibling Worktrees
+    * **Section:** § 2 Event grammar & § 7 Adopter upgrade rung.
+    * **Failure Scenario:** The ledger is shared globally across the local repository in the `.git/` directory. An upgraded v2.16.0 checkout writes an `aggregate_v2` row. The design deliberately dictates that "a pre-2.16.0 reader fails CLOSED on the first aggregate row it meets". 
+    * **Why it matters:** Upgrading a *single* worktree and emitting one v2 event acts as a destructive schema migration for *all* other v2.15.0 worktrees sharing that `.git` directory. Active standard programs in those sibling worktrees are instantly paralyzed because they can no longer parse the ledger, violating the Deploy-order safety invariant ("must not assume a migration... created by a step that runs after the deploy").
+    * **Fix:** Write `aggregate_v2` events to a separate file (e.g., `repair-events-v2.jsonl`), or have v2.15.0 readers gracefully ignore unknown envelope types instead of failing the entire ledger parse.
+    
+    ### 5. MEDIUM: INTER-SECTION CONTRADICTIONS — `close` Anchor for No-Disposition Programs
+    * **Section:** § 3 Transition table (T12) vs § 2 Event grammar (`close`).
+    * **Failure Scenario:** An Owner attempts to abandon a program stuck at `closed(1)` (a panel was collected, but no disposition was reached). § 2 explicitly allows this: "for a program with NO disposition, its winning panel_open". However, the T12 guard in § 3 restricts this exception to virgin closes only: "cites the latest disposition or (virgin) the winning open".
+    * **Why it matters:** If the T12 guard is enforced literally as written, the Owner cannot close the stuck program. They cannot cite a disposition (none exists) and they cannot cite the winning open (because a panel was collected, so it is not virgin). The program is permanently deadlocked.
+    * **Fix:** Reconcile T12 with § 2. Remove the `(virgin)` qualifier in T12 so it reads: "cites the latest disposition or (if none) the winning open".
+    
+    ### 6. LOW: MECHANISM CORRECTNESS — Refreeze `EQUAL` Rejects Shrinking Scopes
+    * **Section:** § 5 Rig-vs-candidate discriminator & § 3 Transition table (T3b).
+    * **Failure Scenario:** A candidate is contaminated mid-panel. The worker reverts an accidental, unnecessary file modification, *shrinking* the footprint of changed paths. The worker triggers `panel_open r (REFREEZE)`. 
+    * **Why it matters:** § 5 dictates that the re-derived changed paths "must EQUAL the superseded open's". Because the footprint shrank, it does not exactly equal the original set, and the refreeze refuses. The stated intent is only to prevent a candidate "whose footprint grew" from riding the refreeze, but strict equality erroneously blocks safe, footprint-shrinking corrections.
+    * **Fix:** Relax the refreeze changed-path constraint from exact equality to a SUBSET check: "must be a subset of (≤) the superseded open's changed paths".
+    
+    ***
+    
+    **OVERALL VERDICT & HIGHEST RISK**
+    The single highest-risk thing to resolve first is the **TOCTOU concurrency hazard on ledger appends**. Without an explicit file lock encompassing the read-of-length and the write-of-payload, concurrent writes from different agents/worktrees will mint identical `seq` numbers, corrupting the deterministic cross-stream ordering and bricking the shared ledger.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: Entirety of `docs/journal/terminal_round_breaker_contract.md` (§ 0 through § 9, including INVARIANTS and REPO_INVARIANTS).
+    
+    PIL-DONE-944f6af9303e87662289933f

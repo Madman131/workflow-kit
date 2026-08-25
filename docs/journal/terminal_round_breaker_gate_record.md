@@ -420,3 +420,89 @@ State at close of batch 3: **npm test 239/239 · acceptance PASSED · doc-size a
 state.** Round accounting: R1 batch 1 · R2 batch 2 (root, early) · R3 batch 3 (root, mandatory)
 — the allowance is SPENT. Next: freeze the R4 candidate; the FINAL BOOKEND panel (zero accepted
 ⇒ TERMINAL-GO; any accepted ⇒ TERMINAL-STOP; no outgoing dispatch either way).
+
+## ROUND 4 · FINAL BOOKEND · candidate `1ceddb0f70716ba9e08a5636569c155a7e9052b0` (tree `a749d469…`)
+
+Panel: five fresh blind seats (free · state-machine · fail-closed · doctrine-truth · adversarial
+walk-through) + Codex external (receipt `TRB-R4-9e2438be627e502b`, out-of-payload quote verified
+against core/OPERATE.md:1) + the Gemini design bookend (receipt `PIL-RCPT-…`, canaries returned).
+All seven returned: six NO-GO, one GO (doctrine-truth — every batch-3 doctrine fix verified on
+target by execution). Every seat declared its pre-loaded exposure; none read an excluded
+artifact. Three seats executed probes; convergence across independent executions was decisive.
+
+`GATE ROUND 4 · changeset terminal-round-breaker · verdict NO-GO · HARM-PASSING 7 clustered ·
+NOTES 11 · LADDER: STOP`
+
+### BOOKEND DISPOSITION — TERMINAL-STOP (accepted blockers exist; no batch 4 is legal)
+
+**ACCEPTED (blocking; the successor's exact trigger set):**
+- **A1 · Lift by budget, not repair coverage** (state-machine-F4 ≡ walk-1 ≡ failclosed-F3;
+  THREE independent executions): a child declared wide — the pattern § 3 encourages — that opens
+  narrow and GOes releases the parent's stopped surface its panels never saw. The contract's own
+  paragraph carries both readings; the code implements the permissive one. Cure shape (seats
+  concur): lift = declared budget ∩ the GO child's opened coverage.
+- **A2 · One-shot exit lattice** (state-machine-F1 ≡ walk-2, TWO executions): a lineage child
+  that terminates non-GO (STOP, or the virgin close M35's own fixture performs) permanently
+  bricks the grandparent's reserved surface — the grandchild refuses on the un-excepted,
+  unliftable ancestor reservation; one continuation per anchor forecloses retry. Falsifies
+  "each reservation exits through its own direct children."
+- **A3 · Pending budget wedges a live program** (state-machine-F2 ≡ failclosed-F4, TWO
+  executions): a continuation may declare a child budget over an unrelated ACTIVE program's
+  mid-review surface — accepted silently at declaration, detonating on the victim's own
+  disposition/open with a generic conflict, composing to a mutual permanent brick. The M39
+  courtesy (refuse at declaration, where it is cheap) was applied pending-vs-pending only.
+- **A4 · Multi-panel close sheds fresh ground** (state-machine-F3 ≡ walk-3): a close after a
+  later-round panel was collected but undisposed caps the successor's trigger universe at the
+  OLD disposition — the honest successor carrying the new ground REFUSES; only the shedding one
+  records. Defeats M36's stated purpose for exactly the freshest harms.
+- **A5 · Init symlink/backup residue** (Codex-2 ≡ failclosed-F1/F2 · Codex-3 ≡ free-F1, all
+  executed): a DANGLING dst symlink escapes the refusal (the lstat check sits under an
+  existsSync gate — the code's own rationale comment names this exact case); an
+  intermediate-directory symlink routes the install outside the repo; a PARSEABLE settings.json
+  is merged through a link and rewritten with no backup. Three exit-0 writes outside the install
+  on the documented upgrade path, each falsifying a § 7 sentence.
+- **A6 · Legacy handoff replay omits activeness** (Codex-1): the record path requires an ACTIVE
+  standard parent; replay deliberately did not (a batch-1 rationale the as-of ordering has since
+  made obsolete) — a planted hash-valid handoff citing an inactive parent mints lineage.
+  Contract-invariant (T15); the cure is now free under as-of binding.
+- **A7 · The ≤100 trigger cap can make the sole exit shape-impossible** (free-F2, executed): a
+  collected ground (or accepted set) beyond 100 ids makes the exact-carry successor refuse on
+  SHAPE while the trimmed one refuses on EXACTNESS — a permanent, exit-less reservation inside
+  the mechanism's own disclosed bounds.
+
+**FOLLOWUP (real, non-blocking, separable — each with its route):** double-`--force` silently
+clobbers the only `.bak` (walk-7; route: successor) · gate-runner scripts and prompt-dir
+mechanism shims escape the skip-flag stale accounting (walk-8 ≡ free-F4 ≡ the init worker's own
+routed residual; route: successor) · the continuation deny text still enumerates two terminal
+kinds where the delta made three (doctrine-F1; route: successor) · SKILL.md's honest-limits twin
+under-claims the armed wall (doctrine-F2; route: successor) · T12's "(virgin)" qualifier
+contradicts § 2 and the mechanism (Gemini-5; route: successor contract pass) · the
+`aggregate-child-continuation-malformed` second spelling is unnamed in § 2 (free-F3 ≡
+failclosed-F6; route: successor) · the three-causes tail over-claims the git-common-dir
+diagnostic (doctrine-F3; route: successor) · the STOP-successor trigger rule omits routed
+follow-ups while CLOSED admits them — the routes survive in the disposition row, but the
+asymmetry deserves a stated reason or a fix (Gemini-3, narrowed; route: successor contract
+pass) · the pending-abandonment exit is an undisclosed ritual (walk-4; route: successor
+disclosure or a cancel path).
+
+**DECLINED (failed premise or mechanism, recorded):** Gemini-1 seq TOCTOU (seq is stamped by
+the READER from line position — never stored, never hashed; the H1 fixture executes racing
+writers; the proposed fix IS the implementation) · Gemini-2 unbounded growth (the standing
+banked deferral) · Gemini-4 sibling-worktree bricking (the disclosed fail-closed upgrade
+design, § 2 as trued) · Gemini-6 shrinking-refreeze refusal (deliberate: a refreeze changes
+bytes, never scope; a shrunk footprint is a scope change and exits via close+successor) ·
+failclosed-F5 (the narrowed close-exclusion is the deliberate forward-adjudication re-pin,
+disclosed in H2's rationale). **NOTES:** parity red (the § 8c landing blocker, correct on this
+host) · the rig-ship hazard re-observed (§ 6's own disclosure) · plain-rerun corrupt-settings
+warn-and-exit-0 (pre-existing) · README v2.2.0 history's stale present-tense citation
+(history-keeps-its-spelling convention; borderline — successor may annotate) · the walks that
+HELD: the bookend walls, self-release orderings, the winning-open anchor, M38 stability, the
+single-emission fold, and every § 7 sentence outside A5's three.
+
+**TERMINAL STATE: STOP.** Round accounting: R1 batch 1 · R2 batch 2 (root, early) · R3 batch 3
+(root, mandatory) · R4 bookend — the allowance is SPENT and the bookend records STOP on seven
+accepted harms, five of them repair-introduced by batch 3 itself. Per the model this changeset
+ships: no further round, batch, refreeze, or dispatch exists inside this changeset. The sole
+exit is a typed OWNER CONTINUATION (child changeset) whose trigger set is the accepted set
+EXACTLY (A1–A7), inheriting tier T3. The model was applied to its own build to the letter — the
+bookend refused to let repair-introduced defects ride a GO.
