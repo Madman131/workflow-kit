@@ -8,7 +8,12 @@
 //     CURRENT-BUT-DISARMED, and exit 0 there is manufactured assurance);
 //   · a SYMLINK at an overwrite target or its .bak slot refuses rather than writing through;
 //   · an unparseable settings.json under --force is backed up byte-for-byte before replacement;
-//   · a lane excluded by a skip flag but PRESENT on disk still gets the read-only stale-keep check.
+//   · a lane excluded by a skip flag but PRESENT on disk still gets the read-only stale-keep check;
+//   · the core.hooksPath write — git's, not ours — is refused when a SYMLINKED .git resolves the
+//     target's git directory into another repository, while a normal repo and a linked
+//     `git worktree` adoptee (git dir outside the root, .git a FILE) keep adopting;
+//   · the containment check answers BEFORE any mkdir, so a refused write leaves NO directory
+//     behind it inside a linked-out `.claude`.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -312,6 +317,125 @@ test("an INTERMEDIATE directory symlink is refused — the write may not resolve
     const clean = run();
     assert.equal(clean.status, 0, `with a real directory the hooks install: ${clean.stderr}`);
     assert.ok(existsSync(path.join(hooksDir, "guard-lane-authoring.mjs")), "…into the repo this time");
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a SYMLINKED .git refuses the core.hooksPath write — it may not land in ANOTHER repository", () => {
+  // `git config` writes into whatever git directory the target RESOLVES to, and that write went
+  // through none of this file's protections: no lstat refusal, no containment check, no backup,
+  // no accounting. With .git a link into another repo's git dir, init armed THAT repository's
+  // commits with this target's .githooks and exited 0. The refusal keys on the LINK, because a
+  // linked `git worktree` legitimately keeps its git dir outside the worktree root.
+  const home = mkdtempSync(path.join(os.tmpdir(), "kit-force-gitdir-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-force-prompts-"));
+  const runInit = (target) => spawnSync(process.execPath,
+    [path.join(KIT, "bin", "init.mjs"), "--target", target, "--repo-name", "adopter",
+      "--codex-prompts-dir", codexDir, "--skip-codex-lane"],
+    { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
+  const hooksPathOf = (dir) => spawnSync("git", ["-C", dir, "config", "--get", "core.hooksPath"], { encoding: "utf8" });
+  try {
+    const other = path.join(home, "other");
+    const target = path.join(home, "adopter");
+    for (const d of [other, target]) execFileSync("git", ["init", "-q", d]);
+    const otherConfig = path.join(other, ".git", "config");
+    const before = readFileSync(otherConfig, "utf8");
+    rmSync(path.join(target, ".git"), { recursive: true, force: true });
+    symlinkSync(path.join(other, ".git"), path.join(target, ".git"));
+
+    const r = runInit(target);
+    assert.equal(r.status, 1, "an escaping git-dir write is a FAILING state — this run exited 0 before");
+    assert.match(r.stderr, /REFUSED to set core\.hooksPath/, "the refusal is printed at the site");
+    assert.match(r.stderr, /resolves OUTSIDE the install target/, "…named as the escape it is");
+    assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…and counted into the end-of-run report");
+    assert.ok(r.stderr.includes(`· ${path.join(target, ".git")}`), "…which names the link");
+    assert.equal(readFileSync(otherConfig, "utf8"), before, "the OTHER repository's config is byte-identical");
+    assert.notEqual(hooksPathOf(target).status, 0, "…so core.hooksPath is set nowhere at all");
+
+    // Polarity 1 — a REGULAR .git: the same install sets core.hooksPath and exits 0, so the exit 1
+    // above was the escape's and not something general about this target.
+    rmSync(path.join(target, ".git"));
+    execFileSync("git", ["init", "-q", target]);
+    const clean = runInit(target);
+    assert.equal(clean.status, 0, `a normal repo is untouched by the refusal: ${clean.stderr}`);
+    assert.match(clean.stdout, /core\.hooksPath=\.githooks/, "…and reports the binding");
+    assert.equal(hooksPathOf(target).stdout.trim(), ".githooks", "…which really landed");
+    assert.equal(readFileSync(otherConfig, "utf8"), before, "…still nothing written to the other repo");
+
+    // Polarity 2 — a real linked worktree, built with git itself. Its git dir IS outside the
+    // worktree root (that is what a worktree is), but its .git is a FILE, so a refusal keyed on
+    // the git dir's LOCATION would break every worktree adoptee. This one adopts.
+    const primary = path.join(home, "primary");
+    execFileSync("git", ["init", "-q", primary]);
+    execFileSync("git", ["-C", primary, "-c", "user.email=kit@example.invalid", "-c", "user.name=kit",
+      "commit", "-q", "--allow-empty", "-m", "base"]);
+    const wt = path.join(home, "adoptee-worktree");
+    execFileSync("git", ["-C", primary, "worktree", "add", "-q", wt, "-b", "lane"]);
+    assert.ok(!lstatSync(path.join(wt, ".git")).isSymbolicLink(), "precondition: a worktree's .git is a FILE");
+    const adopted = runInit(wt);
+    assert.equal(adopted.status, 0, `a worktree adoptee still adopts cleanly: ${adopted.stderr}`);
+    assert.match(adopted.stdout, /core\.hooksPath=\.githooks/, "…binding every lane as before");
+    assert.equal(hooksPathOf(wt).stdout.trim(), ".githooks", "…and the setting is readable from the worktree");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
+test("a linked .claude creates NOTHING outside: the containment check runs BEFORE the mkdir", () => {
+  // The check ran AFTER ensureDir, so with `.claude` linked out every FILE write refused while the
+  // directory tree was built inside the external target anyway — and settings.json, the one write
+  // that had no containment check at all, was created in there beside it.
+  const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-linked-claude-"));
+  try {
+    const claude = path.join(dir, ".claude");
+    rmSync(claude, { recursive: true, force: true });
+    symlinkSync(outside, claude);
+
+    const plain = run();
+    assert.equal(plain.status, 1, "the escape fails the run");
+    assert.deepEqual(readdirSync(outside), [], "not one file OR DIRECTORY was created outside the install");
+    assert.match(plain.stderr, /resolves OUTSIDE the install target/, "…refused with the containment vocabulary");
+    assert.ok(plain.stderr.includes(`REFUSED to write ${path.join(claude, "settings.json")}`),
+      "…the registrations merge is refused too, not written into someone else's directory");
+    assert.match(plain.stderr, /overwrite\(s\) were REFUSED/, "…and the refusals are counted");
+    assert.ok(plain.stderr.includes(`· ${path.join(claude, "hooks", "guard-lane-authoring.mjs")}`), "…named one by one");
+
+    const forced = run(["--force"]);
+    assert.equal(forced.status, 1, "--force refuses the same way");
+    assert.deepEqual(readdirSync(outside), [], "…still nothing outside");
+
+    // Polarity: with a real directory in place the same run installs into the repo.
+    rmSync(claude);
+    const clean = run();
+    assert.equal(clean.status, 0, `with a real .claude the install completes: ${clean.stderr}`);
+    assert.ok(existsSync(path.join(claude, "hooks", "guard-lane-authoring.mjs")), "the hooks land inside the repo");
+    assert.ok(existsSync(path.join(claude, "settings.json")), "…and so do the registrations");
+  } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a linked .codex creates NOTHING outside either — the eager agents-dir mkdir is guarded too", () => {
+  // The Codex lane creates `.codex/agents` EAGERLY (so an unwritable lane fails at that line rather
+  // than deep in the template loop) — a mkdir ahead of every containment check, which built a
+  // directory inside the external target the copies beside it then refused.
+  const { dir, run, cleanup } = adopt();   // codex lane ENABLED
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-force-linked-codex-"));
+  try {
+    const codex = path.join(dir, ".codex");
+    rmSync(codex, { recursive: true, force: true });
+    symlinkSync(outside, codex);
+
+    const r = run();
+    assert.equal(r.status, 1, "the escape fails the run");
+    assert.deepEqual(readdirSync(outside), [], "no agents/ directory — nothing at all — outside the install");
+    assert.match(r.stderr, /resolves OUTSIDE the install target/, "…refused with the containment vocabulary");
+    assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…and counted");
+
+    // Polarity: a real directory back in place and the lane installs into the repo.
+    rmSync(codex);
+    const clean = run();
+    assert.equal(clean.status, 0, `with a real .codex the lane installs: ${clean.stderr}`);
+    assert.ok(existsSync(path.join(codex, "hooks", "guard-lane-authoring.mjs")), "the lane's hooks are inside the repo");
   } finally { cleanup(); rmSync(outside, { recursive: true, force: true }); }
 });
 

@@ -1273,7 +1273,9 @@ model's name).
 (`core/REVIEW.md` payload contract and pass-types, `core/GATES.md` § Model · effort matrix,
 `core/WORKFLOW.md` § Gate). **One rule here is genuinely new and lives only in the skill body**: the
 one-firing-per-changeset budget. It is not in `core/`, and **nothing counts it** — round count is a
-conversation fact, so the cap binds the agent that reads it and nothing else. The skill says so
+conversation fact *(historical justification — since v2.16.0 a RECORDED program's ROUNDS are
+ledger-walled; the FIRING count here remains uncounted)*, so the cap binds the agent that reads
+it and nothing else. The skill says so
 where it states the cap, rather than implying a hook enforces it.
 
 Upgrading: re-run `init` with your original flags (no `--force` needed — the new files simply

@@ -2031,3 +2031,78 @@
     INSPECTED SCOPE: Entirety of `docs/journal/terminal_round_breaker_contract.md` (§ 0 through § 9, including INVARIANTS and REPO_INVARIANTS).
     
     PIL-DONE-944f6af9303e87662289933f
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T12:50:09Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787662017-26409-1545124600`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=45152; instrumented_payload=45305; inline_combined=49122; file=45378
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `342397b1638c95b4f1571464f85167c42717633b`
+- Artifact-Base: `bf5831e2985cac67fad806b457b9938c037b81e0`
+- Artifact-SHA: `342397b1638c95b4f1571464f85167c42717633b`
+- Artifact-Ref: `refs/pil/gate-artifacts/342397b1638c95b4f1571464f85167c42717633b`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, §§ 0-9)
+- Start: 2026-08-25T12:46:57Z
+- End: 2026-08-25T12:50:09Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-3637631a92ac180a5a8ddf5e
+    CANARIES: PIL-INGEST-015efe898d7a PIL-INGEST-0261669de014 PIL-INGEST-03d9a720d9a0
+    
+    Here is the cross-family audit. The same-family panel waved through severe mechanical deadlocks, cross-section contradictions, and unbounded growth traps. The design as written bricks its own adoption path and punishes successful repairs. 
+    
+    ### 1. BLOCKER: Inter-Section Contradictions / Mechanism Correctness — Standard Reader Blindness to Legacy Handoff
+    **Section:** § 2 (Event grammar) vs § 3 (T15 `legacy_handoff`)
+    **Concrete failure scenario:** § 2 states "The upgraded reader filters the envelope [`aggregate_v2`] out of the standard projection." However, § 3 (T15) claims the `legacy_handoff` event (which ships *inside* this very envelope as an aggregate kind) "atomically ends standard ownership." Because the standard reader filters out all `aggregate_v2` envelopes before projection, the standard state machine never sees the handoff.
+    **Why it matters:** The standard program remains globally ACTIVE in the standard projection forever. When the new aggregate child attempts to start (T1), the guard checks "no ACTIVE program of either grammar owns any declared path," sees the immortal standard program still holding the paths, and permanently refuses. The migration pathway deadlocks completely.
+    **Fix:** The standard projection reader must specifically intercept and parse the `aggregate_v2` envelope to extract `legacy_handoff` events before dropping the rest, or `legacy_handoff` must be dual-emitted as a bare standard event type.
+    
+    ### 2. BLOCKER: Concurrency / Completeness Gaps — Write Authority resolves BY TASK ignoring split changesets
+    **Section:** § 3 (Resolution order & `child_continuation` split)
+    **Concrete failure scenario:** § 3 states "Every write-authority query resolves the ACTIVE aggregate program BY TASK first, then decides target scope." However, § 2 allows a `split` child continuation to create 2–8 disjoint children. These children share the same parent `task` but use distinct `changeset` identifiers, meaning a single `task` can have multiple simultaneously ACTIVE aggregate programs. 
+    **Why it matters:** Resolving "BY TASK first" assumes a 1:1 mapping. The guard will either crash upon finding multiple active programs for the task, or arbitrarily pick the first one. If it picks Child A, a worker legally admitted to Child B will have its legitimate writes rejected (`repair-worker-path-unauthorized`), breaking concurrent split workflows.
+    **Fix:** Write-authority queries must resolve strictly by the composite `(task, changeset)` identity, matching the state machine's core definition ("States per (task, changeset)"). The worker session payload must provide both.
+    
+    ### 3. BLOCKER: Unbounded Growth / Invariant Violation — The 1200 Trigger Cap Traps Multi-Round Accumulations
+    **Section:** § 2 (`child_continuation` trigger ids)
+    **Concrete failure scenario:** The hard cap for a CLOSED program's trigger list is 1200 ("the 12-seat × 100-id ground bound, so the sole exit is never shape-impossible"). However, if a program is CLOSED after round 2 or 3, the rule requires the trigger list to be "a SUPERSET of the accepted set PLUS every collected-but-undisposed panel's raw finding ids." The `accepted` ids from prior rounds (e.g., 50) are summed with the current round's raw ids (e.g., 1180). This sum (1230) exceeds the static 1200 cap.
+    **Why it matters:** The `child_continuation` event will be shape-refused. Because a stopped/closed surface is ONLY released via its lineage, these paths become permanently bricked in the repository with no available exit.
+    **Fix:** Increase the cap to `3600` (accounting for the 3 allowed batches of accumulation) or validate the ground bounds per-panel rather than applying a flat sum cap.
+    
+    ### 4. HIGH: Data-Safety / Completeness Gaps — The "Virgin Close" Requirement Punishes Successful Partial Repairs
+    **Section:** § 3 (Terminal reservations, disclosed in full)
+    **Concrete failure scenario:** The text dictates: "a new continuation is admissible when every child of the standing one is terminal and at least one ended as a VIRGIN close." If a user creates a split to partially repair a parent, and all children successfully reach `TERMINAL-GO`, they are terminal but *none* ended as a virgin close.
+    **Why it matters:** If the user later attempts to declare a *new* continuation to repair the parent's remaining reserved paths, the guard will refuse it because the "virgin close" condition is false. A successful partial repair permanently locks the remainder of the parent's paths. The user is forced to manufacture a dummy child and abandon it just to satisfy this broken clause.
+    **Fix:** Remove the "and at least one ended as a VIRGIN close" constraint for general sequential continuations. That clause was intended as an escape hatch for *abandoned* pending children, not as a restriction on all sequential repairs.
+    
+    ### 5. HIGH: Mechanism Correctness — Refreeze's Strict Equality Check Deadlocks Shrunk Footprints
+    **Section:** § 3 (T3b Refreeze guard)
+    **Concrete failure scenario:** A mid-panel candidate change is allowed one refreeze. The rule dictates: "The refreeze's changed paths are RE-DERIVED... and must EQUAL the superseded open's". If a user realizes they accidentally included an unrelated file and executes `git reset HEAD <file>` to *shrink* the footprint, the re-derived paths are a strict subset. The equality check fails.
+    **Why it matters:** The refreeze is refused. The original `panel_close` cannot complete because the candidate was changed (the bracket check fails). The program is permanently deadlocked in `open(r)` and the round is burned. The user must abandon (`close`) the entire program.
+    **Fix:** Change the refreeze path constraint from `must EQUAL` to `SUBSET OR EQUAL`.
+    
+    ### 6. MEDIUM: Completeness Gaps — Missing `worker_handoff` transition for mid-panel crashes
+    **Section:** § 3 (T9 / Transition table)
+    **Concrete failure scenario:** Transition T9 restricts `worker_handoff` exclusively to the `dispatched(r)` state. If the worker machine dies while the program is in `open(r)` (waiting for the panel to close), the state machine has no valid transition to accept a new worker session.
+    **Why it matters:** The owner cannot hand off the worker until the current panel and PM disposition completely finish and push the state to `dispatched(r+1)`. If the dead worker was also running the local agents/processes that drive the panel, the panel will never close, resulting in a total deadlock that can only be resolved by a virgin `close` and `child_continuation`.
+    **Fix:** Allow `worker_handoff` during `open(r)`, `closed(r)`, and `disposed(r)` states, preserving the session replacement logic without altering the aggregate state.
+    
+    ---
+    
+    **HIGHEST-RISK ITEM TO RESOLVE FIRST:**
+    Finding 1 (Standard Reader Blindness to Legacy Handoff). It is a structural contradiction that completely breaks the v2.16.0 standard-to-aggregate migration path on day one, trapping users with immortal standard programs blocking their new aggregate pipelines.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Entire document, §§ 0-9)
+    
+    PIL-DONE-1c6a3454f0159d830ac505ce

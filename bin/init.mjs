@@ -227,20 +227,40 @@ function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 // LINK here", not "does a file exist here".
 function isSymlinkAt(p) { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } }
 
+// Where `p` WOULD live, resolved without creating anything: realpath the deepest ancestor that
+// already exists, then re-append the segments still missing. A directory that does not exist yet
+// has no realpath — realpathOrSelf hands back the literal path, which reads as inside the target
+// even when an existing symlinked ancestor (`.claude` → elsewhere) puts it outside. The containment
+// check has to answer BEFORE mkdir runs, or the escape is already carved into the external
+// directory, so it cannot rely on the parent existing.
+function resolveWithoutCreating(p) {
+  let cur = path.resolve(p);
+  const tail = [];
+  for (;;) {
+    if (existsSync(cur)) return path.join(realpathOrSelf(cur), ...tail);
+    const up = path.dirname(cur);
+    if (up === cur) return path.join(cur, ...tail);   // reached the filesystem root: nothing exists
+    tail.unshift(path.basename(cur));
+    cur = up;
+  }
+}
+
 // The roots this run may write under — the repo target plus the user-global Codex prompts dir —
 // set by main() before the first copy. A dst whose REAL parent directory escapes both is being
 // routed through a symlinked INTERMEDIATE directory (`.claude/hooks` → elsewhere), which the
 // per-file lstat above cannot see: the file inside the linked dir is a regular file. Resolved
 // lazily per write, so a root that main() only just created (or one under macOS's /tmp symlink)
-// compares by its real path. An empty roots list refuses everything — fail closed, not open.
+// compares by its real path — and by the SAME rule on both sides, so a root that does not exist
+// yet is not a spurious mismatch. An empty roots list refuses everything — fail closed, not open.
 let writeRoots = [];
-function containedInWriteRoots(dst) {
-  const parent = realpathOrSelf(path.dirname(dst));
+function dirContainedInWriteRoots(dir) {
+  const parent = resolveWithoutCreating(dir);
   return writeRoots.some((root) => {
-    const r = realpathOrSelf(root);
+    const r = resolveWithoutCreating(root);
     return parent === r || parent.startsWith(r + path.sep);
   });
 }
+function containedInWriteRoots(dst) { return dirContainedInWriteRoots(path.dirname(dst)); }
 
 // ONE writer for every `<dst>.bak`, refusing rather than damaging. Two refusals beyond a plain
 // write failure: a symlink in the .bak slot would send the bytes into the link's target, and a
@@ -299,14 +319,16 @@ function copyGuarded(src, dst, force, mechanism = true) {
     return "refused";
   }
   // An INTERMEDIATE directory symlink routes the whole write outside the install — the file
-  // inside the linked dir is a regular file, so only the resolved PARENT exposes it. ensureDir
-  // first, so the realpath sees a directory that exists.
-  ensureDir(path.dirname(dst));
+  // inside the linked dir is a regular file, so only the resolved PARENT exposes it. The check
+  // runs BEFORE any mkdir: creating the parent first refused each FILE write but had already built
+  // the directory tree inside the external target (with `.claude` linked out, a dozen directories
+  // an adopter never asked for, in someone else's repo). A refusal creates nothing.
   if (!containedInWriteRoots(dst)) {
     backupRefused.push(dst);
-    warn(`REFUSED: the directory holding ${dst} resolves OUTSIDE the install target (${realpathOrSelf(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
+    warn(`REFUSED: the directory holding ${dst} resolves OUTSIDE the install target (${resolveWithoutCreating(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
     return "refused";
   }
+  ensureDir(path.dirname(dst));
   if (existsSync(dst) && !force) {
     if (mechanism) {
       let differs = true;
@@ -392,13 +414,14 @@ function writeWithBackup(dst, text) {
     warn(`REFUSED to overwrite ${dst}: ${isSymlinkAt(dst) ? "it" : `${dst}.bak`} is a SYMLINK, and init does not write through links. Replace it with a regular file and re-run.`);
     return false;
   }
-  // Same intermediate-directory containment as copyGuarded, same reason, same accounting.
-  ensureDir(path.dirname(dst));
+  // Same intermediate-directory containment as copyGuarded, same reason, same accounting — and
+  // like copyGuarded it answers BEFORE the mkdir, so a refusal leaves no directory behind it.
   if (!containedInWriteRoots(dst)) {
     backupRefused.push(dst);
-    warn(`REFUSED to overwrite ${dst}: its directory resolves OUTSIDE the install target (${realpathOrSelf(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
+    warn(`REFUSED to overwrite ${dst}: its directory resolves OUTSIDE the install target (${resolveWithoutCreating(path.dirname(dst))}) — a symlinked intermediate directory would carry this write out of the repo. Replace it with a real directory and re-run.`);
     return false;
   }
+  ensureDir(path.dirname(dst));
   if (backupBeforeOverwrite(dst, text) === "FAILED") {
     backupRefused.push(dst);
     warn(`REFUSED to overwrite ${dst}: its previous content could not be backed up (is ${dst}.bak writable?). The existing file is UNCHANGED — move it aside yourself, then re-run.`);
@@ -441,6 +464,15 @@ function mergeSettings(targetSettings, kitSettings, force) {
     } else {
       warn(`${targetSettings} is a SYMLINK (resolves to ${resolved}) — left untouched: init does not write through links. Replace the link with a regular file, or add the registrations to ${resolved} yourself.`);
     }
+    return "skipped";
+  }
+  // …and the same INTERMEDIATE-directory containment every other write pays. This one write
+  // reached writeFileSync directly, so with `.claude` linked out the registrations were created
+  // inside the external directory while every copyGuarded write beside them refused. Checked
+  // before the mkdir below, and counted like every other refusal.
+  if (!containedInWriteRoots(targetSettings)) {
+    backupRefused.push(targetSettings);
+    warn(`REFUSED to write ${targetSettings}: its directory resolves OUTSIDE the install target (${resolveWithoutCreating(path.dirname(targetSettings))}) — a symlinked intermediate directory would carry the registrations out of the repo. Replace it with a real directory and re-run.`);
     return "skipped";
   }
   let existing = {};
@@ -569,6 +601,29 @@ function realpathOrSelf(p) {
   try { return realpathSync(p); } catch { return path.resolve(p); }
 }
 
+// The git-dir escape — the one writer that went through NONE of this file's protections. `git
+// config` writes into whatever git directory the target RESOLVES to, and a `.git` that is a
+// SYMLINK resolves into another repository entirely: core.hooksPath landed in THAT repo's config,
+// outside the install, from a run that exited 0. No per-file lstat, no containment check and no
+// backup covers it, because the write is git's, not ours.
+//
+// The refusal keys on the SYMLINKED-`.git` SHAPE, never on the git dir's location alone: a linked
+// `git worktree` checkout legitimately keeps its git dir under the primary clone's common dir, and
+// its `.git` is a FILE ("gitdir: …"), not a link — refusing on location would break every worktree
+// adoptee. Returns the resolved git dir when it escapes the target, else null.
+function escapingGitDir(target) {
+  if (!isSymlinkAt(path.join(target, ".git"))) return null;
+  let gitDir;
+  try {
+    gitDir = execFileSync("git", ["-C", target, "rev-parse", "--absolute-git-dir"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch {
+    gitDir = path.join(target, ".git");   // git could not say; the link itself resolves well enough
+  }
+  const resolved = realpathOrSelf(gitDir);
+  const root = realpathOrSelf(target);
+  return (resolved === root || resolved.startsWith(root + path.sep)) ? null : resolved;
+}
+
 function isGitRepo(target) {
   try {
     execFileSync("git", ["-C", target, "rev-parse", "--git-dir"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -659,8 +714,14 @@ function main() {
     // written under T/.githooks — unreachable. Warn rather than silently misconfigure.
     let top = null;
     try { top = execFileSync("git", ["-C", T, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(); } catch { /* handled below */ }
+    const escaped = escapingGitDir(T);
     if (top && realpathOrSelf(top) !== realpathOrSelf(T)) {
       warn(`${T} is a SUBDIRECTORY of git repo ${top} — core.hooksPath would be set on the parent and miss ${T}/.githooks. Adopt at the repo ROOT, or configure the hook manually.`);
+    } else if (escaped) {
+      // The remediation deliberately does NOT hand over the `git config` line the branch below
+      // prints: running it by hand performs the very write refused here.
+      backupRefused.push(path.join(T, ".git"));
+      warn(`REFUSED to set core.hooksPath: ${path.join(T, ".git")} is a SYMLINK whose git directory resolves OUTSIDE the install target (${escaped}) — the setting would be written into ANOTHER repository's config, arming its commits with ${T}/.githooks and leaving this one unbound. Replace the link with a real .git directory and re-run (a linked \`git worktree\` checkout, whose .git is a FILE, is unaffected).`);
     } else if (gitConfig(T, "core.hooksPath", ".githooks")) {
       log(pcTrusted
         ? `  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`
@@ -960,8 +1021,11 @@ function main() {
   } else {
     try {
       const cfgDst = path.join(T, ".codex", "config.toml");
-      // Fail HERE, inside the catch, rather than later in the template loop.
-      ensureDir(path.join(T, ".codex", "agents"));
+      // Fail HERE, inside the catch, rather than later in the template loop — but NEVER through a
+      // linked `.codex`: a directory created before the containment check is the escape the copy
+      // below refuses one line later. Not contained ⇒ create nothing and let that refusal count it.
+      const codexAgents = path.join(T, ".codex", "agents");
+      if (dirContainedInWriteRoots(codexAgents)) ensureDir(codexAgents);
       const codexCfg = copyGuarded(path.join(KIT_ROOT, "codex", "config.toml"), cfgDst, force, false);
       // A KEPT config.toml may already declare `hooks`. Codex accepts registrations in either that
       // file or `.codex/hooks.json` and warns when both do, so an adopter carrying their own is
@@ -1122,7 +1186,9 @@ function main() {
   let cfgKept = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else {
-    ensureDir(path.dirname(cfgPath));
+    // No eager ensureDir: writeWithBackup creates the parent itself, AFTER its containment check.
+    // A mkdir taken first is the same escape copyGuarded refuses — a directory built inside a
+    // linked-out `.claude` by a write that then refuses.
     const cfgText = JSON.stringify(config, null, 2) + "\n";
     // A --force re-run with no family flags rewrites this to `{}`, silently WIDENING the write guard
     // (an executedPathDirs family the adopter configured simply disappears). Keep the previous

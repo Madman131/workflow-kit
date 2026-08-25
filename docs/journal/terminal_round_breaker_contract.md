@@ -60,19 +60,22 @@ Kinds (each totally shape-validated before ANY field dereference):
 
 | kind | binds | authority it creates |
 |---|---|---|
-| `panel_open` | task · changeset · round (1–4) · phase · tier · frozen commit+tree · base ref + base commit · changed paths (derived from the immutable base..frozen pair) · complete expected seat roster {seat_id, role, family, pass_type, paths, substitution?} | reserves the round; first eligible open wins; membership authority. **Floors fixed for the DECLARED tier** (tier itself is declared and Owner-ratified upstream): free seat at full path coverage · ≥2 (T2) / ≥3 (T3) distinct angle roles, all `free` · one external · **≥2 distinct family values** (names are data; distinctness is the floor) |
+| `panel_open` | task · changeset · round (1–4) · phase · tier · frozen commit+tree · base ref + base commit · changed paths (derived from the immutable base..frozen pair) · complete expected seat roster {seat_id, role, family, pass_type, paths, substitution?} | reserves the round; first eligible open wins; membership authority. **Floors fixed for the DECLARED tier** (tier itself is declared and Owner-ratified upstream): free seat at full path coverage · ≥2 (T2) / ≥3 (T3) distinct angle roles, all `free` · one external · **≥2 distinct family values** — OR a roster below two families admitted through an
+Owner-evidenced `same-family-only` seat substitution (`core/REVIEW.md`'s reduced-decorrelation
+state; a caller-supplied declaration per the records-not-deters bound), recorded, never silent |
 | `panel_close` | its `panel_open` event id · received seat outcomes {id, role, family, pass_type, inspected_paths, reviewed commit+tree, verdict, finding ids, artifact receipt+sha256, packet_scope, pre_loaded} | the round's review receipt — received ≡ expected exactly, every changed path covered, and **finding ids globally unique across seats** (a collision refuses HERE, while the close is still recomposable). `pre_loaded` is a LOG (false · true · the seat's disclosure text), never a certification; seat outcomes are records, unauthenticated by construction |
 | `disposition` | one unused `panel_close` of the current round · complete disjoint FOUR-bucket partition of every seat and PM finding id — **`accepted`** (BLOCKING: the bucket IS the declaration that a harm is changed-feature/contract-invariant class or Critical/fail-open) · **`followup`** (real, non-blocking, safely separable adjacent; each entry `{id, route}` with its routing text inline — embedded because a separate event citing the GO would be a content-hash cycle) · **`declined`** · **`note`** · terminal_state · remediation_kind · authorized paths ⊆ the open's changed paths | GO (zero accepted; followups routed) · CONTINUE (authorizes at most one batch) · STOP (declarable at ANY round) |
 | `dispatch` | exactly one accepted CONTINUE disposition + its panel_close · next round · brief path+sha256+size · authorized paths · for a ROOT-KIND disposition (any round): the `root_exit` event id | the batch — one per disposition, ever |
 | `root_exit` | the root-kind disposition · shared mechanism · why prior fixes were symptoms · owner/state/yield seams · one replacement · removed workarounds · trigger matrix | unlocks only that disposition's dispatch |
 | `worker` | dispatch event id · session | admits ONE worker session; the handoff-admitted session's own `--verify` is idempotent |
 | `worker_handoff` | Owner evidence · the immutable active dispatch · the prior worker's exact admission · new session | replaces the worker; revokes the old session in the same transition |
-| `close` | Owner evidence · reason · the latest disposition — or, for a program with NO disposition, its winning `panel_open` | ABANDON: releases active authority; **eligibility = session ∉ every admitted worker session** (verifications and handoff replacements); after any COLLECTED panel the close RESERVES the UNION of the program's opens' changed paths exactly as STOP does (close-then-relabel is not a fresh budget, and ground findings are not released by abandoning them before the disposition); a truly virgin close — no panel ever collected — reserves nothing |
+| `close` | Owner evidence · reason · the latest disposition — or, for a program with NO disposition, its winning `panel_open` | ABANDON: releases active authority; **eligibility = session ∉ every admitted worker session** (verifications and handoff replacements); after any RECORDED panel receipt the close RESERVES the UNION of the program's opens' changed paths exactly as STOP does (close-then-relabel is not a fresh budget, and RECORDED ground is not released by abandoning it before the disposition); a close with no receipt on record reserves nothing — the open-to-receipt window is a disclosed records-not-deters seam: seats' collected-in-fact-but-unrecorded artifacts are invisible to a controller that can only read rows |
 | `child_continuation` | parent task/changeset · the anchor: parent's latest disposition id — or, for a no-disposition CLOSED parent with a collected panel, its winning `panel_open` id (mirroring the close event's own anchor rule; without it that reservation had no constructible exit) · the parent terminal candidate (frozen commit+tree, controller-derived) · continuation kind `split` \| `new_changeset` \| `material_scope` · children (split: 2–8 disjoint; else one), each {task, changeset, tier ≥ parent tier, budget, authorized-path SUPERSET the child's opens must stay inside; a pending budget binds until the child opens, and two pending budgets never overlap} · trigger ids (STOP: the accepted set, order-insensitive — routed follow-ups deliberately ride the DISPOSITION row, whose inline routes survive; the trigger set is the lineage's CAUSE, not the successor's workload; GO: routed follow-ups only; CLOSED: a SUPERSET of the accepted set PLUS every collected-but-undisposed panel's raw finding ids — the freshest un-discharged ground cannot be shed — with routed follow-ups optional; winning-open anchor: the union of the collected panels' raw finding ids; cap 1200 = the 12-seat × 100-id ground bound, so the sole exit is never shape-impossible) · Owner evidence | lineage ONLY — no ownership, no verdict, no dispatch; the ONE successor mechanism; anchors only to a TERMINAL parent (GO, STOP, or CLOSED — a non-terminal or held state can never seed a child) |
 | `legacy_handoff` | the CURRENT winning standard disposition/candidate/round · one declared child | atomically ends standard ownership, creates lineage; the recorder derives the citation itself (callers never mint trusted pointers); replay binds the latest ROUND row AND the parent's ACTIVENESS as of the handoff's own ledger position (cross-stream order by `seq` — § 3 Replay stability; a planted row citing an inactive parent is inert), so neither a post-handoff close of the emptied program nor an out-of-band standard append can retroactively unmake the lineage; the child budget refuses when it overlaps a pending hold or a live program's surface |
 
 Refusal states are the shipped ones: `aggregate-<kind>-conflict` for a transition the derivation
-refuses, `aggregate-<kind>-malformed` for shape, plus the named diagnoses `aggregate-terminal`,
+refuses, `aggregate-<kind>-malformed` for shape (one deliberate unification: the
+`child_continuation` kind spells both as `aggregate-continuation-…`), plus the named diagnoses `aggregate-terminal`,
 `aggregate-worker-required`, `aggregate-close-self-authorized`, `aggregate-root-exit-required`,
 `aggregate-dispatch-unavailable`, `repair-worker-path-unauthorized`, and the recorder's
 `repair-controller-version-skew`. Every one has remediation text in the write guard or recorder.
@@ -85,7 +88,7 @@ absolute; a refreeze changes the candidate, never the round count.
 
 | # | From | Event | Guard (all mechanical) | To |
 |---|---|---|---|---|
-| T1 | `unopened` | `panel_open` r=1 | identity globally unclaimed; no ACTIVE program of either grammar owns any declared path; no terminal reservation covers them (exception: the child's OWN lineage parent's reservation); evidence commit-addressed with the clean-candidate bracket before AND after capture | `open(1)` |
+| T1 | `unopened` | `panel_open` r=1 | identity globally unclaimed; no ACTIVE program of either grammar owns any declared path; no terminal reservation covers them (exception: the reservations of the child's OWN lineage ANCESTOR CHAIN — direct-parent-only was the executed nested lockout, M42); evidence commit-addressed with the clean-candidate bracket before AND after capture | `open(1)` |
 | T2 | `open(r)` | `panel_close` | cites the round's WINNING open (a superseded open can never close); received ≡ expected; cross-seat finding ids unique; recorder stands at the frozen candidate (tracked-clean; untracked files are packet discipline, not candidate identity), bracket re-checked after receipt assembly | `closed(r)` |
 | T3 | `open(r)` | rig failure, candidate bytes UNCHANGED | a NON-EVENT by design: the panel has not closed; the failed seat attempt reruns (§ 5) | `open(r)` — consumes nothing |
 | T3b | `open(r)` unclosed | `panel_open` r (REFREEZE) | AT MOST ONCE per round · NEVER at the final bookend (a contaminated bookend exits via close+successor) · roster and changed-path set PINNED to the superseded open · tier pinned · both overlap checks re-run · the superseded open can no longer close. No disposition was reached ⇒ nothing consumed; a refreeze never grants a batch or resets the count — and the bound is what keeps that sentence true | `open(r)` on the new candidate |
@@ -118,14 +121,22 @@ reaching TERMINAL-GO lifts the reservation over its declared budget INTERSECTED 
 its own panels actually opened — a wide budget is a plan, not a repair, and the never-reviewed
 remainder stays reserved. A lineage child's OPEN excepts its whole ANCESTOR chain (a grandchild
 working its parent's reserved slice is also working its grandparent's — excepting only the direct
-parent made the lattice one-shot). One LIVE continuation per anchor, not one ever: a new
-continuation is admissible when every child of the standing one is terminal and at least one
-ended as a VIRGIN close (opened, collected nothing — it holds no anchor of its own, and its
-slice would otherwise strand; that ritual open-then-virgin-close is also the ONE exit from an
-abandoned pending declaration, stated here rather than left to be discovered). A PENDING child's
-declared budget binds from declaration until the child opens — and is refused AT declaration when
-it overlaps another pending budget OR a live program's bound surface, where the collision is
-cheap and diagnosable. This permanence is the design: a stopped surface is worked again only
+parent made the lattice one-shot) — but the LIFT stays with direct children: a grandchild's GO
+lifts only its own parent's reservation, never across generations; each reservation exits
+through its own direct children. One LIVE continuation per anchor, not one ever: a new
+continuation is admissible when every child of the standing one is terminal AND either one ended
+as a VIRGIN close (opened, collected nothing — its slice would otherwise strand; that ritual
+open-then-virgin-close is also the ONE exit from an abandoned pending declaration, stated here
+rather than left to be discovered) OR un-lifted remainder survives on the parent's own
+reservation — a successful PARTIAL repair must not lock the rest. A PENDING child's declared
+budget binds from declaration until the child opens — and is refused AT declaration when it
+overlaps another pending budget, a live program's bound surface, OR another program's un-lifted
+reservation; the reservation exception at declaration is the declarer's own NON-GO lineage chain
+(a GO node ends its lineage's claim, so reach-back through a GO hop refuses and the reserving
+ancestor's own re-openable anchor is the only door). Every round of one changeset derives its
+changed paths from ROUND 1's exact base ref and commit — the base is the CHANGESET's, not the
+round's, enforced at open and refreeze alike, so a moved base can never shrink a later panel's
+view to the last delta. This permanence is the design: a stopped surface is worked again only
 through the lineage that owns why it stopped, and released only where that lineage repaired it
 to GO.
 
@@ -191,9 +202,10 @@ pointing here; § 0 above records the ruling it cites. `README.md` gains the v2.
 section with the upgrade instructions. Generalization holds: no Owner names, no model brands, no
 adopter paths in shipped text. One RIG surface, named per the sweep rule: the untracked
 `core/REPO_INVARIANTS.md` states cadence components for THIS repo's own gate runs (its item 5 is
-the refreeze bound). It is not a shipped surface and sits in no packet or accounting list — and
-because `init` copies the `core/` tree from the FILESYSTEM, running init from a working copy
-that holds the rig file would ship it; it stays untracked so a released clone never has it.
+the refreeze bound). It is not a shipped surface and sits in no packet or accounting list. `init`'s
+`copyTree(core/)` filters the `[G]`-generated names (§ 7), so even an init run FROM a working
+copy holding the rig file cannot ship it; it stays untracked besides, so a released clone never
+carries it at all.
 
 ## 7 · Adopter upgrade rung
 
@@ -273,7 +285,8 @@ lineage child opens on a SUBSET of its declared budget. **M30** the reservation 
 the reserving parent's own lineage — an unrelated parent's child refuses. **M31** an unreadable
 ancestor never buys the blind relief; observed overrides are named in the deny result. **M32**
 the recorder's version-skew refusal is typed, never a TypeError. **M33** the family floor — a
-single-family T2/T3 roster cannot open. **M34** ledger order is authority — an out-of-band
+single-family T2/T3 roster cannot open, EXCEPT through a declared `same-family-only`
+substitution with Owner evidence (both polarities and the escape tested). **M34** ledger order is authority — an out-of-band
 standard append leaves every persisted aggregate row's adjudication untouched (ownership,
 dispositions, reservations intact) while a NEW admission on the appended row's path refuses;
 disabled arm: stripping the seq prefix from the legacy check erases the whole program. **M35**

@@ -21,6 +21,11 @@ import {
   recordAggregateRootExit, recordWorkerVerification,
 } from "../hooks/repair-dispatch-state.mjs";
 
+const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
+  : value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype
+    ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stable(value[key])}`).join(",")}}`
+    : JSON.stringify(value);
+const stamped = (event) => ({ event_id: createHash("sha256").update(stable(event)).digest("hex"), event });
 const options = (dir, sessionId = "orchestrator") => ({ projectRoot: dir, sessionId });
 
 function repo() {
@@ -478,19 +483,41 @@ test("the STOP reservation yields only to the reserving parent's own lineage", (
       children: [{ task_id: "b-child", changeset_id: "b-child-cs", tier: "T2",
         budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
     }, options(ctx.dir));
-    assert.equal(continuationB.ok, true, continuationB.state);
+    // Since terminal-round-breaker-2 the skeleton-key walk dies one step EARLIER: the
+    // declaration itself refuses (a child budget over another program's un-lifted reservation,
+    // and task-b's GO lineage holds no claim on A's surface).
+    assert.equal(continuationB.ok, false);
+    assert.equal(continuationB.state, "aggregate-continuation-conflict",
+      "an UNRELATED parent cannot even DECLARE a child over another program's STOP");
+    // Defense in depth: a hand-planted continuation row is inert, and the child's open still
+    // refuses on the open-side reservation arm.
+    const plantedContinuation = stamped({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-b", changeset_id: "cs-b",
+      recorded_at: "2099-01-01T00:00:40.000Z", session_id: "planted",
+      parent_disposition_event_id: stateB.latest.event_id,
+      parent_frozen_commit: stateB.panels_open.at(-1).frozen_commit,
+      parent_frozen_tree: stateB.panels_open.at(-1).frozen_tree,
+      trigger_ids: ["ADJ"], continuation_kind: "new_changeset", owner_evidence: "planted",
+      children: [{ task_id: "b-child", changeset_id: "b-child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+    });
     execFileSync("git", ["checkout", "-qb", "b-child-line", "origin/main"], { cwd: ctx.dir });
     const childCandidate = commit(ctx.dir, "b-child-work", "src/x.mjs");
-    const bypass = recordAggregatePanelOpen({
+    const loadedBypass = loadRepairEventsForProject(ctx.dir);
+    const bypassOpen = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "b-child", changeset_id: "b-child-cs",
+      recorded_at: "2099-01-01T00:00:41.000Z", session_id: "planted",
       round: 1, phase: "repair_round", tier: "T2",
       frozen_commit: childCandidate.commit, frozen_tree: childCandidate.tree,
       base_ref: "origin/main", base_commit: ctx.base,
-      expected_seats: seats(childCandidate.paths),
+      changed_paths: ["src/x.mjs"], expected_seats: seats(["src/x.mjs"]),
       incoming_dispatch_event_id: null, incoming_worker_event_id: null,
-      child_continuation_event_id: continuationB.event_id, legacy_handoff_event_id: null,
-    }, options(ctx.dir));
-    assert.equal(bypass.ok, false,
+      child_continuation_event_id: plantedContinuation.event_id, legacy_handoff_event_id: null,
+    });
+    const bypassWorld = deriveAggregateRepairState(
+      [...loadedBypass.aggregate_events, plantedContinuation, bypassOpen], "b-child",
+      { standardEvents: loadedBypass.events });
+    assert.equal(bypassWorld.panels_open.length, 0,
       "an UNRELATED parent's lineage child is not a skeleton key over another program's STOP");
   } finally { ctx.cleanup(); }
 });

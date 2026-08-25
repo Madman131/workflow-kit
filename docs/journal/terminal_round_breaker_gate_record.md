@@ -548,3 +548,118 @@ consumed except the three § 7 disclosed limits (panel material, this round).
 State: **npm test 251/251 · acceptance PASSED · WORKFLOW 25,064/25,088 · skill budgets all
 inside caps · parity red = the standing pre-landing state.** This changeset's own cadence now
 begins: freeze → R1 full T3 panel (its own frontier firing unspent).
+
+## terminal-round-breaker-2 · ROUND 1 · candidate `bf5831e2985cac67fad806b457b9938c037b81e0` (tree `f7ca9125…`)
+
+Panel (mixed-fleet tiers recorded per the Owner's 2026-08-25 ratification; this round's internal
+seats ran FABLE — launched before the ratification — externals cross-family as always): free
+(Fable) · state-machine (Fable) · fail-closed (Fable) · doctrine-truth (Fable) · adversarial
+walk-through (Fable) + Codex external (receipt `TRB2-R1-39124bd2d11f2444`, out-of-payload quote
+verified against core/MULTI_AGENT.md:1) + Gemini design bookend (receipt `PIL-DONE-1c6a345…`).
+All seven returned NO-GO. Pre-loaded exposure declared by every seat; one seat disclosed an
+incidental single-line grep hit from the excluded gate record, derived independently beforehand
+and quarantined.
+
+`GATE ROUND 1 · changeset terminal-round-breaker-2 · verdict NO-GO · HARM-PASSING 8 clustered ·
+NOTES 13 · LADDER: continue`
+
+### R1 accepted clusters (batch 1, ONE bounded batch)
+
+- **BA · The trigger cap's arithmetic is refuted five ways** (fail-closed EXECUTED a 1300-id
+  accepted STOP through the real recorder; state-machine, free, doctrine, Gemini concur): the
+  disposition id universe is seat ids (≤1200) PLUS PM findings (≤100), and the CLOSED floor is
+  additive across rounds — the mandatory exact carry can reach ~2600 while the shape cap sits at
+  1200, re-creating the brick M47 claims closed, one order of magnitude up. CURE: cap = 2600
+  (the union bound: accepted universe + undisposed-ground universe), the in-code comment and
+  § 2/M47 sentences trued, and M47 gains the disposition-anchor boundary polarities.
+- **BB · No cross-round base pin — the round's deepest finding** (adversarial walk-1, HIGH,
+  executed): a later-round `panel_open` may declare a DIFFERENT base, deriving only the last
+  delta as its changed paths — so the lift counts round-1's pre-repair open as "coverage" of
+  bytes NO panel reviewed at the GO candidate, and even a plain GO/bookend certifies a whole
+  changeset on a delta-only review. "The immutable base..frozen pair" was claimed, never
+  enforced across rounds. CURE: every round-N open and refreeze must carry round 1's exact
+  base_ref AND base_commit (record path + replay guard) — changed paths become cumulative by
+  construction and the lift's coverage semantics become true.
+- **BC · Pending-vs-STOPPED wedge** (free-F1, HIGH, executed): successor declarations check
+  pending and active overlaps but never STOPPED ones — an unrelated program's child budget over
+  a STOP-reserved surface is accepted, permanently destroying the reservation's sole lineage
+  exit in the full-overlap shape. CURE: child budgets refuse against un-lifted STOP/CLOSED
+  reservations at declaration — EXCEPT when the reserving program IS the declaring parent
+  itself (its own anchor is the sanctioned exit).
+- **BD · The all-GO remainder brick** (Gemini-4 + state-machine-F3): a partial-coverage child's
+  GO leaves un-lifted remainder, yet with no virgin child the anchor never reopens — a
+  successful partial repair permanently locks the rest. CURE: `anchorConsumed` also admits a
+  re-continuation when all children are terminal AND un-lifted remainder exists on the parent's
+  reservation.
+- **BE · The GO-hop springboard dies at BC's narrowness** (state-machine-F2 ≡ walk-2, executed):
+  a GO child's continuation could declare the grandparent's un-repaired remainder with EMPTY
+  triggers and open it via the ancestor chain — pure transport, the harm context shed. BC's
+  exception being the reserving program ONLY closes it at declaration: reach-back through GO
+  hops refuses, and the reserving ancestor's own re-openable anchor (BD) is the one exit,
+  carrying its accepted set exactly. The open-side ancestor-chain exception stays (it can only
+  ever fire for budgets the reserving program itself declared).
+- **BF · The pending-hold diagnosis keys off seat[0]** (three seats, two executed): legal
+  rosters not free-seat-first get the bare conflict — the R4 cure conditionally inert. CURE:
+  match against the derived `evidence.changed_paths`, already computed in the same function.
+- **BG · Init small set:** `gitConfig` writes through a symlinked `.git` into another repo's
+  config (walk-6.4 — containment check added); directory creation leaks through a linked
+  `.claude` because `ensureDir` precedes containment (fail-closed-F4 — order swapped); § 7
+  gains: symlinked WRITE ROOTS are operator-supplied and followed by design (fail-closed-F3,
+  disclosed), and the "unresolvable root set fails closed" sentence trued to the mechanism
+  (fail-closed-F5).
+- **BH · Contract/doctrine truth set:** the family-floor escape stated in § 2 + M33 (Codex-1 ≡
+  doctrine-F3) · the § 6-vs-§ 7 rig contradiction cured — § 6 now cites the filter
+  (doctrine-F2, introduced by my own § 7 edit) · T1's exception cell says ANCESTOR CHAIN
+  (doctrine-F4) · the cross-generation non-lift sentence RESTORED to prose (doctrine-F5, a
+  load-bearing cut) · § 2's malformed-state formula notes the unified continuation spelling
+  (fail-closed-F6) · the ledger-unavailable third cause goes version-relative (doctrine-F6) ·
+  the close row's ground wall restated in RECORDATION terms with the open-to-receipt window
+  disclosed as a records-not-deters seam (walk-5 — the mechanism cannot see unrecorded
+  collections, and flipping the virgin-close rule would break the M43 ritual) · README's v1.6
+  round-count claim annotated like its siblings (doctrine-F7).
+
+**DECLINED (failed premise or mechanism, recorded):** Gemini-1 (the handed-off standard parent
+is excepted by the AGGREGATE world's `legacyHandedOff` — the standard projection never needed to
+see the handoff; the hard-stop suite executes the migration green) · Gemini-2 (split children
+carry globally UNIQUE task ids — by-task resolution is 1:1 by construction) · Gemini-5 (refreeze
+scope-pin by design, standing precedent: a shrunk footprint is a scope change, exit =
+close+successor) · Gemini-6 (a worker handoff IS legal mid-open — `active_dispatch` persists
+until the next disposition clears it) · Codex-2 (the external sandbox cannot mkdtemp — an
+environment bound, disclosed each round; the suites run green in three other seats and here).
+**NOTES:** walk-3 re-continuation accounting is disclosure-consistent (identity burn + Owner
+evidence is the stated bound) · no surface names the pending holder at DECLARATION time
+(diagnosability, unpromised) · the at-cap flags stand (WORKFLOW 24 B, RUNG_ZERO 1 word — for
+the Owner's wording sign-off) · the rig file's untracked status re-verified by two seats.
+
+Round accounting: R1 batch 1 (bounded — this disposition). Remaining allowance: R2 bounded ·
+R3 root kind · R4 bookend. Worker assignment per the mixed-fleet ratification: build workers at
+OPUS this batch; the state-machine/adversarial seats stay Fable at the next panel.
+
+## terminal-round-breaker-2 · BATCH 1 COMPLETE (2026-08-25)
+
+All eight R1 clusters consumed in the one bounded batch. Controller (orchestrator): BA cap 2600
+with the true union arithmetic · BB the cross-round base pin (open + refreeze, vs ROUND 1's
+exact base) · BC pending-vs-stopped at declaration with the NON-GO-chain exception
+(`declarationExceptions` — which also closes BE's springboard at the door) · BD the remainder
+reopen in `anchorConsumed` · BF the diagnosis matched against `evidence.changed_paths` · plus
+the M30/M42/M43/M44/M47 fixture and mutation-anchor retargets the new semantics forced. Init
+(worker chip, OPUS — mixed-fleet ledger entry #1): BG-a the symlinked-`.git` refusal keyed on
+link shape (real worktrees proven unaffected by a git-built fixture) · BG-b containment BEFORE
+mkdir via `resolveWithoutCreating` — and an in-scope escalation done right: `mergeSettings` had
+NO containment at all (the external leak was 12 dirs + a real settings.json), plus two more
+mkdir-before-check sites, all fixed and pinned; init-force 11→14, red-then-green per fix.
+Tests (worker chip, OPUS — ledger entry #2): M48–M52 pinned, four discriminating mutants; M49's
+mutant shows the OLD cap poisoned the whole read when a 1300-id row existed; brief's stale
+"41" count corrected by measurement (37). Doctrine/contract (orchestrator): BH complete —
+family-floor escape in § 2+M33 · § 6 rig sentence cites the filter · T1 = ancestor chain · the
+cross-generation non-lift RESTORED to prose · § 2 notes the unified continuation spelling · the
+close row in RECORDATION terms with the open-to-receipt seam disclosed · the version-relative
+third cause · both README annotations (v1.6's scoped precisely: the FIRING cap stays
+uncounted). Worker residuals routed: dangling-ancestor ENOENT crash (fails closed, ugly — R2
+panel material) · worktree `git config` writes the shared common config (git semantics,
+pre-existing).
+
+State: **npm test 259/259 · acceptance PASSED · WORKFLOW 25,064/25,088 · budgets inside caps ·
+parity red = the standing pre-landing state.** Round accounting: R1 batch 1 (bounded, spent) ·
+remaining: R2 bounded · R3 root kind · R4 bookend. The R2 panel runs the ratified mixed fleet:
+free/doctrine/fail-closed at OPUS, state-machine/adversarial at FABLE, externals unchanged.

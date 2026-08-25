@@ -139,9 +139,12 @@ function validAggregateKindShape(event) {
         (event.parent_disposition_event_id === null && ID64.test(event.parent_panel_open_event_id || ""))) &&
         GIT_SHA.test(event.parent_frozen_commit || "") && GIT_SHA.test(event.parent_frozen_tree || "") &&
         Array.isArray(event.trigger_ids) &&
-        // 1200 = the exact-carry bound the panel bounds allow (12 seats x 100 finding ids):
-        // the sole exit must never be SHAPE-impossible for a ground the grammar itself admits.
-        event.trigger_ids.length <= 1200 && new Set(event.trigger_ids).size === event.trigger_ids.length &&
+        // 2600 = the exact-carry bound the grammar itself admits: a disposition's id universe
+        // is seat ids (12 x 100) PLUS PM findings (100) = 1300, and the CLOSED floor is additive
+        // across two of those universes (accepted ∪ a later round's undisposed ground). The sole
+        // exit must never be SHAPE-impossible for a mandatory carry — the R1 panel executed a
+        // 1300-id STOP against the prior 1200 cap.
+        event.trigger_ids.length <= 2600 && new Set(event.trigger_ids).size === event.trigger_ids.length &&
         event.trigger_ids.every((id) => text(id, 300)) &&
         ["split", "new_changeset", "material_scope"].includes(event.continuation_kind) &&
         Array.isArray(event.children) && event.children.length > 0 && event.children.every(aggregateChildShape) &&
@@ -679,6 +682,19 @@ function aggregateWorld(events, standardEvents = []) {
   const pendingLineageOverlap = (paths, exceptTask = null) => [...childLineage.values()].some((lineage) =>
     lineage.task_id !== exceptTask && !programs.has(lineage.task_id) &&
     overlaps(paths, lineage.authorized_paths));
+  // The declaration-time reservation exception: the declarer plus every ancestor reachable
+  // without passing a TERMINAL-GO node (a GO ended that lineage's claim on reserved surface).
+  const declarationExceptions = (taskId) => {
+    const except = new Set([taskId]);
+    let current = taskId;
+    while (programs.get(current)?.terminal !== "GO") {
+      const parent = childLineage.get(current)?.parent_task_id ?? null;
+      if (parent === null || except.has(parent)) break;
+      except.add(parent);
+      current = parent;
+    }
+    return except;
+  };
   const lineageChangesetUsed = (changesetId) => [...childLineage.values()]
     .some((lineage) => lineage.changeset_id === changesetId);
   const accept = (row) => { accepted.set(row.event_id, row); return row; };
@@ -744,6 +760,7 @@ function aggregateWorld(events, standardEvents = []) {
             priorOpens.length < 2 && prior.phase !== "final_bookend" &&
             (row.frozen_commit !== prior.frozen_commit || row.frozen_tree !== prior.frozen_tree) &&
             row.phase === prior.phase && row.tier === prior.tier &&
+            row.base_ref === prior.base_ref && row.base_commit === prior.base_commit &&
             same(row.expected_seats, prior.expected_seats) &&
             same(paths, prior.changed_paths) &&
             !activePathOverlap(paths, row.task_id, rowSeq) &&
@@ -765,6 +782,13 @@ function aggregateWorld(events, standardEvents = []) {
         const ownLineage = state.lineage_event_id ? childLineage.get(row.task_id) : null;
         if (state.changeset_id !== row.changeset_id || state.terminal || !state.latest ||
             state.latest.terminal_state !== "CONTINUE" || row.round !== state.latest.round + 1 ||
+            // THE BASE IS THE CHANGESET'S, NOT THE ROUND'S: every later round re-derives its
+            // changed paths from ROUND 1's exact base, or a moved base reviews only the last
+            // delta while the GO — and the lift's "opened coverage" — certifies the whole
+            // candidate (executed R1 finding, the round's deepest: "immutable base..frozen
+            // pair" was claimed but never enforced across rounds).
+            row.base_ref !== state.panels_open[0].base_ref ||
+            row.base_commit !== state.panels_open[0].base_commit ||
             row.phase !== (row.round === 4 ? "final_bookend" : "repair_round") ||
             (TIER_RANK[row.tier] ?? 0) < (TIER_RANK[state.tier] ?? 0) ||
             activePathOverlap(paths, row.task_id, rowSeq) ||
@@ -963,7 +987,12 @@ function aggregateWorld(events, standardEvents = []) {
         const allTerminal = children.every((child) => child?.terminal);
         const anyVirgin = children.some((child) =>
           child?.terminal === "CLOSED" && !child.panels_close.length);
-        return !(allTerminal && anyVirgin);
+        // A successful PARTIAL repair must not lock the rest: when un-lifted remainder survives
+        // on this parent's own reservation, the anchor reopens even with no virgin child
+        // (executed R1 finding — an all-GO split's narrow coverage stranded the remainder).
+        const lifted = liftedPaths(state);
+        const remainder = (state.stopped_paths || []).some((entry) => !lifted.has(entry));
+        return !(allTerminal && (anyVirgin || remainder));
       };
       // The freshest un-discharged harms ride the lineage: panels COLLECTED after the anchor
       // disposition but never adjudicated carry ground the successor must not shed (the R4
@@ -1030,7 +1059,15 @@ function aggregateWorld(events, standardEvents = []) {
           // disposition and next open with a generic conflict, composing to a mutual brick (the
           // R4 bookend executed both directions) — the same refuse-at-declaration courtesy,
           // pending-vs-active.
-          row.children.some((child) => activePathOverlap(child.authorized_paths, row.task_id, rowSeq))) continue;
+          row.children.some((child) => activePathOverlap(child.authorized_paths, row.task_id, rowSeq)) ||
+          // …and pending-vs-STOPPED: a budget over another program's un-lifted reservation would
+          // permanently destroy that reservation's sole lineage exit (executed R1 finding). The
+          // exception is the declarer's own NON-GO lineage chain — a STOP/CLOSED lineage
+          // declares over its own and its non-GO ancestors' reservations (its anchors carry the
+          // harm context down), while a GO node ENDS its lineage's claim: the GO-hop springboard
+          // refuses at declaration, and the reserving ancestor's own re-openable anchor is the
+          // only door, carrying its accepted set exactly.
+          row.children.some((child) => stoppedPathOverlap(child.authorized_paths, declarationExceptions(row.task_id)))) continue;
       const continuation = accept(row); continuations.set(row.event_id, continuation);
       parentContinuations.set(row.parent_disposition_event_id ?? row.parent_panel_open_event_id, row);
       for (const child of row.children) {
@@ -1062,6 +1099,7 @@ function aggregateWorld(events, standardEvents = []) {
       // does at a continuation declaration.
       if (!standard?.ok || !standard.active || standard.changeset_id !== row.parent_changeset_id ||
           activePathOverlap(row.child.authorized_paths, row.parent_task_id, rowSeq) ||
+          stoppedPathOverlap(row.child.authorized_paths) ||
           standard.latest?.event_id !== row.parent_disposition_event_id ||
           standard.latest.round !== row.parent_round || row.parent_candidate_sha !== standard.latest.candidate_sha ||
           !same(row.authorized_paths, standard.latest.authorized_paths) ||
@@ -1486,8 +1524,11 @@ export function recordAggregatePanelOpen(input,
   // A refusal caused by a PENDING lineage budget was undiagnosable — the victim met a generic
   // conflict naming nothing (R4 finding). Name the holder; the refusal itself stays the world's.
   const pending = rows && derivePendingLineageBudgets(rows.aggregate, { standardEvents: rows.standard });
+  // Matched against the DERIVED changed paths — a roster's seat order is legal input, and the
+  // seat-0 proxy returned the bare conflict for any roster not free-seat-first (executed R1
+  // finding, the R4 cure conditionally inert).
   const holder = pending?.find((entry) => entry.task_id !== input.task_id &&
-    entry.authorized_paths.some((entry2) => (input.expected_seats?.[0]?.paths ?? []).includes(entry2)));
+    entry.authorized_paths.some((entry2) => (evidence?.changed_paths ?? []).includes(entry2)));
   if (holder) {
     return { ...result, detail: `a PENDING lineage child (${holder.task_id}, parent ${holder.parent_task_id}) holds a declared budget over these paths until it opens` };
   }

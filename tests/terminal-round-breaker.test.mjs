@@ -94,14 +94,16 @@ function receivedSeats(expected, candidate, findingIds = []) {
   }));
 }
 
+// `baseRef`/`baseCommit` default to the ONE base every panel here declares; M48 varies them to
+// pin the cross-round base, and nothing else may.
 function openPanel(ctx, round, candidate, { task = "task-1", changeset = "cs-1", tier = "T2",
-  incoming = {}, lineage = {} } = {}) {
+  incoming = {}, lineage = {}, baseRef = "origin/main", baseCommit = ctx.base } = {}) {
   const expected = expectedSeats(candidate.paths, tier);
   const opened = recordAggregatePanelOpen({
     type: "aggregate_v2", kind: "panel_open", task_id: task, changeset_id: changeset, round,
     phase: round === 4 ? "final_bookend" : "repair_round", tier,
     frozen_commit: candidate.commit, frozen_tree: candidate.tree,
-    base_ref: "origin/main", base_commit: ctx.base, expected_seats: expected,
+    base_ref: baseRef, base_commit: baseCommit, expected_seats: expected,
     incoming_dispatch_event_id: incoming.dispatch ?? null,
     incoming_worker_event_id: incoming.worker ?? null,
     child_continuation_event_id: lineage.continuation ?? null,
@@ -1855,7 +1857,7 @@ test("M43: ONE LIVE continuation per anchor — a stranded virgin child reopens 
     assert.ok(pendingReal.some((entry) => entry.task_id === "c43c"),
       "the re-declared child holds its pending budget");
     const mutant = await importMutant(mutantDir, [[
-      "        return !(allTerminal && anyVirgin);",
+      "        return !(allTerminal && (anyVirgin || remainder));",
       "        return true;",
     ]]);
     const pendingMutant = mutant.derivePendingLineageBudgets(loaded.aggregate_events,
@@ -1913,8 +1915,8 @@ test("M44: pending-vs-active refuses AT DECLARATION — continuation and legacy 
     assert.ok(!derivePendingLineageBudgets(wedgeRows, { standardEvents: window.events })
       .some((entry) => entry.task_id === "c44x"), "the shipped check keeps the wedge out");
     const mutant = await importMutant(mutantDir, [[
-      "          row.children.some((child) => activePathOverlap(child.authorized_paths, row.task_id, rowSeq))) continue;",
-      "          false) continue;",
+      "          row.children.some((child) => activePathOverlap(child.authorized_paths, row.task_id, rowSeq)) ||",
+      "          false ||",
     ]]);
     assert.ok(mutant.derivePendingLineageBudgets(wedgeRows, { standardEvents: window.events })
       .some((entry) => entry.task_id === "c44x"),
@@ -2176,9 +2178,11 @@ test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS,
       children: [{ task_id: "c47", changeset_id: "c47-cs", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/x.mjs"] }],
     }, options(ctx.dir));
-    // 1201 unique ids exceed the exact-carry bound (12 seats x 100 ids) — refused on SHAPE,
-    // under the ONE unified malformed spelling.
-    const over = successor(Array.from({ length: 1201 }, (_, index) => `Z-${index}`));
+    // 2601 unique ids exceed the exact-carry bound (the 1300-id disposition universe plus a
+    // 1300-id undisposed-ground universe, the CLOSED-floor union) — refused on SHAPE, under the
+    // ONE unified malformed spelling. 1201 now ACCEPTS: the R1 panel executed a 1300-id
+    // mandatory carry against the old 1200 cap.
+    const over = successor(Array.from({ length: 2601 }, (_, index) => `Z-${index}`));
     assert.equal(over.ok, false);
     assert.equal(over.state, "aggregate-continuation-malformed",
       "beyond the exact-carry bound is a shape refusal — and the derived name is the unified one");
@@ -2187,4 +2191,409 @@ test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS,
     assert.equal(carried.ok, true,
       `a grammar-legal ground is never shape-impossible to carry: ${carried.state}`);
   } finally { ctx.cleanup(); }
+});
+
+// ── batch 4 · the R1/R4 accepted findings the shipped code now carries ─────────────────────────
+
+test("M48: THE CROSS-ROUND BASE PIN — every later round re-derives from ROUND 1's base, and a refreeze may not move it", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // R1 reviews a candidate touching BOTH x and y, accepts F1, and dispatches the y repair.
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
+    const r1 = commit(ctx.dir, "p48");
+    assert.deepEqual(r1.paths, ["src/x.mjs", "src/y.mjs"]);
+    const panel = openPanel(ctx, 1, r1);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const closed = closePanel(ctx, panel, r1, ["F1"]);
+    assert.equal(closed.ok, true, closed.state);
+    const decided = decide(ctx, closed, { accepted: ["F1"], authorized_paths: ["src/y.mjs"] });
+    assert.equal(decided.ok, true, decided.state);
+    const authority = dispatchBatch(ctx, decided.event_id, closed.event_id, 2);
+
+    // The worker repairs y on top of the R1 freeze. TWO honest-looking declarations of the SAME
+    // round-2 candidate exist: from R1's own base (the whole candidate: x AND y), or from R1's
+    // FROZEN COMMIT as the new base (the delta only: y). The second is the "review only what
+    // changed since last round" mistake — and the GO it earns, plus the coverage-scoped lift,
+    // would certify x, which no round-2 seat ever read.
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 2;\n");
+    execFileSync("git", ["add", "src/y.mjs"], { cwd: ctx.dir }); // NOT -A: the brief stays untracked
+    execFileSync("git", ["commit", "-qm", "r2-repair"], { cwd: ctx.dir });
+    const r2 = {
+      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+    };
+    // A real ref at the R1 freeze, so the moved-base declaration is fully WELL-FORMED: its
+    // evidence capture succeeds and its roster matches the delta it derives. Only the pin refuses.
+    execFileSync("git", ["update-ref", "refs/remotes/origin/r1line", r1.commit], { cwd: ctx.dir });
+    const deltaOnly = { commit: r2.commit, tree: r2.tree, paths: ["src/y.mjs"] };
+    const wholeCandidate = { commit: r2.commit, tree: r2.tree, paths: ["src/x.mjs", "src/y.mjs"] };
+    const moved = openPanel(ctx, 2, deltaOnly, { incoming: { dispatch: authority.dispatch,
+      worker: authority.worker }, baseRef: "origin/r1line", baseCommit: r1.commit });
+    assert.equal(moved.opened.ok, false, "a round-2 panel may not re-base onto round 1's freeze");
+    assert.equal(moved.opened.state, "aggregate-panel-open-conflict");
+
+    // The disabled arm needs the ledger AS OF THE REFUSAL — the refused row never appended, and
+    // the accepted pinned open below would mask the mutant's own round-2 acceptance.
+    const window = loadRepairEventsForProject(ctx.dir);
+    const plantedDelta = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "task-1", changeset_id: "cs-1",
+      recorded_at: "2099-01-01T00:07:00.000Z", session_id: "orchestrator", round: 2,
+      phase: "repair_round", tier: "T2", frozen_commit: r2.commit, frozen_tree: r2.tree,
+      base_ref: "origin/r1line", base_commit: r1.commit, changed_paths: ["src/y.mjs"],
+      expected_seats: expectedSeats(["src/y.mjs"]),
+      incoming_dispatch_event_id: authority.dispatch, incoming_worker_event_id: authority.worker,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    });
+    const deltaRows = [...window.aggregate_events, plantedDelta];
+    assert.equal(deriveAggregateRepairState(deltaRows, "task-1",
+      { standardEvents: window.events }).panels_open.length, 1,
+    "replay refuses the moved-base round-2 open too — the pin is not a record-time courtesy");
+
+    // …and the SAME candidate declared from round 1's exact base_ref + base_commit ACCEPTS, at
+    // the full x+y scope round 1 reviewed.
+    const pinned = openPanel(ctx, 2, wholeCandidate, { incoming: { dispatch: authority.dispatch,
+      worker: authority.worker } });
+    assert.equal(pinned.opened.ok, true,
+      `the pinned base is the accepting polarity: ${pinned.opened.state}`);
+    const afterPinned = derive(ctx);
+    assert.equal(afterPinned.panels_open.length, 2);
+    assert.deepEqual(afterPinned.panels_open.at(-1).changed_paths, ["src/x.mjs", "src/y.mjs"],
+      "round 2 re-derives the WHOLE candidate from round 1's base — never the last delta");
+
+    // ── the refreeze polarity: a same-round supersede may not move the base either ─────────────
+    // A second program, disjoint from task-1's bound surface, opens round 1 at origin/main.
+    execFileSync("git", ["update-ref", "refs/remotes/origin/mirror48", ctx.base], { cwd: ctx.dir });
+    const first = sideCandidate(ctx, "r48-line", { "docs/r48.md": "v1\n" });
+    const rPanel = openPanel(ctx, 1, first, { task: "r48", changeset: "cs-r48" });
+    assert.equal(rPanel.opened.ok, true, rPanel.opened.state);
+    // The refreeze cures contaminated BYTES. Declared from a DIFFERENT ref naming the identical
+    // commit — same scope, same roster, same phase, same tier — it still refuses: the base is
+    // pinned as a PAIR, and a moved ref is a moved base.
+    const refreeze = sideCandidate(ctx, "r48-refreeze", { "docs/r48.md": "v2\n" });
+    const movedRefreeze = openPanel(ctx, 1, refreeze, { task: "r48", changeset: "cs-r48",
+      baseRef: "origin/mirror48" });
+    assert.equal(movedRefreeze.opened.ok, false, "a refreeze may not re-declare its base ref");
+    assert.equal(movedRefreeze.opened.state, "aggregate-panel-open-conflict");
+    assert.equal(derive(ctx, "r48").panels_open.length, 1, "nothing was consumed by the refusal");
+    // The base-pin discriminator: the identical refreeze on the PINNED ref lands (M23 owns the
+    // refreeze's general accepting polarity; this pair isolates the base alone).
+    const pinnedRefreeze = openPanel(ctx, 1, refreeze, { task: "r48", changeset: "cs-r48" });
+    assert.equal(pinnedRefreeze.opened.ok, true,
+      `only the base moved: ${pinnedRefreeze.opened.state}`);
+    assert.equal(derive(ctx, "r48").panels_open.length, 2);
+
+    // Disabled arm: strip the two cross-round base-pin lines and the delta-only round 2 lands —
+    // the R1 finding, the round's deepest: "immutable base..frozen pair" was claimed but never
+    // enforced ACROSS rounds, so a moved base reviewed only the last delta while the GO (and the
+    // coverage-scoped lift) certified the whole candidate.
+    const mutant = await importMutant(mutantDir, [
+      ["            row.base_ref !== state.panels_open[0].base_ref ||\n", ""],
+      ["            row.base_commit !== state.panels_open[0].base_commit ||\n", ""],
+    ]);
+    const landed = mutant.deriveAggregateRepairState(deltaRows, "task-1",
+      { standardEvents: window.events });
+    assert.equal(landed.panels_open.length, 2,
+      "without the pin the moved-base round 2 lands — delta-only review under a whole-candidate GO");
+    assert.deepEqual(landed.panels_open.at(-1).changed_paths, ["src/y.mjs"],
+      "…and x — reviewed at round 1, changed by no round-2 seat — silently leaves the panel's sight");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M49: CAP TRUTH AT THE EXECUTED SHAPE — the R1 panel's own 1300-id STOP carries, and the ledger stays derivable", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // The R1 panel's OWN reproduction: 12 seats × 100 raw ids (both grammar maxima at once) plus
+    // 100 PM findings = a 1300-id disposition universe, every one BLOCKING-accepted, terminal STOP.
+    const candidate = commit(ctx.dir, 1);
+    const paths = candidate.paths;
+    const seats = [
+      { seat_id: "free", role: "free", family: "codex", pass_type: "free", paths },
+      ...Array.from({ length: 10 }, (_, index) => ({ seat_id: `angle-${index}`,
+        role: `angle:${index}`, family: "codex", pass_type: "free", paths })),
+      { seat_id: "external", role: "external", family: "claude", pass_type: "folded", paths },
+    ];
+    assert.equal(seats.length, 12, "12 is the roster maximum the grammar admits");
+    const opened = recordAggregatePanelOpen({
+      type: "aggregate_v2", kind: "panel_open", task_id: "task-1", changeset_id: "cs-1", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: candidate.commit,
+      frozen_tree: candidate.tree, base_ref: "origin/main", base_commit: ctx.base,
+      expected_seats: seats, incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    }, options(ctx.dir));
+    assert.equal(opened.ok, true, `${opened.state}: ${opened.detail ?? ""}`);
+    const seatFindings = seats.map((seat, si) =>
+      Array.from({ length: 100 }, (_, fi) => `S${si}-F${fi}`));
+    const received = seats.map((seat, si) => ({
+      seat_id: seat.seat_id, role: seat.role, family: seat.family, pass_type: seat.pass_type,
+      inspected_paths: seat.paths, reviewed_commit: candidate.commit, reviewed_tree: candidate.tree,
+      verdict: "NO-GO", raw_finding_ids: seatFindings[si],
+      artifact_receipt: `receipt-${seat.seat_id}`,
+      artifact_sha256: String(si).padStart(2, "0").repeat(32), pre_loaded: false,
+      packet_scope: "candidate-only",
+    }));
+    const closed = recordAggregatePanelClose({
+      type: "aggregate_v2", kind: "panel_close", task_id: "task-1", changeset_id: "cs-1",
+      panel_open_event_id: opened.event_id, received_seats: received,
+    }, options(ctx.dir));
+    assert.equal(closed.ok, true, closed.state);
+    assert.equal(derive(ctx).panels_close.length, 1, "the ledger derives with a 1200-id close");
+
+    const pmFindings = Array.from({ length: 100 }, (_, index) => ({ id: `PM-${index}`,
+      harm: `harm ${index}`, mechanism: `mechanism ${index}`, trigger: `trigger ${index}` }));
+    const everyId = [...seatFindings.flat(), ...pmFindings.map((finding) => finding.id)];
+    assert.equal(everyId.length, 1300);
+    assert.equal(new Set(everyId).size, 1300);
+    const stop = decide(ctx, closed, { accepted: everyId, pm_findings: pmFindings,
+      terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+    assert.equal(stop.ok, true, stop.state);
+    const stopped = derive(ctx);
+    assert.equal(stopped.terminal, "STOP");
+    assert.equal(stopped.latest.all_finding_ids.length, 1300,
+      "the whole executed universe is adjudicated, not truncated");
+
+    // THE SOLE EXIT. A STOP successor must carry the accepted set EXACTLY — so the trigger cap
+    // must admit the largest set the grammar can mint, or the mandatory carry is SHAPE-impossible
+    // and the reservation has no door at all. Order-insensitive: the successor may list them
+    // in any order.
+    const successor = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: stop.event_id, trigger_ids: [...everyId].reverse(),
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor for the 1300 accepted",
+      children: [{ task_id: "c49", changeset_id: "c49-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(successor.ok, true,
+      `the executed 1300-id STOP carry is not shape-impossible: ${successor.state}`);
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(deriveAggregateRepairState(loaded.aggregate_events, "task-1",
+      { standardEvents: loaded.events }).terminal, "STOP", "the ledger still derives after the carry");
+    assert.ok(derivePendingLineageBudgets(loaded.aggregate_events, { standardEvents: loaded.events })
+      .some((entry) => entry.task_id === "c49"), "the child holds its declared budget");
+
+    // Disabled arm: restore the prior 1200 cap. The executed row is no longer a VALID ENVELOPE,
+    // so the whole ledger fails closed — the reservation's one door was not merely refused, the
+    // program's entire history became underivable.
+    const mutant = await importMutant(mutantDir, [[
+      "        event.trigger_ids.length <= 2600 &&", "        event.trigger_ids.length <= 1200 &&",
+    ]]);
+    const bricked = mutant.deriveAggregateRepairState(loaded.aggregate_events, "task-1",
+      { standardEvents: loaded.events });
+    assert.equal(bricked.ok, false);
+    assert.equal(bricked.state, "repair-history-invalid",
+      "the prior cap makes the executed exit unrecordable AND the ledger unreadable");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+// A STOPs over {x, y}; its continuation seeds child B with the {x} half ONLY; B opens x at full
+// coverage and GOes, so x is lifted and y stays reserved on A. The shared world for M50 and M51.
+function goHopWorld(ctx) {
+  writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
+  const aCand = commit(ctx.dir, "a50");
+  assert.deepEqual(aCand.paths, ["src/x.mjs", "src/y.mjs"]);
+  const aPanel = openPanel(ctx, 1, aCand, { task: "a50", changeset: "a50-cs" });
+  assert.equal(aPanel.opened.ok, true, aPanel.opened.state);
+  const aClosed = closePanel(ctx, aPanel, aCand, ["A1"], { task: "a50", changeset: "a50-cs" });
+  assert.equal(aClosed.ok, true, aClosed.state);
+  const aStop = decide(ctx, aClosed, { task: "a50", changeset: "a50-cs", accepted: ["A1"],
+    terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+  assert.equal(aStop.ok, true, aStop.state);
+  assert.deepEqual(derive(ctx, "a50").stopped_paths, ["src/x.mjs", "src/y.mjs"]);
+  const contAB = recordAggregateChildContinuation({
+    type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
+    parent_disposition_event_id: aStop.event_id, trigger_ids: ["A1"],
+    continuation_kind: "new_changeset", owner_evidence: "Owner successor: the x half first",
+    children: [{ task_id: "b50", changeset_id: "b50-cs", tier: "T2", budget: "the x half",
+      authorized_paths: ["src/x.mjs"] }],
+  }, options(ctx.dir));
+  assert.equal(contAB.ok, true, contAB.state);
+  const bCand = sideCandidate(ctx, "b50-line", { "src/x.mjs": "export const x = 'b50';\n" });
+  const bOpen = openPanel(ctx, 1, bCand, { task: "b50", changeset: "b50-cs",
+    lineage: { continuation: contAB.event_id } });
+  assert.equal(bOpen.opened.ok, true, bOpen.opened.state);
+  const bClosed = closePanel(ctx, bOpen, bCand, [], { task: "b50", changeset: "b50-cs" });
+  assert.equal(bClosed.ok, true, bClosed.state);
+  const bGo = decide(ctx, bClosed, { task: "b50", changeset: "b50-cs",
+    terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+  assert.equal(bGo.ok, true, bGo.state);
+  assert.equal(derive(ctx, "b50").terminal, "GO");
+  return { aStop, contAB, bOpen, bGo };
+}
+
+test("M50: DECLARATION-TIME STOPPED REFUSAL — a GO ends its lineage's claim, so the GO hop is no springboard", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    const world = goHopWorld(ctx);
+    // THE SPRINGBOARD: B reached GO on its own narrow half, and now declares a child over y —
+    // its PARENT's still-reserved surface, which no B seat ever read. A GO node's lineage claim
+    // ended with its GO; the harm context that reserved y lives on A's anchor, not B's.
+    const springboard = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "b50", changeset_id: "b50-cs",
+      parent_disposition_event_id: world.bGo.event_id, trigger_ids: [],
+      continuation_kind: "new_changeset", owner_evidence: "hop the GO onto the reserved half",
+      children: [{ task_id: "d50", changeset_id: "d50-cs", tier: "T2", budget: "the y half",
+        authorized_paths: ["src/y.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(springboard.ok, false, "a GO child cannot declare over its parent's reservation");
+    assert.equal(springboard.state, "aggregate-continuation-conflict");
+
+    // Ledger as of the refusal — the accepting polarities below would mask the mutant's landing.
+    const window = loadRepairEventsForProject(ctx.dir);
+    const bOpenRow = derive(ctx, "b50").panels_open.at(-1);
+    const plantedHop = stamped({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "b50", changeset_id: "b50-cs",
+      recorded_at: "2099-01-01T00:08:00.000Z", session_id: "planter",
+      parent_disposition_event_id: world.bGo.event_id,
+      parent_frozen_commit: bOpenRow.frozen_commit, parent_frozen_tree: bOpenRow.frozen_tree,
+      trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "springboard",
+      children: [{ task_id: "d50", changeset_id: "d50-cs", tier: "T2", budget: "the y half",
+        authorized_paths: ["src/y.mjs"] }],
+    });
+    const hopRows = [...window.aggregate_events, plantedHop];
+    assert.ok(!derivePendingLineageBudgets(hopRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "d50"), "replay refuses the springboard too");
+
+    // Polarity: B's anchor itself is LIVE — a child over a surface nobody reserved declares
+    // freely. Only the reserved-y overlap refused above.
+    const virginSide = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "b50", changeset_id: "b50-cs",
+      parent_disposition_event_id: world.bGo.event_id, trigger_ids: [],
+      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on, unreserved surface",
+      children: [{ task_id: "d50free", changeset_id: "d50free-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: ["docs/d50.md"] }],
+    }, options(ctx.dir));
+    assert.equal(virginSide.ok, true, `B's own anchor is not consumed: ${virginSide.state}`);
+
+    // THE DOOR THAT IS OPEN: A's own anchor reopens on the un-lifted remainder, and A — the
+    // reserver, carrying the accepted set exactly — declares y itself.
+    const reopen = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
+      parent_disposition_event_id: world.aStop.event_id, trigger_ids: ["A1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor: now the y half",
+      children: [{ task_id: "c50", changeset_id: "c50-cs", tier: "T2", budget: "the y half",
+        authorized_paths: ["src/y.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(reopen.ok, true,
+      `the reserving ancestor's remainder anchor is the only door: ${reopen.state}`);
+
+    // Disabled arm: let the exception chain walk PAST a GO node and the springboard lands — the
+    // GO hop launders a narrow GO into a claim over surface it never reviewed.
+    const mutant = await importMutant(mutantDir, [[
+      "    while (programs.get(current)?.terminal !== \"GO\") {", "    while (true) {",
+    ]]);
+    assert.ok(mutant.derivePendingLineageBudgets(hopRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "d50"),
+    "a GO-transparent ancestor chain lets the springboard declaration land");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M51: THE REMAINDER REOPEN vs ANTI-SPAM BOUNDARY — un-lifted remainder reopens the anchor, nothing stranded closes it", () => {
+  const ctx = repo();
+  try {
+    const world = goHopWorld(ctx);
+    const reopenA = (task, paths) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
+      parent_disposition_event_id: world.aStop.event_id, trigger_ids: ["A1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: task, changeset_id: `${task}-cs`, tier: "T2", budget: "one changeset",
+        authorized_paths: paths }],
+    }, options(ctx.dir));
+    // ACCEPT: B's GO lifted x, but y — reserved, never repaired — is stranded remainder. Even
+    // with every declared child terminal and none virgin, the anchor reopens.
+    const second = reopenA("c51", ["src/y.mjs"]);
+    assert.equal(second.ok, true, `un-lifted remainder reopens the anchor: ${second.state}`);
+    // C2 repairs y at full coverage and GOes: now every reserved path is lifted.
+    const cCand = sideCandidate(ctx, "c51-line", { "src/y.mjs": "export const y = 'c51';\n" });
+    const cOpen = openPanel(ctx, 1, cCand, { task: "c51", changeset: "c51-cs",
+      lineage: { continuation: second.event_id } });
+    assert.equal(cOpen.opened.ok, true, cOpen.opened.state);
+    const cClosed = closePanel(ctx, cOpen, cCand, [], { task: "c51", changeset: "c51-cs" });
+    assert.equal(cClosed.ok, true, cClosed.state);
+    const cGo = decide(ctx, cClosed, { task: "c51", changeset: "c51-cs",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(cGo.ok, true, cGo.state);
+    assert.equal(derive(ctx, "c51").terminal, "GO");
+    // REFUSE: all children terminal-GO, no virgin close, no un-lifted remainder — nothing is
+    // stranded, so the remainder clause is NOT unlimited reopening. This is the polarity that
+    // separates the two.
+    const third = reopenA("c51b", ["docs/z51.md"]);
+    assert.equal(third.ok, false, "with nothing stranded the anchor stays consumed");
+    assert.equal(third.state, "aggregate-continuation-conflict");
+    // …and the reservation itself is now fully lifted: an unrelated program may work x and y.
+    const outsider = sideCandidate(ctx, "out51",
+      { "src/x.mjs": "export const x = 'out';\n", "src/y.mjs": "export const y = 'out';\n" });
+    assert.equal(openPanel(ctx, 1, outsider, { task: "out51", changeset: "out51-cs" }).opened.ok,
+      true, "a fully repaired reservation releases — the anchor closed because nothing was left");
+  } finally { ctx.cleanup(); }
+});
+
+test("M52: the pending-hold diagnosis survives a NON-free-seat-first roster — the executed R1 shape", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // A GO parent declares a follow-on child over src/p.mjs; the child never opens, so its
+    // declared budget is a PENDING hold.
+    const pCand = sideCandidate(ctx, "p52-line", { "docs/p52.md": "p52\n" });
+    const pPanel = openPanel(ctx, 1, pCand, { task: "p52", changeset: "cs-p52" });
+    assert.equal(pPanel.opened.ok, true, pPanel.opened.state);
+    const pClosed = closePanel(ctx, pPanel, pCand, [], { task: "p52", changeset: "cs-p52" });
+    const pGo = decide(ctx, pClosed, { task: "p52", changeset: "cs-p52",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(pGo.ok, true, pGo.state);
+    const hold = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "p52", changeset_id: "cs-p52",
+      parent_disposition_event_id: pGo.event_id, trigger_ids: [],
+      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on",
+      children: [{ task_id: "c52", changeset_id: "c52-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: ["src/p.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(hold.ok, true, hold.state);
+
+    // The victim's candidate touches p AND q. Its roster is LEGAL but not free-seat-first: the
+    // angle seat at index 0 carries PARTIAL coverage that excludes p entirely, while the free
+    // seat — later in the list — carries the full changed set. Seat order is caller input; the
+    // executed R1 panel's own roster looked like this.
+    const both = ["src/p.mjs", "src/q.mjs"];
+    const victim = sideCandidate(ctx, "v52-line",
+      { "src/p.mjs": "export const p = 1;\n", "src/q.mjs": "export const q = 1;\n" });
+    assert.deepEqual(victim.paths, both);
+    const angleFirst = [
+      { seat_id: "a", role: "angle:a", family: "codex", pass_type: "free", paths: ["src/q.mjs"] },
+      { seat_id: "free", role: "free", family: "codex", pass_type: "free", paths: both },
+      { seat_id: "b", role: "angle:b", family: "codex", pass_type: "free", paths: both },
+      { seat_id: "external", role: "external", family: "claude", pass_type: "folded", paths: both },
+    ];
+    const open = (seatList, module = { recordAggregatePanelOpen }) => module.recordAggregatePanelOpen({
+      type: "aggregate_v2", kind: "panel_open", task_id: "v52", changeset_id: "v52-cs", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: victim.commit, frozen_tree: victim.tree,
+      base_ref: "origin/main", base_commit: ctx.base, expected_seats: seatList,
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    }, options(ctx.dir));
+    const refused = open(angleFirst);
+    assert.equal(refused.ok, false, "the pending budget over p refuses the open");
+    assert.equal(refused.state, "aggregate-panel-open-conflict");
+    assert.match(refused.detail ?? "", /c52/, "the deny names the holding child…");
+    assert.match(refused.detail ?? "", /p52/, "…and the parent whose lineage holds it");
+    // The other polarity of the same roster axis: free-seat-first is diagnosed identically.
+    const freeFirst = open(expectedSeats(both));
+    assert.equal(freeFirst.ok, false);
+    assert.match(freeFirst.detail ?? "", /c52/, "roster order changes nothing about the diagnosis");
+
+    // Disabled arm: match the pending budget against the FIRST SEAT's paths — the seat-0 proxy.
+    // The refusal is identical, but the cure goes conditionally inert for exactly the roster
+    // shape the R1 panel ran, and the operator gets a bare conflict naming nothing.
+    const mutant = await importMutant(mutantDir, [[
+      "(evidence?.changed_paths ?? [])", "(input.expected_seats?.[0]?.paths ?? [])",
+    ]]);
+    const blind = open(angleFirst, mutant);
+    assert.equal(blind.ok, false, "the refusal itself is the world's — the proxy only blinds the deny");
+    assert.equal(blind.detail, undefined,
+      "the seat-0 proxy loses the holder whenever seat 0 does not carry the held path");
+    const stillSeen = open(expectedSeats(both), mutant);
+    assert.match(stillSeen.detail ?? "", /c52/,
+      "…and it still works free-seat-first, which is why the inertness was invisible");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });
