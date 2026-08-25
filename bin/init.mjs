@@ -19,7 +19,7 @@
 
 import { execFileSync } from "node:child_process";
 import {
-  chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync,
+  chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -220,6 +220,13 @@ function isSegment(s) { return typeof s === "string" && s.length > 0 && !s.inclu
 
 function ensureDir(abs) { mkdirSync(abs, { recursive: true }); }
 
+// lstat, never stat/existsSync — both FOLLOW links, so to the overwrite paths a symlink looks like
+// its target: a symlinked dst (or a symlink squatting in the `.bak` slot) turns a --force upgrade
+// into a write OUTSIDE this install that exits 0. A dangling link matters too (existsSync says
+// false while a write through it still creates the external target), which is why this asks "is a
+// LINK here", not "does a file exist here".
+function isSymlinkAt(p) { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } }
+
 // Copy refusing to clobber unless force. Returns "written" | "skipped" | "refused".
 // A MECHANISM skip COMPARES BYTES: a kept file identical to this kit is a completed install, but a
 // kept MECHANISM file that DIFFERS — the controller, guards, recorder, scripts, core doctrine,
@@ -252,6 +259,14 @@ function copyGuarded(src, dst, force, mechanism = true) {
     return "skipped";
   }
   if (force && existsSync(dst)) {
+    // A symlink at either end REFUSES: overwriting dst would write through the link, and "backing
+    // up" onto a linked .bak would send the adopter's bytes into the link's target instead of
+    // preserving them beside the file. Counted like any other refused backup; the link is untouched.
+    if (isSymlinkAt(dst) || isSymlinkAt(`${dst}.bak`)) {
+      backupRefused.push(dst);
+      warn(`REFUSED: ${isSymlinkAt(dst) ? dst : `${dst}.bak`} is a SYMLINK — --force does not write through links. Replace it with a regular file and re-run.`);
+      return "refused";
+    }
     let differs = true;
     try { differs = !readFileSync(src).equals(readFileSync(dst)); } catch { /* unreadable = differs */ }
     if (differs) {
@@ -296,6 +311,12 @@ function backupBeforeOverwrite(dst, nextText) {
 // Write `text` to `dst`, but never destroy differing content we failed to preserve. Returns whether
 // the write happened, so callers report honestly rather than assuming.
 function writeWithBackup(dst, text) {
+  // Same symlink refusal as copyGuarded's force path, same reason, same accounting.
+  if (isSymlinkAt(dst) || isSymlinkAt(`${dst}.bak`)) {
+    backupRefused.push(dst);
+    warn(`REFUSED to overwrite ${dst}: ${isSymlinkAt(dst) ? "it" : `${dst}.bak`} is a SYMLINK, and init does not write through links. Replace it with a regular file and re-run.`);
+    return false;
+  }
   if (backupBeforeOverwrite(dst, text) === "FAILED") {
     backupRefused.push(dst);
     warn(`REFUSED to overwrite ${dst}: its previous content could not be backed up (is ${dst}.bak writable?). The existing file is UNCHANGED — move it aside yourself, then re-run.`);
@@ -329,9 +350,26 @@ function fillTemplate(tmplPath, vars) {
 function mergeSettings(targetSettings, kitSettings, force) {
   let existing = {};
   if (existsSync(targetSettings)) {
-    try { existing = JSON.parse(readFileSync(targetSettings, "utf8")); }
+    let raw = null;
+    try { raw = readFileSync(targetSettings, "utf8"); existing = JSON.parse(raw); }
     catch {
       if (!force) { warn(`existing ${targetSettings} is not valid JSON — left untouched (use --force to replace)`); return "skipped"; }
+      // --force REPLACES an unparseable settings.json — adopter-owned bytes nothing here can
+      // merge. This was the ONE overwrite path not routed through the backup machinery: the
+      // original goes to .bak first, and a backup that cannot be taken (unreadable file, a
+      // symlink at either end, an unwritable .bak slot) refuses the replacement — counted into
+      // the same refused-backup accounting as every other overwrite.
+      const bak = `${targetSettings}.bak`;
+      let saved = false;
+      if (raw !== null && !isSymlinkAt(targetSettings) && !isSymlinkAt(bak)) {
+        try { writeFileSync(bak, raw); saved = true; } catch { /* refused below */ }
+      }
+      if (!saved) {
+        backupRefused.push(targetSettings);
+        warn(`REFUSED to replace ${targetSettings}: it is not valid JSON AND its original bytes could not be backed up to ${bak}. The existing file is UNCHANGED — move it aside yourself, then re-run.`);
+        return "skipped";
+      }
+      warn(`replacing ${targetSettings} (--force): it is not valid JSON, so nothing could be merged — your original is saved at ${bak}`);
       existing = {};
     }
     if (existing === null || typeof existing !== "object" || Array.isArray(existing)) existing = {};
@@ -772,8 +810,26 @@ function main() {
     // WITHOUT the flag, a bare "SKIPPED" reads as "there is no .codex here" while both files sit on
     // disk. Every other kept-file path in this installer reports honestly; this one did not.
     const existing = existsSync(path.join(T, ".codex"));
+    // Skipped is not UNEXAMINED. A present lane's hooks are mechanism files this run just KEPT, so
+    // the stale-keep accounting still owes them the byte comparison — otherwise `--force
+    // --skip-codex-lane` over a drifted .codex exits 0 while that lane keeps enforcing with old
+    // guards. READ-ONLY: nothing in the skipped lane is written, and the armed check stays off
+    // (this run changed no hook, so there is nothing newly disarmed to verify). The remedy names
+    // the skip, because --force alone cannot reach a lane the flag excludes.
+    let laneStale = 0;
+    for (const h of hookFiles) {
+      const p = path.join(T, ".codex", "hooks", h);
+      if (!existsSync(p)) continue;   // absent is not a stale KEEP — nothing was kept
+      let differs = true;
+      try { differs = !readFileSync(path.join(KIT_ROOT, "hooks", h)).equals(readFileSync(p)); } catch { /* unreadable = differs */ }
+      if (differs) {
+        laneStale++;
+        staleKept.push(p);
+        warn(`exists, KEPT BUT STALE against this kit (--skip-codex-lane left it untouched; re-run --force WITHOUT the skip to upgrade it): ${p}`);
+      }
+    }
     log(existing
-      ? `  .codex/: SKIPPED (--skip-codex-lane) — but a .codex/ ALREADY EXISTS here and was left untouched; this run neither wrote nor removed it`
+      ? `  .codex/: SKIPPED (--skip-codex-lane) — but a .codex/ ALREADY EXISTS here and was left untouched; this run neither wrote nor removed it${laneStale ? ` — and ${laneStale} of its hook file(s) are STALE (see warnings above)` : ""}`
       : `  .codex/: SKIPPED (--skip-codex-lane)`);
   } else {
     try {

@@ -80,8 +80,8 @@ into a private worktree.
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
 5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
    fold-check (`/frontier-review`). Precommit one panel, collect it, then PM-disposition it once.
-   R1/R2 permit one bounded batch each — a root kind may be declared EARLY on same-class
-   recurrence; R3 accepted harm requires root replacement,
+   R1/R2 permit one bounded batch each — a root kind may be declared EARLY on same-class or
+   repair-generated recurrence; R3 accepted harm requires root replacement,
    simplification, or split plus root exit and one batch 3; R4 is the final GO/STOP bookend and
    has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No R5,
    cycle, reset, or process-audit continuation. An Owner child links to a terminal parent without

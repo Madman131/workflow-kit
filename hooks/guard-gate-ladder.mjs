@@ -16,14 +16,14 @@
 // do not reintroduce either without re-reading the gate record:
 //
 //   1. A ROUND COUNTER (retired 2026-07-18, Owner ruling). It counted gate-runner invocations and
-//      reported them as `GATE ROUND n/3`. Those are different quantities: a gate ROUND is a
-//      CONVERSATION fact (a verdict the PM dispositioned); an invocation is a TREE fact, including
-//      --dry-run probes and reviewer subagents' probes. It read "ROUND 11/3" against a real ladder
-//      of two. A hook cannot observe reviewer verdicts, so it must not assert a number. The required
-//      emission FORMAT is still surfaced below — including the `GATE ROUND <n>` header, because that
-//      line is the contract — but <n> is left to the PM, and the text says so. (The `/3` is gone from
-//      the header itself: rounds use the root-cause controller since v2.10.0. The sentence above keeps
-//      the old spelling deliberately — it is describing the retired counter, and history does not go
+//      reported them as `GATE ROUND n/3`. Those are different quantities: an invocation is a TREE
+//      fact, including --dry-run probes and reviewer subagents' probes. It read "ROUND 11/3"
+//      against a real ladder of two. A hook must not assert a number it cannot observe. The
+//      required emission FORMAT is still surfaced below — including the `GATE ROUND <n>` header,
+//      because that line is the contract — but <n> is the aggregate ROUND (one frozen candidate +
+//      one complete panel + one PM disposition), supplied by the PM here and walled by the ledger
+//      for a RECORDED program; this hook still does not observe it. (The sentence above keeps the
+//      old spelling deliberately — it is describing the retired counter, and history does not go
 //      stale. What must track the doc is the CONTRACT string, and a test now pins that it does.)
 //
 //   2. A TIER PIN that denied a mid-task tier downgrade (built and removed in the same changeset,
@@ -227,7 +227,10 @@ export const CONTRACT =
   `left" is not reachable. Rounds continue only while each new one is warranted by NEW harm-passing\n` +
   `findings — the R4 bookend excepted: it ALWAYS runs. One frozen candidate plus its precommitted\n` +
   `complete panel is one round. R1 and R2 may\n` +
-  `dispatch one bounded batch each. R3 accepted harm requires root replacement, simplification, or split, a root-exit\n` +
+  `dispatch one bounded batch each; a root kind is declarable EARLY on same-class or\n` +
+  `repair-generated recurrence. A clean panel — zero accepted blockers — closes GO at ANY round,\n` +
+  `and an accepted Critical/fail-open harm STOPS at any round: declared, never inferred.\n` +
+  `R3 accepted harm requires root replacement, simplification, or split, a root-exit\n` +
   `record, and exactly one batch 3. R4 is the final aggregate bookend: zero accepted blockers is GO;\n` +
   `any accepted blocker is STOP. R4 has no outgoing dispatch; no R5, cycle, scope reset, or process-\n` +
   `audit window exists. A contaminated unclosed panel may be refrozen ONCE per round (never the\n` +
@@ -237,8 +240,9 @@ export const CONTRACT =
   `changeset or named backlog). A REMEDIATE discharges only when the finding's\n` +
   `OWN trigger is re-run and no longer fires —\n` +
   `a new test passing is not discharge; the ORIGINAL reproduction, dead, is.\n\n` +
-  `<n> is a CONVERSATION fact — the number of reviewer verdicts dispositioned for this changeset.\n` +
-  `This hook does not observe it and deliberately does not supply it.\n`;
+  `<n> is the aggregate ROUND — one frozen candidate plus its complete collected panel plus one\n` +
+  `PM disposition is one round; seat verdicts are inputs to a round, never rounds. This hook does\n` +
+  `not observe <n> and deliberately does not supply it; for a RECORDED program the ledger walls it.\n`;
 
 // The self-report caveat. The hook's only input for "is this the right tier?" is the answer to that
 // very question, so it must surface the question rather than answer it (IO). Without this line the

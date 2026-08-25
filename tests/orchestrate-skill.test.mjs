@@ -144,7 +144,7 @@ test("the round controller pins the finite aggregate boundary", () => {
   pin(body, "simplification, or split plus root exit", "terminal root batch kinds");
   pin(body, "R4 is the final GO/STOP bookend and has no dispatch", "terminal bookend");
   pin(body, "No R5, cycle, reset, or process-audit continuation", "no controller escape");
-  pin(body, "a root kind may be declared EARLY on same-class recurrence", "the early-root declaration");
+  pin(body, "a root kind may be declared EARLY on same-class or", "the early-root declaration");
 
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
   pin(brief, "Aggregate repair briefs declare",

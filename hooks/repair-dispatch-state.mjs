@@ -132,7 +132,11 @@ function validAggregateKindShape(event) {
         text(event.new_worker_session_id, 200) && text(event.owner_evidence, 1000);
     case "child_continuation":
       // trigger_ids may be EMPTY: a GO-lineage follow-on with no routed adjacents carries none.
-      return ID64.test(event.parent_disposition_event_id || "") &&
+      // The anchor is the parent's latest disposition — or, for a no-disposition CLOSED parent
+      // (a collected panel abandoned before adjudication), its winning panel_open, mirroring
+      // the close event's own anchor rule below.
+      return ((ID64.test(event.parent_disposition_event_id || "") && event.parent_panel_open_event_id === undefined) ||
+        (event.parent_disposition_event_id === null && ID64.test(event.parent_panel_open_event_id || ""))) &&
         GIT_SHA.test(event.parent_frozen_commit || "") && GIT_SHA.test(event.parent_frozen_tree || "") &&
         Array.isArray(event.trigger_ids) &&
         event.trigger_ids.length <= 100 && new Set(event.trigger_ids).size === event.trigger_ids.length &&
@@ -580,27 +584,21 @@ function aggregateWorld(events, standardEvents = []) {
   // Poisoning is UNCONDITIONAL: every standard identity derives up front, so a broken standard
   // history fails the world closed whether or not an aggregate row happens to consult it.
   for (const identity of standardIdentities) getStandard(identity.event.task_id);
-  // THE FULL ADMITTED SET per task, scanned before replay: close eligibility is decided against
-  // every admission in the ledger, so recording a close BEFORE minting one's own worker row —
-  // the pre-mint window — gains nothing. Only rows citing a real dispatch id of the task count;
-  // a textual row citing nothing binds nothing (and a hand-forged full chain is the ledger's
-  // standing records-not-deters bound).
+  // THE ADMITTED SET per task, accumulated AS ROWS ARE ACCEPTED — as-of by construction, like
+  // every other predicate in this derivation. Close eligibility compares against every session
+  // ADMITTED BEFORE the close's own ledger position (verifications AND handoff replacements;
+  // admissions accumulate — a handoff revokes authority, never membership). The earlier
+  // whole-ledger pre-scan was the ONE predicate outside the as-of discipline, and it re-created
+  // the measured fail-open: a LATER admission row naming the closer's session retro-refused an
+  // ACCEPTED close, resurrecting the program and erasing its successor lineage. Forward
+  // adjudication needs no pre-scan: a session not yet admitted at close time is genuinely not a
+  // worker (intent is not fact — records-not-deters), and its later self-admission refuses on
+  // the terminality the accepted close created.
   const admittedByTask = new Map();
-  {
-    const dispatchIds = new Map();
-    for (const row of aggregateRows(events)) {
-      if (row.kind === "dispatch") {
-        if (!dispatchIds.has(row.task_id)) dispatchIds.set(row.task_id, new Set());
-        dispatchIds.get(row.task_id).add(row.event_id);
-      }
-    }
-    for (const row of aggregateRows(events)) {
-      if (row.kind !== "worker" && row.kind !== "worker_handoff") continue;
-      if (!dispatchIds.get(row.task_id)?.has(row.dispatch_event_id)) continue;
-      if (!admittedByTask.has(row.task_id)) admittedByTask.set(row.task_id, new Set());
-      admittedByTask.get(row.task_id).add(row.kind === "worker" ? row.worker_session_id : row.new_worker_session_id);
-    }
-  }
+  const admitSession = (taskId, sessionId) => {
+    if (!admittedByTask.has(taskId)) admittedByTask.set(taskId, new Set());
+    admittedByTask.get(taskId).add(sessionId);
+  };
   const overlaps = (left, right) => left.some((candidate) => right.includes(candidate));
   // THE PATHS A PROGRAM BINDS, in every pre-terminal state. An ACTIVE program binds its
   // authorized repair set; a program still mid-round — an open or collected-but-undisposed panel —
@@ -609,7 +607,14 @@ function aggregateWorld(events, standardEvents = []) {
   // panel was still reviewing it.
   const programBoundPaths = (program) => {
     if (program.terminal) return [];
-    if (program.active) return program.authorized_paths;
+    // An ACTIVE program binds its authorized repair set PLUS any undisposed open's changed
+    // paths: a later round's panel mid-review is as bound as the first round's — leaving it
+    // unbound let a concurrent open wedge a live program out of remediating its own reviewed
+    // surface (executed R3 finding).
+    const undisposed = program.panels_open.filter((open) =>
+      !program.dispositions.some((disposition) => disposition.round === open.round))
+      .flatMap((open) => open.changed_paths);
+    if (program.active) return [...new Set([...program.authorized_paths, ...undisposed])];
     return [...new Set(program.panels_open.flatMap((open) => open.changed_paths))];
   };
   const activePathOverlap = (paths, exceptTask = null, atSeq = Infinity) => {
@@ -625,13 +630,35 @@ function aggregateWorld(events, standardEvents = []) {
   // A terminal reservation yields to TWO things only: the reserving program's own lineage (a
   // child whose continuation names THAT parent), and a lineage DESCENDANT that reached
   // TERMINAL-GO — a successful repair through the sanctioned exit LIFTS the reservation, or a
-  // stopped surface would stay bricked one generation after its reason was fixed.
-  const reservationLifted = (program) => [...childLineage.values()].some((lineage) =>
-    lineage.parent_task_id === program.task_id && programs.get(lineage.task_id)?.terminal === "GO");
-  const stoppedPathOverlap = (paths, exceptParentTask = null) => [...programs.values()].some((program) =>
-    (program.terminal === "STOP" || (program.terminal === "CLOSED" && program.stopped_paths?.length)) &&
-    program.task_id !== exceptParentTask && !reservationLifted(program) &&
-    overlaps(paths, program.stopped_paths || []));
+  // stopped surface would stay bricked one generation after its reason was fixed. The lift is
+  // COVERAGE-SCOPED: a DIRECT lineage child reaching TERMINAL-GO lifts only the paths inside
+  // ITS OWN declared budget — never the whole union. A narrowly-scoped first child must not
+  // release its siblings' never-repaired surfaces to unrelated programs (executed R3 finding,
+  // four independent reproductions). A grandchild chain lifts nothing here by design: each
+  // generation's reservation is its own, exited through its own direct children.
+  const liftedPaths = (program) => {
+    const lifted = new Set();
+    for (const lineage of childLineage.values()) {
+      if (lineage.parent_task_id !== program.task_id) continue;
+      if (programs.get(lineage.task_id)?.terminal !== "GO") continue;
+      for (const entry of lineage.authorized_paths) lifted.add(entry);
+    }
+    return lifted;
+  };
+  const stoppedPathOverlap = (paths, exceptParentTask = null) => [...programs.values()].some((program) => {
+    if (!(program.terminal === "STOP" || (program.terminal === "CLOSED" && program.stopped_paths?.length)) ||
+        program.task_id === exceptParentTask) return false;
+    const lifted = liftedPaths(program);
+    return (program.stopped_paths || []).some((entry) => !lifted.has(entry) && paths.includes(entry));
+  });
+  // A PENDING lineage child's declared budget binds from the moment of its declaration until
+  // its own program exists: the child's IDENTITIES were already reserved, but its PATHS were
+  // not, and the window between a handoff (or an out-of-reservation continuation) and the
+  // child's first open let a concurrent unrelated program snipe the surface and lock the child
+  // out of its own lineage (R3 finding). The exit is the child opening.
+  const pendingLineageOverlap = (paths, exceptTask = null) => [...childLineage.values()].some((lineage) =>
+    lineage.task_id !== exceptTask && !programs.has(lineage.task_id) &&
+    overlaps(paths, lineage.authorized_paths));
   const lineageChangesetUsed = (changesetId) => [...childLineage.values()]
     .some((lineage) => lineage.changeset_id === changesetId);
   const accept = (row) => { accepted.set(row.event_id, row); return row; };
@@ -657,6 +684,7 @@ function aggregateWorld(events, standardEvents = []) {
         const lineage = lineageId !== null ? childLineage.get(row.task_id) : null;
         if (row.round !== 1 || row.phase !== "repair_round" || row.incoming_dispatch_event_id !== null ||
             row.incoming_worker_event_id !== null || activePathOverlap(paths, row.task_id, rowSeq) ||
+            pendingLineageOverlap(paths, row.task_id) ||
             (lineageId === null && stoppedPathOverlap(paths))) continue;
         if (lineageId !== null) {
           // A child's opened paths are a SUBSET of its declared lineage budget — exact equality
@@ -699,6 +727,7 @@ function aggregateWorld(events, standardEvents = []) {
             same(row.expected_seats, prior.expected_seats) &&
             same(paths, prior.changed_paths) &&
             !activePathOverlap(paths, row.task_id, rowSeq) &&
+            !pendingLineageOverlap(paths, row.task_id) &&
             !stoppedPathOverlap(paths, state.lineage_event_id ? childLineage.get(row.task_id)?.parent_task_id ?? null : null) &&
             row.incoming_dispatch_event_id === prior.incoming_dispatch_event_id &&
             row.incoming_worker_event_id === prior.incoming_worker_event_id &&
@@ -719,6 +748,7 @@ function aggregateWorld(events, standardEvents = []) {
             row.phase !== (row.round === 4 ? "final_bookend" : "repair_round") ||
             (TIER_RANK[row.tier] ?? 0) < (TIER_RANK[state.tier] ?? 0) ||
             activePathOverlap(paths, row.task_id, rowSeq) ||
+            pendingLineageOverlap(paths, row.task_id) ||
             stoppedPathOverlap(paths, ownLineage?.parent_task_id ?? null) ||
             (ownLineage && !paths.every((entry) => ownLineage.authorized_paths.includes(entry))) ||
             row.incoming_dispatch_event_id !== state.active_dispatch?.event_id ||
@@ -785,6 +815,7 @@ function aggregateWorld(events, standardEvents = []) {
       if (row.terminal_state === "CONTINUE") {
         const dispositionLineage = state.lineage_event_id ? childLineage.get(row.task_id) : null;
         if (activePathOverlap(paths, row.task_id, rowSeq) ||
+            pendingLineageOverlap(paths, row.task_id) ||
             stoppedPathOverlap(paths, dispositionLineage?.parent_task_id ?? null) ||
             (dispositionLineage && paths.length &&
               !paths.every((entry) => dispositionLineage.authorized_paths.includes(entry)))) continue;
@@ -809,16 +840,19 @@ function aggregateWorld(events, standardEvents = []) {
       // worker, which was null in the window right after a disposition (any constrained session
       // could release itself). (2) A program with NO disposition — an unassemblable roster, a
       // cancelled round — closes by citing its winning panel_open; before, such a program was
-      // permanently unabandonable. (3) A close AFTER any disposition RESERVES the latest winning
-      // open's changed paths exactly as a STOP does: close-then-relabel was an unlimited
-      // fresh-budget restart over the same paths. A virgin close (no disposition ever) reserves
-      // nothing — nothing was ground. The session comparison remains records-not-deters: it
-      // refuses the admitted ID, never the actor behind it.
+      // permanently unabandonable. (3) A close after any COLLECTED panel RESERVES the union of
+      // the program's opens' changed paths exactly as a STOP does: close-then-relabel was an
+      // unlimited fresh-budget restart over the same paths, and ground findings are not released
+      // by abandoning them before the disposition. A truly virgin close (no panel ever
+      // collected) reserves nothing — nothing was ground. The session comparison remains
+      // records-not-deters: it refuses the admitted ID, never the actor behind it.
       if (!state || state.terminal || state.changeset_id !== row.changeset_id ||
           !text(row.reason, 1000) || !text(row.owner_evidence, 1000)) continue;
-      // Eligibility is decided against the FULL admitted set scanned from the whole ledger — a
-      // session about to become the worker cannot release the program by closing BEFORE minting
-      // its own admission row.
+      // Eligibility is decided against every session admitted BEFORE this row's position —
+      // as-of, like every predicate here. A session not yet admitted is genuinely not a worker
+      // (intent is not fact), and its later self-admission refuses on the terminality this
+      // close creates — so the old whole-ledger pre-scan bought nothing and cost replay
+      // stability (a later admission row retro-refused an accepted close).
       if (admittedByTask.get(row.task_id)?.has(row.session_id)) continue;
       const latestOpen = state.panels_open.at(-1) || null;
       const citesDisposition = state.latest && row.disposition_event_id === state.latest.event_id &&
@@ -874,6 +908,7 @@ function aggregateWorld(events, standardEvents = []) {
           !same(row.authorized_paths, dispatch.authorized_paths) || row.brief_path !== dispatch.target ||
           row.brief_sha256 !== dispatch.brief_sha256) continue;
       state.active_worker = accept(row); state.workers.push(row);
+      admitSession(row.task_id, row.worker_session_id);
     } else if (row.kind === "worker_handoff") {
       if (!state || state.terminal || state.changeset_id !== row.changeset_id || !ID64.test(row.dispatch_event_id || "") ||
           !ID64.test(row.prior_worker_event_id || "") || !text(row.new_worker_session_id, 200) ||
@@ -884,29 +919,47 @@ function aggregateWorld(events, standardEvents = []) {
         authorized_paths: [...state.active_dispatch.authorized_paths], brief_path: state.active_dispatch.target,
         brief_sha256: state.active_dispatch.brief_sha256 });
       state.worker_handoffs.push(row);
+      admitSession(row.task_id, row.new_worker_session_id);
     } else if (row.kind === "child_continuation") {
       // The ONE successor mechanism, and it anchors only to a TERMINAL parent — GO, STOP, or an
       // Owner-closed program. A non-terminal (or held) state can never seed a child's baseline.
       // trigger rules per terminal: STOP inherits the accepted set EXACTLY; GO may carry only
-      // routed follow-ups; CLOSED may carry any of the latest disposition's accepted/followup ids.
+      // routed follow-ups; CLOSED must CARRY the accepted set (a floor — an empty trigger list
+      // must not inherit the exit while shedding the harms) and may add routed follow-ups.
       if (!state || state.changeset_id !== row.changeset_id || !state.terminal ||
-          row.parent_disposition_event_id !== state.latest?.event_id ||
           !["split", "new_changeset", "material_scope"].includes(row.continuation_kind) ||
-          !text(row.owner_evidence, 1000) || !Array.isArray(row.children) ||
-          parentContinuations.has(row.parent_disposition_event_id)) continue;
-      const followupIds = state.latest.finding_dispositions.followup.map((entry) => entry.id);
-      // Set-equality is ORDER-INSENSITIVE — a STOP successor listing the identical accepted ids
-      // in another order is the same declaration, not a different one.
-      const triggerOk = state.terminal === "STOP"
-        ? same([...row.trigger_ids].sort(), [...state.latest.finding_dispositions.accepted].sort())
-        : state.terminal === "GO"
-          ? row.trigger_ids.every((id) => followupIds.includes(id))
-          : row.trigger_ids.every((id) =>
-              state.latest.finding_dispositions.accepted.includes(id) || followupIds.includes(id));
+          !text(row.owner_evidence, 1000) || !Array.isArray(row.children)) continue;
+      const parentOpen = state.panels_open.at(-1);
+      // Set-equality is ORDER-INSENSITIVE — a successor listing the identical ids in another
+      // order is the same declaration, not a different one.
+      let triggerOk;
+      if (row.parent_disposition_event_id !== null) {
+        if (row.parent_disposition_event_id !== state.latest?.event_id ||
+            parentContinuations.has(row.parent_disposition_event_id)) continue;
+        const accepted = state.latest.finding_dispositions.accepted;
+        const followupIds = state.latest.finding_dispositions.followup.map((entry) => entry.id);
+        triggerOk = state.terminal === "STOP"
+          ? same([...row.trigger_ids].sort(), [...accepted].sort())
+          : state.terminal === "GO"
+            ? row.trigger_ids.every((id) => followupIds.includes(id))
+            : accepted.every((id) => row.trigger_ids.includes(id)) &&
+              row.trigger_ids.every((id) => accepted.includes(id) || followupIds.includes(id));
+      } else {
+        // The WINNING-OPEN anchor: only a CLOSED parent with NO disposition and a COLLECTED
+        // panel — the reserving case whose reservation previously had NO constructible exit
+        // (T13 demanded a disposition id that does not exist; executed R3 finding). It mirrors
+        // the close event's own anchor rule, and the successor inherits the un-adjudicated
+        // GROUND: the union of the collected panels' raw finding ids.
+        if (state.terminal !== "CLOSED" || state.latest !== null || !state.panels_close.length ||
+            !parentOpen || row.parent_panel_open_event_id !== parentOpen.event_id ||
+            parentContinuations.has(row.parent_panel_open_event_id)) continue;
+        const ground = [...new Set(state.panels_close.flatMap((close) =>
+          close.received_seats.flatMap((seat) => seat.raw_finding_ids)))];
+        triggerOk = same([...row.trigger_ids].sort(), ground.sort());
+      }
       if (!triggerOk) continue;
       // The successor binds the exact parent terminal candidate — lineage anchored to bytes, not
       // only to an event id.
-      const parentOpen = state.panels_open.at(-1);
       if (!parentOpen || row.parent_frozen_commit !== parentOpen.frozen_commit ||
           row.parent_frozen_tree !== parentOpen.frozen_tree) continue;
       const countOk = row.continuation_kind === "split"
@@ -924,9 +977,12 @@ function aggregateWorld(events, standardEvents = []) {
           new Set(childPaths).size !== childPaths.length ||
           childTasks.some((id) => usedTasks.has(id) || stdTaskUsed(id, rowSeq) || childLineage.has(id)) ||
           childChangesets.some((id) => usedChangesets.has(id) || stdChangesetUsed(id, rowSeq) ||
-            lineageChangesetUsed(id))) continue;
+            lineageChangesetUsed(id)) ||
+          // Two PENDING budgets overlapping would deadlock both children (each blocks the
+          // other's open forever) — refuse the collision at declaration, where it is cheap.
+          row.children.some((child) => pendingLineageOverlap(child.authorized_paths, child.task_id))) continue;
       const continuation = accept(row); continuations.set(row.event_id, continuation);
-      parentContinuations.add(row.parent_disposition_event_id);
+      parentContinuations.add(row.parent_disposition_event_id ?? row.parent_panel_open_event_id);
       for (const child of row.children) {
         childLineage.set(child.task_id, { ...child, event_id: row.event_id, parent_task_id: row.task_id });
       }
@@ -936,7 +992,8 @@ function aggregateWorld(events, standardEvents = []) {
           legacyHandedOff.has(row.parent_task_id) || usedTasks.has(row.child.task_id) ||
           stdTaskUsed(row.child.task_id, rowSeq) || childLineage.has(row.child.task_id) ||
           usedChangesets.has(row.child.changeset_id) || stdChangesetUsed(row.child.changeset_id, rowSeq) ||
-          lineageChangesetUsed(row.child.changeset_id)) continue;
+          lineageChangesetUsed(row.child.changeset_id) ||
+          pendingLineageOverlap(row.child.authorized_paths, row.child.task_id)) continue;
       // Bound to the WINNING standard disposition AS OF THIS ROW'S LEDGER POSITION — never an
       // arbitrary historical prefix, and never rows that landed after it. The binding is the
       // LATEST ROUND row visible at the handoff's seq: a stale citation refuses because a newer
@@ -1438,8 +1495,13 @@ export function recordAggregateChildContinuation(input,
   const state = deriveAggregateRepairState(rows.aggregate, input.task_id, { standardEvents: rows.standard });
   const parentOpen = state.ok ? (state.panels_open ?? []).at(-1) : null;
   if (!parentOpen) return { ok: false, state: "aggregate-continuation-malformed" };
-  const event = { ...base, kind: "child_continuation",
-    parent_disposition_event_id: input.parent_disposition_event_id,
+  // The anchor is derived from the parent's actual terminal shape: its latest disposition, or —
+  // for a no-disposition CLOSED parent whose panel was collected — its winning panel_open. The
+  // caller's own citation is accepted only when it matches the derived truth (replay re-checks).
+  const anchor = state.latest
+    ? { parent_disposition_event_id: input.parent_disposition_event_id }
+    : { parent_disposition_event_id: null, parent_panel_open_event_id: parentOpen.event_id };
+  const event = { ...base, kind: "child_continuation", ...anchor,
     parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
     trigger_ids: input.trigger_ids,
     continuation_kind: input.continuation_kind, children: input.children,
@@ -1761,25 +1823,10 @@ export function confirmRepairBrief({ declaration, brief_path: briefPath } = {},
       ? { ok: true, event_id: winner.event_id, idempotent: true }
       : appended;
   }
-  const logical = { type: "repair_dispatch", task_id: r.task_id, changeset_id: r.changeset_id,
-    source_round: r.round - 1, next_round: r.round, candidate_sha: r.candidate_sha,
-    finding_ids: [...r.finding_ids], authorized_paths: [...r.authorized_paths],
-    target_kind: "brief", target: brief.path, brief_sha256: brief.sha256, brief_size: brief.size,
-    ...(r.root_cause_exit_event_id ? { root_cause_exit_event_id: r.root_cause_exit_event_id } : {}),
-    ...(r.adherence_audit_event_id ? { adherence_audit_event_id: r.adherence_audit_event_id } : {}),
-    ...(r.owner_extension_event_id ? { owner_extension_event_id: r.owner_extension_event_id } : {}),
-    ...(r.owner_scope_event_id ? { owner_scope_event_id: r.owner_scope_event_id } : {}) };
-  const prior = current.find((row) => row.event.type === "repair_dispatch" &&
-    sameRepairDispatch(row.event, logical));
-  if (prior) return { ok: true, event_id: prior.event_id, idempotent: true };
-  const appended = appendRepairEvent(file, { ...logical, recorded_at: now, session_id: sessionId });
-  if (!appended.ok) return appended;
-  const after = readRepairEventsSettled(file);
-  if (after === null) return { ok: false, state: "repair-ledger-unavailable" };
-  const winner = after.find((row) => row.event.type === "repair_dispatch" &&
-    sameRepairDispatch(row.event, logical));
-  if (!winner) return { ok: false, state: "repair-ledger-unavailable" };
-  return { ok: true, event_id: winner.event_id, idempotent: winner.event_id !== appended.event_id };
+  // No standard-grammar append arm exists here: `validateRepairDispatch` never returns ok for a
+  // standard declaration (minting is retired), so this line is unreachable for that path — the
+  // dead append arm that once followed was removed rather than left as a false affordance.
+  return { ok: false, state: "standard-mint-retired" };
 }
 
 export function verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_event_id: eventId } = {},

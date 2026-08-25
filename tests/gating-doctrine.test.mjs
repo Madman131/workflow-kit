@@ -317,7 +317,7 @@ test("the retired chase machinery is gone and the finite aggregate controller re
     "the open-referent WORTH IT? is retired: it let the process answer about itself");
   // …and the replacement is present, or the assertions above pass on a gutted file.
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
-  assert.match(w, /Before review, `panel_open` binds the clean frozen commit\/tree/);
+  assert.match(w, /`panel_open` binds the clean frozen commit\/tree/);
   assert.match(w, /Accepted harm in R1 or R2 permits one bounded batch/);
   assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
   assert.match(w, /R4, the final bookend/);
@@ -720,6 +720,27 @@ test("the finite aggregate cadence agrees between every live surface", () => {
     assert.match(t, /root[- ]kind dispatch/i, `${rel} must key the root-exit binding to the DISPATCH KIND`);
     assert.doesNotMatch(t, /R3 root-exit ID|post-R3 root_exit/i, `${rel} still keys the root-exit binding to R3`);
   }
+  // The any-round terminal rules joined the STATED cadence at R3: they were mechanism-only
+  // (T4/T5) and their absence produced a doctrine deadlock a panel executed — a PM with a clean
+  // R1 panel read "R4 always runs" with no license to close GO, chasing redundant panels or
+  // wedging the ladder. WORKFLOW and the decision-time hook state both; the early-root trigger
+  // set carries BOTH its triggers on every surface that names it.
+  assert.match(ctrl, /at ANY round Critical\/fail-open STOPS and zero accepted closes/,
+    "WORKFLOW states both any-round terminal rules in the accepted-definition parenthetical");
+  assert.match(hook, /closes GO at ANY round/, "the hook prints GO-at-any-round");
+  assert.match(hook, /Critical\/fail-open harm STOPS at any round/i, "the hook prints the STOP carve-out");
+  for (const [rel, t] of [["core/WORKFLOW.md", ctrl], ["hooks/guard-gate-ladder.mjs", hook],
+    ["skills/orchestrate/SKILL.md", skill]]) {
+    assert.match(t, /same-class or\s+repair-generated recurrence/,
+      `${rel} names BOTH early-root triggers — dropping repair-generated forfeits the early root on the commonest recurrence`);
+  }
+  // The <n> definition survived only on the hook after WORKFLOW's parenthetical retired; it now
+  // defines the aggregate ROUND, and the retired verdict-count meaning must be GONE — a PM
+  // numbering rounds by verdicts reads a first 4-seat panel as the terminal bookend.
+  assert.match(hook, /<n> is the aggregate ROUND/, "the hook defines <n> as the ROUND");
+  assert.match(hook, /seat verdicts are inputs to a round, never rounds/, "…and severs the verdict-count reading");
+  assert.doesNotMatch(hook, /the number of reviewer verdicts dispositioned/,
+    "the retired verdict-count definition of <n> must not survive anywhere in the printed contract");
   // The retired LINEAR ladder must be GONE from BOTH — a reader/agent meets whichever they get, and
   // both shipping is worse than either. These are the shapes THIS chip retired.
   const RETIRED = [/Rounds 1[–-]3 are ordinary/i, /Rounds 4[–-]6/i, /two-cycle window/i, /process audit on (?:the|those) exact bytes/i];

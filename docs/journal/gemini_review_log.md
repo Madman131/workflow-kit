@@ -1885,3 +1885,73 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: Entire `docs/journal/terminal_round_breaker_contract.md`, focusing on Section 2 (Event Grammar) and Section 3 (Transition table, Resolution order, and Replay constraints) against the provided Epistemic and Repo INVARIANTS.
     PIL-DONE-7b69f19c941766d957fab018
+
+## Gemini gate attempt — PASS_VERDICT — 2026-08-25T07:18:10Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1787642047-53606-55391141`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=37233; instrumented_payload=37386; inline_combined=41203; file=37459
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/terminal_round_breaker_contract.md
+- HEAD: `bc6159bdab3559870a7f8626cabb68ef2c7da473`
+- Artifact-Base: `0052059555f6387888847973ad63545ee236ae7e`
+- Artifact-SHA: `bc6159bdab3559870a7f8626cabb68ef2c7da473`
+- Artifact-Ref: `refs/pil/gate-artifacts/bc6159bdab3559870a7f8626cabb68ef2c7da473`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 1-9 inclusive) and REPO_INVARIANTS
+- Start: 2026-08-25T07:14:07Z
+- End: 2026-08-25T07:18:10Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-b88614b300204bf7a6cfd422
+    CANARIES: PIL-INGEST-018ebe00e376 PIL-INGEST-024cd02389f0 PIL-INGEST-03633f52ddf0
+    
+    Here are the confirmed blind spots and architectural failures missed by the prior panel, ranked by severity.
+    
+    ### 1. BLOCKER: SILENT DATA-LOSS / SECURITY BYPASS VIA REFREEZE PATH-PINNING
+    **Category:** 4. MECHANISM CORRECTNESS & 6. INVARIANT VIOLATIONS
+    **Section:** 3 (Transition table T3b) and 5 (Rig-vs-candidate discriminator).
+    **Concrete failure:** During a panel review, a candidate is contaminated mid-panel (e.g., an agent touches an out-of-scope file to fix a build error). This triggers a T3b REFREEZE to capture the new commit. However, T3b explicitly mandates that the `changed-path set PINNED to the superseded open` must be enforced. Consequently, the new `panel_open` event copies the original, restricted path list (e.g., `[auth.js]`) while pointing to the new frozen commit which actually modifies additional files (e.g., `[auth.js, backdoor.js]`). When the panel closes, T2 only verifies that the explicitly declared `changed_paths` were covered. 
+    **Why it matters:** The system explicitly blinds the panel to the new files. The out-of-scope modifications are completely ignored by the reviewers, automatically approved via a GO disposition, and merged without ever being reviewed. This defeats the entire purpose of the terminal round breaker.
+    **Fix:** T3b must dynamically re-derive the actual changed paths of the new candidate and assert they are an exact match (or strict subset) of the superseded open's budget, actively refusing the refreeze if the candidate expands its footprint.
+    
+    ### 2. HIGH: INVERTED SESSION ELIGIBILITY CREATING ORPHAN LOCKS & GRIEFING
+    **Category:** 1. INTER-SECTION CONTRADICTIONS & 3. CONCURRENCY / LOCK HAZARDS
+    **Section:** 3 (Transition table T12), 3 (T9), and 2 (close).
+    **Concrete failure:** The eligibility guard for the `close` (Abandon) event is explicitly defined as `session ∉ every admitted worker session`. This inverted logic creates a dual failure:
+    A) An actively admitted worker that encounters a fundamentally unfixable task CANNOT cleanly abandon it because its session *is* in the admitted set (evaluating to FALSE). The worker must halt, permanently locking the paths as an orphan because the active program retains write authority and there is "no reaper" (Invariant 10).
+    B) When a worker is replaced via `worker_handoff` (T9), its session is explicitly *revoked*. Because it is no longer in the admitted set, the revoked worker's session now perfectly satisfies `session ∉ admitted set`. 
+    **Why it matters:** The authorized worker is permanently blocked from cleaning up its own deadlocks, while a revoked/obsolete session is unexpectedly granted the authority to issue a `close`, permanently reserving the paths and instantly bricking the new worker's active program.
+    **Fix:** The `close` guard must require the session to either *be* the currently active admitted worker OR an Owner-evidenced override.
+    
+    ### 3. HIGH: NON-ATOMIC OVERWRITE LEAVES REPO BRICKED ON FAILURE
+    **Category:** 5. DATA-SAFETY / LOSS WINDOWS
+    **Section:** 7 (Adopter upgrade rung).
+    **Concrete failure:** When an adopter runs `init --force` to upgrade, the script iterates through differing mechanism files, backing up and overwriting them in place. If a failure occurs midway through the loop (e.g., an EACCES error on file 10 of 20), the script counts the refusal, finishes the loop, and "forces exit 1". However, files 1 through 9 have already been irrevocably overwritten.
+    **Why it matters:** There is no rollback mechanism for a partial failure. The repository is abandoned in an unrunnable, mixed-version state (explicitly noted as "never reads as a clean adopt"), crippling the adopter's gate machinery and requiring manual, piecemeal restoration from `.bak` files.
+    **Fix:** The upgrade must perform all backups and file generation into a temporary staging directory first, and then atomically swap the directories. Alternatively, explicitly trap the error and roll back the modified files before exiting.
+    
+    ### 4. MEDIUM: TOCTOU SNIPE WINDOW IN LEGACY MIGRATION
+    **Category:** 3. CONCURRENCY / LOCK HAZARDS
+    **Section:** 2 (legacy_handoff) and 3 (T1, T15).
+    **Concrete failure:** T15 dictates that `legacy_handoff` atomically ends standard ownership and creates a child lineage. However, unlike `STOP` or a collected `close`, `legacy_handoff` does *not* generate a terminal reservation. Between the moment the legacy standard program is ended and the moment the new aggregate child successfully writes its first `panel_open` (T1), the paths are completely unprotected in the public pool. 
+    **Why it matters:** An unrelated, concurrent aggregate task can issue a `panel_open` in that exact window, snipe the paths, and permanently lock the migrated child out of its own lineage.
+    **Fix:** `legacy_handoff` must explicitly emit a terminal reservation for the standard program's paths, which the child lineage can then safely claim under the T1 parent exception.
+    
+    ### 5. MEDIUM: RESOURCE EXHAUSTION VIA IDEMPOTENT APPEND-ONLY RETRIES
+    **Category:** 2. UNBOUNDED GROWTH / RESOURCE EXHAUSTION
+    **Section:** 2 (Event grammar) and Repo Invariant 1.
+    **Concrete failure:** The design relies on an "append-only JSONL" ledger where "every accepted event is fsync'd". It claims that "A retry differing only in its timestamp converges idempotently on the standing winner". Because the ledger is strictly append-only, converging idempotently only protects the *reader's* projection; the *writer* still physically appends the full JSON payload to the disk for every retry. 
+    **Why it matters:** A stuck agent in a tight retry loop (e.g., repeatedly failing a guard but injecting a new timestamp) will continuously append duplicate JSON events, easily exhausting the storage on a small (2 GB) box and causing a hard system outage.
+    **Fix:** Implement a bounded local retry cache (rejecting payloads that differ only by timestamp before the disk write phase), or enforce a hard cap on total ledger size/row-count per task.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 1-9 inclusive) and REPO_INVARIANTS
+    PIL-DONE-40e4d7d90f068bfa0dcc21a8

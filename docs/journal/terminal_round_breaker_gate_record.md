@@ -259,3 +259,164 @@ existing governed doc PASS (WORKFLOW 25,087/25,088 — at-cap, flag to Owner wit
 2924/2925) · skill budgets 33 OK · parity check red as the standing pre-landing condition.**
 Round accounting unchanged: batch 3 (root kind only) + the R4 bookend remain. Next: freeze the
 R3 candidate; the full R3 panel.
+
+## ROUND 3 · candidate `0052059555f6387888847973ad63545ee236ae7e` (tree `c0490b84…`)
+
+Panel: five fresh blind seats (free · state-machine · fail-closed · doctrine-truth+CUT ·
+adversarial walk-through) + Codex external (receipt `TRB-R3-0e8ab104bee93a95`, out-of-payload
+quote verified against core/REVIEW.md:1) + the Gemini design bookend on the updated contract
+(receipt `PIL-RCPT-b88614b3…`, canaries returned). The changeset's ONE frontier fold-check was
+spent at R1 per the rule. All seven returned; all seven NO-GO. Every seat declared its
+pre-loaded exposure (the auto-injected memory index + commit subjects, per
+`no-seat-is-certifiably-free`); none reported reading an excluded artifact.
+
+`GATE ROUND 3 · changeset terminal-round-breaker · verdict NO-GO · HARM-PASSING 14 clustered ·
+NOTES 12 · LADDER: continue`
+
+### R3 accepted clusters (batch 3, ONE batch — root kind, see the exit below)
+
+- **RA · Reservation lift over-broad (free-F1 = walk-2 = failclosed-F1 = Codex-1's lift half;
+  FOUR independent executions):** `reservationLifted` releases a STOP/CLOSED program's ENTIRE
+  reserved union, repo-wide, on ANY one direct lineage child's TERMINAL-GO — including a child
+  that never touched the stopped paths — and the interloper's open then squats the sibling
+  child's own sanctioned exit. Undisclosed in the contract (§ 3 says "permanent … sole exit is
+  lineage"), untested in either polarity, contradicts M30's own row. CURE: coverage-scoped lift —
+  a GO child lifts ONLY the paths inside ITS declared budget; the remainder stays reserved for
+  the lineage that owns it. Disclosure in § 3 + M-row + both-polarity tests.
+- **RB · CLOSED trigger escape (Codex-1 core):** `trigger_ids: []` vacuously satisfies the
+  CLOSED subset rule, so a successor can inherit the exit while carrying NO accepted harm.
+  CURE: a CLOSED parent's successor must carry the accepted set as a SUPERSET floor (follow-ups
+  optional) — a CLOSED-with-disposition parent always has accepted ≥ 1, so the floor is total.
+- **RC · No-disposition close has no exit (Codex-2 = free-F2 = state-machine-F2, executed):**
+  a collected-panel close with no disposition reserves with an UNCONSTRUCTIBLE successor
+  (T13 demands a disposition id that does not exist) — permanent, repo-wide, no in-band
+  recovery; contradicts § 3's "sole exit" promise. CURE: `child_continuation` may anchor a
+  no-disposition CLOSED parent by its winning `panel_open` id; trigger inheritance = the union
+  of the collected panels' raw finding ids (the un-adjudicated ground), order-insensitive.
+- **RD · Close admission escaped the as-of discipline (state-machine-F1, CRITICAL, executed
+  both polarities):** `admittedByTask` scans the WHOLE ledger, so a LATER worker/handoff row
+  naming the closer's session retro-refuses an ACCEPTED close — resurrecting the program,
+  erasing the Owner's continuation and the child's accepted lineage: the measured fail-open
+  class re-introduced by batch 2's own pre-mint cure. CURE: fold close admission into the as-of
+  prefix discipline (admissions visible at the close row's position); a later admission row for
+  a terminal program already refuses on terminality. The H2c fixture retargets to the honest
+  claim: the pre-admission close ACCEPTS (the session was genuinely not a worker yet — intent
+  is not fact, per records-not-deters), the later self-admission refuses, history stays stable.
+- **RE · Pending-lineage path window (Gemini-4):** between a legacy handoff (or a continuation
+  declaring out-of-reservation child paths) and the child's first open, the child's declared
+  budget is unprotected — a concurrent unrelated open snipes it and locks the child out of its
+  own lineage. CURE: a PENDING lineage child's declared budget binds in the creation-branch
+  overlap check until the child opens (ids are already reserved; paths join them).
+- **RF · Active program's open-panel surface unbound in later rounds (free-F3, executed):**
+  `programBoundPaths` returns only `authorized_paths` for an ACTIVE program, shadowing the
+  union for rounds ≥ 2 — a concurrent open can wedge a live program out of remediating its own
+  reviewed surface. CURE: an active program binds authorized_paths ∪ its undisposed opens'
+  changed paths.
+- **RG · init symlink fail-open (Codex-3):** `--force` backup and overwrite write THROUGH a
+  symlinked `dst`/`dst.bak`, mutating external targets with exit 0. CURE: lstat both; a symlink
+  at either refuses the overwrite (counted, named, exit 1).
+- **RH · settings.json corrupt+force destruction (failclosed-F2, executed):** an unparseable
+  `.claude/settings.json` under `--force` is regenerated with NO `.bak`, exit 0, and a
+  "merged (verified by read-back)" log line — violating § 7's every-differing-file sentence.
+  CURE: route it through the backup path (back up the original bytes; refusal counts).
+- **RI · skip-lane stale silence (failclosed-F3, executed):** `--force --skip-codex-lane` over
+  a repo whose PRESENT `.codex` lane holds byte-differing mechanism exits 0 calling it
+  "left untouched". CURE: the stale-keep read-only check runs for skipped-but-present lanes —
+  named + exit 1, same contract as every other stale keep.
+- **RJ · Doctrine truth set (doctrine-F1/F2/F3/F4/F5 + free-F6 + failclosed-F4/F5 + walk-5 +
+  Gemini-1-as-wording + state-machine-F4):** the hook CONTRACT's `<n>` tail is now
+  self-contradictory and is the kit's ONLY surviving `<n>` definition (rewrite to the ROUND
+  meaning + pin) · GO-at-any-round is mechanism (T4) but absent from every doctrine surface
+  (state it in WORKFLOW ¶85 + the hook) · the Critical/fail-open carve-out joins the hook's
+  printed cadence and the agreement pins · the early-root trigger set regains "or
+  repair-generated" (WORKFLOW + SKILL + hook) · deny text "TWO causes" → three · the folded
+  blind notice's "proceeded UNCHECKED" goes tense-neutral inside a deny · the no-attempt-row
+  audit row stops mislabeling itself `rung-already-spent` · contract § 2 "BOTH lanes in one
+  run" trued to per-checkout · § 3/T3b states refreeze changed-paths are RE-DERIVED and must
+  match (the mechanism Gemini's design-read could not see) · § 7 discloses non-atomic partial
+  failure honestly (staging-dir atomicity DEFERRED, banked) · § 9's "full npm test" scoped
+  ("green modulo the parity rung, discharged at landing") · close-arm comment, lift comment
+  (DESCENDANT→direct child), and the dead `confirmRepairBrief` standard-append arm cleaned.
+
+**DECLINED (failed premise or mechanism, recorded):** Gemini-1 as a code defect (the record
+path DERIVES changed paths from the new candidate's base..frozen and the refreeze demands
+`same()` — executed by the M23/H3a fixtures; the CONTRACT WORDING half is accepted in RJ) ·
+Gemini-2A (an admitted worker cannot self-abandon BY DESIGN — ABANDON is an outside-session/
+Owner action, the degraded-mode keyboard; disclosed in § 2) · Gemini-2B (a revoked session
+stays ineligible: admissions accumulate — executed green by the fail-closed seat's probes) ·
+Gemini-5 (timestamp-differing retries return idempotently BEFORE the append and refusals never
+append — no unbounded growth path exists in the aggregate writer; the general replay-growth
+item stays banked from R2) · state-machine-F3 as a mechanism change (byte-inequality is not a
+sound predicate for "the batch did work": a legitimate repair may restore prior bytes, and
+semantic sameness is declared, never inferred — the entry chain is the mechanical guard; § 3's
+"all mechanical" header wording rides RJ). **DEFERRED:** atomic staging-dir upgrade (Gemini-3;
+banked — the mitigation TODAY is universal .baks + counted refusals + loud exit 1) ·
+replay-growth/O(n²) (standing from R2). **NOTES:** parity red is the standing pre-landing
+condition (routed at § 8c, discharged at landing) · free-F5's inert-row admission diagnosis
+mismatch (resolves under RD's as-of rework) · WORKFLOW:89 legacy-handoff omission ·
+GATES:479 "controller in § Gate" phrasing · RUNG_ZERO's lane-specific disarm over-generality ·
+walk-3's base-commit-hides-prior-work property (records-not-deters class, gated on Owner
+evidence) · the grandchild-chain lift limit (direct children only — disclosed in RA's cure).
+
+### ROOT EXIT — batch 3 declared `root_replacement` (the mandatory R3 root batch)
+
+- **Shared mechanism:** batch 2 centralized the ENTRY-side authority (path binding, overlap,
+  budgets) but left the EXIT/ADMISSION lattice — how reservations LIFT, how closes are
+  ADJUDICATED, how successors ANCHOR, what a pending lineage HOLDS — hand-rolled per branch,
+  without the as-of ledger-order discipline and without coverage scoping. Every R3 blocking
+  finding (RA–RF) is one branch of that lattice missing one of those two disciplines.
+- **Why prior fixes were symptoms:** the R2 batch fixed entry-side instances (T10 re-checks,
+  reservations, squat guards) and the mid-batch seq cure fixed the READ side; the exit side
+  (lift/close/anchor) was patched ad-hoc (the pre-scan, the lift) and re-introduced the same
+  classes one branch over.
+- **Owner/state/yield seams:** terminal state and its reservation (owner: the reserving
+  program's lineage) · close admission (owner: the ledger prefix at the close's position) ·
+  successor anchoring (owner: the parent's winning terminal artifact — disposition OR winning
+  open) · pending lineage (owner: the declared child until it opens).
+- **Replacement:** one exit-lattice discipline — every exit/admission predicate evaluates
+  as-of its row's ledger position, and every release is COVERAGE-SCOPED to the lineage that
+  earned it (per-child-budget lifts; superset trigger floors; anchors for every terminal parent
+  kind; pending budgets bind).
+- **Removed workarounds:** the whole-ledger `admittedByTask` pre-scan (replaced by as-of
+  admission) · the any-child whole-union lift (replaced by budget-scoped lift).
+- **Trigger matrix:** the four executed reproductions (lift-release · close-resurrection ·
+  no-disposition brick · pending-path snipe) plus the retargeted H2c and both polarities of
+  each new guard.
+
+Round accounting: R1 batch 1 (bounded) · R2 batch 2 (root_replacement, early) · **R3 batch 3
+(root_replacement — the mandatory root batch, this exit)** · remaining: the R4 final bookend
+ONLY. The replacement candidate receives R4; zero accepted closes GO, any accepted closes STOP.
+
+## BATCH 3 COMPLETE (2026-08-25) — the R3 root batch, consumed
+
+The exit-lattice replacement landed exactly as the root exit declared. Controller (orchestrator):
+coverage-scoped lift (RA) · CLOSED accepted-set trigger floor (RB) · the winning-open successor
+anchor for no-disposition collected closes, recorder-derived (RC) · close admission folded into
+the as-of discipline — the whole-ledger pre-scan REMOVED, admissions accumulate at acceptance,
+H2(c) retargeted to forward adjudication (RD) · pending lineage budgets bind from declaration to
+first open, with declaration-time collision refusal (RE) · an active program binds its undisposed
+opens' changed paths (RF) · the dead standard-append arm in confirmRepairBrief removed and the
+close-arm comment trued. Init (worker chip, red-then-green with targeted reverts): symlink
+refusal on dst and .bak in both overwrite paths (RG) · corrupt-settings original-bytes backup
+(RH) · skip-lane read-only stale accounting, KEPT BUT STALE + exit 1 (RI); init-force tests 4→7.
+Doctrine (RJ): the hook's <n> redefined as the aggregate ROUND with the verdict-count reading
+severed and pinned · GO-at-any-round + the Critical/fail-open carve-out now STATED on WORKFLOW
+and the hook, pinned · the early-root trigger set carries BOTH triggers on WORKFLOW/SKILL/hook,
+pinned · THREE causes in the ledger-unavailable deny · the folded blind notice went
+tense-neutral · the no-attempt-row audit row stops mislabeling itself · contract trued (as-of
+admission, coverage lift, anchors, T10 entry-chain wording, refreeze re-derivation, per-checkout
+upgrade, § 7 to the landed init incl. non-atomicity disclosure, § 9 parity scoping, M35–M40).
+Tests (worker chip): M35–M40 pinned both-polarity with discriminating mutants (five mutation
+anchors verified unique; M38 is the stability polarity of the pre-scan's removal). One layered-
+defense note from the fixture work, recorded: the pending-budget hold (RE) masks the lift probe
+(RA) unless the sibling's pending entry is consumed first — two independent guards covering one
+surface, the fixture reads the lift alone by virgin-closing the sibling. Worker residuals routed:
+the `--skip-codex-prompt` analogue of RI (user-global prompts dir carries two mechanism shims;
+un-adjudicated sibling — R4 panel material or a follow-up route) · a symlinked-but-parseable
+settings.json is merged through the link (arguably legitimate; unnamed by any finding).
+
+State at close of batch 3: **npm test 239/239 · acceptance PASSED · doc-size all existing PASS
+(WORKFLOW 25,064/25,088) · skill budgets all inside caps · parity red = the designed pre-landing
+state.** Round accounting: R1 batch 1 · R2 batch 2 (root, early) · R3 batch 3 (root, mandatory)
+— the allowance is SPENT. Next: freeze the R4 candidate; the FINAL BOOKEND panel (zero accepted
+⇒ TERMINAL-GO; any accepted ⇒ TERMINAL-STOP; no outgoing dispatch either way).

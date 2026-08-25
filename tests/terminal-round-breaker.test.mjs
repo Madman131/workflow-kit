@@ -753,9 +753,12 @@ test("H2: close eligibility against the FULL admitted set — verification, hand
       "a handoff-admitted replacement cannot release the program either");
     assert.equal(closeAs("worker-2").state, "aggregate-close-self-authorized",
       "…and the revoked prior worker remains in the admitted set");
-    // (c) THE PRE-MINT WINDOW: a session records its close FIRST and mints its admission row
-    // AFTER it. The admitted set is scanned from the FULL ledger before replay, so the later
-    // admission still refuses the earlier close.
+    // (c) THE PRE-MINT WINDOW, adjudicated FORWARD — as-of, like every other predicate. A
+    // session not yet admitted at close time is genuinely not a worker (intent is not fact,
+    // per records-not-deters), so its close ACCEPTS; its later self-admission then refuses on
+    // the terminality that close created. The earlier whole-ledger pre-scan resolved this
+    // backward — a LATER admission row retro-refused an ACCEPTED close, resurrecting the
+    // program and erasing its successors: the measured fail-open, executed by the R3 panel.
     const loaded = loadRepairEventsForProject(ctx.dir);
     const dispatchRow = loaded.aggregate_events.find((row) => row.event.kind === "dispatch").event;
     const sneakClose = stamped({
@@ -775,14 +778,18 @@ test("H2: close eligibility against the FULL admitted set — verification, hand
     const unadmitted = deriveAggregateRepairState(
       [...loaded.aggregate_events, sneakClose], "task-1", { standardEvents: loaded.events });
     assert.equal(unadmitted.terminal, "CLOSED", "an unadmitted session's close takes effect");
-    // The SAME close with the admission minted AFTER it: the full-ledger pre-scan refuses it.
+    // The SAME close with the admission minted AFTER it: the close STANDS (replay stability —
+    // appending a row never re-adjudicates an accepted one) and the late admission is the row
+    // that loses, refused by the terminality the close created.
     const preMint = deriveAggregateRepairState(
       [...loaded.aggregate_events, sneakClose, sneakAdmission], "task-1",
       { standardEvents: loaded.events });
-    assert.equal(preMint.terminal, null,
-      "minting the admission AFTER the close gains nothing — the pre-scan reads the whole ledger");
-    assert.equal(preMint.closes.length, 0, "the pre-mint close is inert, not history-breaking");
-    assert.equal(preMint.active, true, "…and the program's authority is NOT released");
+    assert.equal(preMint.terminal, "CLOSED",
+      "the accepted close STANDS — a later admission row never re-adjudicates it");
+    assert.equal(preMint.closes.length, 1, "the close remains the accepted terminal row");
+    assert.equal(preMint.active, false, "…the program stays released");
+    assert.equal(preMint.workers.length, 1,
+      "…and the post-close self-admission is the row that loses (only the real worker's row stands)");
     // Record-path positive control: a genuinely outside session closes the real program.
     const ownerClose = closeAs("owner-session");
     assert.equal(ownerClose.ok, true, ownerClose.state);
@@ -1210,4 +1217,427 @@ test("S1a: the env arm on a REAL directory — a Git location override forces su
       "with nothing in view and no override, the control says it is BLIND — not that nothing exists");
     assert.deepEqual(blind.observed_overrides, []);
   } finally { rmSync(real, { recursive: true, force: true }); }
+});
+
+// ── R3 accepted findings — the M35–M40 pins ────────────────────────────────────────────────────
+
+// A candidate on its own branch from origin/main touching EXACTLY the named files — staged per
+// file, never -A, so rig material (briefs, scratch) can never leak into a candidate's diff.
+function sideCandidate(ctx, branch, files) {
+  execFileSync("git", ["checkout", "-qb", branch, "origin/main"], { cwd: ctx.dir });
+  for (const [rel, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(ctx.dir, rel)), { recursive: true });
+    writeFileSync(path.join(ctx.dir, rel), content);
+    execFileSync("git", ["add", rel], { cwd: ctx.dir });
+  }
+  execFileSync("git", ["commit", "-qm", branch], { cwd: ctx.dir });
+  return {
+    commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+    tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+    paths: Object.keys(files).sort(),
+  };
+}
+
+test("M35: the reservation lift is COVERAGE-SCOPED — a child's GO releases its own budget, never its siblings' surfaces", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // Parent STOPs over {x, y}; the Owner splits the exit: child-a owns x, child-b owns y.
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
+    const parentCand = commit(ctx.dir, "p35");
+    const panel = openPanel(ctx, 1, parentCand);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const closed = closePanel(ctx, panel, parentCand, ["F1"]);
+    const stop = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stop.ok, true, stop.state);
+    const split = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: stop.event_id, trigger_ids: ["F1"],
+      continuation_kind: "split", owner_evidence: "Owner split",
+      children: [
+        { task_id: "child-a", changeset_id: "child-a-cs", tier: "T2", budget: "the x half",
+          authorized_paths: ["src/x.mjs"] },
+        { task_id: "child-b", changeset_id: "child-b-cs", tier: "T2", budget: "the y half",
+          authorized_paths: ["src/y.mjs"] },
+      ],
+    }, options(ctx.dir));
+    assert.equal(split.ok, true, split.state);
+    // child-a runs to GO on x only.
+    const aCand = sideCandidate(ctx, "a-line", { "src/x.mjs": "export const x = 'a';\n" });
+    const aOpen = openPanel(ctx, 1, aCand, { task: "child-a", changeset: "child-a-cs",
+      lineage: { continuation: split.event_id } });
+    assert.equal(aOpen.opened.ok, true, aOpen.opened.state);
+    const aClosed = closePanel(ctx, aOpen, aCand, [], { task: "child-a", changeset: "child-a-cs" });
+    assert.equal(aClosed.ok, true, aClosed.state);
+    const aGo = decide(ctx, aClosed, { task: "child-a", changeset: "child-a-cs",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(aGo.ok, true, aGo.state);
+    assert.equal(derive(ctx, "child-a").terminal, "GO");
+    // child-b can still open y through its OWN lineage…
+    const bCand = sideCandidate(ctx, "b-line", { "src/y.mjs": "export const y = 'b';\n" });
+    const bOpen = openPanel(ctx, 1, bCand, { task: "child-b", changeset: "child-b-cs",
+      lineage: { continuation: split.event_id } });
+    assert.equal(bOpen.opened.ok, true, `the sibling's own door stays open: ${bOpen.opened.state}`);
+    // …and is then virgin-closed (no panel collected: reserves nothing, binds nothing), so every
+    // y-probe below reads the PARENT reservation alone — no pending budget, no active binding.
+    const bClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "child-b", changeset_id: "child-b-cs",
+      disposition_event_id: null, panel_open_event_id: bOpen.opened.event_id,
+      reason: "roster unassemblable", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-b"));
+    assert.equal(bClose.ok, true, bClose.state);
+    // The sibling's never-repaired surface stays reserved…
+    const yProbe = sideCandidate(ctx, "y-outsider", { "src/y.mjs": "export const y = 'out';\n" });
+    assert.equal(openPanel(ctx, 1, yProbe, { task: "outsider-y", changeset: "outsider-y-cs" }).opened.ok,
+      false, "child-a's GO must not release the sibling's y");
+    // …while the GO child's own budget is released.
+    const xProbe = sideCandidate(ctx, "x-outsider", { "src/x.mjs": "export const x = 'out';\n" });
+    assert.equal(openPanel(ctx, 1, xProbe, { task: "outsider-x", changeset: "outsider-x-cs" }).opened.ok,
+      true, "the repaired surface IS lifted");
+    // Disabled arm: whole-union lift again (one child's GO lifts the parent's ENTIRE stopped
+    // set) and the y-open lands — the R3 hole, four independent reproductions.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const plantedY = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "planted-y", changeset_id: "planted-y-cs",
+      recorded_at: "2099-01-01T00:00:50.000Z", session_id: "outsider", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: yProbe.commit, frozen_tree: yProbe.tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["src/y.mjs"],
+      expected_seats: expectedSeats(["src/y.mjs"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    });
+    assert.equal(deriveAggregateRepairState([...loaded.aggregate_events, plantedY], "planted-y",
+      { standardEvents: loaded.events }).panels_open.length, 0, "replay refuses the y-open too");
+    const mutant = await importMutant(mutantDir, [[
+      "for (const entry of lineage.authorized_paths) lifted.add(entry);",
+      "for (const entry of (program.stopped_paths || [])) lifted.add(entry);",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState([...loaded.aggregate_events, plantedY], "planted-y",
+      { standardEvents: loaded.events }).panels_open.length, 1,
+    "the whole-union lift reproduces the R3 hole: one narrow GO releases the sibling's surface");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M36: the CLOSED trigger floor — the accepted set must be CARRIED, and only accepted ∪ followups are admissible", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel, candidate, ["F1", "ADJ"]);
+    const decided = decide(ctx, closed, { accepted: ["F1"],
+      followup: [{ id: "ADJ", route: "successor:next" }] });
+    assert.equal(decided.ok, true, decided.state);
+    const ownerClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
+      disposition_event_id: decided.event_id, reason: "abandoned", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-session"));
+    assert.equal(ownerClose.ok, true, ownerClose.state);
+    const window = loadRepairEventsForProject(ctx.dir); // pre-successor rows, for the mutant pair
+    const successor = (trigger_ids) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: decided.event_id, trigger_ids,
+      continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
+      children: [{ task_id: "m36-child", changeset_id: "m36-child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    // An empty trigger list must not inherit the exit while shedding the harms…
+    const shed = successor([]);
+    assert.equal(shed.ok, false);
+    assert.equal(shed.state, "aggregate-continuation-conflict",
+      "a CLOSED successor cannot carry NOTHING");
+    // …an invented id is outside the admissible set…
+    assert.equal(successor(["F1", "not-a-real-id"]).ok, false,
+      "only accepted ∪ followups are admissible");
+    // …and the floor is the ACCEPTED set: a followup alone still sheds the harms.
+    assert.equal(successor(["ADJ"]).ok, false, "the accepted set must be carried, not just adjacents");
+    const carried = successor(["F1"]);
+    assert.equal(carried.ok, true, carried.state);
+    // Disabled arm: drop the floor half and the []-trigger continuation rides the exit — plant it
+    // with its child's open; the shipped floor refuses both, the mutant accepts both.
+    const parentOpenRow = window.aggregate_events.find((row) => row.event.kind === "panel_open").event;
+    const plantedShed = stamped({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      recorded_at: "2099-01-01T00:01:00.000Z", session_id: "planter",
+      parent_disposition_event_id: decided.event_id,
+      parent_frozen_commit: parentOpenRow.frozen_commit, parent_frozen_tree: parentOpenRow.frozen_tree,
+      trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "shed the harms",
+      children: [{ task_id: "m36-shed", changeset_id: "m36-shed-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+    });
+    const plantedChildOpen = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "m36-shed", changeset_id: "m36-shed-cs",
+      recorded_at: "2099-01-01T00:01:01.000Z", session_id: "planter", round: 1,
+      phase: "repair_round", tier: "T2",
+      frozen_commit: parentOpenRow.frozen_commit, frozen_tree: parentOpenRow.frozen_tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["src/x.mjs"],
+      expected_seats: expectedSeats(["src/x.mjs"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: plantedShed.event_id, legacy_handoff_event_id: null,
+    });
+    const rows = [...window.aggregate_events, plantedShed, plantedChildOpen];
+    assert.equal(deriveAggregateRepairState(rows, "m36-shed", { standardEvents: window.events })
+      .panels_open.length, 0, "the shipped floor keeps the harm-shedding exit shut");
+    const mutant = await importMutant(mutantDir, [[
+      "accepted.every((id) => row.trigger_ids.includes(id)) &&",
+      "true &&",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState(rows, "m36-shed", { standardEvents: window.events })
+      .panels_open.length, 1,
+    "without the floor, [] inherits the exit while shedding every accepted harm");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M37: a no-disposition close anchors its successor at the WINNING OPEN — ground carried, one successor per anchor", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closedPanel = closePanel(ctx, panel, candidate, ["G1"]);
+    assert.equal(closedPanel.ok, true, closedPanel.state);
+    // Collected panel, NO disposition, Owner close citing the winning open: the reserving case
+    // whose reservation previously had no constructible exit (T13 demanded a disposition id that
+    // does not exist — the R3 finding).
+    const ownerClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
+      disposition_event_id: null, panel_open_event_id: panel.opened.event_id,
+      reason: "abandoned after collection", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-session"));
+    assert.equal(ownerClose.ok, true, ownerClose.state);
+    assert.deepEqual(derive(ctx).stopped_paths, ["src/x.mjs"], "the close reserved the ground");
+    const successor = (trigger_ids, child) => recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: null, trigger_ids,
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor", children: [child],
+    }, options(ctx.dir));
+    const heir = { task_id: "heir37", changeset_id: "heir37-cs", tier: "T2",
+      budget: "one changeset", authorized_paths: ["src/x.mjs"] };
+    // The un-adjudicated GROUND must be carried — the collected panels' raw finding ids.
+    const shed = successor([], heir);
+    assert.equal(shed.ok, false);
+    assert.equal(shed.state, "aggregate-continuation-conflict",
+      "an empty trigger list cannot carry the ground");
+    const carried = successor(["G1"], heir);
+    assert.equal(carried.ok, true, carried.state);
+    // ONE successor per anchor — the second refuses even with a NON-overlapping child budget,
+    // so nothing but the consumed anchor can be the refuser.
+    const second = successor(["G1"], { task_id: "heir37-b", changeset_id: "heir37-b-cs",
+      tier: "T2", budget: "another", authorized_paths: ["docs/elsewhere.md"] });
+    assert.equal(second.ok, false);
+    assert.equal(second.state, "aggregate-continuation-conflict", "one successor per anchor");
+    // The child opens the RESERVED path through its lineage — the exit is constructible now.
+    const heirCand = sideCandidate(ctx, "heir37-line", { "src/x.mjs": "export const x = 'h';\n" });
+    const heirOpen = openPanel(ctx, 1, heirCand, { task: "heir37", changeset: "heir37-cs",
+      lineage: { continuation: carried.event_id } });
+    assert.equal(heirOpen.opened.ok, true, heirOpen.opened.state);
+    // Disabled arm: without the winning-open anchor branch, the recorded continuation and the
+    // child's open both evaporate on replay — the reservation is un-exitable again (R3 deadlock).
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(deriveAggregateRepairState(loaded.aggregate_events, "heir37",
+      { standardEvents: loaded.events }).panels_open.length, 1);
+    const mutant = await importMutant(mutantDir, [[
+      "if (row.parent_disposition_event_id !== null) {",
+      "if (true) {",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState(loaded.aggregate_events, "heir37",
+      { standardEvents: loaded.events }).panels_open.length, 0,
+    "removing the anchor branch re-bricks the reservation: no successor can exist");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M38: close replay stability — a LATE handoff naming the closer's session loses at its own position; close, lineage, child all stand", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel, candidate, ["F1"]);
+    const decided = decide(ctx, closed, { accepted: ["F1"] });
+    assert.equal(decided.ok, true, decided.state);
+    const authority = dispatchBatch(ctx, decided.event_id, closed.event_id, 2);
+    // Owner close by "owner-z" — not admitted at this position — accepts; the successor lineage
+    // builds on it; the child opens the reserved surface.
+    const ownerClose = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
+      disposition_event_id: decided.event_id, reason: "abandoned", owner_evidence: "Owner keyboard",
+    }, options(ctx.dir, "owner-z"));
+    assert.equal(ownerClose.ok, true, ownerClose.state);
+    const cont = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: decided.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "heir38", changeset_id: "heir38-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(cont.ok, true, cont.state);
+    const heirCand = sideCandidate(ctx, "heir38-line", { "src/x.mjs": "export const x = 'h8';\n" });
+    const heirOpen = openPanel(ctx, 1, heirCand, { task: "heir38", changeset: "heir38-cs",
+      lineage: { continuation: cont.event_id } });
+    assert.equal(heirOpen.opened.ok, true, heirOpen.opened.state);
+    // The state-machine seat's A3 walk, now the STABILITY polarity: a worker_handoff naming
+    // "owner-z" lands raw AFTER everything (no recorder would produce it). Forward adjudication:
+    // the late row loses at ITS OWN position — it must not retro-refuse the accepted close,
+    // resurrect the program, or erase the successor lineage.
+    const late = stamped({
+      type: "aggregate_v2", kind: "worker_handoff", task_id: "task-1", changeset_id: "cs-1",
+      recorded_at: "2099-01-01T00:02:00.000Z", session_id: "revisionist",
+      dispatch_event_id: authority.dispatch, prior_worker_event_id: authority.worker,
+      new_worker_session_id: "owner-z", owner_evidence: "late relabel",
+    });
+    writeFileSync(repairLedgerPath(ctx.dir), JSON.stringify(late) + "\n", { flag: "a" });
+    const parent = derive(ctx);
+    assert.equal(parent.terminal, "CLOSED", "the accepted close STANDS");
+    assert.equal(parent.closes.length, 1, "exactly the one close row holds");
+    assert.equal(parent.worker_handoffs.length, 0, "the late handoff lost at its own position");
+    const child = derive(ctx, "heir38");
+    assert.equal(child.panels_open.length, 1, "the child's program is untouched");
+    assert.equal(child.lineage_event_id, cont.event_id, "…and its lineage still stands");
+  } finally { ctx.cleanup(); }
+});
+
+test("M39: a PENDING lineage budget binds from declaration to first open — snipes refused, collisions refused at declaration", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    // Parent runs to GO. GO carries NO reservation, so between the continuation's declaration
+    // and the child's first open, ONLY the pending budget protects src/z.mjs.
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel, candidate, []);
+    assert.equal(closed.ok, true, closed.state);
+    const go = decide(ctx, closed, { terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(go.ok, true, go.state);
+    const cont = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: go.event_id, trigger_ids: [],
+      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on",
+      children: [{ task_id: "z-child", changeset_id: "z-child-cs", tier: "T2",
+        budget: "the z follow-on", authorized_paths: ["src/z.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(cont.ok, true, cont.state);
+    // BEFORE the child opens: an unrelated program cannot snipe the declared surface…
+    const snipe = sideCandidate(ctx, "sniper", { "src/z.mjs": "export const z = 'snipe';\n" });
+    assert.equal(openPanel(ctx, 1, snipe, { task: "sniper", changeset: "sniper-cs" }).opened.ok,
+      false, "the pending budget holds the surface for the child");
+    // …and a SECOND parent cannot declare a COLLIDING pending budget — two pending budgets
+    // overlapping would deadlock both children, so the collision refuses at declaration.
+    const p2Cand = sideCandidate(ctx, "p2-line", { "docs/p2.md": "p2\n" });
+    const p2Open = openPanel(ctx, 1, p2Cand, { task: "task-p2", changeset: "cs-p2" });
+    assert.equal(p2Open.opened.ok, true, p2Open.opened.state);
+    const p2Closed = closePanel(ctx, p2Open, p2Cand, [], { task: "task-p2", changeset: "cs-p2" });
+    const p2Go = decide(ctx, p2Closed, { task: "task-p2", changeset: "cs-p2",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(p2Go.ok, true, p2Go.state);
+    const collision = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-p2", changeset_id: "cs-p2",
+      parent_disposition_event_id: p2Go.event_id, trigger_ids: [],
+      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on",
+      children: [{ task_id: "z2-child", changeset_id: "z2-child-cs", tier: "T2",
+        budget: "colliding", authorized_paths: ["src/z.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(collision.ok, false);
+    assert.equal(collision.state, "aggregate-continuation-conflict",
+      "an overlapping pending budget refuses at declaration, where the deadlock is cheap to stop");
+    // The pre-open window, kept for the mutant pair below.
+    const window = loadRepairEventsForProject(ctx.dir);
+    const plantedSnipe = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "planted-z", changeset_id: "planted-z-cs",
+      recorded_at: "2099-01-01T00:03:00.000Z", session_id: "sniper", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: snipe.commit, frozen_tree: snipe.tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["src/z.mjs"],
+      expected_seats: expectedSeats(["src/z.mjs"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    });
+    // The child's own open on z passes — the hold excepts its own lineage…
+    const zCand = sideCandidate(ctx, "z-line", { "src/z.mjs": "export const z = 1;\n" });
+    const zOpen = openPanel(ctx, 1, zCand, { task: "z-child", changeset: "z-child-cs",
+      lineage: { continuation: cont.event_id } });
+    assert.equal(zOpen.opened.ok, true, zOpen.opened.state);
+    // …and once the child EXISTS, the surface is still refused — now by the child's own binding.
+    const snipe2 = sideCandidate(ctx, "sniper-after", { "src/z.mjs": "export const z = 2;\n" });
+    assert.equal(openPanel(ctx, 1, snipe2, { task: "sniper-after", changeset: "sniper-after-cs" }).opened.ok,
+      false, "after the open the hold has CONVERTED to the child's active binding");
+    // Disabled arm, both windows: pre-open, ONLY the pending arm stands between the sniper and
+    // the surface — disabling it reproduces the R3 snipe. Post-open, the same disabled arm
+    // changes nothing: the hold genuinely converted, it did not linger.
+    const finalRows = loadRepairEventsForProject(ctx.dir);
+    const plantedAfter = stamped({ ...plantedSnipe.event, task_id: "planted-after",
+      changeset_id: "planted-after-cs", frozen_commit: snipe2.commit, frozen_tree: snipe2.tree,
+      recorded_at: "2099-01-01T00:03:01.000Z" });
+    const mutant = await importMutant(mutantDir, [[
+      "lineage.task_id !== exceptTask && !programs.has(lineage.task_id) &&",
+      "false &&",
+    ]]);
+    assert.equal(deriveAggregateRepairState([...window.aggregate_events, plantedSnipe], "planted-z",
+      { standardEvents: window.events }).panels_open.length, 0, "the shipped arm refuses the snipe");
+    assert.equal(mutant.deriveAggregateRepairState([...window.aggregate_events, plantedSnipe], "planted-z",
+      { standardEvents: window.events }).panels_open.length, 1,
+    "without the pending arm the pre-open snipe lands — the R3 lockout of the child");
+    assert.equal(mutant.deriveAggregateRepairState([...finalRows.aggregate_events, plantedAfter], "planted-after",
+      { standardEvents: finalRows.events }).panels_open.length, 0,
+    "post-open the refusal is the child's own binding — the pending arm no longer carries it");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("M40: an ACTIVE program binds its authorized set PLUS any undisposed open — and EXACTLY the authorized set before one opens", async () => {
+  // Fixture A: r2's panel is OPEN (undisposed) over {x, y} while the authorized set is [x] —
+  // an unrelated open on y must refuse, or a concurrent program wedges the live program out of
+  // remediating its own reviewed surface (the executed R3 finding).
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
+    const cand1 = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, cand1);
+    const closed = closePanel(ctx, panel, cand1, ["F1"]);
+    const decided = decide(ctx, closed, { accepted: ["F1"], authorized_paths: ["src/x.mjs"] });
+    assert.equal(decided.ok, true, decided.state);
+    const authority = dispatchBatch(ctx, decided.event_id, closed.event_id, 2);
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 2;\n");
+    const cand2 = commit(ctx.dir, 2);
+    const p2 = openPanel(ctx, 2, cand2, { incoming: authority });
+    assert.equal(p2.opened.ok, true, p2.opened.state);
+    const yCand = sideCandidate(ctx, "wedge-y", { "src/y.mjs": "export const y = 'w';\n" });
+    assert.equal(openPanel(ctx, 1, yCand, { task: "task-p2", changeset: "cs-p2" }).opened.ok,
+      false, "a mid-review surface cannot be wedged away from the program reviewing it");
+    // Disabled arm: bind only the authorized set (the pre-R3 form) and the wedge lands.
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const plantedWedge = stamped({
+      type: "aggregate_v2", kind: "panel_open", task_id: "planted-p2", changeset_id: "planted-p2-cs",
+      recorded_at: "2099-01-01T00:04:00.000Z", session_id: "wedge", round: 1,
+      phase: "repair_round", tier: "T2", frozen_commit: yCand.commit, frozen_tree: yCand.tree,
+      base_ref: "origin/main", base_commit: ctx.base, changed_paths: ["src/y.mjs"],
+      expected_seats: expectedSeats(["src/y.mjs"]),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+      child_continuation_event_id: null, legacy_handoff_event_id: null,
+    });
+    assert.equal(deriveAggregateRepairState([...loaded.aggregate_events, plantedWedge], "planted-p2",
+      { standardEvents: loaded.events }).panels_open.length, 0, "the union arm refuses the wedge");
+    const mutant = await importMutant(mutantDir, [[
+      "if (program.active) return [...new Set([...program.authorized_paths, ...undisposed])];",
+      "if (program.active) return program.authorized_paths;",
+    ]]);
+    assert.equal(mutant.deriveAggregateRepairState([...loaded.aggregate_events, plantedWedge], "planted-p2",
+      { standardEvents: loaded.events }).panels_open.length, 1,
+    "binding only the authorized set reproduces the R3 wedge");
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+  // Fixture B: the SAME walk stopped at the CONTINUE + dispatch, r2 never opened — the bound is
+  // exactly the authorized set, so the unrelated y-open ACCEPTS. The polarity that keeps the
+  // union from quietly becoming a whole-repo freeze.
+  const ctxB = repo();
+  try {
+    writeFileSync(path.join(ctxB.dir, "src", "y.mjs"), "export const y = 1;\n");
+    const cand1 = commit(ctxB.dir, 1);
+    const panel = openPanel(ctxB, 1, cand1);
+    const closed = closePanel(ctxB, panel, cand1, ["F1"]);
+    const decided = decide(ctxB, closed, { accepted: ["F1"], authorized_paths: ["src/x.mjs"] });
+    assert.equal(decided.ok, true, decided.state);
+    dispatchBatch(ctxB, decided.event_id, closed.event_id, 2);
+    const yCand = sideCandidate(ctxB, "free-y", { "src/y.mjs": "export const y = 'f';\n" });
+    const free = openPanel(ctxB, 1, yCand, { task: "task-p2", changeset: "cs-p2" });
+    assert.equal(free.opened.ok, true,
+      `before a panel opens, the bound is exactly the authorized set: ${free.opened.state}`);
+  } finally { ctxB.cleanup(); }
 });
