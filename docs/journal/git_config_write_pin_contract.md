@@ -72,3 +72,35 @@ roster.
 - `terminal_round_breaker_contract.md`: a one-line resolution breadcrumb on the disclosed residual
   (history preserved; the append-only gate record is NOT edited).
 - `VERSION`: 2.16.0 → 2.17.0.
+
+## Gate record
+
+Frozen candidate: `c0a09b0` (tree `c1da38b`). Builder kill-pass (git-level immunity of `--file` write
++ read-back under `GIT_CONFIG` / `GIT_CONFIG_COUNT` injection / rev-parse) clean. RED/GREEN: the
+rewritten AC2 test is RED on the parent tree (old code strays a write into the foreign file, exit 1)
+and GREEN on the candidate. Full suite 275/275, all three rungs green, user-install parity in sync.
+
+**Cross-family external seat:** the Codex (GPT-family) seat timed out twice — external plumbing
+unavailable. Substituted a BLIND, decorrelated same-family seat that CONSTRUCTED AND EXECUTED 12
+attack scenarios against the frozen candidate (temp repos, real `init` runs, git 2.50.1): `GIT_CONFIG`,
+`GIT_CONFIG_GLOBAL/SYSTEM`, `GIT_CONFIG_COUNT/KEY/VALUE` injection, a linked worktree under a redirect
+(COMMON config armed), all location-override / symlink / gitdir-file refusals, and a before/after
+byte-compare of the redirect sink (no stray write). It independently reproduced the parent-tree INV1
+violation. Verdict: no violation of INV1–INV4; the change is sound. Deviation from the T2 cross-family
+default disclosed to the Owner at push-GO.
+
+`GATE ROUND 1 · changeset git-config-write-pin · verdict GO · HARM-PASSING 0 · NOTES 2`
+- **DEFER — malformed `GIT_CONFIG_COUNT` soft fail-open (pre-existing, out of model).** A malformed
+  `GIT_CONFIG_COUNT=1` with no `GIT_CONFIG_KEY_0` makes every git op fatal, so `isGitRepo(T)` returns
+  false and init exits 0 with a "not a git repo yet" warning — a real repo left unarmed, un-refused.
+  TRIGGER: that broken env; but `isGitRepo` and the caller's not-a-repo branch are UNCHANGED by this
+  commit, and this is a fully-broken git environment, not a config-*redirect* diversion (well-formed
+  COUNT injection is immune — attack A2). Banked as a follow-up candidate; does not block this GO.
+- **NOTE — git-version coverage.** Verified on git 2.50.1 only; `--file` write-isolation and
+  `GIT_CONFIG*` read-immunity are longstanding behaviors. FAILED HARM: no ancient-git adopter
+  demonstrated; low risk.
+- **NOTE — `escapingGitDir` worktree exemption.** A `.git` file crafted to nest under an
+  attacker-controlled foreign repo's `worktrees/` would be adopted. FAILED HARM: requires attacker
+  write access to the target's own `.git` (already game-over); pre-existing, unchanged by this commit.
+
+Zero accepted blockers ⇒ **GO** (subject to the Owner's push-GO). LADDER: terminal-GO.
