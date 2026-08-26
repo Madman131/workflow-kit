@@ -314,7 +314,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(f, /proportionate fix for a \*\*located\*\* defect/);
   assert.match(f, /ADDS a control \/ test \/ machinery/);
   assert.match(f, /narrow, delete, or escalate — never grow/);
-  assert.match(w, /· ACTION-SCREEN <—\|named>/);            // the emission line reserves the slot
+  assert.match(w, /· ACTION-SCREEN <—\|named per RULE #1>/); // the emission line reserves the slot + points to the rule
   assert.match(r, /VOID without its `ACTION-SCREEN`/);       // pass-type-style teeth in REVIEW
 });
 

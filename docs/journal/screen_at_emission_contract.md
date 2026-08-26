@@ -92,14 +92,20 @@ walk-through + a cross-family Codex seat — **both landed the same verdict: v1 
 - Contradiction/precedence checks: no collision (RANK-4 LOW).
 
 **Batch-1 remediation (all applied):** mirror `pass-type` exactly — a reserved **`ACTION-SCREEN` slot** in
-`WORKFLOW:81`'s emission line (absence now a visible empty slot; two redundant clauses trimmed to fit the
-25,088 B cap, headroom 37 B), the **VOID-without-it teeth** in `core/REVIEW.md` beside the free-pass rule,
+`WORKFLOW:81`'s emission line (absence now a visible empty slot; one redundant clause trimmed to fit, then
+the method cap Owner-raised 25088 → 25600 B for headroom), the **VOID-without-it teeth** in `core/REVIEW.md` beside the free-pass rule,
 and the rule made **evidence-bound** in FOUNDATIONS: a defect reachable *as-shipped* is REMEDIATE regardless
 of framing, any trigger that fires on the candidate forbids DEFER, and a proportionate fix for a *located*
 defect is allowed (only hypothetical/non-located machinery is the zoom-out case). Carve-outs still screen
 first. Full suite green after remediation.
 
-**R2 — fold-check on the delta pending; then Owner wording sign-off (= push-GO).** No hook ripple (the
-hook-contract test pins only the bold funnel questions + the block up to "LADDER: continue"; the slot is
-neither). Note the WORKFLOW cap is at 37 B headroom — flag a small Owner cap-raise as optional hygiene, the
-fix fits without it.
+**R2 — fold-check on the delta: SOUND.** Both prior findings verified CLOSED at the evidence level, the fix
+mirrors `pass-type` structurally, pins co-evolved, no fail-open path (a malformed emission line can't clear
+an accepted blocker — the finite-aggregate controller backstops). Three LOW NOTE-level seams: **N1** (the
+WORKFLOW slot lacked a pointer) — REMEDIATED with a 2-word `per RULE #1` pointer, since it affects whether
+the emission surface forces the screen for a WORKFLOW-only reader; **N2** ("VOID" states invalidity not the
+fail-safe direction — backstopped by the controller) and **N3** (empty-slot signal weakest on a GO that
+proposes an added-control — the VOID rule still governs, its trigger being the action) ship as NOTES, not
+chased. The fold-check also caught a doc-truth error (one clause trimmed, not two) — corrected here and in
+the cap-decision log. No hook ripple. **Owner: "raise the cap and finish the gate" (2026-08-26) — cap
+raised to 25600 B, gate closed GO.**
