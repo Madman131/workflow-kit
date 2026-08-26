@@ -118,5 +118,27 @@ code = absence of review, not absence of risk" stated; fence (b) excludes the bu
 as a lightening basis; kill-pass demoted from orphan mandate to the builder's discipline that "never
 lightens the panel"; cross-family made explicitly FLOOR, "never the droppable mixed-fleet excess."
 
-**R2 — fold-check** on the remediation delta: verifying each finding closed + no new hole (in flight).
-Then `/sweep` by claim, then the Owner's wording sign-off (= push-GO). No external gate (prose/idea).
+**R2 — fold-check** on the batch-1 delta: all five prior findings verified CLOSED with accurate
+citations; the "reviewed residual" self-judgment confirmed fenced (cannot breach the floor). Two wording
+nits (N1: "full precommitted panel" ≠ floor made explicit; N2: "tier"→"mandate" so class rungs count as
+floor) — NOTES by RULE #1, applied as author polish, no new panel.
+
+**R3 — cross-family lens (Codex/GPT, owed on `core/` with no exception).** The prior two passes were
+same-family (Claude); the cross-family seat CAUGHT WHAT THEY MISSED — the decorrelation value the rule
+exists for. Four findings, two substantive (accepted → batch-2 REMEDIATE):
+- **#1** a normal R1→R2 continuation's repair DELTA is itself unreviewed code; if the scaled floor drops
+  the angle that delta implicates, novel repair risk is under-gated. FIX: the floor now includes an angle
+  for every dimension the candidate's OWN changes implicate — a repair delta's angle is floor, never excess.
+- **#2** "full precommitted panel = the set bound at its own `panel_open`" was circular (that set could be
+  floor-sized). FIX: anchored to the changeset's RISK-LIVE roster, not a later-reduced one.
+- **#3** (tighten) the "T2 lens when available" paraphrase → point to § Cross-family lens (the escape is
+  pre-existing doctrine, not introduced here).
+- **#4** (tighten) sharpened that RULE #1's "cutting seats" protects the floor/DEPTH; excess above it is
+  neither.
+
+**STOP the adversarial escalation here** (per this amendment's own thesis + the disposition brake): three
+passes found real but converging refinements, all fixed; a fourth seat on a doctrine paragraph is the
+over-gating this rule forbids. `/sweep` by claim: clean — every panel-roster/seat-count/weight claim in
+`core/` (REVIEW §Decorrelation, WORKFLOW §§ Steer rule 2 / controller / Final-gate) is referenced or
+reconciled, none contradicted. No external gate (prose/idea; core-doc substance is the Owner's call).
+Terminal gate = the Owner's wording sign-off (= push-GO).
