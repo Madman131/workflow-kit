@@ -302,6 +302,17 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(r, /a finding that blocks must name the harm — to the Owner\/user, to the usability of the product, or to the FUNCTIONALITY of the code/);
   assert.match(r, /Report everything you find anyway: the DISPOSITION applies the threshold, not the seat/);
   assert.match(r, /under-reporting is the failure mode this rule creates/);
+
+  // v2.19.0 — RULE #1 binds the RECOMMENDATION, not only the findings. The screen on the proposed
+  // action (NO-GO close / successor / added control) is EMITTED, so the Owner never has to ask; the
+  // two defaults (hypothetical ⇒ DEFER, add-machinery ⇒ zoom-out) and the anti-bogus-DEFER fence pin.
+  assert.match(f, /RULE #1 binds the ACTION you recommend, not only the findings/);
+  assert.match(f, /no emitted screen ⇒ \*\*out-of-process\*\*|no emitted screen ⇒ out-of-process/);
+  assert.match(f, /hypothetical the candidate does not exhibit/);
+  assert.match(f, /DEFER, never a blocker/);
+  assert.match(f, /ADDS a control \/ test \/ machinery/);
+  assert.match(f, /narrow, delete, or escalate — never grow/);
+  assert.match(f, /labelling a real defect "hypothetical" cannot bank it/);
 });
 
 test("the retired chase machinery is gone and the finite aggregate controller replaces it", () => {

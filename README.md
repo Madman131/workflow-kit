@@ -1,4 +1,17 @@
-# workflow-kit — v2.18.0
+# workflow-kit — v2.19.0
+
+## What's new in v2.19.0 — screen the recommendation, not just the findings
+
+`core/FOUNDATIONS.md` RULE #1 now binds the ACTION you recommend to the Owner, not only the findings.
+Before a NO-GO closes or a successor / continuation / added control is proposed, the PM screens the
+PROPOSED action (the three harm targets + REAL + zoom-out/KISS) and EMITS that screen in the record — so
+the Owner reads a decision with its screen attached and never has to ask for it; its absence is the signal
+(no emitted screen ⇒ out-of-process, the same honour-but-visible discipline as `pass-type`). Two defaults
+are made unskippable at that boundary: a finding about a hypothetical the candidate does not exhibit (a
+future restructuring, a wrapper that is not in the code) is out of the declared threat model ⇒ DEFER,
+never a blocker; and a remediation that ADDS a control/test/machinery instead of fixing a located product
+defect is the zoom-out case ⇒ narrow, delete, or escalate, never grow. It waives nothing — a DEFER of a
+rated blocker still owes its failed trigger, so labelling a real defect "hypothetical" cannot bank it.
 
 ## What's new in v2.18.0 — panel weight scales to residual risk
 
