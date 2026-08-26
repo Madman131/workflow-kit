@@ -77,3 +77,29 @@ three-target pin holds), this contract, VERSION/README/package.json to 2.19.0. C
 mirror-surfaces test ("every surface that APPLIES rule #1") requires the new clause on other surfaces or
 only the three targets (it pins the targets; the new clause is FOUNDATIONS-canonical unless the test says
 otherwise). No mechanism/hook change (doctrine only) — unless the Owner wants the optional armed sensor.
+
+## Gate record
+
+Frozen v1 candidate `35cb761`. Builder kill-pass: full suite green. Then the mandated adversarial
+walk-through + a cross-family Codex seat — **both landed the same verdict: v1 was decorative.**
+- **CRITICAL (both) — placement/forcing-function.** v1 put the obligation in FOUNDATIONS (a boot doc) while
+  the emission template the agent fills (`WORKFLOW:81`) was unchanged and had no slot. "No emitted screen ⇒
+  out-of-process" was weaker than `pass-type` (no reserved field + no teeth at the emission surface), so
+  absence was invisible and it degraded to the same "should" that failed at Round 26.
+- **HIGH (both) — label-based, not evidence-based.** The defaults ("hypothetical", "added machinery") were
+  self-judged: an agent could downgrade-then-relabel a real defect, or call a legitimate located-defect fix
+  "added machinery" to dodge warranted work.
+- Contradiction/precedence checks: no collision (RANK-4 LOW).
+
+**Batch-1 remediation (all applied):** mirror `pass-type` exactly — a reserved **`ACTION-SCREEN` slot** in
+`WORKFLOW:81`'s emission line (absence now a visible empty slot; two redundant clauses trimmed to fit the
+25,088 B cap, headroom 37 B), the **VOID-without-it teeth** in `core/REVIEW.md` beside the free-pass rule,
+and the rule made **evidence-bound** in FOUNDATIONS: a defect reachable *as-shipped* is REMEDIATE regardless
+of framing, any trigger that fires on the candidate forbids DEFER, and a proportionate fix for a *located*
+defect is allowed (only hypothetical/non-located machinery is the zoom-out case). Carve-outs still screen
+first. Full suite green after remediation.
+
+**R2 — fold-check on the delta pending; then Owner wording sign-off (= push-GO).** No hook ripple (the
+hook-contract test pins only the bold funnel questions + the block up to "LADDER: continue"; the slot is
+neither). Note the WORKFLOW cap is at 37 B headroom — flag a small Owner cap-raise as optional hygiene, the
+fix fits without it.
