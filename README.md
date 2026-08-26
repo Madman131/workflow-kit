@@ -1,4 +1,18 @@
-# workflow-kit — v2.17.0
+# workflow-kit — v2.18.0
+
+## What's new in v2.18.0 — panel weight scales to residual risk
+
+`core/REVIEW.md` § Decorrelation now states that the panel's WEIGHT scales to residual risk while its
+FLOOR never does. The terminal aggregate controller bounds the number of rounds but not panel weight, so
+a continuation whose findings had collapsed to peripheral residue still drew a full mixed-fleet roster.
+The amendment lets the EXCESS provisioned above the mandated floor (the tier's seat counts + cross-family
+requirement) scale down for an R1→R2 continuation whose *reviewed* residual has demonstrably collapsed —
+while the floor never drops, the terminal R4 bookend and any root-replacement candidate ALWAYS receive the
+full precommitted panel, and neither a clean budget-free pass nor the builder's own kill-pass may lighten
+the panel. It also names the builder's pre-freeze kill-pass as the discipline that makes the panel an
+independent check rather than the first attack. This is not a seat cut (`core/FOUNDATIONS.md` RULE #1):
+the seats that catch harm stay; only excess piled past the floor on a genuinely low-residual continuation
+is dropped. The recurring efficiency audit is deliberately NOT part of this — it stays out of doctrine.
 
 ## What's new in v2.17.0 — the init `git config` write is pinned to `--file`
 
