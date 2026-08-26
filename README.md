@@ -1,4 +1,21 @@
-# workflow-kit — v2.18.0
+# workflow-kit — v2.19.0
+
+## What's new in v2.19.0 — screen the recommendation, not just the findings
+
+RULE #1 (`core/FOUNDATIONS.md`) now binds the ACTION the PM recommends to the Owner, not only the
+findings. Before a NO-GO closes or a successor / continuation / added control is proposed, the PM screens
+the PROPOSED action (the three harm targets + REAL + zoom-out/KISS) and names it in an emitted
+**`ACTION-SCREEN`** field — the emission line reserves the slot (`core/WORKFLOW.md` § Gate) and, exactly as
+a verdict is NO-GO without a named free pass, **a NO-GO/successor is VOID without its `ACTION-SCREEN`**
+(`core/REVIEW.md`, the teeth `pass-type` has). So the Owner reads a decision with its screen attached and
+never has to ask; its absence is a visible empty slot. The screen is **evidence-bound, not label-bound** —
+it turns on the candidate *as-shipped*: (1) a finding the candidate does not exhibit (a hypothetical future
+wrapper not in the code) is out of the declared threat model ⇒ DEFER — but only where the trigger genuinely
+needs code the candidate lacks; a defect reachable as-shipped is REMEDIATE regardless of framing, and any
+trigger that fires on the candidate forbids DEFER; (2) machinery added to chase a hypothetical/non-located
+target is the zoom-out case ⇒ narrow/delete/escalate, never grow — but a proportionate fix for a *located*
+defect (a guard, validation, a regression test) is allowed. Origin: a live gate ran to Round 26 proposing
+machinery to catch a wrapper the candidate never had; the screen only ran when the Owner asked.
 
 ## What's new in v2.18.0 — panel weight scales to residual risk
 

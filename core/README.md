@@ -83,7 +83,7 @@ its class in a marker on line 3**, and `scripts/check-doc-size.mjs` reads that m
   | Role | Docs | Cap | Derived from |
   |---|---|---|---|
   | **entry** | `CLAUDE.md` · `AGENTS.md` | **8 KiB** | read at the start of every session |
-  | **method** | `FOUNDATIONS` · `WORKFLOW` · `REVIEW` · `ARTIFACT_CLASS` · `OPERATE` · `MULTI_AGENT` · `BINDINGS` · `OWNER_COMMS` | **24.5 KiB** | the boot budget (~72 KB / ~27K tokens) |
+  | **method** | `FOUNDATIONS` · `WORKFLOW` · `REVIEW` · `ARTIFACT_CLASS` · `OPERATE` · `MULTI_AGENT` · `BINDINGS` · `OWNER_COMMS` | **25 KiB** | the boot budget (~72 KB / ~27K tokens) |
   | **payload** | `INVARIANTS` · `REPO_INVARIANTS` | **8 KiB** | the Gemini 80 KiB INLINE ceiling + signal-to-noise |
   | **snapshot** | `SYSTEM_MAP.md` | **8 KiB** | a boot-read architecture snapshot; keep it tight so boot stays cheap |
 

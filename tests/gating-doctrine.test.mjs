@@ -302,6 +302,20 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(r, /a finding that blocks must name the harm — to the Owner\/user, to the usability of the product, or to the FUNCTIONALITY of the code/);
   assert.match(r, /Report everything you find anyway: the DISPOSITION applies the threshold, not the seat/);
   assert.match(r, /under-reporting is the failure mode this rule creates/);
+
+  // v2.19.0 — RULE #1 binds the RECOMMENDATION, not only the findings. The ACTION-SCREEN is an
+  // EMITTED, EVIDENCE-BOUND field with pass-type teeth (a NO-GO/successor is VOID without it); the
+  // two defaults turn on the candidate AS-SHIPPED, not on labels. Field slot in WORKFLOW's emission
+  // line, teeth in REVIEW (parallel to the free-pass rule), the rule + evidence-binding in FOUNDATIONS.
+  assert.match(f, /RULE #1 binds the ACTION you recommend, not only the findings/);
+  assert.match(f, /evidence-bound, not label-bound/);
+  assert.match(f, /a defect reachable as-shipped is REMEDIATE regardless of framing/);
+  assert.match(f, /any trigger that FIRES on the candidate forbids DEFER/);
+  assert.match(f, /proportionate fix for a \*\*located\*\* defect/);
+  assert.match(f, /ADDS a control \/ test \/ machinery/);
+  assert.match(f, /narrow, delete, or escalate — never grow/);
+  assert.match(w, /· ACTION-SCREEN <—\|named per RULE #1>/); // the emission line reserves the slot + points to the rule
+  assert.match(r, /VOID without its `ACTION-SCREEN`/);       // pass-type-style teeth in REVIEW
 });
 
 test("the retired chase machinery is gone and the finite aggregate controller replaces it", () => {
