@@ -247,7 +247,11 @@ BACK from the target's own config file (via `git config --file <resolved>`, immu
 environment can UNDETECTABLY arm a foreign repo or leave the target falsely armed. The one
 residual, disclosed: a `GIT_CONFIG` redirect writes `core.hooksPath` into the redirected config
 ONCE before the read-back refuses (reversible, signaled) — detection, not yet prevention; pinning
-the write to `--file <resolved>` is the banked prevention follow-up. A
+the write to `--file <resolved>` is the banked prevention follow-up.
+**[RESOLVED 2026-08-25, v2.17.0 — the write is now pinned to `--file <resolved>`; under `GIT_CONFIG`
+init arms the target's OWN config with no stray write. The refuse-under-`GIT_CONFIG` behavior this
+paragraph records is superseded. See `git_config_write_pin_contract.md`; this disclosure is kept as
+history.]** A
 symlinked `.claude/settings.json` refuses the merge (plain: a named warning printing the
 RESOLVED target; forced: counted, exit 1); a present-but-unparseable one is backed up
 byte-for-byte before regeneration, and a forced merge that would CHANGE a regular settings

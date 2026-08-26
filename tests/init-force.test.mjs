@@ -23,8 +23,9 @@
 //   · the two root-level appends (.gitignore, AGENTS.md) lstat before they write;
 //   · a DANGLING intermediate directory link is a typed, counted refusal — never a raw ENOENT
 //     stack trace from mkdir;
-//   · (ROOT-BATCH, write-target trust) the core.hooksPath write is trusted by READING IT BACK from
-//     the target's own config, catching GIT_CONFIG and any write-redirect var no name list knows;
+//   · (ROOT-BATCH, write-target trust) the core.hooksPath write is PINNED to the target's own config
+//     with `git config --file <resolved>`, so GIT_CONFIG and any write-redirect var no name list
+//     knows cannot divert it — a read-back from that same file then confirms it landed;
 //     a `.git` regular-FILE gitdir pointer to another repo refuses while a worktree pointer adopts;
 //     an unwritable .gitignore is a counted refusal, never a throw that kills the accounting; a
 //     corrupt settings.json is backed up byte-for-byte (non-UTF-8 intact); and a dangling
@@ -418,12 +419,13 @@ test("a SYMLINKED .git refuses the core.hooksPath write — it may not land in A
   }
 });
 
-test("the core.hooksPath write is trusted by READ-BACK, not by a name enumeration: GIT_CONFIG is caught", () => {
-  // ROOT-BATCH 1, the resolved-EFFECT discipline. `git config core.hooksPath` obeys GIT_CONFIG (and
-  // any future write-redirect var), so a bare write lands in a FOREIGN file and exits 0 while the
-  // target's floor stays unset. The `.git` here is an ORDINARY directory — the symlink pre-check and
-  // the GIT_*DIR name-enumeration both see nothing wrong — so ONLY the post-write read-back from the
-  // target's OWN config can catch it. That is the point: the trust is in the effect, not the name.
+test("the core.hooksPath write is PINNED to the target's own config with --file: GIT_CONFIG cannot divert it", () => {
+  // ROOT-BATCH 1, the resolved-EFFECT discipline — now on the WRITE, not just the read-back. A bare
+  // `git config core.hooksPath` obeys GIT_CONFIG (and any future write-redirect var) and would land
+  // in a FOREIGN file. Pinning the write to `git config --file <the target's own resolved config>`
+  // overrides the redirect: the value lands in the adopted repo's own config and the sink stays
+  // untouched. The `.git` here is an ORDINARY directory — nothing in the environment is wrong except
+  // the redirect — so this proves the WRITE itself is immune, not merely that an escape is caught.
   const home = mkdtempSync(path.join(os.tmpdir(), "kit-force-gitconfig-"));
   const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-force-prompts-"));
   const GIT_ENV = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_CONFIG"];
@@ -440,27 +442,24 @@ test("the core.hooksPath write is trusted by READ-BACK, not by a name enumeratio
     execFileSync("git", ["init", "-q", target]);
     const realConfig = path.join(target, ".git", "config");
     const foreign = path.join(home, "foreign-config");
-    writeFileSync(foreign, "");   // GIT_CONFIG redirect sink
+    writeFileSync(foreign, "");   // a GIT_CONFIG redirect sink that must stay untouched
 
     const r = runInit(target, { GIT_CONFIG: foreign });
-    assert.equal(r.status, 1, "a redirected core.hooksPath write is a FAILING state, not a silent exit 0");
-    assert.match(r.stderr, /REFUSED to set core\.hooksPath/, "the refusal is printed at the site");
-    assert.match(r.stderr, /did not read back from .+ own git config/, "…named as a read-back failure, the resolved-effect check");
-    assert.match(r.stderr, /overwrite\(s\) were REFUSED/, "…and counted into the end-of-run report");
-    assert.ok(r.stderr.includes(`· ${path.join(target, ".git")}`), "…which names the .git whose write escaped");
-    assert.doesNotMatch(r.stdout, /core\.hooksPath=\.githooks/, "…and never prints the success line claiming the binding it could not make");
-    // The write went to the FOREIGN file; the target's OWN config never got it.
-    assert.match(readFileSync(foreign, "utf8"), /hooksPath = \.githooks/, "the write really landed in the redirect target");
-    assert.equal(spawnSync("git", ["-C", target, "config", "--file", realConfig, "--get", "core.hooksPath"], { encoding: "utf8" }).status, 1,
-      "…and NOT in the adopted repo's own config");
+    assert.equal(r.status, 0, "with the write pinned to --file, a GIT_CONFIG redirect no longer diverts it: init arms and exits 0");
+    assert.doesNotMatch(r.stderr, /REFUSED to set core\.hooksPath/, "…so there is nothing to refuse");
+    assert.match(r.stdout, /core\.hooksPath=\.githooks/, "…and it prints the binding it really made");
+    // The write went to the TARGET's OWN config; the GIT_CONFIG sink got NO core.hooksPath.
+    assert.doesNotMatch(readFileSync(foreign, "utf8"), /hooksPath/, "the GIT_CONFIG redirect target received NO stray core.hooksPath write");
+    assert.equal(spawnSync("git", ["-C", target, "config", "--file", realConfig, "--get", "core.hooksPath"], { encoding: "utf8" }).stdout.trim(),
+      ".githooks", "…the value landed in the adopted repo's own config");
 
-    // Polarity: without the redirect the same install sets core.hooksPath and exits 0 — so the exit
-    // 1 above is the read-back's doing, not something general about this target.
+    // Polarity: the same install in a clean environment is identical — proving the exit 0 above is
+    // the pinned write's doing, and that arming did not depend on the redirect being present.
     const clean = runInit(target);
     assert.equal(clean.status, 0, `a clean environment adopts and arms: ${clean.stderr}`);
     assert.match(clean.stdout, /core\.hooksPath=\.githooks/, "…reports the binding");
     assert.equal(spawnSync("git", ["-C", target, "config", "--file", realConfig, "--get", "core.hooksPath"], { encoding: "utf8" }).stdout.trim(),
-      ".githooks", "…which really landed in the target's own config this time");
+      ".githooks", "…which really landed in the target's own config");
   } finally {
     rmSync(home, { recursive: true, force: true });
     rmSync(codexDir, { recursive: true, force: true });

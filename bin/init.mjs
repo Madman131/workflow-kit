@@ -733,29 +733,30 @@ function gitRevParse(target, flag) {
   } catch { return null; }
 }
 
-// ROOT-BATCH CURE (write-target trust): set a git config key AND PROVE it landed in the target's
-// OWN config — the resolved-EFFECT discipline that replaces trusting a NAME ENUMERATION. `git
-// config <key> <value>` obeys GIT_CONFIG (and any future write-redirect var), so a bare write can
-// silently land in a FOREIGN file while exiting 0. After the write we resolve the target's real
-// config path with rev-parse (immune) and read the value back with `git config --file <that path>`
-// (also immune — a bare `git config --get` is redirected by GIT_CONFIG too). The value is trusted
-// ONLY when it reads back from the target's own config. This closes GIT_CONFIG and every future
-// write-redirect var at once, without enumerating any of them. Returns true iff the write provably
-// landed in the target; false when it went elsewhere or git failed.
+// ROOT-BATCH CURE (write-target trust): set a git config key DIRECTLY in the target's OWN config and
+// PROVE it landed there — the resolved-EFFECT discipline that replaces trusting a NAME ENUMERATION.
+// A bare `git config <key> <value>` obeys GIT_CONFIG (and any future write-redirect var), so it can
+// silently land the write in a FOREIGN file. We instead resolve the target's real config path with
+// rev-parse (IMMUNE to GIT_CONFIG) FIRST, then pin BOTH the write and the read-back to it with `git
+// config --file <that path> …`. `--file` overrides any config-file redirect, so the write lands in
+// the target's own config and never escapes, and the read-back (also `--file`, also immune) confirms
+// it. This PREVENTS the escape — not merely detects it after one stray write — and closes GIT_CONFIG
+// and every future write-redirect var at once, without enumerating any of them. core.hooksPath is a
+// --local setting, which for a linked worktree lives in the COMMON config, so the path we resolve and
+// write is --git-common-dir's (rev-parse hands back a relative ".git" for a plain repo; resolve it
+// against the target). Returns true iff the value provably reads back from the target's own config;
+// false when git cannot resolve the target, or cannot write or read it.
 function gitConfigVerified(target, key, value) {
-  try {
-    execFileSync("git", ["-C", target, "config", key, value], { stdio: ["ignore", "pipe", "pipe"] });
-  } catch { return false; }
-  // core.hooksPath is a --local setting, which for a linked worktree lives in the COMMON config —
-  // so the read-back must resolve the common dir, not the per-worktree gitdir. rev-parse hands back
-  // a relative ".git" for a plain repo; resolve it against the target.
   const commonDir = gitRevParse(target, "--git-common-dir");
   if (commonDir === null) return false;
   const configFile = path.resolve(target, commonDir, "config");
+  try {
+    execFileSync("git", ["-C", target, "config", "--file", configFile, key, value], { stdio: ["ignore", "pipe", "pipe"] });
+  } catch { return false; }
   let readBack;
   try {
     readBack = execFileSync("git", ["-C", target, "config", "--file", configFile, "--get", key], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  } catch { return false; }   // absent from the target's real config = the write escaped it
+  } catch { return false; }   // could not read the target's own config back
   return readBack === value;
 }
 
@@ -933,13 +934,13 @@ function main() {
         ? `  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`
         : `  core.hooksPath=.githooks set — but the pre-commit is an EXISTING, UNVERIFIED hook (see warning above); the every-lane guarantee depends on it, NOT confirmed`);
     } else {
-      // The write did NOT read back from the target's OWN config: a GIT_CONFIG / write-redirect var
-      // sent it to a foreign file, or git could not write it. Either way the every-lane floor is
-      // NOT set here — a counted refusal, not a soft warn that exits 0 on an unarmed repo. This is
-      // the backstop that makes the write-target-trust categorical for any redirect var, named or
-      // not. No `git config …` remedy is offered: run by hand under the same redirect it repeats.
+      // The write into the target's OWN config, or the read-back from it, failed: git could not
+      // resolve --git-common-dir, or could not write/read that file. The write is PINNED to it with
+      // --file, so a GIT_CONFIG / write-redirect var can no longer divert it — reaching here means a
+      // REAL failure on the target's own config, not an escape. Either way the every-lane floor is
+      // NOT set here — a counted refusal, not a soft warn that exits 0 on an unarmed repo.
       backupRefused.push(path.join(T, ".git"));
-      warn(`REFUSED to set core.hooksPath: the write did not read back from ${T}'s own git config — it was redirected to another file (a GIT_CONFIG / write-redirect variable in this environment) or git could not write it. The every-lane commit floor is NOT set here. Clear any GIT_CONFIG* variables, confirm git can write ${T}'s config, and re-run.`);
+      warn(`REFUSED to set core.hooksPath: writing it into ${T}'s own git config — or reading it back — failed; git could not resolve or write ${T}'s config file. The every-lane commit floor is NOT set here. Confirm ${T} is a writable git repository and re-run.`);
     }
   } else {
     // isGitRepo(T) came back false — but a Git LOCATION variable set to an EMPTY value makes git
