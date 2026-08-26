@@ -1,4 +1,16 @@
-# workflow-kit — v2.16.0
+# workflow-kit — v2.17.0
+
+## What's new in v2.17.0 — the init `git config` write is pinned to `--file`
+
+`bin/init.mjs` now writes `core.hooksPath` DIRECTLY into the target's own config with `git config
+--file <resolved>`, resolving that path up front with `git rev-parse --git-common-dir` (immune to
+`GIT_CONFIG`). `--file` overrides any config-file redirect, so a `GIT_CONFIG` — or any write-redirect
+variable, named or not — can no longer divert the write into a foreign file: the escape is PREVENTED,
+not merely detected after one stray write. Under such a redirect `init` now arms the target's own
+config and exits 0 instead of refusing. This lands the prevention follow-up banked by the
+terminal-round-breaker R4 residual; the post-write read-back stays as the confirmation. Git-location
+overrides (`GIT_DIR`/`GIT_COMMON_DIR`/`GIT_WORK_TREE`) and symlink / gitdir-file escapes are refused
+exactly as before.
 
 ## What's new in v2.16.0 — the terminal aggregate controller
 
