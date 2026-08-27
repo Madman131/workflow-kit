@@ -1,4 +1,18 @@
-# workflow-kit — v2.22.0
+# workflow-kit — v2.23.0
+
+## What's new in v2.23.0 — the Owner-continuation tier floor, in the skill and guarded
+
+`core/WORKFLOW.md` § Gate already bound it: rework after a terminal STOP happens only through an **Owner
+continuation — a parent-linked child `(tier ≥ parent's)`** whose GO frees the reserved paths, while the
+parent stays terminal. But the `/orchestrate` **skill** — the doc an agent actually loads to run a program —
+stated only "an Owner child links to a terminal parent without resetting it," dropping the floor. A
+continuation built from the skill alone could under-gate a T3 parent's rework at T1. The skill now carries
+`(tier ≥ parent's)` in that sentence (`skills/orchestrate/SKILL.md` step 5), synced byte-for-byte into the
+installed skill. A guard test pins the floor and adds a **negative sentinel** that reddens if any retired
+pre-terminal CIRCULAR-cadence vocabulary ("two-cycle window", "process audit on the exact", "next cycle's
+round") ever creeps back into the skill body — a self-canaried regex, so the sentinel cannot go silently dead
+(`tests/orchestrate-skill.test.mjs`). Graduation of `FAILURE_MODES.md` FM-2026-08-27-16 (a hand-port skewed
+the installed skill because the circular→terminal sweep never covered the skill layer).
 
 ## What's new in v2.22.0 — a successor is a screened recommendation, mechanically
 
