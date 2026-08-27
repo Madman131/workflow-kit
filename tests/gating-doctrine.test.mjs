@@ -316,6 +316,13 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(f, /narrow, delete, or escalate — never grow/);
   assert.match(w, /· ACTION-SCREEN <—\|named per RULE #1>/); // the emission line reserves the slot + points to the rule
   assert.match(r, /VOID without its `ACTION-SCREEN`/);       // pass-type-style teeth in REVIEW
+
+  // v2.20 — the terminal bookend runs the fresh-look ACTION-SCREEN before it closes: a mis-accepted
+  // blocker closes GO as a residual, a surviving one closes STOP carrying the Owner a screened
+  // recommendation (narrow continuation on the located defect, or abandon) — never a bare dead-end.
+  assert.match(w, /Before it closes, the bookend runs the fresh-look `ACTION-SCREEN` on each accepted blocker/);
+  assert.match(f, /At the terminal bookend the same screen produces the Owner's decision, never a bare STOP/);
+  assert.match(f, /a \*\*narrow continuation\*\* on only the located defect \(never machinery for a hypothetical\), or \*\*abandon\*\*/);
 });
 
 test("the retired chase machinery is gone and the finite aggregate controller replaces it", () => {

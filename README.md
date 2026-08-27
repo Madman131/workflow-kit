@@ -1,4 +1,16 @@
-# workflow-kit — v2.19.0
+# workflow-kit — v2.20.0
+
+## What's new in v2.20.0 — the terminal STOP is never a bare dead-end
+
+The terminal bookend now marries the finite-aggregate controller (v2.16) to the screen-at-emission rule
+(v2.19) at the one moment they matter most. **Before the bookend closes, it runs the fresh-look
+`ACTION-SCREEN` on each accepted blocker** (`core/FOUNDATIONS.md` RULE #1 — RULE #1 + REAL + zoom-out/KISS,
+evidence-bound to the candidate as-shipped): a blocker that FAILS that fresh screen was never real (the
+mis-accepted or hypothetical case — the Round-26 defect), so the correct close is GO with it a named
+residual; one that SURVIVES closes STOP — but the STOP is never handed to the Owner bare. It carries ONE
+screened recommendation for his approval: accept the named residuals and GO, a narrow continuation on only
+the located defect (never machinery for a hypothetical), or abandon. The Owner decides; he never has to ask
+for the fresh look.
 
 ## What's new in v2.19.0 — screen the recommendation, not just the findings
 
