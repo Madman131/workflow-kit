@@ -3,14 +3,16 @@
 ## What's new in v2.20.0 — the terminal STOP is never a bare dead-end
 
 The terminal bookend now marries the finite-aggregate controller (v2.16) to the screen-at-emission rule
-(v2.19) at the one moment they matter most. **Before the bookend closes, it runs the fresh-look
-`ACTION-SCREEN` on each accepted blocker** (`core/FOUNDATIONS.md` RULE #1 — RULE #1 + REAL + zoom-out/KISS,
-evidence-bound to the candidate as-shipped): a blocker that FAILS that fresh screen was never real (the
-mis-accepted or hypothetical case — the Round-26 defect), so the correct close is GO with it a named
-residual; one that SURVIVES closes STOP — but the STOP is never handed to the Owner bare. It carries ONE
-screened recommendation for his approval: accept the named residuals and GO, a narrow continuation on only
-the located defect (never machinery for a hypothetical), or abandon. The Owner decides; he never has to ask
-for the fresh look.
+(v2.19) at the one moment they matter most. **Before the bookend closes — once, as its single disposition —
+it re-screens EVERY accepted blocker against the candidate as-shipped** (`core/FOUNDATIONS.md` RULE #1, the
+evidence-bound screen): a blocker whose trigger **no longer fires** was a mis-applied acceptance (its
+trigger never actually fired against this candidate — the Round-26 case), discarded as a named residual; a
+blocker whose trigger **fires survives** and closes STOP — it is never routed to GO, and the fresh look
+never re-judges the harm or materiality of an exhibited, Precedence-protected blocker (that would be a
+forbidden audit window). It closes **GO only if zero survive, STOP if any survive**. A STOP is never handed
+to the Owner bare: it carries ONE screened recommendation per surviving defect for his approval — a narrow
+continuation scoped to exactly that defect (never machinery for a hypothetical, never a re-run), or abandon.
+A closed STOP is never re-screened; the parent stays terminal. The Owner decides; he never has to ask.
 
 ## What's new in v2.19.0 — screen the recommendation, not just the findings
 

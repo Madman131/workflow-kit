@@ -317,12 +317,16 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   assert.match(w, /· ACTION-SCREEN <—\|named per RULE #1>/); // the emission line reserves the slot + points to the rule
   assert.match(r, /VOID without its `ACTION-SCREEN`/);       // pass-type-style teeth in REVIEW
 
-  // v2.20 — the terminal bookend runs the fresh-look ACTION-SCREEN before it closes: a mis-accepted
-  // blocker closes GO as a residual, a surviving one closes STOP carrying the Owner a screened
-  // recommendation (narrow continuation on the located defect, or abandon) — never a bare dead-end.
-  assert.match(w, /Before it closes, the bookend runs the fresh-look `ACTION-SCREEN` on each accepted blocker/);
-  assert.match(f, /At the terminal bookend the same screen produces the Owner's decision, never a bare STOP/);
-  assert.match(f, /a \*\*narrow continuation\*\* on only the located defect \(never machinery for a hypothetical\), or \*\*abandon\*\*/);
+  // v2.20 — the terminal bookend re-screens EVERY accepted blocker once before it closes, on the
+  // strict as-shipped trigger-fires test: GO iff zero survive, STOP iff any survive. A firing trigger
+  // SURVIVES and is never routed to GO (no harm-axis re-litigation of an exhibited blocker — that
+  // would be a forbidden audit window); a STOP carries a per-defect narrow-continuation-or-abandon rec.
+  assert.match(w, /the bookend re-screens EVERY accepted blocker against the candidate \*as-shipped\*/);
+  assert.match(w, /GO only if ZERO survive/);
+  assert.match(f, /At the terminal bookend the same screen is the bookend's SINGLE final disposition/);
+  assert.match(f, /a blocker whose trigger FIRES SURVIVES and closes STOP — it is never routed to GO/);
+  assert.match(f, /GO iff zero survive, STOP iff any survive/);
+  assert.match(f, /a narrow continuation scoped to exactly those defects/);
 });
 
 test("the retired chase machinery is gone and the finite aggregate controller replaces it", () => {

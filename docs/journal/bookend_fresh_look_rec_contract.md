@@ -48,3 +48,29 @@ rework past it is still only an Owner continuation. Nothing lets a closed STOP r
   read as re-opening.
 - **Cross-doc split:** pointer in WORKFLOW, detail in FOUNDATIONS — same pattern as the ACTION-SCREEN
   itself; the WORKFLOW pointer names the rule + FOUNDATIONS, findable.
+
+## Gate record
+
+Frozen v1 `a465c02`. Kill-pass green. Mandated adversarial walk-through + cross-family Codex seat — both
+landed the SAME root: the v1 wording was loose in the GO direction (the dangerous one).
+- **[HIGH, both] Inversion / GO-with-residual escape.** v1's FAIL route ("mis-accepted or hypothetical")
+  read as a category separate from the exhibit axis, inviting an agent to re-judge the HARM of a blocker the
+  candidate genuinely EXHIBITS and route it to GO-residual — shipping a real, reachable blocker (the
+  Round-26 failure INVERTED), colliding with "accepted = contract-invariant harm" + Precedence.
+- **[HIGH→BLOCKER, Codex] Quantifier bug.** "one that fails closes GO" permitted GO while another blocker
+  survived — must be GO iff zero survive, STOP iff any survive.
+- **[MED, WT] Terminality.** v1 converted a mechanical STOP into a judgment; the run-once / no-post-close-
+  re-screen safety lived only in the journal, not the doctrine.
+- **[MED, WT] Cross-doc.** WORKFLOW carried "a screened recommendation" without the content bound (narrow/
+  abandon) — a WORKFLOW-only reader could recommend a re-run or a broad refactor.
+- **[LOW, WT] Multi-survivor** under-spec (singular "the located defect").
+
+**Batch-1 remediation (all applied, both seats' own fixes):** the FAIL route is bound to the **strict
+as-shipped trigger-fires test only** — a firing trigger SURVIVES and closes STOP, never routed to GO, and
+the fresh look never re-judges the harm/materiality of an exhibited, Precedence-protected blocker (a
+forbidden audit window); **GO iff zero survive, STOP iff any survive**; the fresh look is the bookend's
+**single disposition, run once, a closed STOP never re-screened**; the recommendation bound (narrow
+continuation on the located defect, or abandon) carried **inline in WORKFLOW**; **one recommendation per
+surviving located defect**. Full suite green; WORKFLOW 25556 B (headroom 44). Self-verified each finding
+closed; escalation converged (both seats' fixes applied) ⇒ no third round, per this repo's own doctrine.
+**Owner: "go ahead, finish the gate" (2026-08-26) = wording sign-off / push-GO.**
