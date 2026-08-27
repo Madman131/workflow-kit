@@ -1,4 +1,15 @@
-# workflow-kit — v2.20.0
+# workflow-kit — v2.21.0
+
+## What's new in v2.21.0 — external review gates are standing pre-authorized
+
+External / cross-family read-only review gates (the Codex/Gemini/Claude cold panels) are now a **standing
+pre-authorized step** of the ladder — a session runs one and transmits its review payload (the frozen
+candidate + the redacted contract + invariants + design context, standard exclusions applied) **with no
+per-gate and no per-thread Owner authorization, and never stops to ask**; availability is *discovered by
+running the tool, not by asking the Owner* (`core/REVIEW.md` § Cross-family lens). This removes the
+recurring "may I send this externally for review?" interruption without touching a single write control:
+the **execution gate** — per-write Owner authorization at a live-data write — and the **push-GO** are
+explicitly untouched, and the read-only gate still never touches the live service.
 
 ## What's new in v2.20.0 — the terminal STOP is never a bare dead-end
 
