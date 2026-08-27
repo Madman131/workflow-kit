@@ -145,6 +145,20 @@ test("the round controller pins the finite aggregate boundary", () => {
   pin(body, "R4 is the final GO/STOP bookend and has no dispatch", "terminal bookend");
   pin(body, "No R5, cycle, reset, or process-audit continuation", "no controller escape");
   pin(body, "a root kind may be declared EARLY on same-class or", "the early-root declaration");
+  pin(body, "terminal parent (tier ≥ parent's)", "Owner-continuation tier floor");
+
+  // GRADUATE FM-2026-08-27-16: the pre-terminal CIRCULAR-cadence vocabulary must never creep back
+  // into the skill. An LPB port found the installed orchestrate skill still circular because nothing
+  // asserted the terminal cadence here. This negative pin reddens if any retired cadence term
+  // reappears; the canary proves the regex still fires on a string that DOES carry that vocabulary
+  // (so the negative pin is not silently dead).
+  const retiredCadence = /CIRCULAR cadence|two-cycle window|process audit on the exact|next cycle's round/i;
+  assert.doesNotMatch(body, retiredCadence,
+    "the retired circular-cadence vocabulary must not reappear in the /orchestrate skill body");
+  assert.match(
+    "rounds run in cycles (the CIRCULAR cadence); after two, a process audit on the exact bytes",
+    retiredCadence,
+    "canary: the retired-cadence regex must still fire on text that carries that vocabulary");
 
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
   pin(brief, "Aggregate repair briefs declare",

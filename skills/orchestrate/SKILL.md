@@ -84,7 +84,7 @@ into a private worktree.
    repair-generated recurrence; R3 accepted harm requires root replacement,
    simplification, or split plus root exit and one batch 3; R4 is the final GO/STOP bookend and
    has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No R5,
-   cycle, reset, or process-audit continuation. An Owner child links to a terminal parent without
+   cycle, reset, or process-audit continuation. An Owner child links to a terminal parent (tier ≥ parent's) without
    resetting it. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
    scope/disposition/root call; on disagreement zoomed-out CONTROLS; KISS; carve-outs screen
    first, then RULE #1** (`core/FOUNDATIONS.md` § Principles; cite document+section). Round events:
