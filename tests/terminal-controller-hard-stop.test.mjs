@@ -9,12 +9,21 @@ import assert from "node:assert/strict";
 
 import {
   activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, fingerprintCandidate,
-  loadRepairEventsForProject, readRepairEvents, recordAggregateChildContinuation,
+  loadRepairEventsForProject, readRepairEvents, recordAggregateChildContinuation as _rawChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff, recordAggregatePanelClose,
   recordAggregatePanelOpen, recordAggregateRootExit, recordAggregateWorkerHandoff,
   recordOwnerExtension, recordRepairClose, recordRoundDisposition, recordWorkerVerification,
   repairLedgerPath, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
+
+// A minted successor now REQUIRES a structured action_screen (screen-at-emission enforcement,
+// FM-2026-08-27-17). These tests exercise successor MECHANICS, not the screen, so a valid default is
+// injected here; a call still overrides it (e.g. `action_screen: undefined` for the refusal case).
+const _DEFAULT_CONTINUATION_SCREEN = { surviving_finding_ids: [], harm: "n/a — mechanics fixture",
+  trigger: "n/a — mechanics fixture", smallest_action: "the narrow successor", kiss: "no new machinery",
+  zoom_out: "still the asked-for work" };
+const recordAggregateChildContinuation = (input, opts) =>
+  _rawChildContinuation({ action_screen: _DEFAULT_CONTINUATION_SCREEN, ...input }, opts);
 
 const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
   : value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype

@@ -1,4 +1,17 @@
-# workflow-kit — v2.21.0
+# workflow-kit — v2.22.0
+
+## What's new in v2.22.0 — a successor is a screened recommendation, mechanically
+
+The screen-at-emission rule (v2.19) was honour-visible — and it recurred as an **omission**: an agent hit a
+terminal STOP and minted a parent-linked successor without emitting the successor-level `ACTION-SCREEN`,
+because "successor-or-abandon" felt like automatic routing. Now the controller **refuses to mint a
+`child_continuation` that carries no structured `action_screen`** (`hooks/repair-dispatch-state.mjs`): the
+emitted screen — surviving finding ids · harm · trigger · smallest action · KISS · zoom-out — is required at
+the mint, so an unscreened recommendation can never become dispatched work. It enforces **presence and
+structural completeness only, never the reasoning's quality** (the Owner still spot-checks that — the
+LOG-not-a-certification rule holds), and it binds **only newly minted successors**: historical ledger rows,
+which reach only the shape validator, keep replaying untouched. This is the graduation of a recurred
+honour-failure into a control (`FAILURE_MODES.md` FM-2026-08-27-17).
 
 ## What's new in v2.21.0 — external review gates are standing pre-authorized
 

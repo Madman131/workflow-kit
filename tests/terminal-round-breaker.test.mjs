@@ -18,12 +18,22 @@ import assert from "node:assert/strict";
 import {
   activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState,
   derivePendingLineageBudgets, deriveRepairState, fingerprintCandidate,
-  gitSubjectPresent, loadRepairEventsForProject, recordAggregateChildContinuation,
+  gitSubjectPresent, loadRepairEventsForProject, recordAggregateChildContinuation as _rawChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff,
   recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateRootExit,
   recordAggregateWorkerHandoff, recordOwnerExtension, recordRepairClose,
   recordWorkerVerification, repairLedgerPath, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
+
+// A minted successor now REQUIRES a structured action_screen (screen-at-emission enforcement,
+// FM-2026-08-27-17). These existing tests exercise successor MECHANICS, not the screen, so a valid
+// default is injected here; a call still overrides it (e.g. `action_screen: undefined` to exercise the
+// refusal). The dedicated action_screen enforcement tests supply their own and live below.
+const _DEFAULT_CONTINUATION_SCREEN = { surviving_finding_ids: [], harm: "n/a — mechanics fixture",
+  trigger: "n/a — mechanics fixture", smallest_action: "the narrow successor", kiss: "no new machinery",
+  zoom_out: "still the asked-for work" };
+const recordAggregateChildContinuation = (input, opts) =>
+  _rawChildContinuation({ action_screen: _DEFAULT_CONTINUATION_SCREEN, ...input }, opts);
 
 const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
   : value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype
@@ -468,6 +478,49 @@ test("four-bucket partition: followups carry inline routing, accepted means bloc
       "a GO successor cannot inherit a non-followup id");
     const ok = successor(["ADJ-1"], "T2");
     assert.equal(ok.ok, true, ok.state);
+  } finally { ctx.cleanup(); }
+});
+
+test("a minted successor REQUIRES a structured action_screen — omission and each missing dimension are refused", () => {
+  // screen-at-emission (FM-2026-08-27-17): a successor is a SCREENED recommendation, not an automatic
+  // route. The controller enforces the screen's PRESENCE + structural COMPLETENESS at the mint — never
+  // its reasoning quality (the Owner spot-checks that). Uses the RAW mint, not the file's default-screen
+  // wrapper, so omission actually reaches the check.
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const p1 = openPanel(ctx, 1, candidate, { tier: "T2" });
+    const c1 = closePanel(ctx, p1, candidate, ["CRIT-1"]);
+    const stop = decide(ctx, c1, { accepted: ["CRIT-1"], terminal_state: "STOP", remediation_kind: null,
+      authorized_paths: [] });
+    assert.equal(stop.ok, true, stop.state);
+    const state = derive(ctx);
+    const baseInput = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
+      changeset_id: "cs-1", parent_disposition_event_id: state.latest.event_id, trigger_ids: ["CRIT-1"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
+      children: [{ task_id: "next", changeset_id: "next-cs", tier: "T2", budget: "one narrow successor",
+        authorized_paths: ["src/x.mjs"] }] };
+    const full = { surviving_finding_ids: ["CRIT-1"], harm: "orientation delivery breaks",
+      trigger: "call brain_orient with a required global unset", smallest_action: "clarify the receipt schema",
+      kiss: "no new API, reuse the existing response cap", zoom_out: "unlocks the requested delivery" };
+    // OMITTED entirely → refused.
+    assert.equal(_rawChildContinuation({ ...baseInput }, options(ctx.dir)).state,
+      "aggregate-continuation-action-screen-required", "a successor with no action_screen is refused");
+    // EACH screening dimension is enforced present — no dimension may be silently skipped.
+    for (const drop of ["harm", "trigger", "smallest_action", "kiss", "zoom_out"]) {
+      const partial = { ...full }; delete partial[drop];
+      assert.equal(_rawChildContinuation({ ...baseInput, action_screen: partial }, options(ctx.dir)).state,
+        "aggregate-continuation-action-screen-required", `a screen missing "${drop}" is refused`);
+    }
+    // A non-array surviving_finding_ids (or non-string id) is refused; an EMPTY array is fine (GO-lineage).
+    assert.equal(_rawChildContinuation({ ...baseInput, action_screen: { ...full, surviving_finding_ids: "CRIT-1" } },
+      options(ctx.dir)).state, "aggregate-continuation-action-screen-required", "surviving_finding_ids must be an array");
+    // COMPLETE → minted, and the screen is stored DURABLY on the event for the Owner to read.
+    const minted = _rawChildContinuation({ ...baseInput, action_screen: full }, options(ctx.dir));
+    assert.equal(minted.ok, true, minted.state);
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const row = loaded.aggregate_events.map((r) => r.event).find((e) => e.kind === "child_continuation");
+    assert.deepEqual(row.action_screen, full, "the minted successor carries its action_screen verbatim");
   } finally { ctx.cleanup(); }
 });
 
