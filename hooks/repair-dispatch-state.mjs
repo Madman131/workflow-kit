@@ -148,7 +148,10 @@ function validAggregateKindShape(event) {
         event.trigger_ids.every((id) => text(id, 300)) &&
         ["split", "new_changeset", "material_scope"].includes(event.continuation_kind) &&
         Array.isArray(event.children) && event.children.length > 0 && event.children.every(aggregateChildShape) &&
-        text(event.owner_evidence, 1000);
+        text(event.owner_evidence, 1000) &&
+        // action_screen is REQUIRED at the mint (recordAggregateChildContinuation); OPTIONAL in the
+        // shape so rows minted before this field keep validating on replay (never re-minted here).
+        (event.action_screen === undefined || validActionScreen(event.action_screen));
     case "legacy_handoff":
       return text(event.parent_task_id, 120) && text(event.parent_changeset_id, 120) &&
         ID64.test(event.parent_disposition_event_id || "") && Number.isSafeInteger(event.parent_round) &&
@@ -546,6 +549,23 @@ function aggregateChildShape(child) {
   return plain(child) && text(child.task_id, 120) && text(child.changeset_id, 120) &&
     ["T2", "T3"].includes(child.tier) && text(child.budget, 300) &&
     paths && same(paths, child.authorized_paths);
+}
+
+// A newly minted successor (child_continuation) carries the EMITTED screen of the RECOMMENDATION
+// itself — screen-at-emission (v2.19) applied to the ACTION, not only the per-finding screens. This
+// checks PRESENCE + structural COMPLETENESS only, NEVER reasoning quality (the Owner spot-checks
+// quality; FM-2026-08-27-17). Every screening dimension is answered even to say "none": a
+// GO-lineage follow-on repairs no surviving defect, so `surviving_finding_ids` may be EMPTY and
+// harm/trigger may read "none — scope extension"; the point is that no dimension is silently skipped,
+// which is the omission that recurred. It is required only at the MINT here, so historical rows —
+// which never reach this function — keep validating (the shape check below accepts it as optional).
+function validActionScreen(s) {
+  return plain(s) &&
+    Array.isArray(s.surviving_finding_ids) && s.surviving_finding_ids.length <= 2600 &&
+    new Set(s.surviving_finding_ids).size === s.surviving_finding_ids.length &&
+    s.surviving_finding_ids.every((id) => text(id, 300)) &&
+    text(s.harm, 1000) && text(s.trigger, 1000) &&
+    text(s.smallest_action, 1000) && text(s.kiss, 1000) && text(s.zoom_out, 1000);
 }
 
 function aggregateWorld(events, standardEvents = []) {
@@ -1619,6 +1639,12 @@ export function recordAggregateChildContinuation(input,
       !input.children.every(aggregateChildShape)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
+  // Screen-at-emission on the RECOMMENDATION: a successor is a screened action, never an automatic
+  // route. Refuse the mint if it carries no structured action_screen (FM-2026-08-27-17). Presence +
+  // completeness only — the Owner still spot-checks whether the screen's reasoning is sound.
+  if (!validActionScreen(input.action_screen)) {
+    return { ok: false, state: "aggregate-continuation-action-screen-required" };
+  }
   // The parent terminal candidate is DERIVED, never caller-supplied — callers do not mint
   // trusted pointers.
   const file = repairLedgerPath(projectRoot, { execGit });
@@ -1637,7 +1663,7 @@ export function recordAggregateChildContinuation(input,
     parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
     trigger_ids: input.trigger_ids,
     continuation_kind: input.continuation_kind, children: input.children,
-    owner_evidence: input.owner_evidence };
+    owner_evidence: input.owner_evidence, action_screen: input.action_screen };
   return appendEligibleAggregate(file, event, "aggregate-continuation-conflict");
 }
 
