@@ -1,4 +1,40 @@
-# workflow-kit — v2.24.0
+# workflow-kit — v2.25.0
+
+## What's new in v2.25.0 — the two residuals `/grilling` left behind
+
+**New adopters now get the pointer that makes `/grilling` fire.** The skill is model-invoked, so the
+Claude lane reaches for it unprompted; **Codex has no model-invocation** and its prompts fire only when
+typed, so nothing in that lane would ever propose the interview. `templates/AGENTS.md.tmpl` now carries
+the `<!-- workflow-kit:grilling-pointer -->` block — always-loaded text telling the agent to propose the
+interview itself when the work admits more than one reading. Placed before "Before the first code
+write", the order the two actually run in.
+
+**And the suite stopped writing into the operator's home directory.** `tests/sweep-sensor.test.mjs`
+adopted a scratch repo with neither `--codex-prompts-dir` nor `--skip-codex-prompt`, so `init.mjs` fell
+back to `DEFAULT_CODEX_PROMPTS_DIR` and `node scripts/run-checks.mjs` **installed a new shim into the
+real `~/.codex/prompts`** — a write no `git status` or revert reaches. `copyGuarded` refusing to clobber
+kept the blast radius to one file and hid the defect until v2.24.0 shipped a new shim to expose it.
+
+The call site now passes a scratch dir, and a guard in `tests/kit-controls.test.mjs` fails on any
+**direct `spawnSync`/`execFileSync`** of `init.mjs` under `tests/` carrying neither flag. It matches the
+call form rather than the filename, because `import()` and `readFileSync` of `init.mjs` name the path
+without running it. A call that cannot reach the install declares itself with a
+`kit-guard:no-install — <reason>` **comment** directly above it — a deny-list with a reason per entry,
+so a wrong marker is a reviewable claim rather than a silent exemption. It fails **closed** on a call it
+cannot parse, and scans nested and non-`.mjs` files. The self-canary drives the **same** function the
+guard uses, over a planted tree, so the two cannot drift.
+
+**What the guard is, stated honestly: a checklist, not a containment boundary.** It catches the direct
+call shape that actually leaked. It does not see `spawn`/`execSync`/`fork`/`execa`, a path hoisted into
+a helper, a shell string, or a flag present as text that never reaches the child argv. The complete fix
+is to run the suite under a scratch `HOME`, which contains every shape at once; that is a separate
+change and is not in this release.
+
+Scope was recomputed twice by execution during this chip: a first reading of "27 leaking call sites"
+was wrong. Of **46 matches** under `tests/`, 41 already carried a flag; of the 5 remaining, two are
+`import()`/`readFileSync` of the file rather than invocations, two exit 2 on argument validation and now
+declare themselves, and **exactly one leaked**.
+
 
 ## What's new in v2.24.0 — `/grilling`, the interview that settles intent before the build
 

@@ -62,6 +62,18 @@ violating one is unrecoverable, but that section governs.
    containing code — and any T1–T3 push — needs the Owner's push-GO first. A push ships the WHOLE
    branch: before any push, check `git log {{DEPLOY_REMOTE_REF}}..HEAD` for ungated work from ANY lane.
 
+<!-- workflow-kit:grilling-pointer -->
+## Before you build — settle intent first
+When the work in front of you admits more than one reasonable reading — a loose ask, a chip about to
+be minted, a plan whose scope you would otherwise guess at — run the alignment interview in
+[`.agents/skills/grilling/SKILL.md`](.agents/skills/grilling/SKILL.md) **before the first write**, and
+**propose it yourself rather than waiting to be asked**. It asks the settled frontier of decisions one
+round at a time, each question carrying your recommended answer, so "your rec" is always a complete
+reply; facts you can look up are yours to find, never the Owner's to supply. Claude Code:
+`/grilling`, which the agent may also reach for unprompted. Codex: `/grilling` (installed into your
+Codex prompts dir, default `~/.codex/prompts/`) — **it fires only when typed there, so this pointer is
+what makes you reach for it** — or read the repo file above.
+
 ## Before the first code write
 Declare the task lane in `.claude/task-lane.json` (session id + kebab task id + exactly one route).
 **Use `in-thread` (with the tier), or `exempt` (with a ledgered reason AND the tier)** — those are
