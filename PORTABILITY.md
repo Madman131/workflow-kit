@@ -697,7 +697,8 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` Stop
   sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
-  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`), the
+  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
+  `/grilling`), the
   `agents/*` reviewer seat
   definitions (→ `.claude/agents/`), and `codex/config.toml` (→ `.codex/config.toml`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
