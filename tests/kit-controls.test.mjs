@@ -1700,10 +1700,11 @@ export function initInvocationOffenders(dir) {
         const call = src.slice(m.index, end);
         if (!/init\.mjs/.test(call)) continue;
         if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
-        // The marker must be a COMMENT, on one of the two lines directly above, and carry a reason
-        // after the dash. A bare token loose in a string, or a marker meant for a neighbouring call,
-        // does not exempt anything: that was an unconstrained textual bypass in the first cut.
-        const above = src.slice(0, m.index).split("\n").slice(-3, -1);
+        // The marker must be a COMMENT, on the SINGLE line directly above, carrying a reason after
+        // the dash. A bare token in a string does not exempt anything, and neither does a marker
+        // written for a neighbouring call: a two-line window let one marker exempt the call beneath
+        // it AND the next one, which is how an unmarked invocation rides in behind a marked one.
+        const above = src.slice(0, m.index).split("\n").slice(-2, -1);
         if (above.some((l) => /^\s*\/\/\s*kit-guard:no-install\s+—\s+\S/.test(l))) continue;
         offenders.push(`${rel}${e.name}:${line()}`);
       }
@@ -1765,6 +1766,11 @@ test("the ~/.codex/prompts guard CAN FAIL — the REAL matcher catches a leak, i
       "the marker must carry a reason after the dash");
     assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "${"x".repeat(4100)}"]);`), 1,
       "an unparseable call must FAIL CLOSED, not sweep in a later flag");
+    assert.equal(only(
+      `  // kit-guard:no-install — exits 2\n` +
+      `  spawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);\n` +
+      `  spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`), 1,
+      "one marker exempts ONLY the call directly beneath it — the next call must still be caught");
     // discovery: a nested file and a non-.mjs extension are both in scope
     rmSync(dir, { recursive: true, force: true }); mkdirSync(path.join(dir, "support"), { recursive: true });
     plant("support/helper.cjs", `spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`);
