@@ -1,4 +1,30 @@
-# workflow-kit — v2.25.0
+# workflow-kit — v2.26.0
+
+## What's new in v2.26.0 — RULE #1 becomes findable
+
+`core/FOUNDATIONS.md`'s RULE #1 entry had accreted into a single **840-word paragraph** carrying at
+least seven distinct rules — the rule proper, the carve-outs, the ACTION-SCREEN duty, its
+evidence-binding, the terminal bookend, the GO/STOP close, and the successor mint — each fold
+(v2.19, v2.20, v2.22) individually correct, the sum the same disease the 2026-07-03 doctrine-bloat
+postmortem names: *"20+ individually-correct folds truncated the executor."* And the lane's failure
+data says omission is the dominant mode — 8 of the last 10 rule violations were a positive duty
+NOT DONE, including the ACTION-SCREEN buried mid-paragraph here (`FM-2026-08-27-17`).
+
+The paragraph is now one parent bullet (RULE #1's statement, the Owner's ratification, the three
+targets, the NOTE rule) with **nine nested sub-bullets, one rule-region each**. **Zero words changed:
+the edit inserts list markers and newlines at nine sentence boundaries and nothing else** — the build
+asserts byte-preservation programmatically, and every restructure constraint (pins byte-for-byte,
+no cross-file moves, original order) held without exception.
+
+The pin battery was run by **mutating the canon**, not by watching green: four mutations across the
+head, the three-target enumeration, the close, and the zoom-out clause each reddened the suite and
+were restored from git. One finding: **the successor-mint doctrine sentence is pinned by no test** —
+a pre-existing gap (pin coverage is a function of the test files, untouched here), dispositioned as
+a NOTE because the mint's enforcement is mechanical (`hooks/repair-dispatch-state.mjs`, 62 tests of
+its own). The polarity question — rewrite prohibitions as positives? — was measured against
+`FAILURE_MODES.md` and CLOSED before this chip: 76% of core/'s prohibitions are already
+contrastive, and omission, not attraction-to-the-banned-act, is what actually fails. Density was
+the defect; density is what this fixes.
 
 ## What's new in v2.25.0 — the two residuals `/grilling` left behind
 
