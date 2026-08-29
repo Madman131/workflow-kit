@@ -15,17 +15,25 @@ back to `DEFAULT_CODEX_PROMPTS_DIR` and `node scripts/run-checks.mjs` **installe
 real `~/.codex/prompts`** — a write no `git status` or revert reaches. `copyGuarded` refusing to clobber
 kept the blast radius to one file and hid the defect until v2.24.0 shipped a new shim to expose it.
 
-The call site now passes a scratch dir, and a guard in `tests/kit-controls.test.mjs` fails if any
-`init.mjs` **invocation** under `tests/` carries neither flag. It matches the `spawnSync`/`execFileSync`
-form rather than the filename, because `import()` and `readFileSync` of `init.mjs` mention the path
-without running it. A call that genuinely cannot install declares itself with a
-`kit-guard:no-install — <reason>` comment: a **deny-list with a reason per entry**, so the scan still
-visits every invocation and a wrong marker is a reviewable claim rather than a silent exemption. The
-guard ships with a self-canary that re-runs its matcher over planted sources, including the two
-not-an-invocation shapes.
+The call site now passes a scratch dir, and a guard in `tests/kit-controls.test.mjs` fails on any
+**direct `spawnSync`/`execFileSync`** of `init.mjs` under `tests/` carrying neither flag. It matches the
+call form rather than the filename, because `import()` and `readFileSync` of `init.mjs` name the path
+without running it. A call that cannot reach the install declares itself with a
+`kit-guard:no-install — <reason>` **comment** directly above it — a deny-list with a reason per entry,
+so a wrong marker is a reviewable claim rather than a silent exemption. It fails **closed** on a call it
+cannot parse, and scans nested and non-`.mjs` files. The self-canary drives the **same** function the
+guard uses, over a planted tree, so the two cannot drift.
+
+**What the guard is, stated honestly: a checklist, not a containment boundary.** It catches the direct
+call shape that actually leaked. It does not see `spawn`/`execSync`/`fork`/`execa`, a path hoisted into
+a helper, a shell string, or a flag present as text that never reaches the child argv. The complete fix
+is to run the suite under a scratch `HOME`, which contains every shape at once; that is a separate
+change and is not in this release.
 
 Scope was recomputed twice by execution during this chip: a first reading of "27 leaking call sites"
-was wrong — 46 invocations exist, 41 already carried a flag, and **exactly one leaked**.
+was wrong. Of **46 matches** under `tests/`, 41 already carried a flag; of the 5 remaining, two are
+`import()`/`readFileSync` of the file rather than invocations, two exit 2 on argument validation and now
+declare themselves, and **exactly one leaked**.
 
 
 ## What's new in v2.24.0 — `/grilling`, the interview that settles intent before the build

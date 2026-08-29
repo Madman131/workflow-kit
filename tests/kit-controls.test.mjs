@@ -1658,7 +1658,62 @@ test("no shipped doc restates a method-cap number that disagrees with the checke
   }
 });
 
-test("no test may run bin/init.mjs against the OPERATOR'S real ~/.codex/prompts", () => {
+// One matcher, used by BOTH the guard and its canary. It was two copies in the first cut, and a cold
+// seat noted the copies could drift while both tests stayed green — so the canary proved only that a
+// duplicate recognised its own fixtures. This is the single source of truth for both.
+//
+// WHAT IT IS, STATED HONESTLY: a LEXICAL scan for a direct `spawnSync`/`execFileSync` call whose
+// argument text names init.mjs. It is a checklist, not a containment boundary. It does NOT see:
+// `spawn`/`execSync`/`fork`/`execa`/async `execFile`, a path hoisted into a const or helper, a shell
+// string, or a flag that is present as text but never reaches the child argv. Those gaps are the
+// reason `docs/` carries the containment proposal (run the suite under a scratch HOME) as the real
+// fix; this guard catches the shape that ACTUALLY leaked (FM-2026-08-29-18) and fails closed on what
+// it cannot parse.
+export function initInvocationOffenders(dir) {
+  const offenders = [];
+  const walk = (d, rel) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const abs = path.join(d, e.name);
+      if (e.isDirectory()) { walk(abs, `${rel}${e.name}/`); continue; }
+      if (!/\.(mjs|cjs|js|ts)$/.test(e.name)) continue;
+      const src = readFileSync(abs, "utf8");
+      const re = /(spawnSync|execFileSync)\s*\(/g;
+      let m;
+      while ((m = re.exec(src))) {
+        let i = m.index + m[0].length, depth = 1, end = -1;
+        while (i < src.length && i < m.index + 4000) {
+          const c = src[i];
+          if (c === "(") depth++;
+          else if (c === ")") { depth--; if (!depth) { end = i; break; } }
+          i++;
+        }
+        const line = () => src.slice(0, m.index).split("\n").length;
+        // FAIL CLOSED on an unparseable call. The first cut left `end` at src.length here, so a call
+        // whose closing paren was past the window swept in every later flag in the file and exempted
+        // itself. An unterminated call we cannot read is an offender, not a pass.
+        if (end === -1) {
+          if (/init\.mjs/.test(src.slice(m.index, m.index + 4000))) {
+            offenders.push(`${rel}${e.name}:${line()} (unparseable call — could not find its closing paren)`);
+          }
+          continue;
+        }
+        const call = src.slice(m.index, end);
+        if (!/init\.mjs/.test(call)) continue;
+        if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
+        // The marker must be a COMMENT, on one of the two lines directly above, and carry a reason
+        // after the dash. A bare token loose in a string, or a marker meant for a neighbouring call,
+        // does not exempt anything: that was an unconstrained textual bypass in the first cut.
+        const above = src.slice(0, m.index).split("\n").slice(-3, -1);
+        if (above.some((l) => /^\s*\/\/\s*kit-guard:no-install\s+—\s+\S/.test(l))) continue;
+        offenders.push(`${rel}${e.name}:${line()}`);
+      }
+    }
+  };
+  walk(dir, "tests/");
+  return offenders;
+}
+
+test("no DIRECT spawnSync/execFileSync of bin/init.mjs under tests/ may install into the operator's real ~/.codex/prompts", () => {
   // The failure this exists to stop, executed on this release: tests/sweep-sensor.test.mjs adopted a
   // scratch repo with neither --codex-prompts-dir nor --skip-codex-prompt, so init.mjs fell back to
   // DEFAULT_CODEX_PROMPTS_DIR (bin/init.mjs:39) and `node scripts/run-checks.mjs` INSTALLED a new
@@ -1666,80 +1721,55 @@ test("no test may run bin/init.mjs against the OPERATOR'S real ~/.codex/prompts"
   // copyGuarded's refusal to clobber kept the blast radius to one file and hid it until /grilling
   // shipped a new shim (FAILURE_MODES.md FM-2026-08-29-18).
   //
-  // Match the INVOCATION form, not the filename: `import(...init.mjs)` and `readFileSync(...init.mjs)`
-  // both mention the path without running it, and a filename match calls them leaks.
-  //
-  // A call that cannot install (argument validation, exit 2 before the install runs) declares itself
-  // with a `kit-guard:no-install` marker naming the reason. That is a DENY-LIST WITH A REASON PER
-  // ENTRY, not an allow-list: the scan still visits every invocation, and a wrong marker is a claim
-  // its author made in the diff, reviewable as one.
-  const dir = path.join(KIT, "tests");
-  const offenders = [];
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".mjs"))) {
-    const src = readFileSync(path.join(dir, file), "utf8");
-    const re = /(spawnSync|execFileSync)\s*\(/g;
-    let m;
-    while ((m = re.exec(src))) {
-      let i = m.index + m[0].length, depth = 1, end = src.length;
-      while (i < src.length && i < m.index + 4000) {
-        const c = src[i];
-        if (c === "(") depth++;
-        else if (c === ")") { depth--; if (!depth) { end = i; break; } }
-        i++;
-      }
-      const call = src.slice(m.index, end);
-      if (!/init\.mjs/.test(call)) continue;
-      if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
-      // the marker sits on the two lines above the call
-      const before = src.slice(0, m.index).split("\n").slice(-3).join("\n");
-      if (/kit-guard:no-install/.test(before)) continue;
-      offenders.push(`tests/${file}:${src.slice(0, m.index).split("\n").length}`);
-    }
-  }
-  assert.deepEqual(offenders, [],
-    `these invoke bin/init.mjs with neither --codex-prompts-dir nor --skip-codex-prompt, so they install ` +
-    `into the operator's real ~/.codex/prompts. Pass a scratch dir, or declare why it cannot install with ` +
-    `a \`kit-guard:no-install — <reason>\` comment above the call:\n  ${offenders.join("\n  ")}`);
+  // The test NAME states the scope on purpose. This catches the direct-call shape that leaked; it is
+  // not a proof that nothing writes to the operator's home. See initInvocationOffenders' header for
+  // what it cannot see, and prefer the scratch-HOME containment boundary when that lands.
+  assert.deepEqual(initInvocationOffenders(path.join(KIT, "tests")), [],
+    "these make a direct spawnSync/execFileSync of bin/init.mjs with neither --codex-prompts-dir nor " +
+    "--skip-codex-prompt, so they install into the operator's real ~/.codex/prompts. Pass a scratch " +
+    "dir, or, if the call cannot reach the install at all, declare why directly above it with " +
+    "`// kit-guard:no-install — <reason>`");
 });
 
-test("the ~/.codex/prompts guard CAN FAIL — it catches an unflagged invocation and is not fooled by a mention", () => {
-  // A guard that cannot fail is a guard that proves nothing. This is the self-canary: it re-runs the
-  // guard's own matcher over planted sources rather than trusting the pass above.
-  const scan = (src) => {
-    const re = /(spawnSync|execFileSync)\s*\(/g;
-    const hits = [];
-    let m;
-    while ((m = re.exec(src))) {
-      let i = m.index + m[0].length, depth = 1, end = src.length;
-      while (i < src.length && i < m.index + 4000) {
-        const c = src[i];
-        if (c === "(") depth++;
-        else if (c === ")") { depth--; if (!depth) { end = i; break; } }
-        i++;
-      }
-      const call = src.slice(m.index, end);
-      if (!/init\.mjs/.test(call)) continue;
-      if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
-      const before = src.slice(0, m.index).split("\n").slice(-3).join("\n");
-      if (/kit-guard:no-install/.test(before)) continue;
-      hits.push(m.index);
-    }
-    return hits.length;
-  };
-  // The fixtures ASSEMBLE the filename at runtime rather than spelling it. Written literally, this
-  // test's own planted sources are real matches in this file and the guard above flags line for line
-  // — which it did, the first time this was written. scan() still receives the exact text.
+test("the ~/.codex/prompts guard CAN FAIL — the REAL matcher catches a leak, is not fooled by a mention, and fails closed", () => {
+  // A guard that cannot fail proves nothing. This drives the SAME function the guard uses, over a
+  // planted tree on disk, so the two cannot drift apart.
+  //
+  // The fixtures assemble the filename at runtime. Spelled literally, this test's own planted sources
+  // are real matches in this file and the guard above flags them line by line — which it did, the
+  // first time this was written.
   const F = ["init", "mjs"].join(".");
-  assert.equal(scan(`spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`), 1,
-    "an unflagged invocation must be caught");
-  assert.equal(scan(`spawnSync("node", [path.join(K, "bin", "${F}"), "--codex-prompts-dir", d]);`), 0,
-    "a flagged invocation must pass");
-  assert.equal(scan(`spawnSync("node", [path.join(K, "bin", "${F}"), "--skip-codex-prompt"]);`), 0,
-    "a skipped invocation must pass");
-  assert.equal(scan(`const { x } = await import(path.join(KIT, "bin", "${F}"));`), 0,
-    "an import() of the file is not an invocation");
-  assert.equal(scan(`readFileSync(path.join(KIT, "bin", "${F}"), "utf8")`), 0,
-    "a readFileSync of the file is not an invocation");
-  assert.equal(scan(`// kit-guard:no-install — exits 2\nspawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);`), 0,
-    "a declared no-install call must pass");
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-guard-"));
+  const plant = (name, body) => { writeFileSync(path.join(dir, name), body); };
+  const only = (body) => {
+    rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
+    plant("a.mjs", body);
+    return initInvocationOffenders(dir).length;
+  };
+  try {
+    assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`), 1,
+      "an unflagged invocation must be caught");
+    assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "--codex-prompts-dir", d]);`), 0,
+      "a flagged invocation must pass");
+    assert.equal(only(`execFileSync(p, [path.join(K, "bin", "${F}"), "--skip-codex-prompt"]);`), 0,
+      "a skipped invocation must pass");
+    assert.equal(only(`const { x } = await import(path.join(KIT, "bin", "${F}"));`), 0,
+      "an import() of the file is not an invocation");
+    assert.equal(only(`readFileSync(path.join(KIT, "bin", "${F}"), "utf8")`), 0,
+      "a readFileSync of the file is not an invocation");
+    assert.equal(only(`  // kit-guard:no-install — exits 2\n  spawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);`), 0,
+      "a declared no-install call, with a reason, must pass");
+    assert.equal(only(`  const s = "kit-guard:no-install";\n  spawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);`), 1,
+      "the marker must be a COMMENT — a bare token in a string must not exempt anything");
+    assert.equal(only(`  // kit-guard:no-install\n  spawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);`), 1,
+      "the marker must carry a reason after the dash");
+    assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "${"x".repeat(4100)}"]);`), 1,
+      "an unparseable call must FAIL CLOSED, not sweep in a later flag");
+    // discovery: a nested file and a non-.mjs extension are both in scope
+    rmSync(dir, { recursive: true, force: true }); mkdirSync(path.join(dir, "support"), { recursive: true });
+    plant("support/helper.cjs", `spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`);
+    assert.equal(initInvocationOffenders(dir).length, 1, "a nested, non-.mjs helper is still scanned");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
