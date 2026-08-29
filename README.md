@@ -1,4 +1,32 @@
-# workflow-kit — v2.24.0
+# workflow-kit — v2.25.0
+
+## What's new in v2.25.0 — the two residuals `/grilling` left behind
+
+**New adopters now get the pointer that makes `/grilling` fire.** The skill is model-invoked, so the
+Claude lane reaches for it unprompted; **Codex has no model-invocation** and its prompts fire only when
+typed, so nothing in that lane would ever propose the interview. `templates/AGENTS.md.tmpl` now carries
+the `<!-- workflow-kit:grilling-pointer -->` block — always-loaded text telling the agent to propose the
+interview itself when the work admits more than one reading. Placed before "Before the first code
+write", the order the two actually run in.
+
+**And the suite stopped writing into the operator's home directory.** `tests/sweep-sensor.test.mjs`
+adopted a scratch repo with neither `--codex-prompts-dir` nor `--skip-codex-prompt`, so `init.mjs` fell
+back to `DEFAULT_CODEX_PROMPTS_DIR` and `node scripts/run-checks.mjs` **installed a new shim into the
+real `~/.codex/prompts`** — a write no `git status` or revert reaches. `copyGuarded` refusing to clobber
+kept the blast radius to one file and hid the defect until v2.24.0 shipped a new shim to expose it.
+
+The call site now passes a scratch dir, and a guard in `tests/kit-controls.test.mjs` fails if any
+`init.mjs` **invocation** under `tests/` carries neither flag. It matches the `spawnSync`/`execFileSync`
+form rather than the filename, because `import()` and `readFileSync` of `init.mjs` mention the path
+without running it. A call that genuinely cannot install declares itself with a
+`kit-guard:no-install — <reason>` comment: a **deny-list with a reason per entry**, so the scan still
+visits every invocation and a wrong marker is a reviewable claim rather than a silent exemption. The
+guard ships with a self-canary that re-runs its matcher over planted sources, including the two
+not-an-invocation shapes.
+
+Scope was recomputed twice by execution during this chip: a first reading of "27 leaking call sites"
+was wrong — 46 invocations exist, 41 already carried a flag, and **exactly one leaked**.
+
 
 ## What's new in v2.24.0 — `/grilling`, the interview that settles intent before the build
 

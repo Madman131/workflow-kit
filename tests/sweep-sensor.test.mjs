@@ -521,7 +521,11 @@ test("THE INSTALLED HOOKS RUN IN A REAL ADOPTER TREE — presence and registrati
   try {
     execFileSync("git", ["init", "-q", "."], { cwd: dir });
     execFileSync("git", ["remote", "add", "origin", "https://example.com/a.git"], { cwd: dir });
-    execFileSync(process.execPath, [path.join(ROOT_DIR, "bin", "init.mjs"), "--owner-name", "T"],
+    // `--codex-prompts-dir` is not optional here. Without it init.mjs falls back to
+    // DEFAULT_CODEX_PROMPTS_DIR — the OPERATOR'S REAL `~/.codex/prompts` — and a suite run installs
+    // any shim this branch happens to carry into their global namespace (FM-2026-08-29-18).
+    execFileSync(process.execPath, [path.join(ROOT_DIR, "bin", "init.mjs"), "--owner-name", "T",
+      "--codex-prompts-dir", scratch()],
       { cwd: dir, stdio: "pipe" });
 
     const payload = (target) => JSON.stringify({

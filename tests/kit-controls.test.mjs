@@ -136,6 +136,7 @@ test("init rejects a flag-shaped value for every value-taking flag", () => {
   // help flag. Single-dash flags are real (-h), so rejecting only "--" prefixes left this open.
   for (const argv of [["--target"], ["--target", "-h"], ["--target", "--help"], ["--repo-name", "--force"],
     ["--owner-name", "--force"], ["--codex-prompts-dir", ""], ["--memory-dir", "--target"]]) {
+    // kit-guard:no-install — every argv here exits 2 on argument validation, before any install runs.
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), ...argv], { encoding: "utf8" });
     assert.equal(r.status, 2, `${argv.join(" ")} must exit 2, not proceed (got ${r.status})`);
     assert.doesNotMatch(r.stderr, /ERR_INVALID_ARG_TYPE|at ModuleLoader/, "and it must be a clean message, not a stack trace");
@@ -1543,6 +1544,7 @@ test("removed-flag `=` spelling, the hooks DETECTOR, and an honest skip message"
 
   // 1. `--flag=value` fell through to the generic "unknown argument", so the adopter most likely to
   // have SCRIPTED the flag was the one who got no migration sentence.
+  // kit-guard:no-install — a removed flag; exits 2 before any install runs.
   const eq = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--risk-tokens=billing"], { encoding: "utf8" });
   assert.equal(eq.status, 2, "the `=` spelling still exits 2");
   assert.match(eq.stderr, /--risk-tokens was REMOVED at v2\.0/, "…and now gets the migration message, not 'unknown argument'");
@@ -1654,4 +1656,90 @@ test("no shipped doc restates a method-cap number that disagrees with the checke
       .concat([...fine.matchAll(CAP_AFTER)].map((m) => Number(m[1])));
     assert.ok(hits.every((n) => n === capKiB), `a correct spelling must not be flagged: ${fine}`);
   }
+});
+
+test("no test may run bin/init.mjs against the OPERATOR'S real ~/.codex/prompts", () => {
+  // The failure this exists to stop, executed on this release: tests/sweep-sensor.test.mjs adopted a
+  // scratch repo with neither --codex-prompts-dir nor --skip-codex-prompt, so init.mjs fell back to
+  // DEFAULT_CODEX_PROMPTS_DIR (bin/init.mjs:39) and `node scripts/run-checks.mjs` INSTALLED a new
+  // shim into the operator's user-global prompts dir — a write no `git status` or revert reaches.
+  // copyGuarded's refusal to clobber kept the blast radius to one file and hid it until /grilling
+  // shipped a new shim (FAILURE_MODES.md FM-2026-08-29-18).
+  //
+  // Match the INVOCATION form, not the filename: `import(...init.mjs)` and `readFileSync(...init.mjs)`
+  // both mention the path without running it, and a filename match calls them leaks.
+  //
+  // A call that cannot install (argument validation, exit 2 before the install runs) declares itself
+  // with a `kit-guard:no-install` marker naming the reason. That is a DENY-LIST WITH A REASON PER
+  // ENTRY, not an allow-list: the scan still visits every invocation, and a wrong marker is a claim
+  // its author made in the diff, reviewable as one.
+  const dir = path.join(KIT, "tests");
+  const offenders = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".mjs"))) {
+    const src = readFileSync(path.join(dir, file), "utf8");
+    const re = /(spawnSync|execFileSync)\s*\(/g;
+    let m;
+    while ((m = re.exec(src))) {
+      let i = m.index + m[0].length, depth = 1, end = src.length;
+      while (i < src.length && i < m.index + 4000) {
+        const c = src[i];
+        if (c === "(") depth++;
+        else if (c === ")") { depth--; if (!depth) { end = i; break; } }
+        i++;
+      }
+      const call = src.slice(m.index, end);
+      if (!/init\.mjs/.test(call)) continue;
+      if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
+      // the marker sits on the two lines above the call
+      const before = src.slice(0, m.index).split("\n").slice(-3).join("\n");
+      if (/kit-guard:no-install/.test(before)) continue;
+      offenders.push(`tests/${file}:${src.slice(0, m.index).split("\n").length}`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    `these invoke bin/init.mjs with neither --codex-prompts-dir nor --skip-codex-prompt, so they install ` +
+    `into the operator's real ~/.codex/prompts. Pass a scratch dir, or declare why it cannot install with ` +
+    `a \`kit-guard:no-install — <reason>\` comment above the call:\n  ${offenders.join("\n  ")}`);
+});
+
+test("the ~/.codex/prompts guard CAN FAIL — it catches an unflagged invocation and is not fooled by a mention", () => {
+  // A guard that cannot fail is a guard that proves nothing. This is the self-canary: it re-runs the
+  // guard's own matcher over planted sources rather than trusting the pass above.
+  const scan = (src) => {
+    const re = /(spawnSync|execFileSync)\s*\(/g;
+    const hits = [];
+    let m;
+    while ((m = re.exec(src))) {
+      let i = m.index + m[0].length, depth = 1, end = src.length;
+      while (i < src.length && i < m.index + 4000) {
+        const c = src[i];
+        if (c === "(") depth++;
+        else if (c === ")") { depth--; if (!depth) { end = i; break; } }
+        i++;
+      }
+      const call = src.slice(m.index, end);
+      if (!/init\.mjs/.test(call)) continue;
+      if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
+      const before = src.slice(0, m.index).split("\n").slice(-3).join("\n");
+      if (/kit-guard:no-install/.test(before)) continue;
+      hits.push(m.index);
+    }
+    return hits.length;
+  };
+  // The fixtures ASSEMBLE the filename at runtime rather than spelling it. Written literally, this
+  // test's own planted sources are real matches in this file and the guard above flags line for line
+  // — which it did, the first time this was written. scan() still receives the exact text.
+  const F = ["init", "mjs"].join(".");
+  assert.equal(scan(`spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`), 1,
+    "an unflagged invocation must be caught");
+  assert.equal(scan(`spawnSync("node", [path.join(K, "bin", "${F}"), "--codex-prompts-dir", d]);`), 0,
+    "a flagged invocation must pass");
+  assert.equal(scan(`spawnSync("node", [path.join(K, "bin", "${F}"), "--skip-codex-prompt"]);`), 0,
+    "a skipped invocation must pass");
+  assert.equal(scan(`const { x } = await import(path.join(KIT, "bin", "${F}"));`), 0,
+    "an import() of the file is not an invocation");
+  assert.equal(scan(`readFileSync(path.join(KIT, "bin", "${F}"), "utf8")`), 0,
+    "a readFileSync of the file is not an invocation");
+  assert.equal(scan(`// kit-guard:no-install — exits 2\nspawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);`), 0,
+    "a declared no-install call must pass");
 });
