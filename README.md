@@ -13,7 +13,8 @@ questions, in a fixed order** — zoom-out, then RULE #1, then KISS (`core/FOUND
 `core/WORKFLOW.md` § Round/root-cause controller) — so the question that could end the line of work
 outranks every question that refines it, and a question bearing only on the record or consistency is a
 NOTE rather than an ask. **And facts are the agent's job**: anything answerable from the repo, the git
-history or a tool is dispatched to a subagent, so what reaches the Owner is decisions only.
+history or a tool is dispatched to a subagent, so the Owner is spared the legwork and gets the
+decisions.
 
 Rounds are shaped by `/humanize bullet`, degrading cleanly where `core/OWNER_COMMS.md` — a `[G]` artifact
 — is absent. It ships to both lanes from one body; the Codex shim states the asymmetry rather than hiding
