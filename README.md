@@ -1,4 +1,25 @@
-# workflow-kit — v2.23.0
+# workflow-kit — v2.24.0
+
+## What's new in v2.24.0 — `/grilling`, the interview that settles intent before the build
+
+Misalignment in this kit has been resolved **late and expensively, by the gate**: the v2.12.0 comms chip
+shipped 1 of 5 rules because both NO-GO rounds removed scope. `/grilling` is a cheap pass at the same
+thing *before* a brief is minted. It maps the work as a **design tree**, asks the whole settled
+**frontier** in one round with a recommended answer beside every question, then recomputes as the answers
+push the frontier outward.
+
+Two things make it this kit's skill rather than a generic interview. **The three lenses choose the
+questions, in a fixed order** — zoom-out, then RULE #1, then KISS (`core/FOUNDATIONS.md`,
+`core/WORKFLOW.md` § Round/root-cause controller) — so the question that could end the line of work
+outranks every question that refines it, and a question bearing only on the record or consistency is a
+NOTE rather than an ask. **And facts are the agent's job**: anything answerable from the repo, the git
+history or a tool is dispatched to a subagent, so what reaches the Owner is decisions only.
+
+Rounds are shaped by `/humanize bullet`, degrading cleanly where `core/OWNER_COMMS.md` — a `[G]` artifact
+— is absent. It ships to both lanes from one body; the Codex shim states the asymmetry rather than hiding
+it, since Codex prompts fire only when typed while the Claude lane queues the skill unprompted. Adapted
+from `mattpocock/skills` (MIT).
+
 
 ## What's new in v2.23.0 — the Owner-continuation tier floor, in the skill and guarded
 
