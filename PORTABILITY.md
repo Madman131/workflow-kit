@@ -694,8 +694,11 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 ## What is portable verbatim vs generated
 
 - `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the two PreToolUse sensors
-  (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` Stop
-  sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
+  (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` and
+  `sensor-token-ledger` Stop sensors (the ledger appends one cumulative token-usage row per turn to the
+  untracked `.claude/metrics/tokens.jsonl`; `scripts/token-report.mjs` reads it; Claude lane only —
+  Codex has no observed Stop payload, so like `guard-owner-comms` it installs and is not registered
+  there), `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
   `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
   `/grilling`), the

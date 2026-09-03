@@ -8,31 +8,31 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-cross-repo-writes.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking write stays inside this repo…"
+            "statusMessage": "Checking write stays inside this repo\u2026"
           },
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-lane-authoring.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking the task's lane declaration…"
+            "statusMessage": "Checking the task's lane declaration\u2026"
           },
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-brief-rung.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking the pre-send verification rung for this brief…"
+            "statusMessage": "Checking the pre-send verification rung for this brief\u2026"
           },
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-sweep-owed.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking whether this edit owes a pre-fold dependency sweep…"
+            "statusMessage": "Checking whether this edit owes a pre-fold dependency sweep\u2026"
           },
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-mutation-owed.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking whether this edit owes a two-sided mutation record…"
+            "statusMessage": "Checking whether this edit owes a two-sided mutation record\u2026"
           }
         ]
       },
@@ -43,7 +43,7 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-gate-ladder.mjs\"",
             "timeout": 10,
-            "statusMessage": "Resolving the declared tier; surfacing the ladder it owes…"
+            "statusMessage": "Resolving the declared tier; surfacing the ladder it owes\u2026"
           }
         ]
       },
@@ -54,7 +54,7 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-brief-rung.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking the pre-send verification rung for this dispatch…"
+            "statusMessage": "Checking the pre-send verification rung for this dispatch\u2026"
           }
         ]
       }
@@ -66,7 +66,13 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-owner-comms.mjs\"",
             "timeout": 10,
-            "statusMessage": "Checking the final message against OWNER_COMMS rule 1…"
+            "statusMessage": "Checking the final message against OWNER_COMMS rule 1\u2026"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-token-ledger.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Recording this turn's token usage in .claude/metrics/tokens.jsonl\u2026"
           }
         ]
       }

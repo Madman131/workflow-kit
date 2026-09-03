@@ -885,7 +885,7 @@ function main() {
   const claudeHooks = installHooks(path.join(T, ".claude", "hooks"));
   log(claudeHooks.kept
     ? `  .claude/hooks/: ${claudeHooks.installed} installed, ${claudeHooks.kept} EXISTING kept — may be STALE; re-run with --force to update`
-    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the sweep-owed and mutation-owed PreToolUse sensors (print, never deny), the guard-owner-comms Stop sensor (fails OPEN), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
+    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the sweep-owed and mutation-owed PreToolUse sensors (print, never deny), the guard-owner-comms and sensor-token-ledger Stop sensors (fail OPEN; the ledger writes .claude/metrics/tokens.jsonl, untracked), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
 
   // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
   const pc = path.join(T, ".githooks", "pre-commit");

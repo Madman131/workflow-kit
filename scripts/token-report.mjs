@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+// workflow-kit — scripts/token-report.mjs. Reads the ledger `hooks/sensor-token-ledger.mjs` writes
+// and prints token spend per task (default), per session, or per day. Tokens only — no prices.
+//
+//   node scripts/token-report.mjs [--by task|session|day] [--ledger <path>] [--json]
+//
+// EVERY ROW IS A CUMULATIVE SNAPSHOT of its session at one Stop, so this report keeps only the
+// LATEST row per session_id and then aggregates. Summing rows would multiply-count.
+//
+// Columns are tokens the model was handed (prompt = input + cache_creation + cache_read; cache
+// reads are cheaper but they are still context) and tokens it produced (out), split between the
+// session's own turns (main) and its Agent-tool subagents (side: cold seats, panels, explorers).
+// The main/side split is the number this method never had: what the gates cost against the build.
+
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function parseArgs(argv) {
+  const o = { by: "task", ledger: null, json: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--json") o.json = true;
+    else if (a === "--by") o.by = argv[++i];
+    else if (a === "--ledger") o.ledger = argv[++i];
+    else if (a === "-h" || a === "--help") { console.log("usage: token-report.mjs [--by task|session|day] [--ledger <path>] [--json]"); process.exit(0); }
+    else { console.error(`token-report: unknown argument ${a}`); process.exit(2); }
+  }
+  if (!["task", "session", "day"].includes(o.by)) { console.error(`token-report: --by must be task, session or day`); process.exit(2); }
+  return o;
+}
+
+export function loadLatestPerSession(text) {
+  const latest = new Map();
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let r;
+    try { r = JSON.parse(line); } catch { continue; }
+    const key = r.session_id || r.transcript || r.ts;
+    if (!key) continue;
+    const prev = latest.get(key);
+    if (!prev || String(r.ts) >= String(prev.ts)) latest.set(key, r);
+  }
+  return [...latest.values()];
+}
+
+const prompt = (s) => (s?.input || 0) + (s?.cache_creation || 0) + (s?.cache_read || 0);
+
+export function aggregate(rows, by) {
+  const groups = new Map();
+  for (const r of rows) {
+    const key = by === "session" ? (r.session_id || "(unknown)")
+      : by === "day" ? String(r.ts || "").slice(0, 10) || "(unknown)"
+      : (r.task_id || "(undeclared)");
+    const g = groups.get(key) || { key, sessions: 0, main_prompt: 0, main_out: 0, side_prompt: 0, side_out: 0, side_messages: 0, main_messages: 0 };
+    g.sessions += 1;
+    g.main_prompt += prompt(r.main); g.main_out += r.main?.output || 0; g.main_messages += r.main?.messages || 0;
+    g.side_prompt += prompt(r.sidechain); g.side_out += r.sidechain?.output || 0; g.side_messages += r.sidechain?.messages || 0;
+    groups.set(key, g);
+  }
+  return [...groups.values()].sort((a, b) => (b.main_prompt + b.side_prompt) - (a.main_prompt + a.side_prompt));
+}
+
+function fmt(n) { return n.toLocaleString("en-US"); }
+
+export function render(groups, by) {
+  const head = [by, "sessions", "main prompt", "main out", "side prompt", "side out", "side share"];
+  const lines = groups.map((g) => {
+    const total = g.main_prompt + g.side_prompt;
+    const share = total ? `${Math.round((100 * g.side_prompt) / total)}%` : "—";
+    return [g.key, String(g.sessions), fmt(g.main_prompt), fmt(g.main_out), fmt(g.side_prompt), fmt(g.side_out), share];
+  });
+  const widths = head.map((h, i) => Math.max(h.length, ...lines.map((l) => l[i].length)));
+  const row = (cells) => cells.map((c, i) => (i === 0 ? c.padEnd(widths[i]) : c.padStart(widths[i]))).join("  ");
+  const tot = groups.reduce((a, g) => ({ s: a.s + g.sessions, mp: a.mp + g.main_prompt, mo: a.mo + g.main_out, sp: a.sp + g.side_prompt, so: a.so + g.side_out }), { s: 0, mp: 0, mo: 0, sp: 0, so: 0 });
+  const totalShare = tot.mp + tot.sp ? `${Math.round((100 * tot.sp) / (tot.mp + tot.sp))}%` : "—";
+  return [row(head), row(widths.map((w) => "-".repeat(w))), ...lines.map(row),
+    row(["TOTAL", String(tot.s), fmt(tot.mp), fmt(tot.mo), fmt(tot.sp), fmt(tot.so), totalShare]),
+    "", "prompt = input + cache_creation + cache_read tokens handed to the model; out = tokens produced.",
+    "side = Agent-tool subagent turns (cold seats, panels, explorers); main = the session's own turns.",
+    "Latest snapshot per session; Codex CLI seats are not in this ledger."].join("\n");
+}
+
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const o = parseArgs(process.argv.slice(2));
+  const ledger = o.ledger || process.env.WORKFLOW_KIT_TOKEN_LEDGER_PATH
+    || path.join(process.env.CLAUDE_PROJECT_DIR || process.cwd(), ".claude", "metrics", "tokens.jsonl");
+  if (!existsSync(ledger)) {
+    console.error(`token-report: no ledger at ${ledger} — the Stop sensor writes it after the first turn in a repo where it is registered.`);
+    process.exit(1);
+  }
+  const rows = loadLatestPerSession(readFileSync(ledger, "utf8"));
+  const groups = aggregate(rows, o.by);
+  if (o.json) console.log(JSON.stringify({ ledger, by: o.by, sessions: rows.length, groups }, null, 2));
+  else console.log(`ledger: ${ledger}  (${rows.length} session(s), latest snapshot each)\n\n${render(groups, o.by)}`);
+}
+void KIT;
