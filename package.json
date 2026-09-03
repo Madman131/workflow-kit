@@ -14,6 +14,7 @@
     "record:repair-event": "node scripts/record-repair-event.mjs",
     "check:orchestrate-user": "node scripts/sync-user-orchestrate-skill.mjs --check",
     "report:tokens": "node scripts/token-report.mjs",
+    "census:worktrees": "node scripts/worktree-census.mjs",
     "sync:orchestrate-user": "node scripts/sync-user-orchestrate-skill.mjs --install",
     "test": "node scripts/run-checks.mjs",
     "acceptance": "bash acceptance/plant-the-bug.sh"

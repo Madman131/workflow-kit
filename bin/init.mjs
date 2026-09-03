@@ -5,8 +5,8 @@
 // repo-specific families into .claude/kit.config.json (a [G] binding), GENERATES the [G] files
 // (entry stubs, BINDINGS, REPO_INVARIANTS, SYSTEM_MAP, OWNER_COMMS) from templates with placeholders,
 // installs the dual-lane SKILLS (one shared body under .agents/skills/, a thin shim per harness),
-// MERGES the Claude Code hook registrations into .claude/settings.json — four PreToolUse guards, two
-// PreToolUse sensors (they print and never deny), plus
+// MERGES the Claude Code hook registrations into .claude/settings.json — four PreToolUse guards, three
+// PreToolUse sensors (they print and never deny), two Stop sensors (comms nudge, token ledger), plus
 // the Stop-event Owner-comms SENSOR, which fails OPEN — and, crucially, installs the HARNESS-AGNOSTIC
 // pre-commit hook and sets core.hooksPath, so a non-Claude lane still gets the strongest enforcement
 // floor the kit can give it (see PORTABILITY.md).
@@ -177,6 +177,8 @@ AGENTS.md prose are what bind every lane).`;
 
 const PACKAGE_SCRIPTS = {
   "doc:size": "node scripts/check-doc-size.mjs",
+  "census:worktrees": "node scripts/worktree-census.mjs",
+  "report:tokens": "node scripts/token-report.mjs",
   "confirm:repair-brief": "node scripts/confirm-repair-brief.mjs",
   "record:repair-event": "node scripts/record-repair-event.mjs",
   "test:kit-controls": "node --test tests/*.test.mjs",
@@ -959,6 +961,9 @@ function main() {
   copyGuarded(path.join(KIT_ROOT, "scripts", "check-doc-size.mjs"), path.join(T, "scripts", "check-doc-size.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "record-repair-event.mjs"), path.join(T, "scripts", "record-repair-event.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "confirm-repair-brief.mjs"), path.join(T, "scripts", "confirm-repair-brief.mjs"), force);
+  // v2.27: the two REPORT tools. Read-only; they need no binding and never mutate the repo.
+  copyGuarded(path.join(KIT_ROOT, "scripts", "worktree-census.mjs"), path.join(T, "scripts", "worktree-census.mjs"), force);
+  copyGuarded(path.join(KIT_ROOT, "scripts", "token-report.mjs"), path.join(T, "scripts", "token-report.mjs"), force);
   const runners = ["codex-gate.sh", "cold-review-gemini.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs"];
   const gateGuardRel = path.join("scripts", "codex-gate-guard", "claude");
   if (args.withGateRunners) {
@@ -968,7 +973,7 @@ function main() {
     }
     const guard = path.join(T, "scripts", "codex-gate-guard", "claude");
     if (copyGuarded(path.join(KIT_ROOT, "scripts", "codex-gate-guard", "claude"), guard, force) === "written") chmodX(guard);
-    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + gate runners (need codex/agy at runtime — see PORTABILITY.md)`);
+    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + gate runners (need codex/agy at runtime — see PORTABILITY.md)`);
   } else {
     // Skipped is not UNEXAMINED: runners a previous adopt installed are mechanism kept-files even
     // when this run omits the flag — read-only compared, like the skipped .codex lane below.

@@ -1,7 +1,9 @@
 // workflow-kit — tests for the token-ledger Stop sensor and its report. Both polarities: a planted
-// transcript yields the EXACT sums (dedupe by message.id, main/sidechain split, lane attribution),
-// and every fail-open branch is observed allowing WITHOUT writing a row — a sensor that wrote a row
-// on garbage would be manufacturing a measurement.
+// transcript yields the EXACT sums (dedupe by message.id, main/sidechain split, session-bound lane
+// attribution, per-row delta, skipped-line count), and every fail-open branch — garbage stdin, no
+// transcript_path, no session_id, a missing transcript, a non-regular transcript, the off switch —
+// is observed allowing WITHOUT writing a row. The report is checked to sum DELTAS per day/task,
+// to keep append order, and to announce malformed rows rather than hide them.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -11,15 +13,13 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { summarizeTranscript } from "../hooks/sensor-token-ledger.mjs";
-import { aggregate, loadLatestPerSession, render } from "../scripts/token-report.mjs";
+import { aggregate, loadRows, render } from "../scripts/token-report.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HOOK = path.join(KIT, "hooks", "sensor-token-ledger.mjs");
 const REPORT = path.join(KIT, "scripts", "token-report.mjs");
 
 function cleanTestEnv(extra = {}) {
-  // Strip the runner's own env AND any ledger switches the operator's shell carries, THEN apply the
-  // case's own values — the other order silently deleted the off switch a case was setting.
   const e = { ...process.env };
   delete e.NODE_OPTIONS;
   for (const k of Object.keys(e)) if (k.startsWith("NODE_TEST")) delete e[k];
@@ -42,26 +42,28 @@ const PLANTED = [
   assistant("s1", { input_tokens: 50, output_tokens: 5, cache_read_input_tokens: 7 }, { isSidechain: true }),
   assistant("m2", { input_tokens: 200, output_tokens: 20, cache_creation_input_tokens: 3, cache_read_input_tokens: 2000 }),
 ].join("\n") + "\n";
+const MAIN = { input: 300, output: 30, cache_creation: 8, cache_read: 3000, messages: 2 };
+const SIDE = { input: 50, output: 5, cache_creation: 0, cache_read: 7, messages: 1 };
 
-test("summarizeTranscript dedupes by message.id, splits sidechain turns, and reports the latest context size", () => {
+test("summarizeTranscript dedupes by message.id, splits sidechain turns, counts skipped lines, and reports the latest context size", () => {
   const s = summarizeTranscript(PLANTED);
-  assert.deepEqual(s.main, { input: 300, output: 30, cache_creation: 8, cache_read: 3000, messages: 2 }, "m1 counted ONCE despite three lines");
-  assert.deepEqual(s.sidechain, { input: 50, output: 5, cache_creation: 0, cache_read: 7, messages: 1 });
+  assert.deepEqual(s.main, MAIN, "m1 counted ONCE despite three lines");
+  assert.deepEqual(s.sidechain, SIDE);
   assert.equal(s.model, "claude-test-1");
   assert.equal(s.context_now, 200 + 3 + 2000, "context_now is the newest usage record's prompt size");
   assert.equal(s.unkeyed, 0);
-  // The polarity that matters: the naive per-line sum is WRONG, and this function does not produce it.
+  assert.equal(s.skipped, 1, "the broken line is COUNTED, not silently dropped");
   assert.notEqual(s.main.input, 500, "a per-line sum would report 500; the dedupe reports 300");
-  // An id-less record is counted once and REPORTED as unkeyed, never silently dropped or merged.
   const noId = summarizeTranscript(line({ type: "assistant", message: { role: "assistant", usage: { input_tokens: 9, output_tokens: 1 } } }) + "\n");
   assert.equal(noId.main.input, 9); assert.equal(noId.unkeyed, 1);
 });
 
-test("the Stop sensor appends a lane-attributed row, fails open on every bad input, and honours the off switch", () => {
+test("the Stop sensor appends a session-bound, delta-carrying row, and fails open WITHOUT a row on every bad input", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-"));
   try {
     mkdirSync(path.join(dir, ".claude"), { recursive: true });
-    writeFileSync(path.join(dir, ".claude", "task-lane.json"), line({ mode: "in-thread", sessionId: "sess-1", taskId: "ecc-test", tier: "T1" }));
+    const lane = (sessionId) => writeFileSync(path.join(dir, ".claude", "task-lane.json"), line({ mode: "in-thread", sessionId, taskId: "ecc-test", tier: "T1" }));
+    lane("sess-1");
     const transcript = path.join(dir, "t.jsonl");
     writeFileSync(transcript, PLANTED);
     const ledger = path.join(dir, ".claude", "metrics", "tokens.jsonl");
@@ -74,23 +76,40 @@ test("the Stop sensor appends a lane-attributed row, fails open on every bad inp
     let r = run({ transcript_path: transcript, session_id: "sess-1", stop_hook_active: false });
     assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout, "", "a sensor prints nothing on stdout");
     assert.equal(rows().length, 1, "one row per Stop");
-    const row = rows()[0];
-    assert.equal(row.session_id, "sess-1"); assert.equal(row.task_id, "ecc-test"); assert.equal(row.tier, "T1"); assert.equal(row.mode, "in-thread");
-    assert.deepEqual(row.main, { input: 300, output: 30, cache_creation: 8, cache_read: 3000, messages: 2 });
-    assert.deepEqual(row.sidechain, { input: 50, output: 5, cache_creation: 0, cache_read: 7, messages: 1 });
-    assert.equal(row.context_now, 2203); assert.equal(row.truncated, false); assert.equal(row.model, "claude-test-1");
+    let row = rows()[0];
+    assert.equal(row.session_id, "sess-1"); assert.equal(row.task_id, "ecc-test"); assert.equal(row.tier, "T1"); assert.equal(row.mode, "in-thread"); assert.equal(row.lane_mismatch, false);
+    assert.deepEqual(row.main, MAIN); assert.deepEqual(row.sidechain, SIDE);
+    assert.deepEqual(row.delta.main, MAIN, "first row: delta equals the cumulative");
+    assert.equal(row.skipped_lines, 1); assert.equal(row.context_now, 2203); assert.equal(row.truncated, false); assert.equal(row.model, "claude-test-1");
     assert.equal(row.transcript, "t.jsonl", "the row carries the transcript's basename only");
 
-    // A second Stop appends a second CUMULATIVE row; the report keeps the latest per session.
+    // A second Stop after more usage: cumulative grows, DELTA is only the growth.
+    writeFileSync(transcript, PLANTED + assistant("m3", { input_tokens: 40, output_tokens: 4 }) + "\n");
     r = run({ transcript_path: transcript, session_id: "sess-1", stop_hook_active: true });
-    assert.equal(r.status, 0); assert.equal(rows().length, 2); assert.equal(rows()[1].stop_hook_active, true);
+    assert.equal(r.status, 0); assert.equal(rows().length, 2);
+    row = rows()[1];
+    assert.equal(row.main.input, 340); assert.equal(row.delta.main.input, 40); assert.equal(row.delta.main.messages, 1);
+    assert.deepEqual(row.delta.sidechain, { input: 0, output: 0, cache_creation: 0, cache_read: 0, messages: 0 });
+    assert.equal(row.stop_hook_active, true);
+
+    // LANE IS SESSION-BOUND: a declaration for another session yields null attribution + a flag.
+    lane("sess-other");
+    r = run({ transcript_path: transcript, session_id: "sess-1" });
+    assert.equal(r.status, 0); row = rows().at(-1);
+    assert.equal(row.task_id, null); assert.equal(row.lane_mismatch, true, "another session's lane is never inherited");
+    rmSync(path.join(dir, ".claude", "task-lane.json"));
+    r = run({ transcript_path: transcript, session_id: "sess-2" });
+    assert.equal(r.status, 0); row = rows().at(-1);
+    assert.equal(row.session_id, "sess-2"); assert.equal(row.task_id, null); assert.equal(row.lane_mismatch, false, "no declaration is not a mismatch");
 
     // FAIL OPEN, WRITE NOTHING: each branch exits 0 and adds no row.
     const before = rows().length;
     for (const [label, payload] of [
       ["garbage stdin", "{nope"],
       ["no transcript_path", { session_id: "sess-1" }],
+      ["no session_id", { transcript_path: transcript }],
       ["missing transcript", { transcript_path: path.join(dir, "absent.jsonl"), session_id: "sess-1" }],
+      ["non-regular transcript", { transcript_path: dir, session_id: "sess-1" }],
     ]) {
       r = run(payload);
       assert.equal(r.status, 0, `${label}: exit 0 (${r.stderr})`);
@@ -99,46 +118,52 @@ test("the Stop sensor appends a lane-attributed row, fails open on every bad inp
     r = run({ transcript_path: transcript, session_id: "sess-1" }, { WORKFLOW_KIT_TOKEN_LEDGER: "false" });
     assert.equal(r.status, 0); assert.equal(rows().length, before, "off switch: no row");
 
-    // No lane declared ⇒ null attribution, still a row (the measurement does not depend on the lane).
-    rmSync(path.join(dir, ".claude", "task-lane.json"));
-    r = run({ transcript_path: transcript, session_id: "sess-2" });
-    assert.equal(r.status, 0);
-    const last = rows().at(-1);
-    assert.equal(last.session_id, "sess-2"); assert.equal(last.task_id, null); assert.equal(last.tier, null);
-
     // Ledger path override lands the row elsewhere.
     const alt = path.join(dir, "alt.jsonl");
     r = run({ transcript_path: transcript, session_id: "sess-3" }, { WORKFLOW_KIT_TOKEN_LEDGER_PATH: alt });
     assert.equal(r.status, 0); assert.ok(existsSync(alt), "override honoured");
 
-    // The report: latest snapshot per session, grouped by task, with a main/side split.
+    // The report over the real ledger: deltas summed, both sessions, the task split, the proxy caveat.
     const out = spawnSync(process.execPath, [REPORT, "--ledger", ledger], { encoding: "utf8", env: cleanTestEnv() });
     assert.equal(out.status, 0, out.stderr);
-    assert.match(out.stdout, /2 session\(s\)/, "sess-1 (two rows) and sess-2 collapse to two sessions");
+    assert.match(out.stdout, /2 session\(s\), 4 row\(s\)/);
     assert.match(out.stdout, /ecc-test/); assert.match(out.stdout, /\(undeclared\)/);
-    assert.match(out.stdout, /3,308/, "main prompt for ecc-test = 300 + 8 + 3000");
-    assert.match(out.stdout, /Codex CLI seats are not in this ledger/, "the limit is printed with the numbers");
+    // ecc-test = row1 delta (3,308 prompt) + row2 delta (40): 3,348. The mismatch row and sess-2 are undeclared.
+    assert.match(out.stdout, /ecc-test\s+1\s+3,348/, "task spend is the SUM OF DELTAS while the session was on that task");
+    assert.match(out.stdout, /proxy for/, "the topology caveat is printed with the numbers");
     const js = spawnSync(process.execPath, [REPORT, "--ledger", ledger, "--by", "session", "--json"], { encoding: "utf8", env: cleanTestEnv() });
     assert.equal(js.status, 0, js.stderr);
     const parsed = JSON.parse(js.stdout);
-    assert.equal(parsed.sessions, 2);
-    assert.equal(parsed.groups.find((g) => g.key === "sess-1").side_prompt, 57);
-    // A missing ledger is an error with the path in it, never an empty report that reads as "no spend".
+    assert.equal(parsed.sessions, 2); assert.equal(parsed.malformed, 0);
+    assert.equal(parsed.groups.find((g) => g.key === "sess-1").main_prompt, 3348);
+    // Argument hygiene: a missing operand is refused, not silently defaulted.
+    const bad = spawnSync(process.execPath, [REPORT, "--ledger"], { encoding: "utf8", env: cleanTestEnv() });
+    assert.equal(bad.status, 2); assert.match(bad.stderr, /needs a value/);
     const none = spawnSync(process.execPath, [REPORT, "--ledger", path.join(dir, "nope.jsonl")], { encoding: "utf8", env: cleanTestEnv() });
     assert.equal(none.status, 1); assert.match(none.stderr, /no ledger at/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("the report's aggregation keeps the LATEST row per session and never sums snapshots", () => {
-  const rows = loadLatestPerSession([
-    line({ ts: "2026-09-03T01:00:00Z", session_id: "a", task_id: "t", main: { input: 10, output: 1, cache_creation: 0, cache_read: 0, messages: 1 }, sidechain: { input: 0, output: 0, cache_creation: 0, cache_read: 0, messages: 0 } }),
-    line({ ts: "2026-09-03T02:00:00Z", session_id: "a", task_id: "t", main: { input: 30, output: 3, cache_creation: 0, cache_read: 0, messages: 3 }, sidechain: { input: 5, output: 1, cache_creation: 0, cache_read: 0, messages: 1 } }),
+test("the report sums deltas per day and task in append order, counts pre-delta rows once, and announces malformed rows", () => {
+  const z = { input: 0, output: 0, cache_creation: 0, cache_read: 0, messages: 0 };
+  const d = (input, output = 0) => ({ ...z, input, output, messages: 1 });
+  const ledger = [
+    line({ ts: "2026-09-03T23:00:00Z", session_id: "a", task_id: "t1", main: d(100), sidechain: z, delta: { main: d(100), sidechain: z } }),
+    line({ ts: "2026-09-04T01:00:00Z", session_id: "a", task_id: "t2", main: d(150), sidechain: d(5), delta: { main: d(50), sidechain: d(5) } }),
+    line({ ts: "2026-09-04T00:30:00Z", session_id: "a", task_id: "t2", main: d(160), sidechain: d(5), delta: { main: d(10), sidechain: z } }), // clock regression: still counted, in append order
+    line({ ts: "2026-09-04T02:00:00Z", session_id: "b", task_id: "t1", main: d(30), sidechain: z }),   // legacy row, no delta
     "broken line",
-  ].join("\n"));
-  assert.equal(rows.length, 1); assert.equal(rows[0].main.input, 30, "latest snapshot wins; 10 is never added to 30");
-  const g = aggregate(rows, "task");
-  assert.deepEqual(g.map((x) => [x.key, x.main_prompt, x.side_prompt]), [["t", 30, 5]]);
-  assert.match(render(g, "task"), /TOTAL\s+1\s+30\s+3\s+5\s+1\s+14%/);
+    line({ ts: "2026-09-04T03:00:00Z", main: d(999), sidechain: z }),                                    // no session_id ⇒ malformed
+  ].join("\n");
+  const { rows, malformed, legacy } = loadRows(ledger);
+  assert.equal(rows.length, 4); assert.equal(malformed, 2); assert.equal(legacy, 1);
+  const byDay = Object.fromEntries(aggregate(rows, "day").map((g) => [g.key, g.main_prompt]));
+  assert.deepEqual(byDay, { "2026-09-03": 100, "2026-09-04": 90 }, "day spend = deltas in that day (50 + 10 + legacy 30), never the latest cumulative");
+  const byTask = Object.fromEntries(aggregate(rows, "task").map((g) => [g.key, g.main_prompt]));
+  assert.deepEqual(byTask, { t1: 130, t2: 60 }, "task spend follows the task each delta was recorded under");
+  const text = render(aggregate(rows, "task"), "task", { malformed, legacy, sessions: 2 });
+  assert.match(text, /WARNING: 2 malformed row\(s\) ignored/);
+  assert.match(text, /1 pre-delta row\(s\)/);
 });
 
 test("init installs the Stop sensor file and registers it once, alongside guard-owner-comms", () => {

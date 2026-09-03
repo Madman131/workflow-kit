@@ -12,15 +12,19 @@
 // by hand, never in tokens. A number nobody measures cannot be tuned. This writes the number.
 //
 // WHAT A ROW IS: a CUMULATIVE snapshot of the session at this Stop — every assistant message's
-// usage, summed. Rows are appended per turn, so `scripts/token-report.mjs` takes the LATEST row per
-// session and never sums rows (summing would multiply-count). Two sums per row:
+// usage, summed — PLUS the DELTA since this session's previous row in the same ledger, so a report
+// can attribute spend to the day and task in which it happened rather than to whichever row came
+// last. Two sums per row, each with cumulative and delta:
 //   main      — the session's own turns;
-//   sidechain — turns flagged `isSidechain` (Agent-tool subagents: cold seats, panels, explorers),
-//               which land in the SAME transcript. Splitting them is what separates gate spend from
-//               build spend, the one comparison the method has never had a number for.
-// A row also carries the task id and tier from `.claude/task-lane.json` (when declared) so spend is
-// attributable per changeset, and `context_now` — the prompt size of the latest turn — so the
-// ledger doubles as a record of context pressure.
+//   sidechain — turns flagged `isSidechain` (Agent-tool subagents), which land in the SAME
+//               transcript. This is a TOPOLOGY split, not a purpose split: in this method the cold
+//               seats and panels run as subagents, so it is a usable proxy for gate spend versus
+//               build spend — a proxy, and the report says so.
+// A row carries the task id and tier from `.claude/task-lane.json` ONLY when that declaration's
+// sessionId matches the Stop payload's session_id (a lane belongs to one session; a mismatch is
+// recorded as `lane_mismatch: true` with null attribution), and `context_now` — the prompt size of
+// the latest turn — so the ledger doubles as a record of context pressure. It also records
+// `skipped_lines` (unparseable transcript lines) so a partial count is visible as partial.
 //
 // DEDUPE BY message.id — load-bearing. Claude Code writes one JSONL line per content block, each
 // repeating the SAME `message.usage`; summing lines over-counts ~2.5-3× (ECC measured a session at
@@ -31,7 +35,9 @@
 //
 // LIMITS, stated: Codex CLI seats run outside this transcript and are not captured; a transcript
 // over MAX_BYTES is read from its tail and the row says `truncated: true`; older transcript shapes
-// without `message.id` are counted per line (over-count possible, and the row says how many).
+// without `message.id` are counted per line (over-count possible, and the row says how many); a
+// Stop payload without a session_id writes NO row (rows are keyed by session, and a null key would
+// merge unrelated sessions); a transcript path that is not a regular file is not read.
 //
 // OFF SWITCH: WORKFLOW_KIT_TOKEN_LEDGER="false" (explicit string compare — "false" is truthy).
 // LEDGER PATH: WORKFLOW_KIT_TOKEN_LEDGER_PATH overrides `<project>/.claude/metrics/tokens.jsonl`.
@@ -69,10 +75,11 @@ export function summarizeTranscript(text) {
   const unkeyedRows = [];
   let latest = null;               // the newest usage record, for context_now
   let model = "";
+  let skipped = 0;                 // unparseable lines — reported, never hidden inside a clean-looking row
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let e;
-    try { e = JSON.parse(line); } catch { continue; }
+    try { e = JSON.parse(line); } catch { skipped++; continue; }
     const msg = e?.message;
     const role = msg?.role ?? e?.type;
     if (role !== "assistant" || !msg?.usage || typeof msg.usage !== "object") continue;
@@ -94,14 +101,37 @@ export function summarizeTranscript(text) {
   const context_now = latest
     ? num(latest.input_tokens) + num(latest.cache_creation_input_tokens) + num(latest.cache_read_input_tokens)
     : 0;
-  return { main, sidechain, model, context_now, unkeyed };
+  return { main, sidechain, model, context_now, unkeyed, skipped };
 }
 
-function readLane(projectRoot) {
+// The previous row for this session, read from the ledger's tail, so the delta can be computed.
+function previousRow(ledger, sessionId) {
+  let text;
+  try { if (!statSync(ledger).isFile()) return null; text = readTail(ledger, 4 * 1024 * 1024).text; } catch { return null; }
+  let prev = null;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    try { const r = JSON.parse(line); if (r && r.session_id === sessionId) prev = r; } catch { /* skip */ }
+  }
+  return prev;
+}
+
+const delta = (cur, prev) => {
+  const d = emptySum();
+  for (const k of Object.keys(d)) d[k] = Math.max(0, (cur?.[k] || 0) - (prev?.[k] || 0));
+  return d;
+};
+
+// Lane attribution is bound to the SESSION: the declaration names the session it belongs to, and a
+// row is tagged only when that matches the payload's session_id (hooks/guard-lane-authoring.mjs
+// binds the same way). Anything else is null attribution plus a visible mismatch flag.
+function readLane(projectRoot, sessionId) {
+  const none = { task_id: null, tier: null, mode: null, lane_mismatch: false };
   try {
     const l = JSON.parse(readFileSync(path.join(projectRoot, ".claude", "task-lane.json"), "utf8"));
-    return { task_id: typeof l.taskId === "string" ? l.taskId : null, tier: typeof l.tier === "string" ? l.tier : null, mode: typeof l.mode === "string" ? l.mode : null };
-  } catch { return { task_id: null, tier: null, mode: null }; }
+    if (typeof l.sessionId !== "string" || l.sessionId !== sessionId) return { ...none, lane_mismatch: true };
+    return { task_id: typeof l.taskId === "string" ? l.taskId : null, tier: typeof l.tier === "string" ? l.tier : null, mode: typeof l.mode === "string" ? l.mode : null, lane_mismatch: false };
+  } catch { return none; }
 }
 
 function main(raw) {
@@ -110,24 +140,29 @@ function main(raw) {
   try { input = JSON.parse(raw); } catch { return ALLOW(); }
   const file = input?.transcript_path;
   if (typeof file !== "string" || !file) return ALLOW();
+  const sessionId = typeof input.session_id === "string" && input.session_id ? input.session_id : null;
+  if (!sessionId) return ALLOW();                                 // no key ⇒ no row (never merge sessions)
   const projectRoot = path.resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
   let tail;
-  try { tail = readTail(file, MAX_BYTES); } catch { return ALLOW(); }
+  try { if (!statSync(file).isFile()) return ALLOW(); tail = readTail(file, MAX_BYTES); } catch { return ALLOW(); }
   const sum = summarizeTranscript(tail.text);
+  const ledger = process.env.WORKFLOW_KIT_TOKEN_LEDGER_PATH || path.join(projectRoot, ".claude", "metrics", "tokens.jsonl");
+  const prev = previousRow(ledger, sessionId);
   const row = {
     ts: new Date().toISOString(),
-    session_id: typeof input.session_id === "string" ? input.session_id : null,
-    ...readLane(projectRoot),
+    session_id: sessionId,
+    ...readLane(projectRoot, sessionId),
     model: sum.model || null,
     transcript: path.basename(file),
     main: sum.main,
     sidechain: sum.sidechain,
+    delta: { main: delta(sum.main, prev?.main), sidechain: delta(sum.sidechain, prev?.sidechain) },
     context_now: sum.context_now,
     unkeyed_messages: sum.unkeyed,
+    skipped_lines: sum.skipped,
     truncated: tail.truncated,
     stop_hook_active: input.stop_hook_active === true,
   };
-  const ledger = process.env.WORKFLOW_KIT_TOKEN_LEDGER_PATH || path.join(projectRoot, ".claude", "metrics", "tokens.jsonl");
   try {
     mkdirSync(path.dirname(ledger), { recursive: true });
     appendFileSync(ledger, JSON.stringify(row) + "\n");

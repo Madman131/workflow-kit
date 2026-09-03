@@ -4,68 +4,78 @@
 //
 //   node scripts/token-report.mjs [--by task|session|day] [--ledger <path>] [--json]
 //
-// EVERY ROW IS A CUMULATIVE SNAPSHOT of its session at one Stop, so this report keeps only the
-// LATEST row per session_id and then aggregates. Summing rows would multiply-count.
+// EVERY ROW carries a cumulative snapshot AND the delta since the session's previous row. The
+// report SUMS DELTAS, in append order, so spend lands in the day and task in which it happened;
+// a session that changes task or crosses midnight splits correctly. Rows the hook wrote before
+// deltas existed (no `delta` field) count their cumulative total once, in their own group, and the
+// report says how many such rows it saw. Malformed rows are counted and reported, never silently
+// dropped — a report that hides its own gaps reads as clean.
 //
 // Columns are tokens the model was handed (prompt = input + cache_creation + cache_read; cache
 // reads are cheaper but they are still context) and tokens it produced (out), split between the
-// session's own turns (main) and its Agent-tool subagents (side: cold seats, panels, explorers).
-// The main/side split is the number this method never had: what the gates cost against the build.
+// session's own turns (main) and its Agent-tool subagents (side). The split is TOPOLOGY, not
+// purpose: it is a proxy for gate-versus-build spend where, as in this method, cold seats and
+// panels run as subagents. Where review runs in the main thread the proxy inverts; read it as such.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 function parseArgs(argv) {
   const o = { by: "task", ledger: null, json: false };
+  const needsValue = (i, flag) => { const v = argv[i + 1]; if (v === undefined || v.startsWith("--")) { console.error(`token-report: ${flag} needs a value`); process.exit(2); } return v; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--json") o.json = true;
-    else if (a === "--by") o.by = argv[++i];
-    else if (a === "--ledger") o.ledger = argv[++i];
+    else if (a === "--by") o.by = needsValue(i++, a);
+    else if (a === "--ledger") o.ledger = needsValue(i++, a);
     else if (a === "-h" || a === "--help") { console.log("usage: token-report.mjs [--by task|session|day] [--ledger <path>] [--json]"); process.exit(0); }
     else { console.error(`token-report: unknown argument ${a}`); process.exit(2); }
   }
-  if (!["task", "session", "day"].includes(o.by)) { console.error(`token-report: --by must be task, session or day`); process.exit(2); }
+  if (!["task", "session", "day"].includes(o.by)) { console.error("token-report: --by must be task, session or day"); process.exit(2); }
   return o;
 }
 
-export function loadLatestPerSession(text) {
-  const latest = new Map();
+// Parse the ledger. Returns { rows, malformed, legacy } — rows in append order, each normalised to
+// carry `spend` (the delta, or the cumulative total for a pre-delta row, flagged `legacy`).
+export function loadRows(text) {
+  const rows = []; let malformed = 0; let legacy = 0;
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let r;
-    try { r = JSON.parse(line); } catch { continue; }
-    const key = r.session_id || r.transcript || r.ts;
-    if (!key) continue;
-    const prev = latest.get(key);
-    if (!prev || String(r.ts) >= String(prev.ts)) latest.set(key, r);
+    try { r = JSON.parse(line); } catch { malformed++; continue; }
+    if (!r || typeof r !== "object" || !r.session_id) { malformed++; continue; }
+    let spend;
+    if (r.delta && r.delta.main && r.delta.sidechain) spend = { main: r.delta.main, sidechain: r.delta.sidechain };
+    else { legacy++; spend = { main: r.main || {}, sidechain: r.sidechain || {} }; }
+    rows.push({ ...r, spend });
   }
-  return [...latest.values()];
+  return { rows, malformed, legacy };
 }
 
 const prompt = (s) => (s?.input || 0) + (s?.cache_creation || 0) + (s?.cache_read || 0);
 
 export function aggregate(rows, by) {
   const groups = new Map();
+  const sessions = new Map();
   for (const r of rows) {
-    const key = by === "session" ? (r.session_id || "(unknown)")
-      : by === "day" ? String(r.ts || "").slice(0, 10) || "(unknown)"
+    const key = by === "session" ? r.session_id
+      : by === "day" ? String(r.ts || "").slice(0, 10) || "(undated)"
       : (r.task_id || "(undeclared)");
-    const g = groups.get(key) || { key, sessions: 0, main_prompt: 0, main_out: 0, side_prompt: 0, side_out: 0, side_messages: 0, main_messages: 0 };
-    g.sessions += 1;
-    g.main_prompt += prompt(r.main); g.main_out += r.main?.output || 0; g.main_messages += r.main?.messages || 0;
-    g.side_prompt += prompt(r.sidechain); g.side_out += r.sidechain?.output || 0; g.side_messages += r.sidechain?.messages || 0;
+    const g = groups.get(key) || { key, sessions: new Set(), main_prompt: 0, main_out: 0, side_prompt: 0, side_out: 0, main_messages: 0, side_messages: 0 };
+    g.sessions.add(r.session_id);
+    g.main_prompt += prompt(r.spend.main); g.main_out += r.spend.main.output || 0; g.main_messages += r.spend.main.messages || 0;
+    g.side_prompt += prompt(r.spend.sidechain); g.side_out += r.spend.sidechain.output || 0; g.side_messages += r.spend.sidechain.messages || 0;
     groups.set(key, g);
+    sessions.set(r.session_id, true);
   }
-  return [...groups.values()].sort((a, b) => (b.main_prompt + b.side_prompt) - (a.main_prompt + a.side_prompt));
+  const out = [...groups.values()].map((g) => ({ ...g, sessions: g.sessions.size }));
+  return out.sort((a, b) => (b.main_prompt + b.side_prompt) - (a.main_prompt + a.side_prompt));
 }
 
 function fmt(n) { return n.toLocaleString("en-US"); }
 
-export function render(groups, by) {
+export function render(groups, by, meta = {}) {
   const head = [by, "sessions", "main prompt", "main out", "side prompt", "side out", "side share"];
   const lines = groups.map((g) => {
     const total = g.main_prompt + g.side_prompt;
@@ -74,13 +84,18 @@ export function render(groups, by) {
   });
   const widths = head.map((h, i) => Math.max(h.length, ...lines.map((l) => l[i].length)));
   const row = (cells) => cells.map((c, i) => (i === 0 ? c.padEnd(widths[i]) : c.padStart(widths[i]))).join("  ");
-  const tot = groups.reduce((a, g) => ({ s: a.s + g.sessions, mp: a.mp + g.main_prompt, mo: a.mo + g.main_out, sp: a.sp + g.side_prompt, so: a.so + g.side_out }), { s: 0, mp: 0, mo: 0, sp: 0, so: 0 });
+  const tot = groups.reduce((a, g) => ({ mp: a.mp + g.main_prompt, mo: a.mo + g.main_out, sp: a.sp + g.side_prompt, so: a.so + g.side_out }), { mp: 0, mo: 0, sp: 0, so: 0 });
   const totalShare = tot.mp + tot.sp ? `${Math.round((100 * tot.sp) / (tot.mp + tot.sp))}%` : "—";
+  const notes = [
+    "prompt = input + cache_creation + cache_read tokens handed to the model; out = tokens produced.",
+    "side = Agent-tool subagent turns; main = the session's own turns. A topology split: a proxy for",
+    "gate-vs-build spend only where review runs in subagents, as this method's cold seats do.",
+    "Deltas summed in append order; Codex CLI seats are not in this ledger.",
+  ];
+  if (meta.malformed) notes.push(`WARNING: ${meta.malformed} malformed row(s) ignored — the totals above are incomplete.`);
+  if (meta.legacy) notes.push(`${meta.legacy} pre-delta row(s) counted by cumulative total.`);
   return [row(head), row(widths.map((w) => "-".repeat(w))), ...lines.map(row),
-    row(["TOTAL", String(tot.s), fmt(tot.mp), fmt(tot.mo), fmt(tot.sp), fmt(tot.so), totalShare]),
-    "", "prompt = input + cache_creation + cache_read tokens handed to the model; out = tokens produced.",
-    "side = Agent-tool subagent turns (cold seats, panels, explorers); main = the session's own turns.",
-    "Latest snapshot per session; Codex CLI seats are not in this ledger."].join("\n");
+    row(["TOTAL", String(meta.sessions ?? ""), fmt(tot.mp), fmt(tot.mo), fmt(tot.sp), fmt(tot.so), totalShare]), "", ...notes].join("\n");
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -92,9 +107,9 @@ if (isMain) {
     console.error(`token-report: no ledger at ${ledger} — the Stop sensor writes it after the first turn in a repo where it is registered.`);
     process.exit(1);
   }
-  const rows = loadLatestPerSession(readFileSync(ledger, "utf8"));
+  const { rows, malformed, legacy } = loadRows(readFileSync(ledger, "utf8"));
+  const sessions = new Set(rows.map((r) => r.session_id)).size;
   const groups = aggregate(rows, o.by);
-  if (o.json) console.log(JSON.stringify({ ledger, by: o.by, sessions: rows.length, groups }, null, 2));
-  else console.log(`ledger: ${ledger}  (${rows.length} session(s), latest snapshot each)\n\n${render(groups, o.by)}`);
+  if (o.json) console.log(JSON.stringify({ ledger, by: o.by, sessions, rows: rows.length, malformed, legacy, groups }, null, 2));
+  else console.log(`ledger: ${ledger}  (${sessions} session(s), ${rows.length} row(s))\n\n${render(groups, o.by, { malformed, legacy, sessions })}`);
 }
-void KIT;

@@ -5,7 +5,7 @@ description: The builder's own self-attack on a candidate before it is frozen fo
 
 # /kill-pass — break it yourself before a seat is paid to
 
-Word budget: 550. Doctrine: `core/REVIEW.md` § Decorrelation ("Builder kill-pass BEFORE
+Word budget: 700. Doctrine: `core/REVIEW.md` § Decorrelation ("Builder kill-pass BEFORE
 `panel_open`") names the step; this is its checklist. It strengthens the candidate; it never
 lightens the panel (`core/WORKFLOW.md` § Steer, rung-order rule 2).
 
@@ -13,8 +13,8 @@ lightens the panel (`core/WORKFLOW.md` § Steer, rung-order rule 2).
 - **The repo's own contract is the authority.** Its standing mechanical gate is named in
   `core/BINDINGS.md`; run that. Never import a coverage number or a stack's ritual from elsewhere.
 - **Gate on the runner's exit code, never a filter's.** `node --test … | grep …` returns the grep's
-  status; a red suite passed a commit that way once (`FAILURE_MODES.md` FM-2026-09-03-20). Run to a
-  file or the terminal, then test the status.
+  status; a red suite passed a commit that way once in this kit's lane (its untracked failure log,
+  entry FM-2026-09-03-20). Run to a file or the terminal, then test the status.
 - **Report every step, PASS / FAIL / N-A, with the command and its exit code.** An omitted step is
   indistinguishable from a passed one.
 
@@ -23,17 +23,21 @@ lightens the panel (`core/WORKFLOW.md` § Steer, rung-order rule 2).
 2. **Build · typecheck · lint** — only the scripts the repo actually declares (`package.json`,
    `Makefile`, CI). Absent ⇒ N-A, stated.
 3. **Full suite, in your worktree**, clean-installed if the lockfile moved.
-4. **Residue grep over ADDED lines only** (`git diff --cached -U0`): secrets and tokens,
-   debug prints, `TODO`/`FIXME` minted by this change, absolute home paths, an Owner's name.
+4. **Residue grep over the candidate's ADDED lines** — commit first, then
+   `git diff <base>...HEAD -U0 | grep '^+[^+]'` — plus every path `git status --short` lists as
+   untracked or modified, read whole (an uncommitted file is invisible to the diff and visible to
+   the next `git add`): secrets and tokens, debug prints, `TODO`/`FIXME` minted by this change,
+   absolute home paths, an Owner's name.
 5. **Read your own diff as the contract's adversary.** Every hunk against the acceptance criteria
    and the invariants: what did the contract promise that this hunk does not do, and what does the
    hunk do that nothing asked for?
 6. **RED / GREEN on every control or test you touched.** Plant the failure it exists to catch and
    watch it go red; restore and watch it go green (`sensor-mutation-owed` demands both polarities).
    Restore from a COMMIT, never from memory, and commit first if the candidate is only in the tree
-   (FM-2026-08-29-19).
+   (the lane's failure log, FM-2026-08-29-19).
 7. **Freeze readiness.** `git status --short`: no unexplained dirty files, no untracked payload a
-   later `git add` could sweep in (FM-2026-08-25-13), a lane declaration for this task.
+   later `git add` could sweep in (the lane's failure log, FM-2026-08-25-13), a lane declaration for
+   this task.
 
 ## Output — before `panel_open`
 ```
@@ -45,10 +49,13 @@ KILL-PASS · <changeset> · <sha or "unfrozen">
 5 diff-as-adversary …  (findings: <list or none>)
 6 red/green         …  (controls: <n>, both polarities: yes|no)
 7 freeze readiness  …
-FREEZE: ready | not ready — <what blocks>
+FREEZE: ready | not ready — <what blocks, or what is NAMED and left>
 ```
-A FAIL is fixed here, by you, before any seat sees the candidate. A clean pass proves the builder
-tried; it certifies nothing to the panel, which runs at its full floor regardless.
+This report is a DECLARATION, not a gate: it adds no stop the method does not already have. A FAIL
+the candidate caused is yours to fix before the freeze; a FAIL the candidate did not cause (a
+pre-existing red, an environment defect) is NAMED in the report and left alone — widening scope to
+clear it is the trap. The report travels with the candidate into `panel_open`. A clean pass proves
+the builder tried; it certifies nothing to the panel, which runs at its full floor regardless.
 
 *Origin: forked from ECC `skills/verification-loop` (affaan-m/ECC @ 22e8cf0, MIT) — its build →
 typecheck → lint → test → secrets → diff sequence, with its coverage target and stack commands

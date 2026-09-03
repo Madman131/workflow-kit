@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // workflow-kit — scripts/worktree-census.mjs. Classify every worktree of a repo from git facts and
-// print a cleanup PLAN. REPORT ONLY: this script never removes, prunes, checks out, fetches or
-// writes anything. The decision stays with whoever runs it (core/OPERATE.md § Garden: sensors, not
-// actuators; the orchestrator's housekeeping rule: prove a thing is DEAD before removing it).
+// print a cleanup PLAN. REPORT ONLY: this script never removes, prunes, checks out, fetches, or
+// changes any tracked content, ref or worktree; the only write git may do on its behalf is the
+// optional index refresh `git status` performs, and it is run with --no-optional-locks so it never
+// takes the index lock. The decision stays with whoever runs it (core/OPERATE.md § Garden: sensors,
+// not actuators; the orchestrator's housekeeping rule: prove a thing is DEAD before removing it).
 //
 //   node scripts/worktree-census.mjs [--repo <path>] [--base <ref>] [--stale-days <n>] [--json] [--no-pr]
 //
@@ -10,18 +12,27 @@
 //   main         the primary checkout (never a removal candidate)
 //   occupied     carries a live `.claude/task-lane.json` — another lane's declared work, untouchable
 //   dirty        uncommitted changes — never removable, someone's in-flight work
+//   locked       `git worktree lock` was applied — someone protected it on purpose; keep
 //   merged       PROVEN landed on the base, by one of the two forms the method recognises:
 //                  ancestor  — HEAD is an ancestor of the base (a true merge, or fast-forward)
-//                  squash    — the branch's PR is MERGED and its tree equals the squash commit's
+//                  squash    — a PR from this branch INTO THE BASE BRANCH is MERGED, and the patch
+//                              the squash commit applied (patch-id of mergeCommit^..mergeCommit)
+//                              equals the patch the branch carries over its merge base with that
+//                              parent — so an unrelated base commit landing between fork and merge
+//                              does not break the proof, and a commit added to the branch after
+//                              the merge does
 //                (skills/orchestrate/PROTOCOLS.md § Shipping: "ancestor-of" is permanently false
 //                after a squash, so ECC's `ahead == 0 ⇒ merged` rule is NOT enough; that gap is
 //                the one this script closes)
-//   merged-pr-tree-differs  the PR is merged but the local tree is not the squash commit's — commits
-//                landed after the merge, or the merge dropped something; SALVAGE before removing
+//   merged-pr-content-differs  the PR is merged but what the branch carries is not what landed —
+//                commits after the merge, or a merge that dropped content; SALVAGE before removing
+//   merged-pr-unprovable  the PR is merged but its merge commit is not in the local object store
+//                (not fetched) — INSPECT; fetch, then re-run
 //   detached     no branch — inspect by hand
 //   stale        unmerged commits and no activity for --stale-days (default 14) — salvage candidate
 //   merge-ready  unmerged commits, recent, clean
-//   idle         ahead/behind could not be computed (no merge base with the base ref) — inspect
+//   idle         no merge base with the base ref (unrelated history) — inspect
+//   bare · missing · unreadable — the degenerate cases, each named as itself
 //
 // PR PROOF needs `gh`; without it (or with --no-pr) the squash form is unavailable and the report
 // says so per worktree rather than guessing. A census that cannot see is not a clear.
@@ -36,17 +47,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 function git(repo, args, opts = {}) {
-  return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], ...opts }).trim();
+  return execFileSync("git", ["-C", repo, "--no-optional-locks", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30000, ...opts }).trim();
 }
 function tryGit(repo, args) { try { return git(repo, args); } catch { return null; } }
 
 export function parseArgs(argv) {
   const o = { repo: process.cwd(), base: null, staleDays: 14, json: false, pr: true, plan: true };
+  const needsValue = (i, flag) => { const v = argv[i + 1]; if (v === undefined || v.startsWith("--")) { console.error(`worktree-census: ${flag} needs a value`); process.exit(2); } return v; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--repo") o.repo = path.resolve(argv[++i]);
-    else if (a === "--base") o.base = argv[++i];
-    else if (a === "--stale-days") o.staleDays = Number(argv[++i]);
+    if (a === "--repo") o.repo = path.resolve(needsValue(i++, a));
+    else if (a === "--base") o.base = needsValue(i++, a);
+    else if (a === "--stale-days") o.staleDays = Number(needsValue(i++, a));
     else if (a === "--json") o.json = true;
     else if (a === "--no-pr") o.pr = false;
     else if (a === "-h" || a === "--help") { console.log("usage: worktree-census.mjs [--repo <path>] [--base <ref>] [--stale-days <n>] [--json] [--no-pr]"); process.exit(0); }
@@ -61,26 +73,44 @@ export function listWorktrees(repo) {
   const items = [];
   let cur = null;
   for (const l of out.split("\n")) {
-    if (l.startsWith("worktree ")) { cur = { path: l.slice(9), head: null, branch: null, detached: false, bare: false }; items.push(cur); }
+    if (l.startsWith("worktree ")) { cur = { path: l.slice(9), head: null, branch: null, detached: false, bare: false, locked: false }; items.push(cur); }
     else if (!cur) continue;
     else if (l.startsWith("HEAD ")) cur.head = l.slice(5);
     else if (l.startsWith("branch ")) cur.branch = l.slice(7).replace(/^refs\/heads\//, "");
     else if (l === "detached") cur.detached = true;
     else if (l === "bare") cur.bare = true;
+    else if (l === "locked" || l.startsWith("locked ")) cur.locked = true;
   }
   return items;
 }
 
-// Default PR lookup via `gh`. Returns { available, merged, mergeCommit } — `available:false` when gh
-// is absent, unauthenticated or errors, so the caller can say "unproven" instead of "not merged".
-export function ghPrLookup(repo, branch) {
+// Default PR lookup via `gh`, scoped to PRs INTO the base branch (a PR merged into `develop` proves
+// nothing about `main`). Returns { available, merged, mergeCommit } — `available:false` when gh is
+// absent, unauthenticated, hangs (15 s) or errors, so the caller says "unproven", never "not merged".
+export function ghPrLookup(repo, branch, baseBranch) {
   try {
-    const raw = execFileSync("gh", ["pr", "list", "--head", branch, "--state", "merged", "--json", "number,mergeCommit", "--limit", "1"],
-      { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const args = ["pr", "list", "--head", branch, "--state", "merged", "--json", "number,mergeCommit", "--limit", "1"];
+    if (baseBranch) args.push("--base", baseBranch);
+    const raw = execFileSync("gh", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15000 });
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr) || arr.length === 0) return { available: true, merged: false, mergeCommit: null, number: null };
     return { available: true, merged: true, mergeCommit: arr[0].mergeCommit?.oid || null, number: arr[0].number };
   } catch { return { available: false, merged: false, mergeCommit: null, number: null }; }
+}
+
+// The base ref's BRANCH name for the PR filter: `origin/main` → `main`, `main` → `main`.
+export function baseBranchName(base) {
+  return String(base || "").replace(/^refs\/(?:heads|remotes\/[^/]+)\//, "").replace(/^[^/]+\//, (m) => (m === "origin/" ? "" : m));
+}
+
+// patch-id of a range, or null when git cannot produce one (missing object, empty range).
+function patchId(repo, from, to) {
+  try {
+    const diff = git(repo, ["diff", `${from}..${to}`]);
+    if (!diff) return "empty";
+    const out = execFileSync("git", ["-C", repo, "--no-optional-locks", "patch-id", "--stable"], { input: diff, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"], timeout: 30000 }).trim();
+    return out.split(/\s+/)[0] || null;
+  } catch { return null; }
 }
 
 export function classify(repo, wt, opts) {
@@ -89,6 +119,7 @@ export function classify(repo, wt, opts) {
     lastCommitDays: null, occupied: null, proof: null, note: null };
   if (wt.bare) { rec.state = "bare"; return rec; }
   if (wt.path === opts.mainPath) { rec.state = "main"; return rec; }
+  if (wt.locked) { rec.state = "locked"; rec.note = "git worktree lock is set — protected on purpose"; return rec; }
   // Occupancy: a declared lane. Read-only; the mtime is what the lane guard's staleness clock reads.
   const lane = path.join(wt.path, ".claude", "task-lane.json");
   if (existsSync(lane)) {
@@ -100,30 +131,33 @@ export function classify(repo, wt, opts) {
     } catch { rec.occupied = { taskId: null, tier: null, ageHours: null }; rec.state = "occupied"; rec.note = "unparseable lane declaration — treat as live"; return rec; }
   }
   if (!existsSync(wt.path)) { rec.state = "missing"; rec.note = "path absent on disk (git worktree prune candidate — still a human decision)"; return rec; }
-  const dirty = tryGit(wt.path, ["status", "--porcelain", "--untracked-files=normal"]);
+  const dirty = tryGit(wt.path, ["status", "--porcelain", "--untracked-files=normal"]);   // --no-optional-locks is on every git call
   if (dirty === null) { rec.state = "unreadable"; rec.note = "git status failed"; return rec; }
   if (dirty) { rec.state = "dirty"; rec.note = `${dirty.split("\n").length} uncommitted path(s)`; return rec; }
   if (wt.detached || !wt.branch) { rec.state = "detached"; return rec; }
+  // Unrelated history: rev-list still returns counts, so ask merge-base directly.
+  if (tryGit(repo, ["merge-base", base, wt.branch]) === null) { rec.state = "idle"; rec.note = "no merge base with the base ref"; return rec; }
   const lr = tryGit(repo, ["rev-list", "--left-right", "--count", `${base}...${wt.branch}`]);
   if (lr) { const [b, a] = lr.split(/\s+/).map(Number); rec.behind = b; rec.ahead = a; }
   const ts = tryGit(repo, ["log", "-1", "--format=%ct", wt.branch]);
-  if (ts) rec.lastCommitDays = Math.round((now / 1000 - Number(ts)) / 86400);
+  if (ts) rec.lastCommitDays = Math.floor((now / 1000 - Number(ts)) / 86400);
   // Proof form 1: ancestor-of.
   try { git(repo, ["merge-base", "--is-ancestor", wt.branch, base]); rec.state = "merged"; rec.proof = "ancestor"; return rec; } catch { /* not an ancestor */ }
-  // Proof form 2: merged PR + tree equality with its squash commit.
+  // Proof form 2: a PR into the base branch is merged, AND the patch the squash commit applied
+  // equals the patch the branch carries over its merge base with the squash commit's parent.
   if (prLookup) {
-    const pr = prLookup(repo, wt.branch);
-    if (!pr.available) rec.note = "pr-proof unavailable (gh missing/unauthenticated) — squash merges cannot be proven here";
+    const pr = prLookup(repo, wt.branch, baseBranchName(base));
+    if (!pr.available) rec.note = "pr-proof unavailable (gh missing/unauthenticated/timed out) — squash merges cannot be proven here";
     else if (pr.merged && pr.mergeCommit) {
-      const t1 = tryGit(repo, ["rev-parse", `${wt.branch}^{tree}`]);
-      const t2 = tryGit(repo, ["rev-parse", `${pr.mergeCommit}^{tree}`]);
-      if (t1 && t2 && t1 === t2) { rec.state = "merged"; rec.proof = `squash PR #${pr.number}`; return rec; }
-      rec.state = "merged-pr-tree-differs"; rec.proof = `PR #${pr.number} merged; tree differs`; rec.note = "salvage: commits after the merge, or the merge dropped content"; return rec;
+      const parent = tryGit(repo, ["rev-parse", "--verify", "--quiet", `${pr.mergeCommit}^`]);
+      if (!parent) { rec.state = "merged-pr-unprovable"; rec.proof = `PR #${pr.number} merged; merge commit not in local objects`; rec.note = "fetch, then re-run"; return rec; }
+      const mb = tryGit(repo, ["merge-base", parent, wt.branch]);
+      const landed = patchId(repo, parent, pr.mergeCommit);
+      const carried = mb ? patchId(repo, mb, wt.branch) : null;
+      if (landed && carried && landed === carried) { rec.state = "merged"; rec.proof = `squash PR #${pr.number} (patch-id match)`; return rec; }
+      rec.state = "merged-pr-content-differs"; rec.proof = `PR #${pr.number} merged; branch content differs from what landed`; rec.note = "salvage: commits after the merge, or the merge dropped content"; return rec;
     }
   } else rec.note = "pr-proof skipped (--no-pr)";
-  // ahead == 0 cannot reach here: every such tip is an ancestor of the base and was proven merged
-  // above. What remains is a branch git could not relate to the base at all.
-  if (lr === null) { rec.state = "idle"; return rec; }
   const stale = rec.lastCommitDays !== null && rec.lastCommitDays >= staleDays;
   rec.state = stale ? "stale" : "merge-ready";
   return rec;
@@ -134,7 +168,7 @@ export function census(repo, o) {
   const wts = listWorktrees(top);
   const mainPath = wts[0]?.path ?? top;
   const base = o.base || (tryGit(top, ["rev-parse", "--verify", "--quiet", "origin/main"]) ? "origin/main" : (tryGit(top, ["rev-parse", "--verify", "--quiet", "main"]) ? "main" : "HEAD"));
-  const prLookup = o.pr ? (o.prLookup || ghPrLookup) : null;
+  const prLookup = o.pr ? (o.prLookup || ghPrLookup) : null;   // signature: (repo, branch, baseBranch)
   const rows = wts.map((w) => classify(top, w, { base, staleDays: o.staleDays, prLookup, mainPath, now: o.now }));
   return { repo: top, base, worktrees: rows, plan: plan(rows) };
 }
@@ -145,9 +179,8 @@ export function plan(rows) {
   const p = { removeSafe: [], salvage: [], keep: [], inspect: [] };
   for (const r of rows) {
     if (r.state === "merged") p.removeSafe.push({ path: r.path, branch: r.branch, reason: `proven merged (${r.proof})` });
-    else if (r.state === "stale" || r.state === "merged-pr-tree-differs") p.salvage.push({ path: r.path, branch: r.branch, reason: `${r.state}: ${r.ahead ?? "?"} ahead, last commit ${r.lastCommitDays ?? "?"}d ago — push/bundle before removing` });
-    else if (r.state === "idle") p.inspect.push({ path: r.path, branch: r.branch, reason: "no merge base with the base ref — relate it by hand" });
-    else if (r.state === "detached" || r.state === "missing" || r.state === "unreadable") p.inspect.push({ path: r.path, branch: r.branch, reason: `${r.state}${r.note ? `: ${r.note}` : ""}` });
+    else if (r.state === "stale" || r.state === "merged-pr-content-differs") p.salvage.push({ path: r.path, branch: r.branch, reason: `${r.state}: ${r.ahead ?? "?"} ahead, last commit ${r.lastCommitDays ?? "?"}d ago — push/bundle before removing${r.note ? ` (${r.note})` : ""}` });
+    else if (["idle", "detached", "missing", "unreadable", "merged-pr-unprovable"].includes(r.state)) p.inspect.push({ path: r.path, branch: r.branch, reason: `${r.state}${r.note ? `: ${r.note}` : ""}` });
     else p.keep.push({ path: r.path, branch: r.branch, reason: r.note ? `${r.state}: ${r.note}` : r.state });
   }
   return p;

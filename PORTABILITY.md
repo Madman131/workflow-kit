@@ -18,6 +18,8 @@ The Codex column is not the Claude column. Read the qualifier in it as part of t
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | **enforced — only once hook trust is granted** | not enforced |
 | `.githooks/pre-commit` (declaration, at commit) | **enforced** | **enforced** | **enforced** |
 | `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* | not present |
+| `sensor-token-ledger` (Stop; token telemetry to `.claude/metrics/tokens.jsonl`) — **sensor, fails OPEN** | *telemetry only* | *installed, NOT registered* (no observed Stop payload) | not present |
+| `sensor-context-pressure` (PreToolUse write; names the digest as owed) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* (payload carries no transcript) | not present |
 
 The formula for the Codex write guards, in full, because every word of it is load-bearing:
 **installed · fail-closed by design · INERT unless your Codex run carries hook trust.**
