@@ -33,6 +33,12 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-mutation-owed.mjs\"",
             "timeout": 10,
             "statusMessage": "Checking whether this edit owes a two-sided mutation record\u2026"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-context-pressure.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Reading this session's context size; the digest is owed past the threshold\u2026"
           }
         ]
       },
