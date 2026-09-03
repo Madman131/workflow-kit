@@ -51,6 +51,10 @@ test("summarizeTranscript dedupes by message.id, splits sidechain turns, counts 
   assert.deepEqual(s.sidechain, SIDE);
   assert.equal(s.model, "claude-test-1");
   assert.equal(s.context_now, 200 + 3 + 2000, "context_now is the newest usage record's prompt size");
+  assert.equal(s.context_now_main, 2203);
+  const sideLast = summarizeTranscript(PLANTED + assistant("s2", { input_tokens: 5, cache_read_input_tokens: 5 }, { isSidechain: true }) + "\n");
+  assert.equal(sideLast.context_now, 10, "any-kind newest");
+  assert.equal(sideLast.context_now_main, 2203, "the MAIN session's newest is unaffected by a later subagent turn");
   assert.equal(s.unkeyed, 0);
   assert.equal(s.skipped, 1, "the broken line is COUNTED, not silently dropped");
   assert.notEqual(s.main.input, 500, "a per-line sum would report 500; the dedupe reports 300");
@@ -118,6 +122,9 @@ test("the Stop sensor appends a session-bound, delta-carrying row, and fails ope
     r = run({ transcript_path: transcript, session_id: "sess-1" }, { WORKFLOW_KIT_TOKEN_LEDGER: "false" });
     assert.equal(r.status, 0); assert.equal(rows().length, before, "off switch: no row");
 
+    // A ledger PATH that is not a regular file (a directory here; a FIFO would block) is never opened.
+    r = run({ transcript_path: transcript, session_id: "sess-1" }, { WORKFLOW_KIT_TOKEN_LEDGER_PATH: dir });
+    assert.equal(r.status, 0, "exit 0, promptly");
     // Ledger path override lands the row elsewhere.
     const alt = path.join(dir, "alt.jsonl");
     r = run({ transcript_path: transcript, session_id: "sess-3" }, { WORKFLOW_KIT_TOKEN_LEDGER_PATH: alt });
@@ -151,19 +158,25 @@ test("the report sums deltas per day and task in append order, counts pre-delta 
     line({ ts: "2026-09-03T23:00:00Z", session_id: "a", task_id: "t1", main: d(100), sidechain: z, delta: { main: d(100), sidechain: z } }),
     line({ ts: "2026-09-04T01:00:00Z", session_id: "a", task_id: "t2", main: d(150), sidechain: d(5), delta: { main: d(50), sidechain: d(5) } }),
     line({ ts: "2026-09-04T00:30:00Z", session_id: "a", task_id: "t2", main: d(160), sidechain: d(5), delta: { main: d(10), sidechain: z } }), // clock regression: still counted, in append order
-    line({ ts: "2026-09-04T02:00:00Z", session_id: "b", task_id: "t1", main: d(30), sidechain: z }),   // legacy row, no delta
+    line({ ts: "2026-09-04T02:00:00Z", session_id: "b", task_id: "t1", main: d(10), sidechain: z }),   // legacy rows (no delta): consecutive
+    line({ ts: "2026-09-04T02:30:00Z", session_id: "b", task_id: "t1", main: d(30), sidechain: z }),   //   cumulatives 10 → 30 count as 30, not 40
     "broken line",
     line({ ts: "2026-09-04T03:00:00Z", main: d(999), sidechain: z }),                                    // no session_id ⇒ malformed
+    line({ ts: "2026-09-04T03:10:00Z", session_id: "c", delta: { main: {}, sidechain: {} }, main: {} }),   // structurally empty deltas: fine (zeros)
+    line({ ts: "2026-09-04T03:20:00Z", session_id: {}, delta: { main: {}, sidechain: {} } }),            // session_id not a string ⇒ malformed
+    line({ ts: "2026-09-04T03:30:00Z", session_id: "d", delta: { main: { input: "9" }, sidechain: {} } }), // non-numeric field ⇒ malformed
+    line({ ts: "2026-09-04T04:00:00Z", session_id: "e", task_id: "t1", main: d(70), sidechain: z, delta: null, truncated: true }), // truncated ⇒ spend unknown
   ].join("\n");
-  const { rows, malformed, legacy } = loadRows(ledger);
-  assert.equal(rows.length, 4); assert.equal(malformed, 2); assert.equal(legacy, 1);
+  const { rows, malformed, legacy, truncated } = loadRows(ledger);
+  assert.equal(rows.length, 7); assert.equal(malformed, 4); assert.equal(legacy, 2); assert.equal(truncated, 1);
   const byDay = Object.fromEntries(aggregate(rows, "day").map((g) => [g.key, g.main_prompt]));
-  assert.deepEqual(byDay, { "2026-09-03": 100, "2026-09-04": 90 }, "day spend = deltas in that day (50 + 10 + legacy 30), never the latest cumulative");
+  assert.deepEqual(byDay, { "2026-09-03": 100, "2026-09-04": 90 }, "day spend = deltas in that day (50 + 10 + legacy 10 + 20); the truncated 70 is NOT counted");
   const byTask = Object.fromEntries(aggregate(rows, "task").map((g) => [g.key, g.main_prompt]));
-  assert.deepEqual(byTask, { t1: 130, t2: 60 }, "task spend follows the task each delta was recorded under");
-  const text = render(aggregate(rows, "task"), "task", { malformed, legacy, sessions: 2 });
-  assert.match(text, /WARNING: 2 malformed row\(s\) ignored/);
-  assert.match(text, /1 pre-delta row\(s\)/);
+  assert.deepEqual(byTask, { t1: 130, t2: 60, "(undeclared)": 0 }, "task spend follows the task each delta was recorded under; legacy 10→30 counts 30, never 40");
+  const text = render(aggregate(rows, "task"), "task", { malformed, legacy, truncated, sessions: 5 });
+  assert.match(text, /WARNING: 4 malformed row\(s\) ignored/);
+  assert.match(text, /2 pre-delta row\(s\)/);
+  assert.match(text, /1 row\(s\) from truncated transcripts carry no delta/);
 });
 
 test("init installs the Stop sensor file and registers it once, alongside guard-owner-comms", () => {

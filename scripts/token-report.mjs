@@ -11,6 +11,9 @@
 // report says how many such rows it saw. Malformed rows are counted and reported, never silently
 // dropped — a report that hides its own gaps reads as clean.
 //
+// Rows the hook wrote before deltas existed are turned into deltas here, per session, from consecutive
+// cumulatives; rows from a truncated transcript carry no delta and are excluded, counted, and warned.
+//
 // Columns are tokens the model was handed (prompt = input + cache_creation + cache_read; cache
 // reads are cheaper but they are still context) and tokens it produced (out), split between the
 // session's own turns (main) and its Agent-tool subagents (side). The split is TOPOLOGY, not
@@ -38,19 +41,30 @@ function parseArgs(argv) {
 
 // Parse the ledger. Returns { rows, malformed, legacy } — rows in append order, each normalised to
 // carry `spend` (the delta, or the cumulative total for a pre-delta row, flagged `legacy`).
+const FIELDS = ["input", "output", "cache_creation", "cache_read", "messages"];
+const isSum = (o) => o && typeof o === "object" && FIELDS.every((k) => k in o ? Number.isFinite(o[k]) : true);
+const diff = (cur, prev) => Object.fromEntries(FIELDS.map((k) => [k, Math.max(0, (cur?.[k] || 0) - (prev?.[k] || 0))]));
+
 export function loadRows(text) {
-  const rows = []; let malformed = 0; let legacy = 0;
+  const rows = []; let malformed = 0; let legacy = 0; let truncated = 0;
+  const lastLegacy = new Map();   // session → its previous cumulative, so legacy rows count once too
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let r;
     try { r = JSON.parse(line); } catch { malformed++; continue; }
-    if (!r || typeof r !== "object" || !r.session_id) { malformed++; continue; }
+    if (!r || typeof r !== "object" || typeof r.session_id !== "string" || !r.session_id) { malformed++; continue; }
     let spend;
-    if (r.delta && r.delta.main && r.delta.sidechain) spend = { main: r.delta.main, sidechain: r.delta.sidechain };
-    else { legacy++; spend = { main: r.main || {}, sidechain: r.sidechain || {} }; }
+    if (r.delta === null && r.truncated === true) { truncated++; spend = null; }
+    else if (r.delta && isSum(r.delta.main) && isSum(r.delta.sidechain)) spend = { main: r.delta.main, sidechain: r.delta.sidechain };
+    else if (isSum(r.main) && isSum(r.sidechain)) {
+      legacy++;
+      const prev = lastLegacy.get(r.session_id);
+      spend = { main: diff(r.main, prev?.main), sidechain: diff(r.sidechain, prev?.sidechain) };
+      lastLegacy.set(r.session_id, { main: r.main, sidechain: r.sidechain });
+    } else { malformed++; continue; }
     rows.push({ ...r, spend });
   }
-  return { rows, malformed, legacy };
+  return { rows, malformed, legacy, truncated };
 }
 
 const prompt = (s) => (s?.input || 0) + (s?.cache_creation || 0) + (s?.cache_read || 0);
@@ -59,6 +73,7 @@ export function aggregate(rows, by) {
   const groups = new Map();
   const sessions = new Map();
   for (const r of rows) {
+    if (!r.spend) continue;   // truncated: spend unknown, never guessed
     const key = by === "session" ? r.session_id
       : by === "day" ? String(r.ts || "").slice(0, 10) || "(undated)"
       : (r.task_id || "(undeclared)");
@@ -93,7 +108,8 @@ export function render(groups, by, meta = {}) {
     "Deltas summed in append order; Codex CLI seats are not in this ledger.",
   ];
   if (meta.malformed) notes.push(`WARNING: ${meta.malformed} malformed row(s) ignored — the totals above are incomplete.`);
-  if (meta.legacy) notes.push(`${meta.legacy} pre-delta row(s) counted by cumulative total.`);
+  if (meta.legacy) notes.push(`${meta.legacy} pre-delta row(s): spend derived from consecutive cumulatives per session.`);
+  if (meta.truncated) notes.push(`WARNING: ${meta.truncated} row(s) from truncated transcripts carry no delta — that spend is NOT in the totals.`);
   return [row(head), row(widths.map((w) => "-".repeat(w))), ...lines.map(row),
     row(["TOTAL", String(meta.sessions ?? ""), fmt(tot.mp), fmt(tot.mo), fmt(tot.sp), fmt(tot.so), totalShare]), "", ...notes].join("\n");
 }
@@ -107,9 +123,9 @@ if (isMain) {
     console.error(`token-report: no ledger at ${ledger} — the Stop sensor writes it after the first turn in a repo where it is registered.`);
     process.exit(1);
   }
-  const { rows, malformed, legacy } = loadRows(readFileSync(ledger, "utf8"));
+  const { rows, malformed, legacy, truncated } = loadRows(readFileSync(ledger, "utf8"));
   const sessions = new Set(rows.map((r) => r.session_id)).size;
   const groups = aggregate(rows, o.by);
-  if (o.json) console.log(JSON.stringify({ ledger, by: o.by, sessions, rows: rows.length, malformed, legacy, groups }, null, 2));
-  else console.log(`ledger: ${ledger}  (${sessions} session(s), ${rows.length} row(s))\n\n${render(groups, o.by, { malformed, legacy, sessions })}`);
+  if (o.json) console.log(JSON.stringify({ ledger, by: o.by, sessions, rows: rows.length, malformed, legacy, truncated, groups }, null, 2));
+  else console.log(`ledger: ${ledger}  (${sessions} session(s), ${rows.length} row(s))\n\n${render(groups, o.by, { malformed, legacy, truncated, sessions })}`);
 }

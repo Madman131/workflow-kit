@@ -23,10 +23,12 @@ test("kill-pass: body declares its budget, both shims point at the body, and ini
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-killpass-adopt-"));
   try {
     const env = { ...process.env }; delete env.NODE_OPTIONS; for (const k of Object.keys(env)) if (k.startsWith("NODE_TEST")) delete env[k];
-    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env });
+    const prompts = path.join(dir, "codex-prompts");   // a scratch Codex prompts dir, so the real ~/.codex/prompts is never touched
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--codex-prompts-dir", prompts, "--skip-codex-lane"], { encoding: "utf8", env });
     assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(path.join(dir, ".agents", "skills", "kill-pass", "SKILL.md")), "shared body installed");
     assert.ok(existsSync(path.join(dir, ".claude", "skills", "kill-pass", "SKILL.md")), "Claude shim installed");
+    assert.ok(existsSync(path.join(prompts, "kill-pass.md")), "Codex shim installed into the prompts dir");
     assert.match(r.stdout + r.stderr, /all resolve on disk/, "init verified every installed shim resolves");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

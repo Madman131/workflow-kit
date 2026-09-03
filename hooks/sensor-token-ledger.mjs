@@ -46,7 +46,7 @@
 // (affaan-m/ECC @ 22e8cf0, MIT); rewritten in this kit's hook idiom, with the lane attribution and
 // the main/sidechain split added.
 
-import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
+import { appendFileSync, closeSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -73,7 +73,8 @@ export function summarizeTranscript(text) {
   const byId = new Map();          // message.id → { usage, side }
   let unkeyed = 0;                 // lines with usage but no id — counted once each, and reported
   const unkeyedRows = [];
-  let latest = null;               // the newest usage record, for context_now
+  let latest = null;               // the newest usage record of any kind, for context_now
+  let latestMain = null;           // the newest MAIN (non-sidechain) record — the session's own context
   let model = "";
   let skipped = 0;                 // unparseable lines — reported, never hidden inside a clean-looking row
   for (const line of text.split("\n")) {
@@ -86,6 +87,7 @@ export function summarizeTranscript(text) {
     const rec = { usage: msg.usage, side: e.isSidechain === true };
     if (typeof msg.model === "string" && msg.model) model = msg.model;
     latest = msg.usage;
+    if (!rec.side) latestMain = msg.usage;
     if (typeof msg.id === "string" && msg.id) byId.set(msg.id, rec);
     else { unkeyed++; unkeyedRows.push(rec); }
   }
@@ -98,16 +100,15 @@ export function summarizeTranscript(text) {
     t.cache_read += num(usage.cache_read_input_tokens);
     t.messages += 1;
   }
-  const context_now = latest
-    ? num(latest.input_tokens) + num(latest.cache_creation_input_tokens) + num(latest.cache_read_input_tokens)
-    : 0;
-  return { main, sidechain, model, context_now, unkeyed, skipped };
+  const size = (u) => (u ? num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens) : 0);
+  return { main, sidechain, model, context_now: size(latest), context_now_main: size(latestMain), unkeyed, skipped };
 }
 
-// The previous row for this session, read from the ledger's tail, so the delta can be computed.
+// The previous row for this session, read from the WHOLE ledger (rows are small; a session's prior
+// row may sit far behind the tail, and missing it would re-count its whole cumulative as a delta).
 function previousRow(ledger, sessionId) {
   let text;
-  try { if (!statSync(ledger).isFile()) return null; text = readTail(ledger, 4 * 1024 * 1024).text; } catch { return null; }
+  try { if (!lstatSync(ledger).isFile()) return null; text = readFileSync(ledger, "utf8"); } catch { return null; }
   let prev = null;
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
@@ -156,7 +157,9 @@ function main(raw) {
     transcript: path.basename(file),
     main: sum.main,
     sidechain: sum.sidechain,
-    delta: { main: delta(sum.main, prev?.main), sidechain: delta(sum.sidechain, prev?.sidechain) },
+    // A truncated read is a sliding window, not a cumulative: its difference from the previous row
+    // is not a delta, so none is claimed and the report counts the row as spend-unknown.
+    delta: tail.truncated ? null : { main: delta(sum.main, prev?.main), sidechain: delta(sum.sidechain, prev?.sidechain) },
     context_now: sum.context_now,
     unkeyed_messages: sum.unkeyed,
     skipped_lines: sum.skipped,
@@ -165,6 +168,8 @@ function main(raw) {
   };
   try {
     mkdirSync(path.dirname(ledger), { recursive: true });
+    let lst = null; try { lst = lstatSync(ledger); } catch { /* absent: will be created */ }
+    if (lst && !lst.isFile()) return ALLOW();                        // a FIFO/symlink/dir ledger path: never open it
     appendFileSync(ledger, JSON.stringify(row) + "\n");
   } catch { /* fail open */ }
   ALLOW();

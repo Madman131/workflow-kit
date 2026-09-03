@@ -16,11 +16,13 @@
 //   merged       PROVEN landed on the base, by one of the two forms the method recognises:
 //                  ancestor  — HEAD is an ancestor of the base (a true merge, or fast-forward)
 //                  squash    — a PR from this branch INTO THE BASE BRANCH is MERGED, and the patch
-//                              the squash commit applied (patch-id of mergeCommit^..mergeCommit)
-//                              equals the patch the branch carries over its merge base with that
-//                              parent — so an unrelated base commit landing between fork and merge
-//                              does not break the proof, and a commit added to the branch after
-//                              the merge does
+//                              the squash commit applied (mergeCommit^..mergeCommit) is BYTE-EQUAL,
+//                              hunk headers aside, to the patch the branch carries over its merge
+//                              base with that parent — whitespace included, because an
+//                              indentation-only change is a semantic change in some languages
+//                              (`git patch-id` would ignore it). An unrelated base commit landing
+//                              between fork and merge does not break the proof; a commit added to
+//                              the branch after the merge does
 //                (skills/orchestrate/PROTOCOLS.md § Shipping: "ancestor-of" is permanently false
 //                after a squash, so ECC's `ahead == 0 ⇒ merged` rule is NOT enough; that gap is
 //                the one this script closes)
@@ -42,6 +44,7 @@
 // the occupancy state are this kit's.
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,18 +101,24 @@ export function ghPrLookup(repo, branch, baseBranch) {
   } catch { return { available: false, merged: false, mergeCommit: null, number: null }; }
 }
 
-// The base ref's BRANCH name for the PR filter: `origin/main` → `main`, `main` → `main`.
-export function baseBranchName(base) {
-  return String(base || "").replace(/^refs\/(?:heads|remotes\/[^/]+)\//, "").replace(/^[^/]+\//, (m) => (m === "origin/" ? "" : m));
+// The base ref's BRANCH name for the PR filter: `origin/main` → `main`, `upstream/main` → `main`
+// when `upstream` is a configured remote, `release/1.x` → `release/1.x` (not a remote).
+export function baseBranchName(base, remotes = []) {
+  let b = String(base || "").replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, "");
+  const slash = b.indexOf("/");
+  if (slash > 0 && remotes.includes(b.slice(0, slash))) b = b.slice(slash + 1);
+  return b;
 }
 
-// patch-id of a range, or null when git cannot produce one (missing object, empty range).
-function patchId(repo, from, to) {
+// Content fingerprint of a range: the diff with hunk headers and index lines removed (line numbers
+// drift when the base moves; content, whitespace included, must not), hashed. Null when git cannot
+// produce it (missing object). "empty" for an empty range.
+function contentId(repo, from, to) {
   try {
-    const diff = git(repo, ["diff", `${from}..${to}`]);
+    const diff = git(repo, ["diff", "--no-color", `${from}..${to}`]);
     if (!diff) return "empty";
-    const out = execFileSync("git", ["-C", repo, "--no-optional-locks", "patch-id", "--stable"], { input: diff, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"], timeout: 30000 }).trim();
-    return out.split(/\s+/)[0] || null;
+    const norm = diff.split("\n").filter((l) => !l.startsWith("@@") && !l.startsWith("index ")).join("\n");
+    return createHash("sha256").update(norm).digest("hex");
   } catch { return null; }
 }
 
@@ -146,15 +155,15 @@ export function classify(repo, wt, opts) {
   // Proof form 2: a PR into the base branch is merged, AND the patch the squash commit applied
   // equals the patch the branch carries over its merge base with the squash commit's parent.
   if (prLookup) {
-    const pr = prLookup(repo, wt.branch, baseBranchName(base));
+    const pr = prLookup(repo, wt.branch, baseBranchName(base, opts.remotes || []));
     if (!pr.available) rec.note = "pr-proof unavailable (gh missing/unauthenticated/timed out) — squash merges cannot be proven here";
     else if (pr.merged && pr.mergeCommit) {
       const parent = tryGit(repo, ["rev-parse", "--verify", "--quiet", `${pr.mergeCommit}^`]);
       if (!parent) { rec.state = "merged-pr-unprovable"; rec.proof = `PR #${pr.number} merged; merge commit not in local objects`; rec.note = "fetch, then re-run"; return rec; }
       const mb = tryGit(repo, ["merge-base", parent, wt.branch]);
-      const landed = patchId(repo, parent, pr.mergeCommit);
-      const carried = mb ? patchId(repo, mb, wt.branch) : null;
-      if (landed && carried && landed === carried) { rec.state = "merged"; rec.proof = `squash PR #${pr.number} (patch-id match)`; return rec; }
+      const landed = contentId(repo, parent, pr.mergeCommit);
+      const carried = mb ? contentId(repo, mb, wt.branch) : null;
+      if (landed && carried && landed === carried) { rec.state = "merged"; rec.proof = `squash PR #${pr.number} (content match)`; return rec; }
       rec.state = "merged-pr-content-differs"; rec.proof = `PR #${pr.number} merged; branch content differs from what landed`; rec.note = "salvage: commits after the merge, or the merge dropped content"; return rec;
     }
   } else rec.note = "pr-proof skipped (--no-pr)";
@@ -169,7 +178,8 @@ export function census(repo, o) {
   const mainPath = wts[0]?.path ?? top;
   const base = o.base || (tryGit(top, ["rev-parse", "--verify", "--quiet", "origin/main"]) ? "origin/main" : (tryGit(top, ["rev-parse", "--verify", "--quiet", "main"]) ? "main" : "HEAD"));
   const prLookup = o.pr ? (o.prLookup || ghPrLookup) : null;   // signature: (repo, branch, baseBranch)
-  const rows = wts.map((w) => classify(top, w, { base, staleDays: o.staleDays, prLookup, mainPath, now: o.now }));
+  const remotes = (tryGit(top, ["remote"]) || "").split("\n").filter(Boolean);
+  const rows = wts.map((w) => classify(top, w, { base, staleDays: o.staleDays, prLookup, mainPath, now: o.now, remotes }));
   return { repo: top, base, worktrees: rows, plan: plan(rows) };
 }
 

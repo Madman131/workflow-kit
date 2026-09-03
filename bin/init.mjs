@@ -531,7 +531,7 @@ function fillTemplate(tmplPath, vars) {
   return text;
 }
 
-// Merge our PreToolUse registrations (4 guards + 2 sensors) into an existing settings.json, or create it.
+// Merge our PreToolUse registrations (4 guards + 3 sensors) and Stop registrations (2 sensors) into an existing settings.json, or create it.
 function mergeSettings(targetSettings, kitSettings, force) {
   // A SYMLINKED settings.json refuses the merge on BOTH paths: the parse-OK branch wrote
   // unconditionally, so a link here had its EXTERNAL target rewritten — no .bak, exit 0, on plain
@@ -1398,8 +1398,8 @@ function main() {
   // 5. settings.json — MERGE the PreToolUse registrations. HONOR the return: never log "merged" when
   // the guards were not actually registered (that is the "manufactured assurance" fail-open).
   const mergeResult = mergeSettings(path.join(T, ".claude", "settings.json"), path.join(KIT_ROOT, "templates", "settings.json"), force);
-  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse (4 guards + 2 sensors) + Stop registrations merged (verified by read-back)`);
-  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 4 PreToolUse guards, the 2 PreToolUse sensors and the Stop sensor are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
+  if (mergeResult === "written") log(`  .claude/settings.json: PreToolUse (4 guards + 3 sensors) + Stop (2 sensors) registrations merged (verified by read-back)`);
+  else if (mergeResult === "skipped") warn(`.claude/settings.json: NOT merged (see warning above) — the 4 PreToolUse guards, the 3 PreToolUse sensors and the 2 Stop sensors are NOT registered. Fix the file and re-run with --force, or register them by hand.`);
   else warn(`.claude/settings.json: post-write verification FAILED — the registrations are NOT confirmed on disk. Inspect ${path.join(T, ".claude", "settings.json")} before trusting the Claude-lane controls.`);
 
   // 6. .claude/kit.config.json — the [G] repo-specific families (the ONLY parameterized DATA).

@@ -24,7 +24,7 @@ lightens the panel (`core/WORKFLOW.md` § Steer, rung-order rule 2).
    `Makefile`, CI). Absent ⇒ N-A, stated.
 3. **Full suite, in your worktree**, clean-installed if the lockfile moved.
 4. **Residue grep over the candidate's ADDED lines** — commit first, then
-   `git diff <base>...HEAD -U0 | grep '^+[^+]'` — plus every path `git status --short` lists as
+   `git diff <base>...HEAD -U0 | grep '^+' | grep -v '^+++ '` — plus every path `git status --short` lists as
    untracked or modified, read whole (an uncommitted file is invisible to the diff and visible to
    the next `git add`): secrets and tokens, debug prints, `TODO`/`FIXME` minted by this change,
    absolute home paths, an Owner's name.

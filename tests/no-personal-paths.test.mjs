@@ -28,7 +28,7 @@
 // green is a scanner never observed working.
 
 import { execFileSync } from "node:child_process";
-import { closeSync, mkdtempSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, lstatSync, mkdtempSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,9 +102,11 @@ export function scanTree(root, identifiers) {
   for (const rel of files) {
     const abs = path.join(root, ...rel.split("/"));
     let st;
-    try { st = statSync(abs); } catch (e) { throw new Error(`tracked file unreadable: ${rel}: ${e.message}`); }
-    if (!st.isFile() || !isText(abs)) continue;
-    const lines = readFileSync(abs, "utf8").split("\n");
+    try { st = lstatSync(abs); } catch (e) { throw new Error(`tracked file unreadable: ${rel}: ${e.message}`); }
+    // A tracked symlink ships its TARGET STRING, not what it points at — scan that string and
+    // never follow the link (following would scan whatever the author's disk holds there).
+    const lines = st.isSymbolicLink() ? [readlinkSync(abs)] : (st.isFile() && isText(abs) ? readFileSync(abs, "utf8").split("\n") : null);
+    if (!lines) continue;
     lines.forEach((text, i) => {
       for (const m of text.matchAll(HOME_PATH_RE)) {
         if (PLACEHOLDER_SEGMENT_RE.test(segmentOf(m[0]))) continue;
@@ -157,6 +159,7 @@ test("the scanner CAN FAIL: a planted repo reddens on every leak shape, in any f
     writeFileSync(path.join(dir, "VERSION"), `1.0.0 ${["", "home", "dave"].join("/")}\n`);                   // extensionless
     writeFileSync(path.join(dir, "core", "blob.bin"), Buffer.concat([Buffer.from(mac), Buffer.from([0, 1, 2])])); // binary: skipped
     writeFileSync(path.join(dir, "untracked.md"), `${["", "Users", "nobody", "looks"].join("/")}\n`);        // never added
+    symlinkSync(["", "Users", "erin", "private"].join("/"), path.join(dir, "core", "link"));                  // a tracked symlink to a home path
     git(["add", "core", "githooks", "VERSION"]);
     const hits = scanTree(dir, ["zzhandle"]);
     const got = hits.map((h) => `${h.file}:${h.match}`).sort();
@@ -166,6 +169,7 @@ test("the scanner CAN FAIL: a planted repo reddens on every leak shape, in any f
       `core/leak-linux.sh:${["", "home", "bob"].join("/")}`,
       `core/leak-mac.md:${["", "Users", "alice"].join("/")}`,
       `core/leak-win.json:${["C:", "Users", "carol"].join("\\\\")}`,   // JSON doubled the backslashes on disk
+      `core/link:${["", "Users", "erin"].join("/")}`,                       // the symlink's TARGET string, never followed
       `githooks/pre-commit:${["", "Users", "alice"].join("/")}`,
     ]);
     // …and outside a repository the disk walk is the fallback, declared as such.

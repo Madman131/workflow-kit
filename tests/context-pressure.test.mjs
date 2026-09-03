@@ -21,13 +21,16 @@ function cleanEnv(extra = {}) {
   for (const k of Object.keys(e)) if (k.startsWith("NODE_TEST") || k.startsWith("WORKFLOW_KIT_CONTEXT")) delete e[k];
   return { ...e, ...extra };
 }
-const usageLine = (tokens, model = "claude-test-1") => JSON.stringify({ type: "assistant", message: { id: `m${tokens}`, role: "assistant", model, usage: { input_tokens: 1000, cache_creation_input_tokens: 0, cache_read_input_tokens: tokens - 1000, output_tokens: 5 }, content: [{ type: "text", text: "x" }] } });
+const usageLine = (tokens, model = "claude-test-1", extra = {}) => JSON.stringify({ type: "assistant", message: { id: `m${tokens}`, role: "assistant", model, usage: { input_tokens: 1000, cache_creation_input_tokens: 0, cache_read_input_tokens: tokens - 1000, output_tokens: 5 }, content: [{ type: "text", text: "x" }] }, ...extra });
 
 test("resolveWindow trusts the override, then the marker, then the family list, then the size, then assumes", () => {
   assert.deepEqual(resolveWindow(10, "claude-test", { WORKFLOW_KIT_CONTEXT_WINDOW: "400000" }), { window: 400000, source: "override" });
   assert.equal(resolveWindow(10, "claude-sonnet-4-5 [1m]", {}).window, 1_000_000);
   assert.equal(resolveWindow(10, "us.anthropic.claude-fable-5-20260115-v1:0", {}).source, "known family");
   assert.equal(resolveWindow(10, "claude-fable-5-mini", {}).window, 200_000, "a letter suffix is a different model");
+  assert.equal(resolveWindow(10, "claude-sonnet-5", {}).source, "known family", "Sonnet 5 ships a 1M window");
+  assert.equal(resolveWindow(10, "notclaude-opus-5-20260115", {}).window, 200_000, "the family must start at a boundary, not mid-word");
+  assert.equal(resolveWindow(10, "x", { WORKFLOW_KIT_CONTEXT_WINDOW: "1e6" }).source.startsWith("assumed"), true, "a malformed override is ignored, not parsed as 1");
   assert.equal(resolveWindow(350_000, "mystery", {}).source, "inferred from size (assumed 1M)");
   assert.match(resolveWindow(10, "mystery", {}).source, /assumed 200k/);
   assert.equal(bucketOf(99_999, 200_000, 50, 10), -1);
@@ -79,11 +82,26 @@ test("the sensor speaks at the threshold as additionalContext, once per bucket, 
     // Thresholds are tunable.
     writeFileSync(transcript, usageLine(45_000) + "\n");
     assert.equal(speaks(run({ ...base, session_id: "sess-D" }, { WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT: "20" })), true, "20% of 200k is 40k");
+    // A SUBAGENT's newest record does not measure the main session: main at 150k, then a sidechain
+    // turn at 10k → still 75% → speaks; and a sidechain record at 190k after a main one at 20k → silent.
+    writeFileSync(transcript, usageLine(150_000) + "\n" + usageLine(10_000, "claude-test-1", { isSidechain: true }) + "\n");
+    r = run({ ...base, session_id: "sess-G" }); assert.equal(speaks(r), true); assert.match(r.stdout, /75%/);
+    writeFileSync(transcript, usageLine(20_000) + "\n" + usageLine(190_000, "claude-test-1", { isSidechain: true }) + "\n");
+    assert.equal(speaks(run({ ...base, session_id: "sess-H" })), false, "a subagent's context is not this session's pressure");
+    // A WINDOW CHANGE resets the bucket memory: 180k on a 200k model (bucket 4), then the same session
+    // on a 1M model at 520k (bucket 0 of a different window) must speak, not be suppressed.
+    writeFileSync(transcript, usageLine(180_000) + "\n");
+    assert.equal(speaks(run({ ...base, session_id: "sess-I" })), true);
+    writeFileSync(transcript, usageLine(520_000, "claude-fable-5-20260101") + "\n");
+    r = run({ ...base, session_id: "sess-I" }); assert.equal(speaks(r), true, "a new denominator starts a new bucket series"); assert.match(r.stdout, /52%/);
 
     // SILENCE branches — exit 0 and EMPTY stdout, never a partial JSON.
     writeFileSync(transcript, usageLine(150_000) + "\n");
     for (const [label, payload, env] of [
-      ["subagent payload", { ...base, session_id: "sess-E", agent_id: "sub-1" }, {}],
+      ["subagent payload (agent_id)", { ...base, session_id: "sess-E", agent_id: "sub-1" }, {}],
+      ["subagent payload (agent_type)", { ...base, session_id: "sess-E", agent_type: "Explore" }, {}],
+      ["non-regular transcript path", { ...base, session_id: "sess-E", transcript_path: dir }, {}],
+      ["JSON primitive on stdin", "42", {}],
       ["Codex-shaped payload (no transcript_path)", { session_id: "sess-E", tool_name: "apply_patch", tool_input: { command: "*** Begin Patch" } }, {}],
       ["missing transcript", { ...base, session_id: "sess-E", transcript_path: path.join(dir, "absent.jsonl") }, {}],
       ["garbage stdin", "{nope", {}],

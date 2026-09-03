@@ -45,6 +45,10 @@ function plant() {
   const squashedPlus = wt("wt-squash-plus", "feat-squash-plus"); commitFile(squashedPlus, "p.txt", "landed");
   shas.squashPlus = squashInto(repo, "feat-squash-plus");
   commitFile(squashedPlus, "p2.txt", "after the merge");
+  // squash-merged, then a WHITESPACE-ONLY change on the branch (semantic in Python) → content differs
+  const ws = wt("wt-squash-ws", "feat-squash-ws"); commitFile(ws, "w.py", "def f():\n    return 1");
+  shas.squashWs = squashInto(repo, "feat-squash-ws");
+  writeFileSync(path.join(ws, "w.py"), "def f():\n  return 1\n"); git(ws, ["add", "w.py"]); git(ws, ["-c", "commit.gpgsign=false", "commit", "-q", "-m", "reindent"]);
   // unmerged, recent → merge-ready (also the wrong-base PR probe)
   const ready = wt("wt-ready", "feat-ready"); commitFile(ready, "r.txt", "ready work");
   // unmerged, OLD → stale
@@ -64,7 +68,7 @@ function plant() {
   return { root, repo, shas };
 }
 
-test("every state is classified from git facts, and the squash proof needs a base-scoped PR plus a patch-id match", () => {
+test("every state is classified from git facts, and the squash proof needs a base-scoped PR plus an exact content match", () => {
   const p = plant();
   try {
     const calls = [];
@@ -74,6 +78,7 @@ test("every state is classified from git facts, and the squash proof needs a bas
       if (branch === "feat-squash") return { available: true, merged: true, mergeCommit: p.shas.squash, number: 7 };
       if (branch === "feat-squash-moved") return { available: true, merged: true, mergeCommit: p.shas.squashMoved, number: 8 };
       if (branch === "feat-squash-plus") return { available: true, merged: true, mergeCommit: p.shas.squashPlus, number: 9 };
+      if (branch === "feat-squash-ws") return { available: true, merged: true, mergeCommit: p.shas.squashWs, number: 11 };
       if (branch === "feat-stale") return { available: true, merged: true, mergeCommit: "0".repeat(40), number: 10 };   // merged upstream, object not local
       return { available: true, merged: false, mergeCommit: null, number: null };
     };
@@ -82,9 +87,10 @@ test("every state is classified from git facts, and the squash proof needs a bas
     assert.ok(calls.every(([, b]) => b === "main"), "the PR lookup is scoped to the base BRANCH");
     assert.equal(c.worktrees[0].state, "main");
     assert.equal(byBranch["feat-merged"].state, "merged"); assert.equal(byBranch["feat-merged"].proof, "ancestor");
-    assert.equal(byBranch["feat-squash"].state, "merged"); assert.match(byBranch["feat-squash"].proof, /squash PR #7 \(patch-id match\)/);
+    assert.equal(byBranch["feat-squash"].state, "merged"); assert.match(byBranch["feat-squash"].proof, /squash PR #7 \(content match\)/);
     assert.equal(byBranch["feat-squash-moved"].state, "merged", "an unrelated base commit between fork and squash does not break the proof");
     assert.equal(byBranch["feat-squash-plus"].state, "merged-pr-content-differs", "a commit after the squash merge is NOT proven merged");
+    assert.equal(byBranch["feat-squash-ws"].state, "merged-pr-content-differs", "a whitespace-only change after the merge is content, and differs");
     assert.equal(byBranch["feat-stale"].state, "merged-pr-unprovable", "a merge commit missing locally is unprovable, never clear");
     assert.equal(byBranch["feat-ready"].state, "merge-ready"); assert.equal(byBranch["feat-ready"].ahead, 1);
     assert.equal(byBranch["feat-dirty"].state, "dirty");
@@ -94,7 +100,7 @@ test("every state is classified from git facts, and the squash proof needs a bas
     assert.equal(byBranch["feat-locked"].state, "locked");
     const pl = c.plan;
     assert.deepEqual(pl.removeSafe.map((e) => e.branch).sort(), ["feat-fresh", "feat-merged", "feat-squash", "feat-squash-moved"]);
-    assert.deepEqual(pl.salvage.map((e) => e.branch).sort(), ["feat-squash-plus"]);
+    assert.deepEqual(pl.salvage.map((e) => e.branch).sort(), ["feat-squash-plus", "feat-squash-ws"]);
     assert.deepEqual(pl.inspect.map((e) => e.branch ?? "(detached)").sort(), ["(detached)", "feat-stale"]);
     assert.ok(["feat-dirty", "feat-occupied", "feat-locked", "main"].every((b) => pl.keep.some((e) => e.branch === b)));
     const total = pl.removeSafe.length + pl.salvage.length + pl.inspect.length + pl.keep.length;
@@ -119,7 +125,7 @@ test("the CLI runs end to end: exit 0, JSON shape, --no-pr note, and bad argumen
     const r = spawnSync(process.execPath, [CLI, "--repo", p.repo, "--base", "main", "--json", "--no-pr"], { encoding: "utf8", env: ENV });
     assert.equal(r.status, 0, r.stderr);
     const c = JSON.parse(r.stdout);
-    assert.equal(c.base, "main"); assert.ok(Array.isArray(c.worktrees) && c.worktrees.length === 12, `12 worktrees planted, got ${c.worktrees.length}`);
+    assert.equal(c.base, "main"); assert.ok(Array.isArray(c.worktrees) && c.worktrees.length === 13, `13 worktrees planted, got ${c.worktrees.length}`);
     assert.ok(c.worktrees.every((w) => typeof w.state === "string"));
     assert.ok(c.worktrees.some((w) => w.note === "pr-proof skipped (--no-pr)"));
     const text = spawnSync(process.execPath, [CLI, "--repo", p.repo, "--base", "main", "--no-pr"], { encoding: "utf8", env: ENV });
@@ -129,6 +135,9 @@ test("the CLI runs end to end: exit 0, JSON shape, --no-pr note, and bad argumen
       assert.equal(bad.status, 2, `refused: ${args.join(" ")}`);
     }
     assert.deepEqual(plan([]), { removeSafe: [], salvage: [], keep: [], inspect: [] });
-    assert.equal(baseBranchName("origin/main"), "main"); assert.equal(baseBranchName("main"), "main"); assert.equal(baseBranchName("refs/remotes/origin/develop"), "develop");
+    assert.equal(baseBranchName("origin/main", ["origin"]), "main"); assert.equal(baseBranchName("main", ["origin"]), "main");
+    assert.equal(baseBranchName("refs/remotes/origin/develop", ["origin"]), "develop");
+    assert.equal(baseBranchName("upstream/main", ["origin", "upstream"]), "main", "any configured remote is stripped");
+    assert.equal(baseBranchName("release/1.x", ["origin"]), "release/1.x", "a branch with a slash that is not a remote is kept whole");
   } finally { rmSync(p.root, { recursive: true, force: true }); }
 });

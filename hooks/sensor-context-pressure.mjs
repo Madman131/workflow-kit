@@ -49,19 +49,21 @@
 // than at /compact, and defaulted to 50% rather than 80% because the digest is written BEFORE
 // pressure, not at it.
 
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { summarizeTranscript } from "./sensor-token-ledger.mjs";
 
 const ALLOW = () => process.exit(0);
-const TAIL_BYTES = 256 * 1024;
+const TAIL_BYTES = 4 * 1024 * 1024;   // the newest usage record is what matters; a single record over 4 MiB is out of model
 const STANDARD_WINDOW = 200_000;
 const LARGE_WINDOW = 1_000_000;
-// Families known to ship a 1M window as of 2026-09-03. Matched as a boundary-aware prefix so a
-// `-mini` or other letter suffix does not match; a dated suffix (`-20260115`) does. EXPECTED TO LAG.
-const KNOWN_1M = ["claude-opus-5", "claude-fable-5", "claude-mythos-5"];
+// Families known to ship a 1M window as of 2026-09-03 (Anthropic's model docs). Matched on BOTH
+// boundaries: the family must start the id or follow a non-alphanumeric character, and a `-mini` or
+// other letter suffix does not match while a dated suffix (`-20260115`) does. EXPECTED TO LAG; the
+// override exists because it will.
+const KNOWN_1M = ["claude-opus-5", "claude-fable-5", "claude-mythos-5", "claude-sonnet-5"];
 
 function readTail(file, maxBytes) {
   const size = statSync(file).size;
@@ -76,15 +78,20 @@ function readTail(file, maxBytes) {
 }
 
 function familyMatch(model, family) {
-  const i = model.indexOf(family);
-  if (i === -1) return false;
-  const rest = model.slice(i + family.length);
-  return !/^[A-Za-z0-9]/.test(rest) && !/^-[A-Za-z]/.test(rest);
+  let from = 0;
+  for (;;) {
+    const i = model.indexOf(family, from);
+    if (i === -1) return false;
+    const before = i === 0 ? "" : model[i - 1];
+    const rest = model.slice(i + family.length);
+    if (!/[A-Za-z0-9]/.test(before) && !/^[A-Za-z0-9]/.test(rest) && !/^-[A-Za-z]/.test(rest)) return true;
+    from = i + 1;
+  }
 }
 
 // EXPORTED for the test. Returns { window, source } where source names which rule decided.
 export function resolveWindow(tokens, model, env = process.env) {
-  const override = Number.parseInt(env.WORKFLOW_KIT_CONTEXT_WINDOW || "", 10);
+  const override = /^\d+$/.test(env.WORKFLOW_KIT_CONTEXT_WINDOW || "") ? Number(env.WORKFLOW_KIT_CONTEXT_WINDOW) : NaN;
   if (Number.isInteger(override) && override > 0) return { window: override, source: "override" };
   const m = typeof model === "string" ? model : "";
   if (m.includes("[1m]")) return { window: LARGE_WINDOW, source: "model marker" };
@@ -94,7 +101,8 @@ export function resolveWindow(tokens, model, env = process.env) {
 }
 
 function pct(env, key, dflt) {
-  const v = Number.parseInt(env[key] || "", 10);
+  const raw = env[key] || "";
+  const v = /^\d+$/.test(raw) ? Number(raw) : NaN;
   return Number.isInteger(v) && v > 0 && v <= 100 ? v : dflt;
 }
 
@@ -124,9 +132,11 @@ function main(raw) {
   const file = ev.transcript_path;
   if (typeof file !== "string" || !file) return ALLOW();          // Codex payloads land here
   let text;
-  try { text = readTail(file, TAIL_BYTES); } catch { return ALLOW(); }
+  try { if (!statSync(file).isFile()) return ALLOW(); text = readTail(file, TAIL_BYTES); } catch { return ALLOW(); }
   const sum = summarizeTranscript(text);
-  const tokens = sum.context_now;
+  // The MAIN session's newest record. A subagent's turn lands in the same transcript with its own,
+  // unrelated context size; measuring that would silence or fire this sensor on the wrong number.
+  const tokens = sum.context_now_main;
   if (!(tokens > 0)) return ALLOW();
   const { window, source } = resolveWindow(tokens, sum.model);
   const threshold = pct(process.env, "WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT", 50);
@@ -138,10 +148,20 @@ function main(raw) {
   const key = (typeof ev.session_id === "string" && ev.session_id) || path.basename(file);
   const stateDir = process.env.WORKFLOW_KIT_CONTEXT_STATE_DIR || os.tmpdir();
   const stateFile = path.join(stateDir, `workflow-kit-context-${key.replace(/[^A-Za-z0-9._-]/g, "_")}`);
+  // State = "<bucket>:<window>". A bucket earned against one denominator means nothing against
+  // another (a session that switches from a 200k to a 1M model must not have its 1M reminders
+  // suppressed by a 200k bucket), so a window change resets the memory.
   let last = -1;
-  try { last = Number.parseInt(readFileSync(stateFile, "utf8"), 10); if (!Number.isInteger(last)) last = -1; } catch { /* first time */ }
+  try {
+    const [b, w] = readFileSync(stateFile, "utf8").trim().split(":");
+    if (/^-?\d+$/.test(b || "") && Number(w) === window) last = Number(b);
+  } catch { /* first time */ }
   if (bucket <= last) return ALLOW();
-  try { mkdirSync(stateDir, { recursive: true }); writeFileSync(stateFile, String(bucket)); } catch { /* speak anyway */ }
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    let lst = null; try { lst = lstatSync(stateFile); } catch { /* absent */ }
+    if (!lst || lst.isFile()) writeFileSync(stateFile, `${bucket}:${window}`);   // never through a symlink
+  } catch { /* speak anyway */ }
   const percent = Math.round((100 * tokens) / window);
   const text2 = message({ tokens, window, source, percent });
   try { process.stderr.write(`sensor-context-pressure: ${text2}\n`); } catch { /* ignore */ }
