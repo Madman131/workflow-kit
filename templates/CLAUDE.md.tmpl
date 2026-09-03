@@ -38,7 +38,9 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
 1. **Absolute paths only.** Never say or pass "the repo" — name it with its full path.
 2. **Write ONLY here.** A PreToolUse guard (`.claude/hooks/guard-cross-repo-writes.mjs`) blocks
    Write/Edit outside this repo, so a sibling is **physically unwritable** by the file tools.
-   (Sanctioned exception: private worktrees under `/tmp` sit inside the guard's allowed roots.)
+   (Sanctioned exception: the guard also allows `~/.claude`, `/tmp`, and every absolute path in
+   `.claude/kit.config.json` `worktreeRoots` — which is how this repo's private worktrees stay
+   writable. A root that is not declared there is one your file tools cannot reach.)
 3. **Identity ritual before EVERY commit/push:** run
    `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
    and confirm the intended remote + branch. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}** — gate
@@ -52,8 +54,9 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    checkout, **NEVER `git add -A` / `git add .` / `git commit -a`.** Unexplained dirty files are the
    other lane's in-flight work — never stage, stash, revert, or edit them. **Canonical text for ALL
    lanes: `core/MULTI_AGENT.md` § Multi-writer checkout** — read it before any commit. Claude-specific:
-   worktrees go under `/tmp` (the rule-2 exception); commit early and often there — `/tmp` is purged
-   on reboot and only commits survive it.
+   worktrees go under a root declared in `.claude/kit.config.json` `worktreeRoots` (`/tmp` by
+   default — the rule-2 exception); commit early and often there — a scratch root is purged on
+   reboot and only commits survive it.
 
 ## Enforcement is asymmetric — say it plainly
 The three PreToolUse guards have registered in **both** lanes since kit v2.1, **kit v2.2 adds two

@@ -679,6 +679,91 @@ test("CHARACTERIZATION — `/tmp` and `/private/tmp` are ALLOWED write roots, so
   } finally { R.cleanup(); }
 });
 
+test("worktreeRoots WIDENS the cross-repo guard to the roots THIS repo declares — and fails CLOSED on a bad one", () => {
+  // THE DEFECT (found adopting v2.26.0): `core/MULTI_AGENT.md` sends substantial concurrent work into
+  // a private worktree, and this guard shipped `/tmp` as the only root one could live under. An
+  // adopter whose worktrees sit anywhere else had a session that could not write its OWN worktree
+  // with the file tools — doctrine and control contradicting each other. The root set is now data.
+  //
+  // Three polarities, because two of them are the ones that can silently rot: the declared root must
+  // be ALLOWED (or the family does nothing), an UNdeclared sibling must still be DENIED (or the
+  // family permits everything), and a MALFORMED entry must DENY (or a config nobody can read
+  // silently narrows to a root set the adopter did not choose).
+  const R = guardRepo();
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-wtroots-"));
+  const undeclared = mkdtempSync(path.join(os.tmpdir(), "kit-wtroots-other-"));
+  const cfg = path.join(R.dir, ".claude", "kit.config.json");
+  const denies = (out) => /"permissionDecision":"deny"/.test(out);
+  const write = (abs) => R.run("guard-cross-repo-writes.mjs", patchCall(envelope(`*** Add File: ${abs}/lane.mjs`, "+1")));
+  try {
+    // Baseline: with NO config both scratch dirs are outside the shipped roots… except on a rig whose
+    // os.tmpdir() IS /tmp, where the shipped scratch roots already cover them. Skip the baseline
+    // there rather than assert something the allowlist legitimately contradicts (the same masquerade
+    // the `/tmp` characterization test above exists to name).
+    const shippedScratch = /^\/(private\/)?tmp(\/|$)/.test(outside);
+    if (!shippedScratch) {
+      assert.equal(denies(write(outside).stdout), true, "precondition: an undeclared root is denied before the family is written");
+    }
+
+    writeFileSync(cfg, JSON.stringify({ worktreeRoots: [outside] }) + "\n");
+    assert.equal(denies(write(outside).stdout), false, "a DECLARED worktree root is an allowed write root");
+    // A path that merely SHARES A PREFIX with the declared root is a different directory, not a
+    // child of it. `startsWith(root)` without the separator would let `<root>-evil/` in.
+    assert.equal(denies(R.run("guard-cross-repo-writes.mjs",
+      patchCall(envelope(`*** Add File: ${outside}-evil/x.mjs`, "+1"))).stdout), true,
+      "…and a sibling that merely shares its prefix is NOT inside it");
+    if (!shippedScratch) {
+      assert.equal(denies(write(undeclared).stdout), true, "…while an UNdeclared root is still denied (the config is load-bearing)");
+    }
+
+    // A trailing separator is the same root. path.resolve normalises it; without that, the prefix
+    // test builds `<root>//` and matches nothing — a declared root that silently does not work.
+    writeFileSync(cfg, JSON.stringify({ worktreeRoots: [outside + path.sep] }) + "\n");
+    assert.equal(denies(write(outside).stdout), false, "a declared root with a trailing separator still works");
+
+    // FAIL CLOSED, three ways. A RELATIVE entry is the one an adopter is most likely to type, and it
+    // is exactly the wrong-base fail-open resolvePatchBase exists to stop — so it is refused, not
+    // resolved against whatever cwd the harness supplied.
+    for (const [label, body] of [
+      ["a non-absolute entry", JSON.stringify({ worktreeRoots: ["../worktrees"] })],
+      ["a non-array value", JSON.stringify({ worktreeRoots: outside })],
+      ["unparseable JSON", '{"worktreeRoots":'],
+    ]) {
+      writeFileSync(cfg, body + "\n");
+      const r = write(outside);
+      assert.equal(denies(r.stdout), true, `${label} must DENY (fail closed), not fall back to the shipped roots`);
+      assert.match(r.stdout, /worktreeRoots/, `${label}: the deny must name the field so the adopter can fix it`);
+      // …and the same corrupt config denies an IN-REPO write too: this guard cannot know which roots
+      // it is missing, so "fail closed" means every gated write, not only the interesting one.
+      assert.equal(denies(R.run("guard-cross-repo-writes.mjs", patchCall(envelope("*** Add File: src/x.mjs", "+1"))).stdout),
+        true, `${label}: an in-repo write is denied too — the guard gates against a root set it could not read`);
+    }
+
+    // A payload with NO WRITE INTENT never reaches the config at all: a corrupt kit.config.json must
+    // not start denying Bash calls.
+    assert.equal(denies(R.run("guard-cross-repo-writes.mjs", BASH_CALL).stdout), false,
+      "a corrupt config does not turn this guard into a Bash blocker — the no-write-intent branch runs first");
+  } finally {
+    R.cleanup();
+    rmSync(outside, { recursive: true, force: true });
+    rmSync(undeclared, { recursive: true, force: true });
+  }
+});
+
+test("the portable doctrine no longer hard-codes `/tmp` as the only worktree root", () => {
+  // The doc half of the same defect. `core/MULTI_AGENT.md` is the CANONICAL multi-writer text every
+  // lane is pointed at, and the two entry stubs summarise it; when the guard's root set became data,
+  // a doc still naming `/tmp` as the place would have kept sending adopters to a root their own
+  // control denies. Pinned so a future edit that reintroduces the hard-coded root goes red here.
+  for (const rel of ["core/MULTI_AGENT.md", "templates/AGENTS.md.tmpl", "templates/CLAUDE.md.tmpl"]) {
+    const text = readFileSync(path.join(KIT, rel), "utf8");
+    assert.match(text, /worktreeRoots/,
+      `${rel} must point at the .claude/kit.config.json worktreeRoots family, not at a fixed root`);
+    assert.doesNotMatch(text, /worktrees? under `\/tmp`|worktrees go under `\/tmp`/,
+      `${rel} must not state that worktrees live under /tmp — that is the default, not the rule`);
+  }
+});
+
 test("CHARACTERIZATION — PRE-EXISTING gating gaps this release inherits and does NOT close", () => {
   // NOT INTRODUCED HERE and NOT FIXED HERE. `isGatedPath` short-circuits on `isStaticallySafe`, so
   // anything under `docs/` or `memory/` is treated as prose REGARDLESS of extension — including

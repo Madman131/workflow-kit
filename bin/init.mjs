@@ -43,7 +43,7 @@ const KIT_VERSION = readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim();
 // Every flag this parser accepts. Used to reject a flag that appears where a VALUE was expected.
 const KNOWN_FLAGS = new Set([
   "--help", "-h", "--target", "--repo-name", "--owner-name", "--remote-url", "--deploy-branch",
-  "--source-dirs", "--state-docs", "--memory-dir", "--with-gate-runners",
+  "--source-dirs", "--state-docs", "--memory-dir", "--worktree-roots", "--with-gate-runners",
   "--codex-prompts-dir", "--skip-codex-prompt", "--codex-cold-model", "--skip-codex-lane",
   "--force", "--print-package-scripts",
 ]);
@@ -107,6 +107,19 @@ function parseArgs(argv) {
     else if (a === "--source-dirs") out.sourceDirs = listVal(next());
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
+    else if (a === "--worktree-roots") {
+      // VALIDATED HERE, not at the guard alone. guard-cross-repo-writes DENIES every write on a
+      // config it cannot read, so a relative entry written by this installer would hand the adopter
+      // a repo whose file tools are dead until they hand-edit JSON. Refuse it in arg parsing, before
+      // anything is written, the way --owner-name and --codex-cold-model refuse their bad shapes.
+      const roots = listVal(next());
+      const bad = roots.filter((r) => !path.isAbsolute(r));
+      if (bad.length) {
+        console.error(`init: --worktree-roots takes ABSOLUTE paths (got ${bad.map((b) => JSON.stringify(b)).join(", ")}). A relative root would resolve against whatever working directory the harness hands the guard, which is the wrong-base fail-open the guard refuses — so it is rejected here rather than written into a config that would then block every write.`);
+        process.exit(2);
+      }
+      out.worktreeRoots = roots;
+    }
     else if (a === "--with-gate-runners") out.withGateRunners = true;
     else if (a === "--codex-prompts-dir") out.codexPromptsDir = path.resolve(next());
     else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
@@ -156,6 +169,9 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
+  --worktree-roots a,b    ABSOLUTE roots where THIS repo's private worktrees live ⇒ kit.config.json
+                          worktreeRoots, which guard-cross-repo-writes adds to its allowed write
+                          roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp)
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
   --codex-prompts-dir <d> where the Codex prompts install — /thread-restart and the skill shims
                           (default: ~/.codex/prompts, USER-GLOBAL — outside the target repo;
@@ -1409,6 +1425,7 @@ function main() {
   // EXISTING key in an older adopter's config is tolerated by every control: ignored, never fatal.
   if (args.stateDocs) config.stateDocs = args.stateDocs;
   if (args.memoryDir) config.memoryDir = args.memoryDir;
+  if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
   let cfgKept = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }

@@ -681,10 +681,18 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   boundary is hostile-evasion, out of the stated model; the every-lane commit floor is the backstop.
   Characterized (not fixed) in `acceptance/plant-the-bug.sh` § F12 so a future hardening flips the
   assertion visibly.
-- **The cross-repo guard ships scratch roots.** `guard-cross-repo-writes.mjs` allows writes to the
-  project dir, `~/.claude`, and `/tmp` / `/private/tmp` (the last two so Claude worktrees under `/tmp`
-  work). An adopter inherits those exemptions — if your workflow never uses `/tmp` worktrees you may
-  tighten them, but the method's private-worktree pattern relies on them.
+- **The cross-repo guard ships scratch roots, and takes more from your config.**
+  `guard-cross-repo-writes.mjs` allows writes to the project dir, `~/.claude`, `/tmp` / `/private/tmp`,
+  and every ABSOLUTE path in `.claude/kit.config.json` `worktreeRoots` (write it with
+  `init --worktree-roots <abs>,<abs>`). The two scratch roots ship so that Claude worktrees under
+  `/tmp` work; the config family exists because that default was wrong for any adopter whose
+  worktrees live elsewhere — without it, a session in the canonical checkout could not write its own
+  worktree with the file tools, and `core/MULTI_AGENT.md` § Multi-writer checkout told it to use one
+  anyway. An adopter inherits the scratch exemptions — if your workflow never uses `/tmp` worktrees
+  you may tighten them — but the method's private-worktree pattern relies on SOME root being
+  allowed. A `worktreeRoots` this guard cannot read (bad JSON, not an object, symlinked, or an entry
+  that is not a non-empty absolute path) fails CLOSED: every gated write is DENIED until it is fixed
+  with a shell command, deleted, or rewritten by `init`.
 - **A few `[P]` method docs carry illustrative origin-repo names.** `core/ARTIFACT_CLASS.md` cites
   `pil/` as a code-dir example; `core/README.md` names `docs/PIL_ARCHITECTURE.md` / `docs/open_work_current_state.md`
   as layer-model examples an adopter won't have; and several method docs cite a `docs/journal/*.md`

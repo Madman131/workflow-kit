@@ -1896,6 +1896,15 @@ uses** — a mis-parameterized `executedPathDirs` blocks the write guard, it nev
 the `pre-commit` floor gates every non-docs path, so an *undeclared code commit* is blocked
 regardless.)
 
+`guard-cross-repo-writes` reads that same file for one family, `worktreeRoots` (v2.27.0):
+the ABSOLUTE roots where **this** repo's private worktrees live, written by
+`init --worktree-roots <abs>,<abs>` and added to the guard's allowed write roots alongside the
+project dir, `~/.claude` and `/tmp` / `/private/tmp`. Omit the flag and you get the shipped roots
+only. It obeys the same fail-closed rule as every other family: a `worktreeRoots` that is not an
+array of non-empty absolute paths — or a `kit.config.json` that is symlinked, unreadable or not
+JSON — **denies every gated write** until you fix it (with a shell command; this guard binds write
+*tools*), delete the file, or re-run `init`.
+
 **Coverage: a tripwire and a floor.** The Claude `guard-lane-authoring` write-time gate is a *tripwire*
 — it catches undeclared writes to known code extensions and to your configured/default source dirs, but
 it is not exhaustive (an unusual extension outside a source dir may slip it). The harness-agnostic

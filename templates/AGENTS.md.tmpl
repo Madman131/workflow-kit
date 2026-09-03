@@ -51,8 +51,9 @@ violating one is unrecoverable, but that section governs.
 2. **Verify before every commit:** run `git status`; every staged file must belong to YOUR task.
    Unexplained dirty files are the other lane's in-flight work — never stage, stash, revert, or edit
    them. If YOUR task needs a file the other lane has dirtied, STOP and ask the Owner.
-3. **Substantial concurrent work → a private worktree** (never inside the shared checkout). Commit
-   early and often there: `/tmp` is purged on reboot, and only commits survive it.
+3. **Substantial concurrent work → a private worktree** under a root this repo declares
+   (`.claude/kit.config.json` `worktreeRoots`; `/tmp` by default) — never inside the shared checkout.
+   Commit early and often there: a scratch root is purged on reboot, and only commits survive it.
 4. **Merge + test in the worktree, never in the shared checkout:** merge the shared branch INTO your
    worktree, install deps there (**`npm ci`** if the merge touched the lockfile), run the **full
    `npm test`** THERE, and only then land the merge.
