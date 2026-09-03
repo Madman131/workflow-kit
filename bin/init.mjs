@@ -6,8 +6,8 @@
 // (entry stubs, BINDINGS, REPO_INVARIANTS, SYSTEM_MAP, OWNER_COMMS) from templates with placeholders,
 // installs the dual-lane SKILLS (one shared body under .agents/skills/, a thin shim per harness),
 // MERGES the Claude Code hook registrations into .claude/settings.json — four PreToolUse guards, three
-// PreToolUse sensors (they print and never deny), two Stop sensors (comms nudge, token ledger), plus
-// the Stop-event Owner-comms SENSOR, which fails OPEN — and, crucially, installs the HARNESS-AGNOSTIC
+// PreToolUse sensors (they print and never deny), two Stop sensors (comms nudge, token ledger; both fail OPEN)
+// — and, crucially, installs the HARNESS-AGNOSTIC
 // pre-commit hook and sets core.hooksPath, so a non-Claude lane still gets the strongest enforcement
 // floor the kit can give it (see PORTABILITY.md).
 //

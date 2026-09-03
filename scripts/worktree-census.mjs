@@ -105,8 +105,9 @@ export function ghPrLookup(repo, branch, baseBranch) {
 // when `upstream` is a configured remote, `release/1.x` → `release/1.x` (not a remote).
 export function baseBranchName(base, remotes = []) {
   let b = String(base || "").replace(/^refs\/heads\//, "").replace(/^refs\/remotes\//, "");
-  const slash = b.indexOf("/");
-  if (slash > 0 && remotes.includes(b.slice(0, slash))) b = b.slice(slash + 1);
+  // A remote name may itself contain "/"; take the LONGEST configured remote that prefixes the ref.
+  const hit = [...remotes].sort((x, y) => y.length - x.length).find((r) => b.startsWith(`${r}/`));
+  if (hit) b = b.slice(hit.length + 1);
   return b;
 }
 
@@ -115,7 +116,8 @@ export function baseBranchName(base, remotes = []) {
 // produce it (missing object). "empty" for an empty range.
 function contentId(repo, from, to) {
   try {
-    const diff = git(repo, ["diff", "--no-color", `${from}..${to}`]);
+    // Raw bytes, deliberately NOT trimmed: a trailing space on the final added line is content.
+    const diff = execFileSync("git", ["-C", repo, "--no-optional-locks", "diff", "--no-color", `${from}..${to}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30000 });
     if (!diff) return "empty";
     const norm = diff.split("\n").filter((l) => !l.startsWith("@@") && !l.startsWith("index ")).join("\n");
     return createHash("sha256").update(norm).digest("hex");

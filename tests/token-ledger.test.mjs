@@ -6,7 +6,7 @@
 // to keep append order, and to announce malformed rows rather than hide them.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,6 +55,8 @@ test("summarizeTranscript dedupes by message.id, splits sidechain turns, counts 
   const sideLast = summarizeTranscript(PLANTED + assistant("s2", { input_tokens: 5, cache_read_input_tokens: 5 }, { isSidechain: true }) + "\n");
   assert.equal(sideLast.context_now, 10, "any-kind newest");
   assert.equal(sideLast.context_now_main, 2203, "the MAIN session's newest is unaffected by a later subagent turn");
+  const sideModel = summarizeTranscript(PLANTED + assistant("s3", { input_tokens: 5 }, { isSidechain: true }).replace('"claude-test-1"', '"claude-fable-5-x"') + "\n");
+  assert.equal(sideModel.model, "claude-fable-5-x", "any-kind newest model"); assert.equal(sideModel.model_main, "claude-test-1", "the MAIN model is the session's own");
   assert.equal(s.unkeyed, 0);
   assert.equal(s.skipped, 1, "the broken line is COUNTED, not silently dropped");
   assert.notEqual(s.main.input, 500, "a per-line sum would report 500; the dedupe reports 300");
@@ -122,6 +124,14 @@ test("the Stop sensor appends a session-bound, delta-carrying row, and fails ope
     r = run({ transcript_path: transcript, session_id: "sess-1" }, { WORKFLOW_KIT_TOKEN_LEDGER: "false" });
     assert.equal(r.status, 0); assert.equal(rows().length, before, "off switch: no row");
 
+    // A symlinked transcript is out of model and not read: no row.
+    const linkT = path.join(dir, "link.jsonl"); symlinkSync(transcript, linkT);
+    { const n = rows().length; r = run({ transcript_path: linkT, session_id: "sess-1" }); assert.equal(r.status, 0); assert.equal(rows().length, n, "symlinked transcript: no row"); }
+    // A malformed PREVIOUS row for the session makes the baseline unknown: the next row claims no delta
+    // (never a delta equal to the whole cumulative).
+    appendFileSync(ledger, JSON.stringify({ session_id: "sess-1", main: "bad", sidechain: "bad" }) + "\n");
+    r = run({ transcript_path: transcript, session_id: "sess-1" }); assert.equal(r.status, 0);
+    row = rows().at(-1); assert.equal(row.delta, null); assert.match(row.delta_unknown_reason, /previous row unknown/);
     // A ledger PATH that is not a regular file (a directory here; a FIFO would block) is never opened.
     r = run({ transcript_path: transcript, session_id: "sess-1" }, { WORKFLOW_KIT_TOKEN_LEDGER_PATH: dir });
     assert.equal(r.status, 0, "exit 0, promptly");
@@ -133,7 +143,7 @@ test("the Stop sensor appends a session-bound, delta-carrying row, and fails ope
     // The report over the real ledger: deltas summed, both sessions, the task split, the proxy caveat.
     const out = spawnSync(process.execPath, [REPORT, "--ledger", ledger], { encoding: "utf8", env: cleanTestEnv() });
     assert.equal(out.status, 0, out.stderr);
-    assert.match(out.stdout, /2 session\(s\), 4 row\(s\)/);
+    assert.match(out.stdout, /2 session\(s\), 5 row\(s\)/, "the unknown-baseline row is a row; the malformed line is not");
     assert.match(out.stdout, /ecc-test/); assert.match(out.stdout, /\(undeclared\)/);
     // ecc-test = row1 delta (3,308 prompt) + row2 delta (40): 3,348. The mismatch row and sess-2 are undeclared.
     assert.match(out.stdout, /ecc-test\s+1\s+3,348/, "task spend is the SUM OF DELTAS while the session was on that task");
@@ -141,7 +151,7 @@ test("the Stop sensor appends a session-bound, delta-carrying row, and fails ope
     const js = spawnSync(process.execPath, [REPORT, "--ledger", ledger, "--by", "session", "--json"], { encoding: "utf8", env: cleanTestEnv() });
     assert.equal(js.status, 0, js.stderr);
     const parsed = JSON.parse(js.stdout);
-    assert.equal(parsed.sessions, 2); assert.equal(parsed.malformed, 0);
+    assert.equal(parsed.sessions, 2); assert.equal(parsed.malformed, 1, "the planted bad previous row is counted, not hidden");
     assert.equal(parsed.groups.find((g) => g.key === "sess-1").main_prompt, 3348);
     // Argument hygiene: a missing operand is refused, not silently defaulted.
     const bad = spawnSync(process.execPath, [REPORT, "--ledger"], { encoding: "utf8", env: cleanTestEnv() });
@@ -165,18 +175,19 @@ test("the report sums deltas per day and task in append order, counts pre-delta 
     line({ ts: "2026-09-04T03:10:00Z", session_id: "c", delta: { main: {}, sidechain: {} }, main: {} }),   // structurally empty deltas: fine (zeros)
     line({ ts: "2026-09-04T03:20:00Z", session_id: {}, delta: { main: {}, sidechain: {} } }),            // session_id not a string ⇒ malformed
     line({ ts: "2026-09-04T03:30:00Z", session_id: "d", delta: { main: { input: "9" }, sidechain: {} } }), // non-numeric field ⇒ malformed
+    line({ ts: "2026-09-04T03:40:00Z", session_id: "f", delta: { main: { input: -9 }, sidechain: {} } }),  // negative field ⇒ malformed
     line({ ts: "2026-09-04T04:00:00Z", session_id: "e", task_id: "t1", main: d(70), sidechain: z, delta: null, truncated: true }), // truncated ⇒ spend unknown
   ].join("\n");
   const { rows, malformed, legacy, truncated } = loadRows(ledger);
-  assert.equal(rows.length, 7); assert.equal(malformed, 4); assert.equal(legacy, 2); assert.equal(truncated, 1);
+  assert.equal(rows.length, 7); assert.equal(malformed, 5); assert.equal(legacy, 2); assert.equal(truncated, 1);
   const byDay = Object.fromEntries(aggregate(rows, "day").map((g) => [g.key, g.main_prompt]));
   assert.deepEqual(byDay, { "2026-09-03": 100, "2026-09-04": 90 }, "day spend = deltas in that day (50 + 10 + legacy 10 + 20); the truncated 70 is NOT counted");
   const byTask = Object.fromEntries(aggregate(rows, "task").map((g) => [g.key, g.main_prompt]));
   assert.deepEqual(byTask, { t1: 130, t2: 60, "(undeclared)": 0 }, "task spend follows the task each delta was recorded under; legacy 10→30 counts 30, never 40");
   const text = render(aggregate(rows, "task"), "task", { malformed, legacy, truncated, sessions: 5 });
-  assert.match(text, /WARNING: 4 malformed row\(s\) ignored/);
+  assert.match(text, /WARNING: 5 malformed row\(s\) ignored/);
   assert.match(text, /2 pre-delta row\(s\)/);
-  assert.match(text, /1 row\(s\) from truncated transcripts carry no delta/);
+  assert.match(text, /1 row\(s\) carry no delta/);
 });
 
 test("init installs the Stop sensor file and registers it once, alongside guard-owner-comms", () => {

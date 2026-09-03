@@ -76,6 +76,7 @@ export function summarizeTranscript(text) {
   let latest = null;               // the newest usage record of any kind, for context_now
   let latestMain = null;           // the newest MAIN (non-sidechain) record — the session's own context
   let model = "";
+  let modelMain = "";              // the MAIN session's model — a subagent may run a different one
   let skipped = 0;                 // unparseable lines — reported, never hidden inside a clean-looking row
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
@@ -85,7 +86,7 @@ export function summarizeTranscript(text) {
     const role = msg?.role ?? e?.type;
     if (role !== "assistant" || !msg?.usage || typeof msg.usage !== "object") continue;
     const rec = { usage: msg.usage, side: e.isSidechain === true };
-    if (typeof msg.model === "string" && msg.model) model = msg.model;
+    if (typeof msg.model === "string" && msg.model) { model = msg.model; if (!rec.side) modelMain = msg.model; }
     latest = msg.usage;
     if (!rec.side) latestMain = msg.usage;
     if (typeof msg.id === "string" && msg.id) byId.set(msg.id, rec);
@@ -101,20 +102,27 @@ export function summarizeTranscript(text) {
     t.messages += 1;
   }
   const size = (u) => (u ? num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens) : 0);
-  return { main, sidechain, model, context_now: size(latest), context_now_main: size(latestMain), unkeyed, skipped };
+  return { main, sidechain, model, model_main: modelMain, context_now: size(latest), context_now_main: size(latestMain), unkeyed, skipped };
 }
 
-// The previous row for this session, read from the WHOLE ledger (rows are small; a session's prior
-// row may sit far behind the tail, and missing it would re-count its whole cumulative as a delta).
+// The previous row for this session. Read from a bounded tail (PREV_TAIL) so a Stop never scans an
+// unbounded file; if the ledger is larger than the tail and no prior row for this session is in it,
+// the baseline is UNKNOWN and no delta is claimed — never "zero", which would re-count the whole
+// cumulative. A prior row whose sums are not valid numbers is likewise unknown.
+const PREV_TAIL = 8 * 1024 * 1024;
+const SUM_KEYS = ["input", "output", "cache_creation", "cache_read", "messages"];
+const validSum = (o) => o && typeof o === "object" && SUM_KEYS.every((k) => Number.isFinite(o[k]) && o[k] >= 0);
 function previousRow(ledger, sessionId) {
-  let text;
-  try { if (!lstatSync(ledger).isFile()) return null; text = readFileSync(ledger, "utf8"); } catch { return null; }
+  let tail;
+  try { if (!lstatSync(ledger).isFile()) return { known: true, row: null }; tail = readTail(ledger, PREV_TAIL); } catch { return { known: true, row: null }; }
   let prev = null;
-  for (const line of text.split("\n")) {
+  for (const line of tail.text.split("\n")) {
     if (!line.trim()) continue;
     try { const r = JSON.parse(line); if (r && r.session_id === sessionId) prev = r; } catch { /* skip */ }
   }
-  return prev;
+  if (!prev) return tail.truncated ? { known: false, row: null } : { known: true, row: null };
+  if (!validSum(prev.main) || !validSum(prev.sidechain)) return { known: false, row: null };
+  return { known: true, row: prev };
 }
 
 const delta = (cur, prev) => {
@@ -145,7 +153,7 @@ function main(raw) {
   if (!sessionId) return ALLOW();                                 // no key ⇒ no row (never merge sessions)
   const projectRoot = path.resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
   let tail;
-  try { if (!statSync(file).isFile()) return ALLOW(); tail = readTail(file, MAX_BYTES); } catch { return ALLOW(); }
+  try { if (!lstatSync(file).isFile()) return ALLOW(); tail = readTail(file, MAX_BYTES); } catch { return ALLOW(); }   // a symlinked transcript is out of model: not read
   const sum = summarizeTranscript(tail.text);
   const ledger = process.env.WORKFLOW_KIT_TOKEN_LEDGER_PATH || path.join(projectRoot, ".claude", "metrics", "tokens.jsonl");
   const prev = previousRow(ledger, sessionId);
@@ -159,7 +167,8 @@ function main(raw) {
     sidechain: sum.sidechain,
     // A truncated read is a sliding window, not a cumulative: its difference from the previous row
     // is not a delta, so none is claimed and the report counts the row as spend-unknown.
-    delta: tail.truncated ? null : { main: delta(sum.main, prev?.main), sidechain: delta(sum.sidechain, prev?.sidechain) },
+    delta: (tail.truncated || !prev.known) ? null : { main: delta(sum.main, prev.row?.main), sidechain: delta(sum.sidechain, prev.row?.sidechain) },
+    delta_unknown_reason: tail.truncated ? "transcript truncated" : (!prev.known ? "previous row unknown or invalid" : null),
     context_now: sum.context_now,
     unkeyed_messages: sum.unkeyed,
     skipped_lines: sum.skipped,

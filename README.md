@@ -20,9 +20,10 @@ sensor or a report, fails open, and ships with the two-polarity test the mutatio
   auto-compaction writes a lossy one. Self-keyed triggers fail; this is the external one.
 - **A worktree census.** `scripts/worktree-census.mjs` classifies every worktree from git facts into a
   cleanup plan (remove-safe / salvage / inspect / keep, a reason each) and **never removes anything**.
-  "Merged" needs proof in one of the two forms `PROTOCOLS.md` recognises — ancestor-of, or a merged PR
-  whose squash commit's tree equals the branch's. ECC's `ahead == 0 ⇒ merged` is false after a squash;
-  the census says "unprovable" there rather than "clear".
+  "Merged" needs proof in one of the two forms `PROTOCOLS.md` recognises — ancestor-of, or a PR into
+  the base branch that is merged AND whose squash commit landed exactly the content the branch carries
+  (byte-exact, hunk headers aside). ECC's `ahead == 0 ⇒ merged` is false after a squash; the census
+  says "unprovable" there rather than "clear".
 - **A leaked-path scanner.** `tests/no-personal-paths.test.mjs` pins `CHIP_BRIEF.md` § 6's honour rule:
   no home-directory path and no operator identifier in the shipped tree, the identifiers derived from
   the running machine rather than written into the test. Clean today; red the day someone leaks one.

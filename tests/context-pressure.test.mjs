@@ -4,7 +4,7 @@
 // payload, missing transcript, off switch — is observed as exit 0 with an EMPTY stdout.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,6 +88,13 @@ test("the sensor speaks at the threshold as additionalContext, once per bucket, 
     r = run({ ...base, session_id: "sess-G" }); assert.equal(speaks(r), true); assert.match(r.stdout, /75%/);
     writeFileSync(transcript, usageLine(20_000) + "\n" + usageLine(190_000, "claude-test-1", { isSidechain: true }) + "\n");
     assert.equal(speaks(run({ ...base, session_id: "sess-H" })), false, "a subagent's context is not this session's pressure");
+    // …nor does a subagent's MODEL pick the denominator: main 150k on a 200k model, then a sidechain
+    // turn on a 1M family → still 75% of 200k → speaks.
+    writeFileSync(transcript, usageLine(150_000) + "\n" + usageLine(10_000, "claude-fable-5-20260101", { isSidechain: true }) + "\n");
+    r = run({ ...base, session_id: "sess-J" }); assert.equal(speaks(r), true, "the main session's model sets the window"); assert.match(r.stdout, /75%/);
+    // A symlinked transcript path is out of model: silent.
+    const linkT = path.join(dir, "link.jsonl"); symlinkSync(transcript, linkT);
+    assert.equal(speaks(run({ ...base, session_id: "sess-K", transcript_path: linkT })), false, "symlinked transcript: silent");
     // A WINDOW CHANGE resets the bucket memory: 180k on a 200k model (bucket 4), then the same session
     // on a 1M model at 520k (bucket 0 of a different window) must speak, not be suppressed.
     writeFileSync(transcript, usageLine(180_000) + "\n");

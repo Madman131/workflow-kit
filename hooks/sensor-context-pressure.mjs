@@ -13,10 +13,13 @@
 // unreadable transcript, a missing field, a subagent payload all produce silence. Silence therefore
 // proves nothing about the context; only a message is evidence.
 //
-// THE MEASUREMENT: the newest assistant `usage` record in the transcript; its
-// input + cache_creation + cache_read tokens partition the prompt, so their sum is the context size
-// of that turn (shared with the token ledger — one function, one fact). Only the transcript TAIL is
-// read, so the hook stays cheap on a large session.
+// THE MEASUREMENT: the newest MAIN-session assistant `usage` record in the transcript (a subagent's
+// turns land in the same file with their own context and possibly their own model, and are ignored
+// here); input + cache_creation + cache_read tokens partition the prompt, so their sum is the context
+// size of that turn (shared with the token ledger — one function, one fact). Only the transcript
+// TAIL (4 MiB) is read, so the hook stays cheap on a large session — if more than that of subagent
+// records follows the newest main turn, the sensor is silent until the next main turn writes a
+// fresh record; it fails open, and a burst of subagent output is not the moment the digest is due.
 //
 // THE WINDOW is the denominator, and it is the least certain number here. Order of trust:
 //   1. WORKFLOW_KIT_CONTEXT_WINDOW (tokens) — an operator's explicit override wins;
@@ -132,13 +135,13 @@ function main(raw) {
   const file = ev.transcript_path;
   if (typeof file !== "string" || !file) return ALLOW();          // Codex payloads land here
   let text;
-  try { if (!statSync(file).isFile()) return ALLOW(); text = readTail(file, TAIL_BYTES); } catch { return ALLOW(); }
+  try { if (!lstatSync(file).isFile()) return ALLOW(); text = readTail(file, TAIL_BYTES); } catch { return ALLOW(); }   // symlinked transcript: out of model, not read
   const sum = summarizeTranscript(text);
   // The MAIN session's newest record. A subagent's turn lands in the same transcript with its own,
   // unrelated context size; measuring that would silence or fire this sensor on the wrong number.
   const tokens = sum.context_now_main;
   if (!(tokens > 0)) return ALLOW();
-  const { window, source } = resolveWindow(tokens, sum.model);
+  const { window, source } = resolveWindow(tokens, sum.model_main);   // the MAIN session's model sets the denominator
   const threshold = pct(process.env, "WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT", 50);
   const step = pct(process.env, "WORKFLOW_KIT_CONTEXT_STEP_PCT", 10);
   const bucket = bucketOf(tokens, window, threshold, step);

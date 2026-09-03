@@ -7,12 +7,11 @@
 // EVERY ROW carries a cumulative snapshot AND the delta since the session's previous row. The
 // report SUMS DELTAS, in append order, so spend lands in the day and task in which it happened;
 // a session that changes task or crosses midnight splits correctly. Rows the hook wrote before
-// deltas existed (no `delta` field) count their cumulative total once, in their own group, and the
-// report says how many such rows it saw. Malformed rows are counted and reported, never silently
-// dropped — a report that hides its own gaps reads as clean.
-//
-// Rows the hook wrote before deltas existed are turned into deltas here, per session, from consecutive
-// cumulatives; rows from a truncated transcript carry no delta and are excluded, counted, and warned.
+// deltas existed (no `delta` field) are turned into deltas HERE, per session, by differencing
+// consecutive cumulatives, and the report says how many such rows it saw. Rows whose delta is
+// unknown (`delta: null` — a truncated transcript, or no usable baseline) are excluded, counted,
+// and warned about. Malformed rows are counted and reported, never silently dropped — a report
+// that hides its own gaps reads as clean.
 //
 // Columns are tokens the model was handed (prompt = input + cache_creation + cache_read; cache
 // reads are cheaper but they are still context) and tokens it produced (out), split between the
@@ -42,7 +41,7 @@ function parseArgs(argv) {
 // Parse the ledger. Returns { rows, malformed, legacy } — rows in append order, each normalised to
 // carry `spend` (the delta, or the cumulative total for a pre-delta row, flagged `legacy`).
 const FIELDS = ["input", "output", "cache_creation", "cache_read", "messages"];
-const isSum = (o) => o && typeof o === "object" && FIELDS.every((k) => k in o ? Number.isFinite(o[k]) : true);
+const isSum = (o) => o && typeof o === "object" && FIELDS.every((k) => k in o ? (Number.isFinite(o[k]) && o[k] >= 0) : true);
 const diff = (cur, prev) => Object.fromEntries(FIELDS.map((k) => [k, Math.max(0, (cur?.[k] || 0) - (prev?.[k] || 0))]));
 
 export function loadRows(text) {
@@ -54,7 +53,7 @@ export function loadRows(text) {
     try { r = JSON.parse(line); } catch { malformed++; continue; }
     if (!r || typeof r !== "object" || typeof r.session_id !== "string" || !r.session_id) { malformed++; continue; }
     let spend;
-    if (r.delta === null && r.truncated === true) { truncated++; spend = null; }
+    if (r.delta === null) { truncated++; spend = null; }   // delta unknown (truncated transcript, or no usable baseline)
     else if (r.delta && isSum(r.delta.main) && isSum(r.delta.sidechain)) spend = { main: r.delta.main, sidechain: r.delta.sidechain };
     else if (isSum(r.main) && isSum(r.sidechain)) {
       legacy++;
@@ -109,7 +108,7 @@ export function render(groups, by, meta = {}) {
   ];
   if (meta.malformed) notes.push(`WARNING: ${meta.malformed} malformed row(s) ignored — the totals above are incomplete.`);
   if (meta.legacy) notes.push(`${meta.legacy} pre-delta row(s): spend derived from consecutive cumulatives per session.`);
-  if (meta.truncated) notes.push(`WARNING: ${meta.truncated} row(s) from truncated transcripts carry no delta — that spend is NOT in the totals.`);
+  if (meta.truncated) notes.push(`WARNING: ${meta.truncated} row(s) carry no delta (truncated transcript or unknown baseline) — that spend is NOT in the totals.`);
   return [row(head), row(widths.map((w) => "-".repeat(w))), ...lines.map(row),
     row(["TOTAL", String(meta.sessions ?? ""), fmt(tot.mp), fmt(tot.mo), fmt(tot.sp), fmt(tot.so), totalShare]), "", ...notes].join("\n");
 }
