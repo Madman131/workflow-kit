@@ -1,6 +1,6 @@
 {
   "name": "workflow-kit",
-  "version": "2.26.0",
+  "version": "2.27.0",
   "description": "Portable steer -> gate -> garden method + fail-closed enforcement controls for building production systems with AI agents.",
   "type": "module",
   "private": true,
@@ -13,6 +13,8 @@
     "confirm:repair-brief": "node scripts/confirm-repair-brief.mjs",
     "record:repair-event": "node scripts/record-repair-event.mjs",
     "check:orchestrate-user": "node scripts/sync-user-orchestrate-skill.mjs --check",
+    "report:tokens": "node scripts/token-report.mjs",
+    "census:worktrees": "node scripts/worktree-census.mjs",
     "sync:orchestrate-user": "node scripts/sync-user-orchestrate-skill.mjs --install",
     "test": "node scripts/run-checks.mjs",
     "acceptance": "bash acceptance/plant-the-bug.sh"

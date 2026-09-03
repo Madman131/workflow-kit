@@ -1,4 +1,47 @@
-# workflow-kit — v2.26.0
+# workflow-kit — v2.27.0
+
+## What's new in v2.27.0 — the kit starts measuring itself
+
+Four mechanisms and one checklist, taken from a survey of `affaan-m/ECC` (pinned `22e8cf0`, MIT) and
+rewritten in this kit's idiom. None touches a gate, a tier or a `core/` document; every one is a
+sensor or a report, fails open, and ships with the two-polarity test the mutation-owed sensor demands.
+
+- **A token ledger.** `hooks/sensor-token-ledger.mjs` (Stop) appends one cumulative row per turn to the
+  untracked `.claude/metrics/tokens.jsonl`: usage counted **once per `message.id`** (a per-line sum
+  over-counts several-fold, because Claude Code writes one line per content block), split between the
+  session's own turns and its Agent-tool seats, tagged with the task id and tier from the lane
+  declaration. `npm run report:tokens` prints spend by task, session or day with the **main / side**
+  split — the gate-versus-build number this method argued about for a month without ever having.
+  Tokens only, no price table. Codex CLI seats are outside the transcript and are not in it.
+- **A context-pressure sensor.** `hooks/sensor-context-pressure.mjs` (PreToolUse, write matcher) reads
+  the newest usage record from the transcript tail, resolves the window (override, `[1m]` marker, a
+  dated list of 1M families, size inference, else an *assumed* 200k — and says which), and at 50% of
+  it, then once per further 10%, tells the model the thread-restart digest is **owed** — before
+  auto-compaction writes a lossy one. Self-keyed triggers fail; this is the external one.
+- **A worktree census.** `scripts/worktree-census.mjs` classifies every worktree from git facts into a
+  cleanup plan (remove-safe / salvage / inspect / keep, a reason each) and **never removes anything**.
+  "Merged" needs proof in one of the two forms `PROTOCOLS.md` recognises — ancestor-of, or a PR into
+  the base branch that is merged AND whose squash commit landed exactly the content the branch carries
+  (byte-exact, hunk headers aside). ECC's `ahead == 0 ⇒ merged` is false after a squash; the census
+  says "unprovable" there rather than "clear".
+- **A leaked-path scanner.** `tests/no-personal-paths.test.mjs` pins `CHIP_BRIEF.md` § 6's honour rule:
+  no home-directory path and no operator identifier in the shipped tree, the identifiers derived from
+  the running machine rather than written into the test. Clean today; red the day someone leaks one.
+- **`/kill-pass`.** `core/REVIEW.md` mandates a builder self-attack before `panel_open` and names no
+  steps. This is the checklist — the repo's own mechanical gate, declared scripts only, the suite in
+  the worktree, a residue grep over added lines, the diff read as the contract's adversary, RED/GREEN
+  on every touched control, freeze readiness — reported with exit codes. Forked from ECC's
+  `verification-loop` with its coverage target removed; the repo's contract is the authority.
+
+What was looked at and **not** taken, with reasons, is recorded in the lane's chip brief: ECC's
+review/verification/learning doctrine (a lighter form of this kit's), its memory vault and instincts
+(a competing persistence plane), Haiku subagents and thinking caps (they cut the seats RULE #1 keeps),
+per-edit fact-forcing (a tax the entry rule forbids), and the plan canvas (Artifacts already do it).
+
+**Upgrade:** new files only, plus a two-row addition to `templates/settings.json` and a log line in
+`init`. An existing adopter gets the hooks by re-running `init --force` (the settings merge is
+idempotent and keeps adopter-owned entries); a plain re-run installs the new files and keeps existing
+ones. Codex hook trust must be re-granted after any hook upgrade, as always.
 
 ## What's new in v2.26.0 — RULE #1 becomes findable
 

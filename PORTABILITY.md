@@ -18,6 +18,8 @@ The Codex column is not the Claude column. Read the qualifier in it as part of t
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | **enforced — only once hook trust is granted** | not enforced |
 | `.githooks/pre-commit` (declaration, at commit) | **enforced** | **enforced** | **enforced** |
 | `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* | not present |
+| `sensor-token-ledger` (Stop; token telemetry to `.claude/metrics/tokens.jsonl`) — **sensor, fails OPEN** | *telemetry only* | *installed, NOT registered* (no observed Stop payload) | not present |
+| `sensor-context-pressure` (PreToolUse write; names the digest as owed) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* (payload carries no transcript) | not present |
 
 The formula for the Codex write guards, in full, because every word of it is load-bearing:
 **installed · fail-closed by design · INERT unless your Codex run carries hook trust.**
@@ -693,12 +695,17 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 ## What is portable verbatim vs generated
 
-- `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the two PreToolUse sensors
-  (`sensor-sweep-owed`, `sensor-mutation-owed` — they print, never deny), the `guard-owner-comms` Stop
-  sensor, `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
+- `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the three PreToolUse sensors
+  (`sensor-sweep-owed`, `sensor-mutation-owed`, and `sensor-context-pressure`, which reads the real
+  context size from the transcript tail and says when the thread-restart digest is owed — Claude lane
+  only, a Codex payload carries no transcript; all three print, never deny), the `guard-owner-comms` and
+  `sensor-token-ledger` Stop sensors (the ledger appends one cumulative token-usage row per turn to the
+  untracked `.claude/metrics/tokens.jsonl`; `scripts/token-report.mjs` reads it; Claude lane only —
+  Codex has no observed Stop payload, so like `guard-owner-comms` it installs and is not registered
+  there), `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
   `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
-  `/grilling`), the
+  `/grilling`, `/kill-pass`), the `scripts/worktree-census.mjs` and `scripts/token-report.mjs` report tools, the
   `agents/*` reviewer seat
   definitions (→ `.claude/agents/`), and `codex/config.toml` (→ `.codex/config.toml`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,
