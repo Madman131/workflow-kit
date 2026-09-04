@@ -5,7 +5,7 @@
 // is observed allowing WITHOUT writing a row. The report is checked to sum DELTAS per day/task,
 // to keep append order, and to announce malformed rows rather than hide them.
 
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -202,5 +202,12 @@ test("init installs the Stop sensor file and registers it once, alongside guard-
     assert.equal(count(), 1, "registered exactly once");
     r = init(); assert.equal(r.status, 0, r.stderr);
     assert.equal(count(), 1, "a re-run does not duplicate the registration");
+    // The ledger is described everywhere as UNTRACKED; ask git whether that is true rather than
+    // trusting the description. check-ignore exits 0 only when the path IS ignored.
+    execFileSync("git", ["init", "-q", dir]);
+    assert.equal(spawnSync("git", ["-C", dir, "check-ignore", "-q", ".claude/metrics/tokens.jsonl"]).status, 0,
+      "the ledger the sensor writes is gitignored — otherwise a blanket add commits per-turn token rows");
+    assert.notEqual(spawnSync("git", ["-C", dir, "check-ignore", "-q", ".claude/settings.json"]).status, 0,
+      "…and the registration that arms it is NOT (it must travel with the repo)");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

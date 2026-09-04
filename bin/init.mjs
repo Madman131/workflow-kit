@@ -1560,7 +1560,14 @@ function main() {
   // `git checkout` hands the file a brand-new mtime that defeats the freshness window. Session
   // binding still stands between that and a free pass, but a committed authorization artifact is a
   // shape this kit does not ship: keep it out of the tree rather than rely on the last check standing.
-  appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json"]);
+  // `.claude/metrics/` rides with the sidecars: `sensor-token-ledger.mjs` (Stop) appends one row per
+  // turn to `.claude/metrics/tokens.jsonl`, which every description of it — the sensor's own header,
+  // the install summary below, PORTABILITY.md, the README — calls UNTRACKED. Until v2.28.0 nothing made
+  // that true: the directory was never ignored, so a blanket add staged per-turn token rows (session
+  // ids, task ids, context sizes) into the adopter's history. Same class as the Codex lane below — an
+  // installer output that must not be committed and that only the installer knows to ignore.
+  appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json", ".claude/metrics/"],
+    "workflow-kit: lane declaration, ledger, pre-send rung sidecar and the token-ledger metrics dir are per-session, gitignored");
   // THE CODEX LANE'S INSTALL IS PER-CHECKOUT, AND ONE FILE IN IT IS PATH-BAKED. `.codex/hooks.json`
   // carries the ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a
   // hook from a working directory the kit does not control, and a wrong project root is a
