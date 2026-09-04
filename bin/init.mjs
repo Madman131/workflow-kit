@@ -1393,7 +1393,7 @@ function main() {
         // watched. The file installs (the two trees stay byte-identical); only the registration is
         // withheld, and PORTABILITY.md says so.
         if (writeWithBackup(hooksJson, JSON.stringify(registration, null, 2) + "\n")) {
-          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · Bash ⇒ the gate-ladder sensor (never denies) · the brief-rung guard's cross-session SEND half is inert in this lane by absence (no such tool)`);
+          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · Bash ⇒ the gate-ladder sensor (never denies) · the brief-rung guard's cross-session SEND half is inert in this lane by absence (no such tool) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
           }
@@ -1550,6 +1550,33 @@ function main() {
   // binding still stands between that and a free pass, but a committed authorization artifact is a
   // shape this kit does not ship: keep it out of the tree rather than rely on the last check standing.
   appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json"]);
+  // THE CODEX LANE'S INSTALL IS PER-CHECKOUT, AND ONE FILE IN IT IS PATH-BAKED. `.codex/hooks.json`
+  // carries the ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a
+  // hook from a working directory the kit does not control, and a wrong project root is a
+  // fail-OPEN). Committed, that file travels to every clone, every linked worktree and every
+  // teammate's machine registering hooks at a path that does not exist there — and a hook that
+  // fails to START does not block anything, so the failure is SILENT. `.codex/hooks/` and
+  // `.codex/config.toml` ride with it because they are the same installer's output for the same
+  // checkout: `init --force` rewrites them, and a stale committed copy is how one clone enforces
+  // with an older guard than the next.
+  //
+  // THIS IS NOT THE ORIGIN REPO'S MISTAKE (PORTABILITY.md § The enforcement asymmetry, "those files
+  // were never committed"). There the gitignored hooks were the ONLY copy: unreviewed, never in CI,
+  // history unrecoverable. Here the SOURCE is tracked twice over — `hooks/*.mjs` in the kit, under
+  // the kit's own suite, and `.claude/hooks/*.mjs` in your repo — and `init` byte-compares the two
+  // installed trees on every run and warns when they drift. What is ignored is a COPY whose
+  // provenance is checked, not a control nobody has read.
+  //
+  // `.codex/agents/*.toml` is deliberately NOT ignored: the cold-review seat is `[G]` content you
+  // complete and your team reviews, and it carries no path.
+  //
+  // Appended when this run installed the lane, and ALSO when a previous run left a `.codex/hooks.json`
+  // behind — `--skip-codex-lane` writes nothing to the lane, but a path-baked file already on disk is
+  // exactly as committable as one written today.
+  if (codexLaneOk || existsSync(path.join(T, ".codex", "hooks.json"))) {
+    appendGitignore(T, [".codex/config.toml", ".codex/hooks.json", ".codex/hooks/"],
+      "workflow-kit: the Codex lane's install is PER-CHECKOUT and hooks.json bakes in this checkout's absolute path — committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The tracked source is hooks/ in the kit and .claude/hooks/ here; .codex/agents/*.toml stays tracked");
+  }
   // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
   // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
   // but `.gemini-gate/` is the allowed in-repo location; it must be gitignored so cold-review-gemini.sh's
@@ -1601,6 +1628,11 @@ function main() {
       `The kit will never grant this for you: it does not write Codex's trust store and it`,
       `does not use --dangerously-bypass-hook-trust. Automating another tool's consent is`,
       `forging consent, and it would arm every hook from every source, not just ours.`,
+      `DO NOT COMMIT the lane: .codex/config.toml, .codex/hooks.json and .codex/hooks/ were`,
+      `added to .gitignore. hooks.json bakes THIS checkout's absolute path into every`,
+      `registered command, so a committed copy registers hooks at a path other clones do not`,
+      `have — and a hook that fails to start blocks nothing, silently. Every clone and every`,
+      `linked worktree runs its own init. .codex/agents/*.toml stays TRACKED.`,
     );
   }
   item(

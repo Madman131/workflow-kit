@@ -157,6 +157,21 @@ port:
   repo's own `core/LANE_CODEX.md` said Codex-hook enforcement was "UNVERIFIED — assume none; that is
   the fail-safe read". These measurements promote that caution to **fact**. It was right.
 
+  **Read that bullet precisely, because since v2.28.0 `init` gitignores your `.codex/` install too**
+  (`.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/` — `.codex/agents/*.toml` stays
+  tracked). The condemnation above is not "gitignored"; it is **gitignored and existing nowhere
+  else**: unreviewed, out of CI, history unrecoverable. What v2.28.0 ignores is a per-checkout
+  **copy** whose source is tracked twice — `hooks/*.mjs` in this kit, under this kit's own suite, and
+  `.claude/hooks/*.mjs` in your repo — and `init` byte-compares the two installed trees on every run
+  and warns on drift. The reason it must not be committed is `.codex/hooks.json`: it bakes **this
+  checkout's absolute path** into every registered command, because Codex runs a hook from a working
+  directory the kit does not control and a wrong project root is a fail-OPEN. Committed, it registers
+  hooks at a path another clone or linked worktree does not have — and a hook that fails to *start*
+  blocks nothing, **silently**. `.codex/hooks/` and `.codex/config.toml` ride with it because they are
+  the same installer's per-checkout output: `init --force` rewrites them, and a stale committed copy
+  is how one clone enforces with an older guard than the next. **Every clone and every linked
+  worktree runs its own `init`.**
+
 **The trust gate, and why it is the sharpest fact here.** Codex does not run a repo's hooks until a
 human has reviewed and trusted them, and that review happens **only in the interactive TUI**
 ("Hooks need review" → "Trust all and continue"). In `codex exec` — the non-interactive mode the
