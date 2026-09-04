@@ -59,7 +59,7 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    reboot and only commits survive it.
 
 ## Enforcement is asymmetric — say it plainly
-On Write/Edit, `.claude/settings.json` registers **three fail-closed guards** — cross-repo writes,
+On Write, Edit, MultiEdit and NotebookEdit, `.claude/settings.json` registers **three fail-closed guards** — cross-repo writes,
 lane authoring, brief rung — and **three sensors** (sweep-owed, mutation-owed, context-pressure)
 that print and never deny; on Bash **one more sensor**, the gate ladder, which surfaces the tier's
 ladder and never denies; on a cross-session send, the brief-rung guard's SEND half; and on Stop
