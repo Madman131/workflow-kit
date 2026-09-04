@@ -707,6 +707,20 @@ function appendGitignore(target, lines, comment = "workflow-kit: lane declaratio
   return appendWrite(gi, text) ? "written" : "refused";
 }
 
+// The kit's Codex registration is the ONE per-checkout, path-baked file the lane writes, and it is
+// identified by the `description` the kit stamps into it — never by its path alone, because an
+// adopter may keep their OWN registration at that path and that file is theirs to commit. Unreadable,
+// unparseable, symlinked or unstamped ⇒ NOT kit-owned: the safe error here is to leave a file
+// tracked, never to hide one from `git add`.
+function kitOwnedHooksJson(target) {
+  const p = path.join(target, ".codex", "hooks.json");
+  try {
+    if (!lstatSync(p).isFile()) return false;
+    const d = JSON.parse(readFileSync(p, "utf8"))?.description;
+    return typeof d === "string" && d.startsWith("workflow-kit v");
+  } catch { return false; }
+}
+
 // Append the /thread-restart fallback pointer to AGENTS.md if absent (idempotent via a stable marker,
 // same shape as appendGitignore). The pointer text is a single [P] source (commands/agents-pointer.md)
 // so the Claude command, the Codex prompt, and this pointer never drift. A re-run — or an AGENTS.md that
@@ -1568,32 +1582,24 @@ function main() {
   // installer output that must not be committed and that only the installer knows to ignore.
   appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json", ".claude/metrics/"],
     "workflow-kit: lane declaration, ledger, pre-send rung sidecar and the token-ledger metrics dir are per-session, gitignored");
-  // THE CODEX LANE'S INSTALL IS PER-CHECKOUT, AND ONE FILE IN IT IS PATH-BAKED. `.codex/hooks.json`
-  // carries the ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a
-  // hook from a working directory the kit does not control, and a wrong project root is a
-  // fail-OPEN). Committed, that file travels to every clone, every linked worktree and every
-  // teammate's machine registering hooks at a path that does not exist there — and a hook that
-  // fails to START does not block anything, so the failure is SILENT. `.codex/hooks/` and
-  // `.codex/config.toml` ride with it because they are the same installer's output for the same
-  // checkout: `init --force` rewrites them, and a stale committed copy is how one clone enforces
-  // with an older guard than the next.
+  // ONLY THE PATH-BAKED FILE, AND ONLY WHEN THE KIT WROTE IT. `.codex/hooks.json` carries the
+  // ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a hook from a
+  // working directory the kit does not control, and a wrong project root is a fail-OPEN). Committed,
+  // that file travels to every clone, linked worktree and teammate's machine registering hooks at a
+  // path that does not exist there — and a hook that fails to START does not block anything, so the
+  // failure is SILENT. Nothing else in the lane is path-baked: `.codex/config.toml` is [P] — shipped
+  // verbatim, path-free, and KEPT when the adopter carries their own (the lane block above) — and
+  // `.codex/hooks/` are byte-copies of the tracked `.claude/hooks/`, drift-checked on every run. An
+  // ignore rule over either hides adopter-owned content from `git add` and loses it in every clone;
+  // the first draft of this block did exactly that, and a cold seat caught it.
   //
-  // THIS IS NOT THE ORIGIN REPO'S MISTAKE (PORTABILITY.md § The enforcement asymmetry, "those files
-  // were never committed"). There the gitignored hooks were the ONLY copy: unreviewed, never in CI,
-  // history unrecoverable. Here the SOURCE is tracked twice over — `hooks/*.mjs` in the kit, under
-  // the kit's own suite, and `.claude/hooks/*.mjs` in your repo — and `init` byte-compares the two
-  // installed trees on every run and warns when they drift. What is ignored is a COPY whose
-  // provenance is checked, not a control nobody has read.
-  //
-  // `.codex/agents/*.toml` is deliberately NOT ignored: the cold-review seat is `[G]` content you
-  // complete and your team reviews, and it carries no path.
-  //
-  // Appended when this run installed the lane, and ALSO when a previous run left a `.codex/hooks.json`
-  // behind — `--skip-codex-lane` writes nothing to the lane, but a path-baked file already on disk is
-  // exactly as committable as one written today.
-  if (codexLaneOk || existsSync(path.join(T, ".codex", "hooks.json"))) {
-    appendGitignore(T, [".codex/config.toml", ".codex/hooks.json", ".codex/hooks/"],
-      "workflow-kit: the Codex lane's install is PER-CHECKOUT and hooks.json bakes in this checkout's absolute path — committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The tracked source is hooks/ in the kit and .claude/hooks/ here; .codex/agents/*.toml stays tracked");
+  // PROVENANCE, NOT EXISTENCE. The check reads the file as it is on disk after the lane block, so it
+  // covers this run's write AND a kit file a previous run left behind under --skip-codex-lane, and
+  // it refuses an adopter's own registration at the same path. An ignore rule cannot UNTRACK a file
+  // git already indexes; the summary below carries that step for an adopter who committed one.
+  if (kitOwnedHooksJson(T)) {
+    appendGitignore(T, [".codex/hooks.json"],
+      "workflow-kit: .codex/hooks.json is PER-CHECKOUT — it bakes this checkout's absolute path into every hook command; committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The rest of .codex/ stays tracked");
   }
   // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
   // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
@@ -1646,11 +1652,12 @@ function main() {
       `The kit will never grant this for you: it does not write Codex's trust store and it`,
       `does not use --dangerously-bypass-hook-trust. Automating another tool's consent is`,
       `forging consent, and it would arm every hook from every source, not just ours.`,
-      `DO NOT COMMIT the lane: .codex/config.toml, .codex/hooks.json and .codex/hooks/ were`,
-      `added to .gitignore. hooks.json bakes THIS checkout's absolute path into every`,
-      `registered command, so a committed copy registers hooks at a path other clones do not`,
-      `have — and a hook that fails to start blocks nothing, silently. Every clone and every`,
-      `linked worktree runs its own init. .codex/agents/*.toml stays TRACKED.`,
+      `DO NOT COMMIT .codex/hooks.json — it is gitignored now. It bakes THIS checkout's absolute`,
+      `path into every registered command, so a committed copy registers hooks at a path other`,
+      `clones do not have — and a hook that fails to start blocks nothing, silently. Every clone`,
+      `and every linked worktree runs its own init. If a previous run's copy is ALREADY tracked,`,
+      `an ignore rule does not untrack it: git rm --cached -- .codex/hooks.json, then commit.`,
+      `Everything else in .codex/ (config.toml, hooks/, agents/) stays TRACKED.`,
     );
   }
   item(
