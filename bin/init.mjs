@@ -901,7 +901,28 @@ function main() {
   // kill. The one adopter measured had copied it by hand, byte-identical, and edited nothing.
   // MECHANISM, like core/: a stale copy mis-states which lane a control binds, so a plain re-run
   // over an older copy keeps it and FAILS naming --force, exactly as a stale guard does.
-  const portability = copyGuarded(path.join(KIT_ROOT, "PORTABILITY.md"), path.join(T, "PORTABILITY.md"), force);
+  //
+  // PROVENANCE BEFORE THE COPY. `PORTABILITY.md` is a generic filename an adopter may already own at
+  // the root. Handed straight to copyGuarded, an adopter's own doc would be reported "KEPT BUT STALE
+  // against this kit" on a plain run and, under --force, replaced (backed up, but replaced). Neither
+  // is right for a file the kit did not write. The kit's file is identified by its first line;
+  // anything else at that path is the adopter's — kept untouched on plain AND forced runs, named in
+  // the report, and COUNTED as a refusal so the run cannot read as a clean install of a file it did
+  // not install. A symlink at that path falls through to copyGuarded, which refuses links itself.
+  const portDst = path.join(T, "PORTABILITY.md");
+  const kitPortabilityHeader = readFileSync(path.join(KIT_ROOT, "PORTABILITY.md"), "utf8").split("\n")[0];
+  const adopterOwnedPortability = () => {
+    if (!existsSync(portDst) || isSymlinkAt(portDst)) return false;
+    try { return readFileSync(portDst, "utf8").split("\n")[0] !== kitPortabilityHeader; } catch { return true; }
+  };
+  let portability;
+  if (adopterOwnedPortability()) {
+    backupRefused.push(portDst);
+    warn(`REFUSED to install PORTABILITY.md: ${portDst} exists and is NOT this kit's file (its first line is not the kit's header) — it is yours, and init does not overwrite an adopter-owned file, --force included. Move or rename yours to receive the kit's copy, or read the kit's from the workflow-kit repository; every "see PORTABILITY.md" pointer in the installed method means the kit's.`);
+    portability = "refused";
+  } else {
+    portability = copyGuarded(path.join(KIT_ROOT, "PORTABILITY.md"), portDst, force);
+  }
   log(`  PORTABILITY.md: ${portability === "written" ? "installed at the repo root" : portability === "skipped" ? "EXISTING kept — may be STALE; re-run with --force to update" : "REFUSED (see above)"}`);
 
   // 2. [P] Claude-lane hooks (verbatim mechanism): the four PreToolUse guards, which fail CLOSED,

@@ -51,3 +51,30 @@ test("init installs PORTABILITY.md verbatim at the root, keeps-and-fails on a st
     assert.ok(readFileSync(`${installed}.bak`, "utf8").endsWith(marker), "…and the adopter's edited version is preserved beside it");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
+
+test("an ADOPTER-OWNED PORTABILITY.md at the root is never overwritten — plain or --force — and the run says so and counts it", () => {
+  // A generic filename: the kit identifies its own by the first line, and treats anything else at
+  // that path as the adopter's. Found by the cross-family lens on the design, round 1.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-portability-own-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-portability-own-prompts-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const run = (args = []) => spawnSync(process.execPath,
+      [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--codex-prompts-dir", codexDir, "--skip-codex-lane", ...args],
+      { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
+    const own = "# Portability notes for our library\n\nWhich platforms we build on.\n";
+    const installed = path.join(dir, "PORTABILITY.md");
+    writeFileSync(installed, own);
+    for (const args of [[], ["--force"]]) {
+      const r = run(args);
+      assert.equal(r.status, 1, `${args.join(" ") || "plain"}: a counted refusal fails the run — it cannot read as a clean install`);
+      assert.match(r.stdout + r.stderr, /REFUSED to install PORTABILITY\.md/, `${args.join(" ") || "plain"}: the refusal is typed and names the file`);
+      assert.doesNotMatch(r.stdout + r.stderr, /KEPT BUT STALE[^\n]*PORTABILITY\.md/, "…and it is never described as a stale kit copy");
+      assert.equal(readFileSync(installed, "utf8"), own, `${args.join(" ") || "plain"}: the adopter's file is byte-identical afterwards`);
+      assert.ok(!existsSync(`${installed}.bak`), "…and no backup was minted, because nothing was replaced");
+    }
+    // Polarity: the kit's own file at that path is recognised and upgraded as before.
+    writeFileSync(installed, readFileSync(path.join(KIT, "PORTABILITY.md")));
+    assert.equal(run().status, 0, "the kit's own copy is not a collision");
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
+});
