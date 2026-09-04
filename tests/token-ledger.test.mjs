@@ -195,6 +195,7 @@ test("init installs the Stop sensor file and registers it once, alongside guard-
   try {
     const init = () => spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
       "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
+    execFileSync("git", ["init", "-q", dir]);   // the git tree exists BEFORE the installer runs, as in an adopter
     let r = init(); assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(path.join(dir, ".claude", "hooks", "sensor-token-ledger.mjs")), "hook file installed by disk discovery");
     const count = () => (JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8")).hooks?.Stop ?? [])
@@ -204,10 +205,30 @@ test("init installs the Stop sensor file and registers it once, alongside guard-
     assert.equal(count(), 1, "a re-run does not duplicate the registration");
     // The ledger is described everywhere as UNTRACKED; ask git whether that is true rather than
     // trusting the description. check-ignore exits 0 only when the path IS ignored.
-    execFileSync("git", ["init", "-q", dir]);
+    assert.doesNotMatch(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED/, "no untrack warning when nothing is indexed");
     assert.equal(spawnSync("git", ["-C", dir, "check-ignore", "-q", ".claude/metrics/tokens.jsonl"]).status, 0,
       "the ledger the sensor writes is gitignored — otherwise a blanket add commits per-turn token rows");
     assert.notEqual(spawnSync("git", ["-C", dir, "check-ignore", "-q", ".claude/settings.json"]).status, 0,
       "…and the registration that arms it is NOT (it must travel with the repo)");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("init WARNS, with the exact untrack command, when the ledger is already indexed — an ignore rule cannot untrack it", () => {
+  // The upgrading cohort: a v2.27.0 adopter committed .claude/metrics/tokens.jsonl before this rule
+  // existed. Nothing in a gitignore append reaches the index, so init says so. Fail-open sensor.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-indexed-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    mkdirSync(path.join(dir, ".claude", "metrics"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "metrics", "tokens.jsonl"), '{"ts":"2026-01-01T00:00:00Z","sessionId":"s"}\n');
+    execFileSync("git", ["-C", dir, "add", "--", ".claude/metrics/tokens.jsonl"]);
+    execFileSync("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]);
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED/, "the warning fires on an indexed ledger");
+    assert.match(r.stdout + r.stderr, /git rm --cached -r -- \.claude\/metrics\//, "…and carries the exact command");
+    assert.equal(spawnSync("git", ["-C", dir, "ls-files", "--", ".claude/metrics/tokens.jsonl"], { encoding: "utf8" }).stdout.trim(),
+      ".claude/metrics/tokens.jsonl", "init did NOT untrack it — that write is the adopter's, not the installer's");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

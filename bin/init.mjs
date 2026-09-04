@@ -707,6 +707,24 @@ function appendGitignore(target, lines, comment = "workflow-kit: lane declaratio
   return appendWrite(gi, text) ? "written" : "refused";
 }
 
+// AN IGNORE RULE NEVER UNTRACKS A PATH GIT ALREADY INDEXES. For the two per-checkout paths init
+// ignores — `.claude/metrics/` (the token ledger) and `.codex/hooks.json` (the path-baked Codex
+// registration) — an adopter who committed one before upgrading keeps committing it, silently, on
+// every blanket add, until they untrack it. init does not perform that write (it rewrites history's
+// view of a file, and that is not the installer's call to make silently) — but it SAYS so, with the
+// exact command, whenever the index already holds the path. A SENSOR, fail-OPEN: no git on PATH, not
+// a repository, or any error ⇒ nothing is said and nothing changes. Two cold seats and a cross-family
+// lens converged on this after a release-note-only fix left the upgrading cohort with no signal.
+function warnIfIndexed(target, rel) {
+  let listed = "";
+  try {
+    listed = execFileSync("git", ["-C", target, "ls-files", "--", rel], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch { return false; }
+  if (!listed.trim()) return false;
+  warn(`${rel} is ALREADY TRACKED in this repository. The ignore rule init just wrote does not untrack it: it keeps changing, and any blanket add keeps committing it, until you run  git rm --cached -r -- ${rel}  and commit. init does not make that change for you.`);
+  return true;
+}
+
 // The kit's Codex registration is the ONE per-checkout, path-baked file the lane writes, and it is
 // identified by the `description` the kit stamps into it — never by its path alone, because an
 // adopter may keep their OWN registration at that path and that file is theirs to commit. Unreadable,
@@ -1601,8 +1619,11 @@ function main() {
   // that true: the directory was never ignored, so a blanket add staged per-turn token rows (session
   // ids, task ids, context sizes) into the adopter's history. Same class as the Codex lane below — an
   // installer output that must not be committed and that only the installer knows to ignore.
-  appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json", ".claude/metrics/"],
-    "workflow-kit: lane declaration, ledger, pre-send rung sidecar and the token-ledger metrics dir are per-session, gitignored");
+  appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json"]);
+  // Its own call and its own comment: an adopter upgrading from v2.27.0 already carries the three
+  // sidecar lines, so the ONE new line lands under a header that describes exactly it.
+  appendGitignore(T, [".claude/metrics/"], "workflow-kit: the token ledger's metrics dir is per-session, gitignored");
+  warnIfIndexed(T, ".claude/metrics/");
   // ONLY THE PATH-BAKED FILE, AND ONLY WHEN THE KIT WROTE IT. `.codex/hooks.json` carries the
   // ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a hook from a
   // working directory the kit does not control, and a wrong project root is a fail-OPEN). Committed,
@@ -1621,6 +1642,7 @@ function main() {
   if (kitOwnedHooksJson(T)) {
     appendGitignore(T, [".codex/hooks.json"],
       "workflow-kit: .codex/hooks.json is PER-CHECKOUT — it bakes this checkout's absolute path into every hook command; committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The rest of .codex/ stays tracked");
+    warnIfIndexed(T, ".codex/hooks.json");
   }
   // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
   // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
