@@ -725,18 +725,25 @@ function warnIfIndexed(target, rel) {
   return true;
 }
 
-// The kit's Codex registration is the ONE per-checkout, path-baked file the lane writes, and it is
-// identified by the `description` the kit stamps into it — never by its path alone, because an
-// adopter may keep their OWN registration at that path and that file is theirs to commit. Unreadable,
-// unparseable, symlinked or unstamped ⇒ NOT kit-owned: the safe error here is to leave a file
-// tracked, never to hide one from `git add`.
-function kitOwnedHooksJson(target) {
+// WHAT MAKES `.codex/hooks.json` PER-CHECKOUT IS THE PATH IT BAKES, NOT WHO WROTE IT. Authorship
+// cannot be proven from content: a `description` is a string anyone can write, and a cold seat showed
+// an adopter's own file wearing the kit's stamp being hidden from `git add`. The harm the ignore rule
+// exists for is a registration whose commands name THIS checkout's absolute path — it cannot start in
+// any other clone, whoever wrote it. So the predicate is that path, present in the registration. A
+// file without it is portable and stays tracked, stamp or no stamp. Absent ⇒ nothing to decide.
+// Present but a symlink, unreadable or not JSON ⇒ init cannot tell, and cannot-read-input never reads
+// as green (core/INVARIANTS.md rule 6): the caller records a COUNTED refusal and ignores nothing.
+// Returns "absent" | "unreadable" | "path-baked" | "portable".
+function codexHooksJsonState(target) {
   const p = path.join(target, ".codex", "hooks.json");
-  try {
-    if (!lstatSync(p).isFile()) return false;
-    const d = JSON.parse(readFileSync(p, "utf8"))?.description;
-    return typeof d === "string" && d.startsWith("workflow-kit v");
-  } catch { return false; }
+  let st;
+  try { st = lstatSync(p); } catch (e) { return e && e.code === "ENOENT" ? "absent" : "unreadable"; }
+  if (!st.isFile()) return "unreadable";
+  let doc;
+  try { doc = JSON.parse(readFileSync(p, "utf8")); } catch { return "unreadable"; }
+  const text = JSON.stringify(doc && typeof doc === "object" ? (doc.hooks ?? doc) : doc);
+  for (const root of new Set([target, realpathOrSelf(target)])) if (root && text.includes(root)) return "path-baked";
+  return "portable";
 }
 
 // Append the /thread-restart fallback pointer to AGENTS.md if absent (idempotent via a stable marker,
@@ -1624,25 +1631,30 @@ function main() {
   // sidecar lines, so the ONE new line lands under a header that describes exactly it.
   appendGitignore(T, [".claude/metrics/"], "workflow-kit: the token ledger's metrics dir is per-session, gitignored");
   warnIfIndexed(T, ".claude/metrics/");
-  // ONLY THE PATH-BAKED FILE, AND ONLY WHEN THE KIT WROTE IT. `.codex/hooks.json` carries the
-  // ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a hook from a
-  // working directory the kit does not control, and a wrong project root is a fail-OPEN). Committed,
-  // that file travels to every clone, linked worktree and teammate's machine registering hooks at a
-  // path that does not exist there — and a hook that fails to START does not block anything, so the
-  // failure is SILENT. Nothing else in the lane is path-baked: `.codex/config.toml` is [P] — shipped
-  // verbatim, path-free, and KEPT when the adopter carries their own (the lane block above) — and
-  // `.codex/hooks/` are byte-copies of the tracked `.claude/hooks/`, drift-checked on every run. An
-  // ignore rule over either hides adopter-owned content from `git add` and loses it in every clone;
-  // the first draft of this block did exactly that, and a cold seat caught it.
-  //
-  // PROVENANCE, NOT EXISTENCE. The check reads the file as it is on disk after the lane block, so it
-  // covers this run's write AND a kit file a previous run left behind under --skip-codex-lane, and
-  // it refuses an adopter's own registration at the same path. An ignore rule cannot UNTRACK a file
-  // git already indexes; the summary below carries that step for an adopter who committed one.
-  if (kitOwnedHooksJson(T)) {
-    appendGitignore(T, [".codex/hooks.json"],
+  // ONLY THE PATH-BAKED FILE. `.codex/hooks.json` carries the ABSOLUTE path of THIS checkout in
+  // every registered command (it must — Codex runs a hook from a working directory the kit does not
+  // control, and a wrong project root is a fail-OPEN). Committed, that file travels to every clone,
+  // linked worktree and teammate's machine registering hooks at a path that does not exist there —
+  // and a hook that fails to START does not block anything, so the failure is SILENT. Nothing else
+  // in the lane is path-baked: `.codex/config.toml` is [P] — shipped verbatim, path-free, KEPT when
+  // the adopter carries their own (the lane block above) — and `.codex/hooks/` are byte-copies of the
+  // tracked `.claude/hooks/`, drift-checked on every run. An ignore rule over either hides
+  // adopter-owned content from `git add` and loses it in every clone; the first draft of this block
+  // did exactly that, and a cold seat caught it. The decision is keyed on the baked path, read from
+  // the file as it sits on disk after the lane block (codexHooksJsonState): this run's write, a kit
+  // file a previous run left under --skip-codex-lane, and an adopter's own path-baked copy are all
+  // per-checkout; an adopter's portable registration at the same path is left tracked. The RESULT is
+  // kept, because the end-of-run summary must describe what happened, not what the lane intended.
+  const codexHooksState = codexHooksJsonState(T);
+  let codexIgnore = "none";
+  if (codexHooksState === "path-baked") {
+    codexIgnore = appendGitignore(T, [".codex/hooks.json"],
       "workflow-kit: .codex/hooks.json is PER-CHECKOUT — it bakes this checkout's absolute path into every hook command; committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The rest of .codex/ stays tracked");
     warnIfIndexed(T, ".codex/hooks.json");
+  } else if (codexHooksState === "unreadable") {
+    const p = path.join(T, ".codex", "hooks.json");
+    backupRefused.push(p);
+    warn(`REFUSED to decide about ${p}: it exists but is a symlink, unreadable, or not valid JSON, so init cannot tell whether its commands bake this checkout's absolute path. Nothing was ignored. Fix or remove the file and re-run.`);
   }
   // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
   // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
@@ -1695,6 +1707,12 @@ function main() {
       `The kit will never grant this for you: it does not write Codex's trust store and it`,
       `does not use --dangerously-bypass-hook-trust. Automating another tool's consent is`,
       `forging consent, and it would arm every hook from every source, not just ours.`,
+    );
+  }
+  // The hooks.json outcome is stated whenever a hooks.json EXISTS — skip or no skip — because the
+  // summary must describe what this run decided about the file on disk, not what the lane intended.
+  if (codexHooksState === "path-baked" && codexIgnore !== "refused") {
+    item(
       `DO NOT COMMIT .codex/hooks.json — it is gitignored now. It bakes THIS checkout's absolute`,
       `path into every registered command, so a committed copy registers hooks at a path other`,
       `clones do not have — and a hook that fails to start blocks nothing, silently. Every clone`,
@@ -1702,6 +1720,13 @@ function main() {
       `an ignore rule does not untrack it: git rm --cached -- .codex/hooks.json, then commit.`,
       `Everything else in .codex/ (config.toml, hooks/, agents/) stays TRACKED.`,
     );
+  } else if (codexHooksState === "portable") {
+    item(
+      `Your own .codex/hooks.json carries no checkout path, so it is portable: init ignored`,
+      `nothing there and it stays TRACKED with the rest of .codex/.`,
+    );
+  } else if (codexHooksState === "unreadable" || codexIgnore === "refused") {
+    item(`UNRESOLVED: .codex/hooks.json — see the REFUSAL above. Nothing was ignored; decide it by hand.`);
   }
   item(
     `READ PORTABILITY.md (installed at your repo root) — what these guards do NOT cover. They bind write TOOLS. A write`,

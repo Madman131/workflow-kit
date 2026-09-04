@@ -93,21 +93,55 @@ test("--skip-codex-lane over a KIT-written hooks.json a previous run left behind
   } finally { cleanup(); }
 });
 
-test("an ADOPTER-OWNED registration or config at the same paths is never ignored — a foreign or unparseable hooks.json is theirs to commit", () => {
+test("an ADOPTER-OWNED registration is judged by the path it bakes, not by any stamp: portable stays tracked, path-baked is ignored, unreadable is a counted refusal", () => {
   const { dir, run, ignored, cleanup } = fresh();
   try {
     mkdirSync(path.join(dir, ".codex"), { recursive: true });
     writeFileSync(path.join(dir, ".codex", "config.toml"), "# the adopter's own codex config\nmodel = \"their-model\"\n");
-    writeFileSync(path.join(dir, ".codex", "hooks.json"), JSON.stringify({ description: "the adopter's own hooks", hooks: {} }, null, 2) + "\n");
-    const r = run(["--skip-codex-lane"]);
+    const hooksJson = path.join(dir, ".codex", "hooks.json");
+    // (a) unstamped, no checkout path: theirs, portable.
+    writeFileSync(hooksJson, JSON.stringify({ description: "the adopter's own hooks", hooks: { PreToolUse: [{ hooks: [{ command: "node ./tools/lint.mjs" }] }] } }, null, 2) + "\n");
+    let r = run(["--skip-codex-lane"]);
     assert.equal(r.status, 0, r.stderr);
-    assert.ok(!ignored(".codex/hooks.json"), "a hooks.json WITHOUT the kit's provenance stamp is adopter-owned: left tracked");
-    assert.ok(!ignored(".codex/config.toml"), "the adopter's config.toml is never ignored");
-    assert.equal(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8").includes("the adopter's own hooks"), true, "…and untouched under --skip-codex-lane");
-    // Unparseable at the same path: also not the kit's, also left alone.
-    writeFileSync(path.join(dir, ".codex", "hooks.json"), "{ not json\n");
-    assert.equal(run(["--skip-codex-lane"]).status, 0);
-    assert.ok(!ignored(".codex/hooks.json"), "a file the kit cannot parse is not treated as the kit's");
+    assert.ok(!ignored(".codex/hooks.json"), "(a) a portable adopter registration is left tracked");
+    assert.ok(!ignored(".codex/config.toml"), "(a) the adopter's config.toml is never ignored");
+    assert.match(r.stdout + r.stderr, /carries no checkout path, so it is portable/, "(a) the summary says so — not 'it is gitignored now'");
+    assert.doesNotMatch(r.stdout + r.stderr, /it is gitignored now/, "(a) no false do-not-commit item");
+    // (b) wearing the kit's stamp but NO checkout path: still theirs, still portable. A stamp is content, not provenance.
+    writeFileSync(hooksJson, JSON.stringify({ description: "workflow-kit v99 — local hooks", hooks: { PreToolUse: [{ hooks: [{ command: "node ./tools/lint.mjs" }] }] } }, null, 2) + "\n");
+    r = run(["--skip-codex-lane"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!ignored(".codex/hooks.json"), "(b) a stamp without the path hides nothing");
+    // (c) THEIR file, but it bakes this checkout's absolute path: per-checkout whoever wrote it — ignored, and said.
+    writeFileSync(hooksJson, JSON.stringify({ description: "copied from the kit and edited", hooks: { PreToolUse: [{ hooks: [{ command: `node ${path.join(dir, ".codex", "hooks", "x.mjs")}` }] }] } }, null, 2) + "\n");
+    r = run(["--skip-codex-lane"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(ignored(".codex/hooks.json"), "(c) a path-baked registration is ignored regardless of author");
+    assert.match(r.stdout + r.stderr, /DO NOT COMMIT \.codex\/hooks\.json/, "(c) …and the summary says why");
+    // (d) unparseable: init cannot tell ⇒ counted refusal, exit 1, nothing ignored, file named.
+    const gi = path.join(dir, ".gitignore");
+    writeFileSync(gi, readFileSync(gi, "utf8").split(/\r?\n/).filter((l) => !l.includes(".codex/") && !l.includes("PER-CHECKOUT")).join("\n") + "\n");
+    writeFileSync(hooksJson, "{ not json\n");
+    r = run(["--skip-codex-lane"]);
+    assert.equal(r.status, 1, "(d) cannot-read-input is a counted refusal, never a silent skip");
+    assert.match(r.stdout + r.stderr, /REFUSED to decide about .+\.codex\/hooks\.json/, "(d) the refusal names the file");
+    assert.match(r.stdout + r.stderr, /UNRESOLVED: \.codex\/hooks\.json/, "(d) …and the summary carries it");
+    assert.ok(!ignored(".codex/hooks.json"), "(d) nothing was ignored");
+  } finally { cleanup(); }
+});
+
+test("a non-skip run that PRESERVES an adopter registration (config.toml declares hooks) tells the truth in the summary", () => {
+  const { dir, run, ignored, cleanup } = fresh();
+  try {
+    mkdirSync(path.join(dir, ".codex"), { recursive: true });
+    writeFileSync(path.join(dir, ".codex", "config.toml"), "hooks = \"./hooks.json\"\n");
+    writeFileSync(path.join(dir, ".codex", "hooks.json"), JSON.stringify({ description: "ours", hooks: {} }, null, 2) + "\n");
+    const r = run();
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8"), /"ours"/, "precondition: the kit did not replace the adopter's registration");
+    assert.ok(!ignored(".codex/hooks.json"), "the adopter's portable registration stays tracked");
+    assert.doesNotMatch(r.stdout + r.stderr, /it is gitignored now/, "the summary must not claim an ignore it did not write");
+    assert.match(r.stdout + r.stderr, /carries no checkout path, so it is portable/, "…it says what actually happened");
   } finally { cleanup(); }
 });
 

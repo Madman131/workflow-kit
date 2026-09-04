@@ -169,9 +169,11 @@ port:
   `.claude/hooks/*.mjs` in your repo — with `init` byte-comparing the two installed trees on every
   run. Nothing else in the lane is ignored: `.codex/config.toml` is `[P]` and path-free (and kept
   when you carry your own), `.codex/hooks/` are byte-copies of your tracked `.claude/hooks/`, and
-  `.codex/agents/*.toml` is `[G]` content your team reviews. The kit identifies its own
-  `hooks.json` by the `description` it stamps, never by the path — an adopter's own registration at
-  that path is left tracked. **An ignore rule never untracks a file git already indexes:** if a
+  `.codex/agents/*.toml` is `[G]` content your team reviews. The decision is keyed on the harm, not on
+  authorship (which no file content can prove): a `hooks.json` whose commands carry this checkout's
+  absolute path is per-checkout whoever wrote it and is ignored; one without that path is portable and
+  stays tracked. A file init cannot read or parse is a counted refusal — nothing ignored, the file
+  named — never a silent skip. **An ignore rule never untracks a file git already indexes:** if a
   previous run's copy is committed, `git rm --cached -- .codex/hooks.json` and commit. **Every clone
   and every linked worktree runs its own `init`.**
 
