@@ -225,10 +225,43 @@ test("init WARNS, with the exact untrack command, when the ledger is already ind
     execFileSync("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]);
     const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
       "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED/, "the warning fires on an indexed ledger");
-    assert.match(r.stdout + r.stderr, /git rm --cached -r -- \.claude\/metrics\//, "…and carries the exact command");
+    assert.equal(r.status, 1, "a tracked ledger is a FAILING state, counted at the exit code — not a warning at exit 0");
+    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED/, "the refusal names the path");
+    assert.match(r.stdout + r.stderr, /git rm --cached -r -- \.claude\/metrics\//, "…carries the exact command (-r: a directory)");
+    assert.match(r.stdout + r.stderr, /STILL TRACKED by git, or could not be checked/, "…and is repeated in the end-of-run accounting");
+    assert.doesNotMatch(r.stdout + r.stderr, /could NOT be written/, "the rule WAS written here, so the advice does not say otherwise");
     assert.equal(spawnSync("git", ["-C", dir, "ls-files", "--", ".claude/metrics/tokens.jsonl"], { encoding: "utf8" }).stdout.trim(),
       ".claude/metrics/tokens.jsonl", "init did NOT untrack it — that write is the adopter's, not the installer's");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an indexed ledger behind a .gitignore init could not write: the advice says the rule is NOT there, and orders the steps", () => {
+  // A symlinked .gitignore is a refused append. Untracking on a rule that was never written re-adds
+  // the file on the next blanket add, so the message must not claim "the ignore rule init just wrote".
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-nogi-"));
+  const outside = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-nogi-out-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    writeFileSync(path.join(outside, "ignores"), "node_modules\n");
+    symlinkSync(path.join(outside, "ignores"), path.join(dir, ".gitignore"));
+    mkdirSync(path.join(dir, ".claude", "metrics"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "metrics", "tokens.jsonl"), "{}\n");
+    execFileSync("git", ["-C", dir, "add", "--", ".claude/metrics/tokens.jsonl"]);
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
+    assert.equal(r.status, 1, r.stderr);
+    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED in this repository, AND the ignore rule for it could NOT be written/, "both facts, in one sentence");
+    assert.match(r.stdout + r.stderr, /Fix \.gitignore first, then run  git rm --cached -r -- \.claude\/metrics\//, "…in the right order");
+    assert.doesNotMatch(r.stdout + r.stderr, /The ignore rule init just wrote/, "never claims a rule it did not write");
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("outside a git repository the index sensor has nothing to ask and says nothing", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-norepo-"));
+  try {
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.doesNotMatch(r.stdout + r.stderr, /ALREADY TRACKED|could not ask git|REFUSED to certify/, "not a repository is a legitimate absence, not a refusal");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

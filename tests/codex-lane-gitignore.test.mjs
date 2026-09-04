@@ -145,7 +145,7 @@ test("a non-skip run that PRESERVES an adopter registration (config.toml declare
   } finally { cleanup(); }
 });
 
-test("init WARNS, with the exact untrack command, when a kit-written hooks.json is already indexed", () => {
+test("init REFUSES, with the exact untrack command, when a kit-written hooks.json is already indexed", () => {
   const { dir, run, ignored, stripIgnore, cleanup } = fresh();
   try {
     assert.equal(run().status, 0, "first run installs the lane");
@@ -154,11 +154,12 @@ test("init WARNS, with the exact untrack command, when a kit-written hooks.json 
     // seed. (A commit here would be blocked by the pre-commit hook init just installed — correctly.)
     execFileSync("git", ["-C", dir, "add", "--", ".codex/hooks.json"]);
     const r = run(["--skip-codex-lane"]);
-    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.status, 1, "a tracked path-baked registration is a FAILING state, counted at the exit code");
     // A TRACKED path is not reported by `check-ignore` without --no-index — the index wins. Ask about
     // the rule itself, which is the thing this run wrote.
     assert.equal(spawnSync("git", ["-C", dir, "check-ignore", "-q", "--no-index", ".codex/hooks.json"]).status, 0, "the ignore rule is re-written…");
     assert.match(r.stdout + r.stderr, /\.codex\/hooks\.json is ALREADY TRACKED/, "…and init says the index still holds it");
-    assert.match(r.stdout + r.stderr, /git rm --cached -r -- \.codex\/hooks\.json/, "…with the exact command");
+    assert.match(r.stdout + r.stderr, /git rm --cached -- \.codex\/hooks\.json/, "…with the exact command (no -r: a file)");
+    assert.doesNotMatch(r.stdout + r.stderr, /git rm --cached -r -- \.codex/, "…and never the directory form for a file");
   } finally { cleanup(); }
 });
