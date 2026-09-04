@@ -743,29 +743,6 @@ function refuseIfIndexed(target, rel, appendResult) {
     : `${rel} is ALREADY TRACKED in this repository. The ignore rule init just wrote does not untrack it: it keeps changing, and any blanket add keeps committing it, until you run  ${cmd}  and commit. init does not make that change for you.`);
 }
 
-// WHAT MAKES `.codex/hooks.json` PER-CHECKOUT IS THE PATH IT BAKES, NOT WHO WROTE IT. Authorship
-// cannot be proven from content: a `description` is a string anyone can write, and a cold seat showed
-// an adopter's own file wearing the kit's stamp being hidden from `git add`. The harm the ignore rule
-// exists for is a registration whose commands name THIS checkout's absolute path — it cannot start in
-// any other clone, whoever wrote it. So the predicate is that path, present in the registration. A
-// file without it is portable and stays tracked, stamp or no stamp. Absent ⇒ nothing to decide.
-// Present but a symlink, unreadable or not JSON ⇒ init cannot tell, and cannot-read-input never reads
-// as green (core/INVARIANTS.md rule 6): the caller records a COUNTED refusal and ignores nothing.
-// Returns "absent" | "unreadable" | "path-baked" | "portable".
-function codexHooksJsonState(target) {
-  const p = path.join(target, ".codex", "hooks.json");
-  let st;
-  // ENOTDIR: a regular FILE sits where `.codex/` should be — the lane block already warned and the
-  // adopt continues; there is no hooks.json to decide about, so it is absence, not an unreadable file.
-  try { st = lstatSync(p); } catch (e) { return e && (e.code === "ENOENT" || e.code === "ENOTDIR") ? "absent" : "unreadable"; }
-  if (!st.isFile()) return "unreadable";
-  let doc;
-  try { doc = JSON.parse(readFileSync(p, "utf8")); } catch { return "unreadable"; }
-  const text = JSON.stringify(doc && typeof doc === "object" ? (doc.hooks ?? doc) : doc);
-  for (const root of new Set([target, realpathOrSelf(target)])) if (root && text.includes(root)) return "path-baked";
-  return "portable";
-}
-
 // Append the /thread-restart fallback pointer to AGENTS.md if absent (idempotent via a stable marker,
 // same shape as appendGitignore). The pointer text is a single [P] source (commands/agents-pointer.md)
 // so the Claude command, the Codex prompt, and this pointer never drift. A re-run — or an AGENTS.md that
@@ -1325,6 +1302,9 @@ function main() {
   // registered: not the zero-registration fail-open, but a partial adopt that flatly contradicts the
   // "carries no enforcement, the adopt continues" contract stated three lines above.
   let codexLaneOk = !args.skipCodexLane;
+  // THE ONE PROVENANCE THIS INSTALLER HAS: set at the single site that writes the path-baked Codex
+  // registration this run. The .gitignore rule for that file follows this fact and nothing else.
+  let kitWroteHooksJson = false;
   if (args.skipCodexLane) {
     // Say what is TRUE of the tree, not merely what this run did. On a re-run over a repo adopted
     // WITHOUT the flag, a bare "SKIPPED" reads as "there is no .codex here" while both files sit on
@@ -1412,10 +1392,62 @@ function main() {
       // declares hooks — in either spelling — the kit does NOT add a second representation. Their
       // registration wins and they are told exactly what that costs them.
       const hooksJson = path.join(T, ".codex", "hooks.json");
+      // The registration is built BEFORE the kept/write branch, because the kept branch needs it too:
+      // a plain re-run keeps the file on disk, and the only way to know that kept file is init's own
+      // — without reading its content for a guess — is that it equals, byte for byte, what init
+      // generates for this checkout right now. Pure computation from T and the kit version.
+      const SHELL_SAFE = /^[A-Za-z0-9._\/@+=-]+$/;
+      const arg = (s) => (SHELL_SAFE.test(s) ? s : `'${String(s).split("'").join(`'\\''`)}'`);
+      const needsQuoting = !SHELL_SAFE.test(T);
+      const nodeCmd = (file) => `node ${arg(path.join(T, ".codex", "hooks", file))} --project-dir ${arg(T)}`;
+      const entry = (file, statusMessage) => ({ type: "command", command: nodeCmd(file), timeout: 10, statusMessage });
+      const registration = {
+        description: `workflow-kit v${KIT_VERSION} — Codex-lane PreToolUse guards. These do NOT run until you approve them in an INTERACTIVE codex session; codex exec skips untrusted hooks silently. Verify with: node scripts/check-codex-hooks-armed.mjs`,
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "apply_patch",
+              hooks: [
+                entry("guard-cross-repo-writes.mjs", "Checking every patch target stays inside this repo…"),
+                entry("guard-lane-authoring.mjs", "Checking the task's lane declaration…"),
+                // The brief-rung guard's WRITE half binds here: a Codex brief arrives as an
+                // apply_patch envelope, which the shared grammar reads exactly as it reads a
+                // Claude `file_path`. Its SEND half is registered NOWHERE in this lane, and that
+                // is a fact about the lane rather than a decision: `send_message` is a tool the
+                // Claude harness has and Codex does not, so there is no payload to bind. The half
+                // that CAN bind, does; the half that cannot is inert BY ABSENCE, and PORTABILITY.md
+                // says so rather than leaving an adopter to infer symmetry that is not there.
+                entry("guard-brief-rung.mjs", "Checking the pre-send verification rung for this brief…"),
+                // The two SENSORS run alongside the guards on the same matcher. They never deny —
+                // registering them here is what stops them being installed-but-inert, which is the
+                // failure mode this kit has already shipped once (files on disk, zero
+                // registrations, exit 0). Order matters only for readability: a sensor cannot
+                // change a guard's decision.
+                entry("sensor-sweep-owed.mjs", "Checking whether this edit owes a pre-fold dependency sweep…"),
+                entry("sensor-mutation-owed.mjs", "Checking whether this edit owes a two-sided mutation record…"),
+              ],
+            },
+            {
+              matcher: "Bash",
+              hooks: [entry("guard-gate-ladder.mjs", "Resolving the declared tier; surfacing the ladder it owes…")],
+            },
+          ],
+        },
+      };
+      const registrationText = JSON.stringify(registration, null, 2) + "\n";
       if (declaresHooks) {
         warn(`.codex/hooks.json: NOT written — your kept .codex/config.toml already declares hooks, and Codex wants a SINGLE representation for this layer. Those registrations are YOURS: the kit did not change them and cannot vouch for them. To adopt the kit's guards instead, remove the hooks declaration from config.toml and re-run init.`);
       } else if (existsSync(hooksJson) && !force) {
-        warn(`exists, kept (use --force to overwrite): ${hooksJson} — the Codex guards may be registered from a STALE file`);
+        // REGENERATION EQUALITY IS PROVENANCE, NOT A HEURISTIC. A kept file byte-identical to the
+        // registration init generates for THIS checkout is init's, exactly; the ignore rule follows.
+        let onDisk = null;
+        try { if (!isSymlinkAt(hooksJson)) onDisk = readFileSync(hooksJson, "utf8"); } catch { /* unreadable: not equal */ }
+        if (onDisk === registrationText) {
+          kitWroteHooksJson = true;
+          log(`  .codex/hooks.json: EXISTING, byte-identical to the registration init generates for this checkout — nothing to write`);
+        } else {
+          warn(`exists, kept (use --force to overwrite): ${hooksJson} — the Codex guards may be registered from a STALE file`);
+        }
       } else {
         // `[G]`, and for a reason that is not stylistic: Codex runs a hook command from a working
         // directory this kit does not control, and NOTHING in the payload can be trusted to name the
@@ -1441,50 +1473,13 @@ function main() {
         //
         // An ordinary path still comes out UNQUOTED, which keeps the common case identical under any
         // executor and keeps the generated file readable.
-        const SHELL_SAFE = /^[A-Za-z0-9._\/@+=-]+$/;
-        const arg = (s) => (SHELL_SAFE.test(s) ? s : `'${String(s).split("'").join(`'\\''`)}'`);
-        const needsQuoting = !SHELL_SAFE.test(T);
-        const nodeCmd = (file) => `node ${arg(path.join(T, ".codex", "hooks", file))} --project-dir ${arg(T)}`;
-        const entry = (file, statusMessage) => ({ type: "command", command: nodeCmd(file), timeout: 10, statusMessage });
-        const registration = {
-          description: `workflow-kit v${KIT_VERSION} — Codex-lane PreToolUse guards. These do NOT run until you approve them in an INTERACTIVE codex session; codex exec skips untrusted hooks silently. Verify with: node scripts/check-codex-hooks-armed.mjs`,
-          hooks: {
-            PreToolUse: [
-              {
-                matcher: "apply_patch",
-                hooks: [
-                  entry("guard-cross-repo-writes.mjs", "Checking every patch target stays inside this repo…"),
-                  entry("guard-lane-authoring.mjs", "Checking the task's lane declaration…"),
-                  // The brief-rung guard's WRITE half binds here: a Codex brief arrives as an
-                  // apply_patch envelope, which the shared grammar reads exactly as it reads a
-                  // Claude `file_path`. Its SEND half is registered NOWHERE in this lane, and that
-                  // is a fact about the lane rather than a decision: `send_message` is a tool the
-                  // Claude harness has and Codex does not, so there is no payload to bind. The half
-                  // that CAN bind, does; the half that cannot is inert BY ABSENCE, and PORTABILITY.md
-                  // says so rather than leaving an adopter to infer symmetry that is not there.
-                  entry("guard-brief-rung.mjs", "Checking the pre-send verification rung for this brief…"),
-                  // The two SENSORS run alongside the guards on the same matcher. They never deny —
-                  // registering them here is what stops them being installed-but-inert, which is the
-                  // failure mode this kit has already shipped once (files on disk, zero
-                  // registrations, exit 0). Order matters only for readability: a sensor cannot
-                  // change a guard's decision.
-                  entry("sensor-sweep-owed.mjs", "Checking whether this edit owes a pre-fold dependency sweep…"),
-                  entry("sensor-mutation-owed.mjs", "Checking whether this edit owes a two-sided mutation record…"),
-                ],
-              },
-              {
-                matcher: "Bash",
-                hooks: [entry("guard-gate-ladder.mjs", "Resolving the declared tier; surfacing the ladder it owes…")],
-              },
-            ],
-          },
-        };
         // The Stop-event Owner-comms SENSOR is deliberately NOT registered here. Codex does list a
         // `Stop` hook event, but this kit has not observed that payload, and registering a sensor
         // against an unverified payload shape would ship a control whose behaviour nobody has
         // watched. The file installs (the two trees stay byte-identical); only the registration is
         // withheld, and PORTABILITY.md says so.
-        if (writeWithBackup(hooksJson, JSON.stringify(registration, null, 2) + "\n")) {
+        if (writeWithBackup(hooksJson, registrationText)) {
+          kitWroteHooksJson = true;
           log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · Bash ⇒ the gate-ladder sensor (never denies) · the brief-rung guard's cross-session SEND half is inert in this lane by absence (no such tool) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
@@ -1652,30 +1647,38 @@ function main() {
   // sidecar lines, so the ONE new line lands under a header that describes exactly it.
   const metricsIgnore = appendGitignore(T, [".claude/metrics/"], "workflow-kit: the token ledger's metrics dir is per-session, gitignored");
   refuseIfIndexed(T, ".claude/metrics/", metricsIgnore);
-  // ONLY THE PATH-BAKED FILE. `.codex/hooks.json` carries the ABSOLUTE path of THIS checkout in
-  // every registered command (it must — Codex runs a hook from a working directory the kit does not
-  // control, and a wrong project root is a fail-OPEN). Committed, that file travels to every clone,
-  // linked worktree and teammate's machine registering hooks at a path that does not exist there —
-  // and a hook that fails to START does not block anything, so the failure is SILENT. Nothing else
-  // in the lane is path-baked: `.codex/config.toml` is [P] — shipped verbatim, path-free, KEPT when
-  // the adopter carries their own (the lane block above) — and `.codex/hooks/` are byte-copies of the
-  // tracked `.claude/hooks/`, drift-checked on every run. An ignore rule over either hides
-  // adopter-owned content from `git add` and loses it in every clone; the first draft of this block
-  // did exactly that, and a cold seat caught it. The decision is keyed on the baked path, read from
-  // the file as it sits on disk after the lane block (codexHooksJsonState): this run's write, a kit
-  // file a previous run left under --skip-codex-lane, and an adopter's own path-baked copy are all
-  // per-checkout; an adopter's portable registration at the same path is left tracked. The RESULT is
-  // kept, because the end-of-run summary must describe what happened, not what the lane intended.
-  const codexHooksState = codexHooksJsonState(T);
+  // ONLY THE PATH-BAKED FILE, AND ONLY BECAUSE INIT WROTE IT. `.codex/hooks.json` carries the
+  // ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a hook from a
+  // working directory the kit does not control, and a wrong project root is a fail-OPEN). Committed,
+  // it registers hooks at a path no other clone has, and a hook that fails to START blocks nothing,
+  // silently. Nothing else in the lane is path-baked, so nothing else is ignored.
+  //
+  // THE ONE PROVENANCE THIS INSTALLER HAS IS WHAT IT WROTE THIS RUN. Three rounds of cold seats took
+  // apart every content heuristic for "is the file at this path the kit's / path-baked": a stamp
+  // anyone can write, a substring a status message can carry, a raw path the generator shell-escapes.
+  // Each patch minted the next defect. The heuristic is gone: the rule follows kitWroteHooksJson,
+  // set at the single site that writes the registration. A rule written on an earlier run persists
+  // in .gitignore by itself. Where init did NOT write the file this run — it preserved an adopter's
+  // registration because their config.toml declares hooks — but an ignore rule for it is active, init
+  // cannot know whose file sits there now, and says exactly that instead of deciding: leave the rule
+  // if it is still the kit's registration, delete the line if it is now theirs. init never removes a
+  // line from .gitignore. Under --skip-codex-lane the adopter opted out of lane handling and the lane
+  // block already reported the untouched .codex/; nothing more is said here.
   let codexIgnore = "none";
-  if (codexHooksState === "path-baked") {
+  let staleHooksRule = false;
+  const hooksJsonPath = path.join(T, ".codex", "hooks.json");
+  const hooksRuleActive = () => {
+    if (!isGitRepo(T)) return false;
+    try { execFileSync("git", ["-C", T, "check-ignore", "-q", "--no-index", "--", ".codex/hooks.json"], { stdio: ["ignore", "pipe", "pipe"] }); return true; }
+    catch { return false; }
+  };
+  if (kitWroteHooksJson) {
     codexIgnore = appendGitignore(T, [".codex/hooks.json"],
       "workflow-kit: .codex/hooks.json is PER-CHECKOUT — it bakes this checkout's absolute path into every hook command; committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The rest of .codex/ stays tracked");
     refuseIfIndexed(T, ".codex/hooks.json", codexIgnore);
-  } else if (codexHooksState === "unreadable") {
-    const p = path.join(T, ".codex", "hooks.json");
-    backupRefused.push(p);
-    warn(`REFUSED to decide about ${p}: it exists but is a symlink, unreadable, or not valid JSON, so init cannot tell whether its commands bake this checkout's absolute path. Nothing was ignored. Fix or remove the file and re-run.`);
+  } else if (!args.skipCodexLane && existsSync(hooksJsonPath) && hooksRuleActive()) {
+    staleHooksRule = true;
+    warn(`a .codex/hooks.json ignore rule is active, but init did not write that file this run (it preserved the registration already there), so it cannot tell whose registration it is now. If it is still the kit's path-baked registration from an earlier run, leave the rule. If it is now YOUR OWN registration, delete the .codex/hooks.json line from .gitignore — while it stands, your file never reaches a clone. init never edits .gitignore lines.`);
   }
   // With the gate runners installed, gitignore the ONE sanctioned in-repo gate-artifact prefix. The
   // Gemini runner defaults --out-dir to a fresh system-temp dir and REJECTS any other in-repo --out-dir,
@@ -1730,9 +1733,9 @@ function main() {
       `forging consent, and it would arm every hook from every source, not just ours.`,
     );
   }
-  // The hooks.json outcome is stated whenever a hooks.json EXISTS — skip or no skip — because the
-  // summary must describe what this run decided about the file on disk, not what the lane intended.
-  if (codexHooksState === "path-baked" && codexIgnore !== "refused") {
+  // The hooks.json outcome is stated from what THIS run did — wrote it, preserved it, refused — never
+  // from what the lane intended.
+  if (kitWroteHooksJson && codexIgnore !== "refused") {
     item(
       `DO NOT COMMIT .codex/hooks.json — it is gitignored now. It bakes THIS checkout's absolute`,
       `path into every registered command, so a committed copy registers hooks at a path other`,
@@ -1741,13 +1744,17 @@ function main() {
       `an ignore rule does not untrack it: git rm --cached -- .codex/hooks.json, then commit.`,
       `Everything else in .codex/ (config.toml, hooks/, agents/) stays TRACKED.`,
     );
-  } else if (codexHooksState === "portable") {
+  } else if (codexIgnore === "refused") {
+    item(`UNRESOLVED: .codex/hooks.json — its ignore rule could not be written (see the REFUSAL above). Decide it by hand.`);
+  } else if (staleHooksRule) {
     item(
-      `Your own .codex/hooks.json carries no checkout path, so it is portable: init ignored`,
-      `nothing there and it stays TRACKED with the rest of .codex/.`,
+      `CHECK .codex/hooks.json: an ignore rule for it is active, but init did not write the file this`,
+      `run — it preserved the registration already there (see the warning above). If that is now`,
+      `your own registration, delete the .codex/hooks.json line from .gitignore; if it is still the`,
+      `kit's path-baked one, leave it. init never edits .gitignore lines.`,
     );
-  } else if (codexHooksState === "unreadable" || codexIgnore === "refused") {
-    item(`UNRESOLVED: .codex/hooks.json — see the REFUSAL above. Nothing was ignored; decide it by hand.`);
+  } else if (!args.skipCodexLane && existsSync(hooksJsonPath)) {
+    item(`.codex/hooks.json: init did not write it this run (your registration is preserved) and did not ignore it — it stays TRACKED with the rest of .codex/.`);
   }
   item(
     // The pointer must describe what THIS run did: a refused collision leaves the adopter's own file
