@@ -38,11 +38,11 @@ untrusted hook is skipped SILENTLY** (no prompt, no warning, no exit-code change
 never assume they are live: `node scripts/check-codex-hooks-armed.mjs` is the only thing that answers
 it. They also bind write TOOLS — a file you change with a plain SHELL command is invisible to them,
 which in the Codex lane is a main road, not a corner case. A human with an editor loads none of them.
-**So what binds you unconditionally is THIS prose + the `.githooks/pre-commit` hook**
-(`core.hooksPath=.githooks`),
+**So what binds you unconditionally is THIS prose, the PM-disposition emission `core/WORKFLOW.md`
+§ Gate requires after every verdict, and the `.githooks/pre-commit` hook** (`core.hooksPath=.githooks`),
 which runs at commit time regardless of harness and blocks a commit that has no valid lane declaration.
-It checks the DECLARATION, not your task scope — since kit v1.5.0 no control carries a per-file
-allowlist, so staying inside your task's scope binds you on your honor alone (§ Multi-writer checkout).
+It checks the DECLARATION, not your task scope — no control carries a per-file allowlist, so
+staying inside your task's scope binds you on your honor alone (§ Multi-writer checkout).
 Treat these rules as binding on your honor AND enforced at the commit.
 Full model: `PORTABILITY.md`.
 
