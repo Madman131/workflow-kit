@@ -718,7 +718,9 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 ## What is portable verbatim vs generated
 
-- `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the three PreToolUse sensors
+- `[P]` (verbatim): **this file** (`PORTABILITY.md`, installed at the adopter's root since v2.28.0 — every
+  entry stub, both reviewer skills and two guards cite it, and a citation to a file `init` never
+  installed read as assurance), `core/*` method docs, the four PreToolUse guards, the three PreToolUse sensors
   (`sensor-sweep-owed`, `sensor-mutation-owed`, and `sensor-context-pressure`, which reads the real
   context size from the transcript tail and says when the thread-restart digest is owed — Claude lane
   only, a Codex payload carries no transcript; all three print, never deny), the `guard-owner-comms` and

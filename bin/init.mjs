@@ -879,6 +879,17 @@ function main() {
   const core = copyTree(path.join(KIT_ROOT, "core"), path.join(T, "core"), force, (name) => !GENERATED_CORE.has(name));
   log(`  core/ method docs: ${core.filter(([, s]) => s === "written").length} written, ${core.filter(([, s]) => s === "skipped").length} kept`);
 
+  // 1b. [P] PORTABILITY.md (verbatim), at the adopter's ROOT. Every generated entry stub, both
+  // reviewer skills, two guards' own headers, codex/config.toml and this installer's end-of-run
+  // summary say "see PORTABILITY.md" for what the controls do NOT cover — and until v2.28.0 no run
+  // of init put that file anywhere the reader could open it. A citation to a missing file is read
+  // as "there is a fuller model somewhere", which is the assurance-by-belief PORTABILITY exists to
+  // kill. The one adopter measured had copied it by hand, byte-identical, and edited nothing.
+  // MECHANISM, like core/: a stale copy mis-states which lane a control binds, so a plain re-run
+  // over an older copy keeps it and FAILS naming --force, exactly as a stale guard does.
+  const portability = copyGuarded(path.join(KIT_ROOT, "PORTABILITY.md"), path.join(T, "PORTABILITY.md"), force);
+  log(`  PORTABILITY.md: ${portability === "written" ? "installed at the repo root" : portability === "skipped" ? "EXISTING kept — may be STALE; re-run with --force to update" : "REFUSED (see above)"}`);
+
   // 2. [P] Claude-lane hooks (verbatim mechanism): the four PreToolUse guards, which fail CLOSED,
   // the two PreToolUse sensors, which never deny,
   // plus the Stop-event Owner-comms SENSOR, which fails OPEN and is a nudge, not enforcement (see
@@ -1636,7 +1647,7 @@ function main() {
     );
   }
   item(
-    `READ PORTABILITY.md — what these guards do NOT cover. They bind write TOOLS. A write`,
+    `READ PORTABILITY.md (installed at your repo root) — what these guards do NOT cover. They bind write TOOLS. A write`,
     `issued through a plain SHELL command is invisible to them, and in the Codex lane that`,
     `is a main road, not a corner case. The pre-commit hook you just installed is the only`,
     `mechanical floor that binds every lane. Do not imply otherwise to your team.`,
