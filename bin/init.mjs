@@ -1729,7 +1729,11 @@ function main() {
     item(`UNRESOLVED: .codex/hooks.json — see the REFUSAL above. Nothing was ignored; decide it by hand.`);
   }
   item(
-    `READ PORTABILITY.md (installed at your repo root) — what these guards do NOT cover. They bind write TOOLS. A write`,
+    // The pointer must describe what THIS run did: a refused collision leaves the adopter's own file
+    // at that path, and "installed at your repo root" would send them to it as the kit's contract.
+    portability === "refused"
+      ? `READ the kit's PORTABILITY.md from the workflow-kit repository — your root PORTABILITY.md is your OWN and was left UNTOUCHED (see the refusal above); every "see PORTABILITY.md" pointer in the installed method means the kit's. It covers what these guards do NOT: they bind write TOOLS. A write`
+      : `READ PORTABILITY.md (installed at your repo root) — what these guards do NOT cover. They bind write TOOLS. A write`,
     `issued through a plain SHELL command is invisible to them, and in the Codex lane that`,
     `is a main road, not a corner case. The pre-commit hook you just installed is the only`,
     `mechanical floor that binds every lane. Do not imply otherwise to your team.`,

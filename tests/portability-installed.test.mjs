@@ -72,6 +72,8 @@ test("an ADOPTER-OWNED PORTABILITY.md at the root is never overwritten — plain
       assert.doesNotMatch(r.stdout + r.stderr, /KEPT BUT STALE[^\n]*PORTABILITY\.md/, "…and it is never described as a stale kit copy");
       assert.equal(readFileSync(installed, "utf8"), own, `${args.join(" ") || "plain"}: the adopter's file is byte-identical afterwards`);
       assert.ok(!existsSync(`${installed}.bak`), "…and no backup was minted, because nothing was replaced");
+      assert.match(r.stdout + r.stderr, /READ the kit's PORTABILITY\.md from the workflow-kit repository/, `${args.join(" ") || "plain"}: the checklist points at the kit's file, not the adopter's`);
+      assert.doesNotMatch(r.stdout + r.stderr, /installed at your repo root/, "…and never claims an install that was refused");
     }
     // Polarity: the kit's own file at that path is recognised and upgraded as before.
     writeFileSync(installed, readFileSync(path.join(KIT, "PORTABILITY.md")));
