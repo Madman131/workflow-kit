@@ -755,7 +755,9 @@ function refuseIfIndexed(target, rel, appendResult) {
 function codexHooksJsonState(target) {
   const p = path.join(target, ".codex", "hooks.json");
   let st;
-  try { st = lstatSync(p); } catch (e) { return e && e.code === "ENOENT" ? "absent" : "unreadable"; }
+  // ENOTDIR: a regular FILE sits where `.codex/` should be — the lane block already warned and the
+  // adopt continues; there is no hooks.json to decide about, so it is absence, not an unreadable file.
+  try { st = lstatSync(p); } catch (e) { return e && (e.code === "ENOENT" || e.code === "ENOTDIR") ? "absent" : "unreadable"; }
   if (!st.isFile()) return "unreadable";
   let doc;
   try { doc = JSON.parse(readFileSync(p, "utf8")); } catch { return "unreadable"; }
