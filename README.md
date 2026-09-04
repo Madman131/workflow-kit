@@ -1896,7 +1896,7 @@ uses** — a mis-parameterized `executedPathDirs` blocks the write guard, it nev
 the `pre-commit` floor gates every non-docs path, so an *undeclared code commit* is blocked
 regardless.)
 
-`guard-cross-repo-writes` reads that same file for one family, `worktreeRoots` (v2.27.0):
+`guard-cross-repo-writes` reads that same file for one family, `worktreeRoots` (v2.28.0):
 the ABSOLUTE roots where **this** repo's private worktrees live, written by
 `init --worktree-roots <abs>,<abs>` and added to the guard's allowed write roots alongside the
 project dir, `~/.claude` and `/tmp` / `/private/tmp`. Omit the flag and you get the shipped roots
