@@ -71,6 +71,7 @@ import fs from "node:fs";
 import { spawn } from "node:child_process";
 const args = process.argv.slice(2), mode = process.env.AGY_FAKE_MODE || "success", marker = process.env.AGY_FAKE_MARKER;
 if (args[0] === "--version") { process.stdout.write("agy 1.1.27\\n"); process.exit(0); }
+if (mode === "stdin-early-exit") process.exit(9);
 const stdin = fs.readFileSync(0, "utf8");
 let input; try { input = JSON.parse(stdin); } catch { process.exit(91); }
 if (!input || input.event !== "user" || !input.message || typeof input.message.content !== "string" || stdin.trim().split("\\n").length !== 1) process.exit(92);
@@ -82,20 +83,24 @@ if (mode === "timeout-child") { const child = spawn(process.execPath, ["-e", "se
 if (mode === "overflow") { process.stdout.write("x".repeat(4 * 1024 * 1024 + 1)); setInterval(() => {}, 1000); }
 if (mode === "overflow-ignore-term") { process.on("SIGTERM", () => {}); setInterval(() => process.stdout.write("x".repeat(128 * 1024)), 0); }
 if (mode === "signal-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); setInterval(() => {}, 1000); }
+if (mode === "immediate-signal-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); process.kill(process.ppid, "SIGINT"); setInterval(() => {}, 1000); }
 if (mode === "hold") { const until = Date.now() + 30000, cell = new Int32Array(new SharedArrayBuffer(4)); while (!fs.existsSync(process.env.AGY_FAKE_RELEASE_FILE) && Date.now() < until) Atomics.wait(cell, 0, 0, 25); if (!fs.existsSync(process.env.AGY_FAKE_RELEASE_FILE)) process.exit(9); }
 if (mode === "malformed") { process.stdout.write("not-json\\n"); process.exit(0); }
 const model = args[args.indexOf("--model") + 1];
 const scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0];
 const emit = value => process.stdout.write(JSON.stringify(value) + "\\n");
-emit({ event: "init", init: { cwd: process.cwd(), tools: mode === "init-tool-list" ? ["read_file"] : [], permission_mode: "request-review", model } });
-if (mode === "tool" || mode === "canceled") emit({ event: "step_update", step_update: { step_type: "tool", state: "DONE", tool_name: "read_file", tool_info: {} } });
-if (mode === "subagent") emit({ event: "step_update", step_update: { step_type: "agent_response", state: "DONE", subagent_info: {} } });
-if (mode === "tool-like") emit({ event: "step_update", step_update: { step_type: "agent_response", state: "DONE", tool_output: "forged" } });
+const conversation = "conversation-1", otherConversation = "conversation-2", usage = { input_tokens: 1, output_tokens: 2, thinking_tokens: 3, cache_read_tokens: 4, total_tokens: 10 };
+emit({ event: "init", conversation_id: conversation, init: { cwd: process.cwd(), tools: mode === "init-tool-list" ? ["read_file"] : [], permission_mode: "request-review", model } });
+if (mode === "tool" || mode === "canceled") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "tool", state: "DONE", tool_info: {} } });
+if (mode === "subagent") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", subagent_info: {} } });
+if (mode === "tool-like") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", tool_output: "forged" } });
+if (mode === "step-extra") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", extra: "forged" } });
+if (! ["tool", "canceled", "subagent", "tool-like", "step-extra"].includes(mode)) emit({ event: "step_update", step_update: { conversation_id: mode === "step-conversation-mismatch" ? otherConversation : conversation, step_index: 0, step_type: "agent_response", state: "DONE", text_delta: "", duration_seconds: 0.01, usage } });
 if (mode === "workspace") fs.writeFileSync("unexpected.txt", "write");
 if (mode === "stderr") process.stderr.write("permission notice\\n");
-if (mode === "canceled") { emit({ event: "result", result: { status: "CANCELED", response: "", denied_actions: ["read_file"] } }); process.exit(0); }
+if (mode === "canceled") { emit({ event: "result", conversation_id: conversation, status: "CANCELED", response: "", duration_seconds: 0.01, num_turns: 1, usage, denied_actions: ["read_file"] }); process.exit(0); }
 const response = mode === "missing" ? "findings\\nVERDICT: GO" : "findings\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done + "\\n";
-emit({ event: "result", result: { status: "SUCCESS", response, ...(mode === "result-extra" ? { tool_output: "forged" } : {}) } });
+emit({ event: "result", conversation_id: mode === "result-conversation-mismatch" ? otherConversation : conversation, status: "SUCCESS", response, duration_seconds: 0.02, num_turns: 1, usage, ...(mode === "result-extra" ? { tool_output: "forged" } : {}) });
 `); chmodSync(binary, 0o755);
   writeFileSync(ps, "#!/bin/sh\nprintf 'Thu Jan 01 00:00:00 1970\\n'\n"); chmodSync(ps, 0o755);
   return { support, binary, home, marker, childMarker };
@@ -246,15 +251,15 @@ test("subscription transport validates settings and sends its complete prompt on
   } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
 });
 test("subscription stream permits advertised tools but rejects tool-like or unknown event fields", () => {
-  for (const [mode, expected] of [["init-tool-list", 0], ["tool-like", 3], ["result-extra", 3]]) {
+  for (const [mode, expected] of [["init-tool-list", 0], ["tool-like", 3], ["step-extra", 3], ["result-extra", 3], ["step-conversation-mismatch", 3], ["result-conversation-mismatch", 3]]) {
     const f = fixture(), fake = fakeAgy(); try {
       const result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_MODE: mode } });
       assert.equal(result.status, expected, `${mode}: ${result.stderr}`);
     } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
   }
 });
-test("subscription transport rejects tool activity, canceled actions, malformed and incomplete output, nonzero, hard-cap overflow, stderr, and workspace mutation", () => {
-  const modes = ["tool", "canceled", "malformed", "missing", "nonzero", "stderr", "workspace", "subagent", "tool-like", "result-extra", "timeout", "overflow", "overflow-ignore-term", "timeout-child"];
+test("subscription transport rejects tool activity, canceled actions, malformed and incomplete output, nonzero, input failure, hard-cap overflow, stderr, and workspace mutation", () => {
+  const modes = ["tool", "canceled", "malformed", "missing", "nonzero", "stdin-early-exit", "stderr", "workspace", "subagent", "tool-like", "step-extra", "result-extra", "step-conversation-mismatch", "result-conversation-mismatch", "timeout", "overflow", "overflow-ignore-term", "timeout-child"];
   for (const mode of modes) {
     const f = fixture(), fake = fakeAgy(); try {
       const extra = ["--agy-bin", fake.binary, ...(mode.includes("timeout") ? ["--timeout-seconds", "1"] : [])], result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, extra)], { encoding: "utf8", timeout: 7000, env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: mode } });
@@ -277,6 +282,15 @@ test("subscription SIGINT tears down descendants, records non-verdict evidence, 
     child.kill("SIGINT"); const outcome = await closed; assert.equal(outcome.code, 130, `runner exited ${outcome.code} (${outcome.signal || "no signal"})`);
     const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0));
     const log = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(log, /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
+  } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
+});
+test("subscription handles an immediate provider SIGINT after listener attachment", async () => {
+  const f = fixture(), fake = fakeAgy(); let child = null;
+  try {
+    child = spawn(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: "immediate-signal-child" } });
+    const outcome = await new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal }))); assert.equal(outcome.code, 130, `runner exited ${outcome.code} (${outcome.signal || "no signal"})`);
+    const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0));
+    assert.match(readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"), /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
   } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
 });
 test("repository invariant, operator contract, and runner default agree on subscription dispatch", () => {

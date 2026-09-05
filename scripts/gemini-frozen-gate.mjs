@@ -344,6 +344,10 @@ function failureClass(error) { const message = String(error.message || ""); if (
 function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function onlyKeys(value, keys) { return Object.keys(value).every(key => keys.has(key)); }
 function toolLikeKey(key) { return /(?:tool|subagent|function|command|action|output)/i.test(key); }
+const USAGE_FIELDS = new Set(["input_tokens", "output_tokens", "thinking_tokens", "cache_read_tokens", "total_tokens"]);
+function nonnegativeNumber(value) { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+function usage(value) { return plainObject(value) && Object.keys(value).length === USAGE_FIELDS.size && onlyKeys(value, USAGE_FIELDS) && [...USAGE_FIELDS].every(key => nonnegativeNumber(value[key])); }
+function conversationId(value) { return typeof value === "string" && value.length > 0 && value.length <= 240 && !/[\r\n\x00]/.test(value); }
 function boundedCapture(limit) {
   let bytes = 0, overflow = false;
   const chunks = [];
@@ -396,12 +400,13 @@ function resolveTransport(o) { return o.transport === "api" ? { name: "direct-ge
 function parseSubscriptionStream(stdout, workspace, model, e) {
   const lines = stdout.split(/\r?\n/); if (lines.at(-1) === "") lines.pop();
   if (!lines.length || lines.some(line => !line)) die("agy stream-json output is empty or contains a blank event", 3);
-  let initCount = 0, resultCount = 0, result;
+  let initCount = 0, resultCount = 0, result, expectedConversation;
   for (const [index, line] of lines.entries()) {
     let event; try { event = JSON.parse(line); } catch { die("agy stream-json output contains malformed JSON", 3); }
     if (!plainObject(event) || typeof event.event !== "string") die("agy stream-json output contains an unrecognized event", 3);
     if (event.event === "init") {
-      if (index !== 0 || ++initCount !== 1 || !onlyKeys(event, new Set(["event", "init"])) || !plainObject(event.init)) die("agy stream-json must begin with exactly one init event", 3);
+      if (index !== 0 || ++initCount !== 1 || !onlyKeys(event, new Set(["event", "conversation_id", "init"])) || !conversationId(event.conversation_id) || !plainObject(event.init)) die("agy stream-json must begin with exactly one init event", 3);
+      expectedConversation = event.conversation_id;
       const init = event.init;
       if (!onlyKeys(init, new Set(["cwd", "tools", "permission_mode", "model"]))) die("agy init contains an unrecognized or execution-like field", 3);
       let cwd; try { cwd = fs.realpathSync(init.cwd); } catch { die("agy init cwd is invalid", 3); }
@@ -411,18 +416,18 @@ function parseSubscriptionStream(stdout, workspace, model, e) {
     if (event.event === "step_update") {
       const step = event.step_update;
       if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || Object.keys(step).some(toolLikeKey) || step.step_type === "tool" || step.step_type === "subagent") die("agy stream recorded a tool or subagent action", 3);
-      const fields = step.step_type === "checkpoint" ? new Set(["step_type", "state"]) : new Set(["step_type", "state", "content"]);
-      if (!["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || !onlyKeys(step, fields) || (Object.hasOwn(step, "content") && typeof step.content !== "string")) die("agy stream contains an unrecognized step", 3);
+      const base = new Set(["conversation_id", "step_index", "state", "step_type"]), responseFields = new Set([...base, "text_delta", "duration_seconds", "usage"]), fields = step.step_type === "user_input" ? base : responseFields;
+      if (!["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== expectedConversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0 || !onlyKeys(step, fields) || (Object.hasOwn(step, "text_delta") && typeof step.text_delta !== "string") || (Object.hasOwn(step, "duration_seconds") && !nonnegativeNumber(step.duration_seconds)) || (Object.hasOwn(step, "usage") && !usage(step.usage))) die("agy stream contains an unrecognized step", 3);
       continue;
     }
     if (event.event === "result") {
-      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, new Set(["event", "result"])) || !plainObject(event.result) || !onlyKeys(event.result, new Set(["status", "response", "denied_actions"]))) die("agy stream must end with exactly one result event", 3);
-      result = event.result; continue;
+      const fields = new Set(["event", "conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"]);
+      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, fields) || event.conversation_id !== expectedConversation || typeof event.status !== "string" || typeof event.response !== "string" || !nonnegativeNumber(event.duration_seconds) || !Number.isSafeInteger(event.num_turns) || event.num_turns < 0 || !usage(event.usage) || (Object.hasOwn(event, "error") && typeof event.error !== "string") || (Object.hasOwn(event, "denied_actions") && !Array.isArray(event.denied_actions))) die("agy stream must end with exactly one valid result event", 3);
+      result = event; continue;
     }
     die("agy stream-json output contains an unrecognized event", 3);
   }
-  if (initCount !== 1 || resultCount !== 1 || result.status !== "SUCCESS" || typeof result.response !== "string" || !result.response.trim()) die("agy subscription response is not one successful nonempty result", 3);
-  if (Object.hasOwn(result, "denied_actions") && (!Array.isArray(result.denied_actions) || result.denied_actions.length)) die("agy subscription response reported denied actions", 3);
+  if (initCount !== 1 || resultCount !== 1 || result.status !== "SUCCESS" || !result.response.trim() || Object.hasOwn(result, "error") || Object.hasOwn(result, "denied_actions")) die("agy subscription response is not one clean successful nonempty result", 3);
   return verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: result.response }] } }] }, e);
 }
 async function callSubscription(o, transport, e) {
@@ -433,31 +438,33 @@ async function callSubscription(o, transport, e) {
   try {
     if (fs.readdirSync(workspace).length) die("subscription workspace is not empty", 3);
     const child = spawn(transport.binary, ["--model", o.model, "--sandbox", "--disable-slash-commands", "--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout", `${o.timeoutSeconds}s`], { cwd: workspace, stdio: ["pipe", "pipe", "pipe"], shell: false, detached: true });
+    let killTimer, terminated = false, teardownDone = false, closeOutcome, finish = () => {}, transportError;
+    const signalGroup = signal => {
+      try { process.kill(-child.pid, signal); } catch { try { child.kill(signal); } catch {} }
+    };
+    const terminate = () => {
+      if (terminated) return; terminated = true;
+      signalGroup("SIGTERM");
+      killTimer = setTimeout(() => { signalGroup("SIGKILL"); teardownDone = true; finish(); }, 2000);
+    };
     const onInterrupt = signal => { interruptedSignal ||= signal; terminate(); };
-    let terminate = () => {};
     process.once("SIGINT", onInterrupt); process.once("SIGTERM", onInterrupt);
     let outcome;
     try {
       outcome = await new Promise((resolve, reject) => {
-      let killTimer, terminated = false, teardownDone = false, closeOutcome;
-      const finish = () => { if (closeOutcome && (!terminated || teardownDone)) resolve(closeOutcome); };
-      const signalGroup = signal => {
-        try { process.kill(-child.pid, signal); } catch { try { child.kill(signal); } catch {} }
-      };
-      terminate = () => {
-        if (terminated) return; terminated = true;
-        signalGroup("SIGTERM");
-        killTimer = setTimeout(() => { signalGroup("SIGKILL"); teardownDone = true; finish(); }, 2000);
-      };
+      finish = () => { if (closeOutcome && (!terminated || teardownDone)) resolve(closeOutcome); };
       const timer = setTimeout(() => { timedOut = true; terminate(); }, o.timeoutSeconds * 1000);
       child.stdout.on("data", chunk => { if (stdout.append(chunk)) terminate(); });
       child.stderr.on("data", chunk => { if (stderr.append(chunk)) terminate(); });
-      child.once("error", error => { clearTimeout(timer); clearTimeout(killTimer); reject(error); });
+      const fail = error => { transportError ||= error; terminate(); };
+      child.once("error", error => { clearTimeout(timer); transportError ||= error; teardownDone = true; closeOutcome ||= { code: null, signal: null }; finish(); });
+      child.stdin.once("error", fail);
       child.once("close", (code, signal) => { clearTimeout(timer); closeOutcome = { code, signal }; finish(); });
-      try { child.stdin.end(`${JSON.stringify({ event: "user", message: { content: e.prompt } })}\n`); } catch (error) { reject(error); }
+      try { child.stdin.end(`${JSON.stringify({ event: "user", message: { content: e.prompt } })}\n`); } catch (error) { fail(error); }
       });
     } finally { process.removeListener("SIGINT", onInterrupt); process.removeListener("SIGTERM", onInterrupt); }
     if (interruptedSignal) die(`agy subscription transport interrupted by ${interruptedSignal}`, interruptedSignal === "SIGINT" ? 130 : 143);
+    if (transportError) die(`agy subscription transport input failed: ${transportError.message}`, 3);
     if (timedOut) die("agy subscription transport timed out", 3);
     if (stdout.overflow || stderr.overflow) die("agy subscription transport exceeded its bounded output limit", 3);
     if (outcome.signal || outcome.code !== 0) die(`agy subscription transport exited ${outcome.signal || outcome.code}`, 3);

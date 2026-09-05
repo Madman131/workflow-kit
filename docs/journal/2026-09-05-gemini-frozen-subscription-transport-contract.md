@@ -107,3 +107,21 @@ NOTES 5 · ACTION-SCREEN remediate bounded transport controls; LADDER continue`.
 6. **REMEDIATE — HARM:** an execution-like field nested in an otherwise accepted stream event can be
    ignored and a forged GO accepted. **TRIGGER:** `agent_response.tool_output` or a result extra field
    accompanies an otherwise valid stream. Init, step, and result fields are now strict allowlists.
+
+#### Pre-R2 compatibility completion for item 6
+
+The first allowlist used a simplified nested-result fixture and would reject the documented/current
+Antigravity 1.1.27 stream before it could judge a candidate. **TRIGGER:** a normal stream has top-level
+`init.conversation_id`, `step_update.conversation_id`/`step_index` plus optional response telemetry,
+and a top-level terminal result with duration, turn count, and usage. The parser now accepts only those
+precise shapes, binds one stable nonempty conversation ID from init through result, and validates the
+closed nonnegative usage object (`input_tokens`, `output_tokens`, `thinking_tokens`,
+`cache_read_tokens`, `total_tokens`). The fake success path now emits that complete shape; mismatched
+conversation IDs and unexpected fields still fail closed. This completes the admitted stream-schema
+repair; it does not widen the transport or introduce a new review round.
+
+The scoped signal handler now owns group termination before it is attached, closing the immediate
+interrupt window. A fake that signals the runner immediately after provider startup proves the 130
+receipt and descendant teardown. The runner also consumes asynchronous stdin write errors such as EPIPE
+as a transport failure and waits for the owned child to close, so an early provider exit cannot crash or
+orphan the runner.
