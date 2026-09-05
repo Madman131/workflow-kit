@@ -13,8 +13,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), r
 const syntheticEnvKey = ["GEMINI", "API", "KEY"].join("_");
 function syntheticAssignment(labelParts, valueParts) { return ["export const ", labelParts.join("_"), " = '", valueParts.join(""), "';\n"].join(""); }
 function authorizationLabel() { return ["AUTH", "ORIZATION"].join(""); }
-function authorizationAssignment(scheme) { return ["export const ", authorizationLabel(), " = ", "'", [scheme, ["really", "secret", "value"].join("")].join(" "), "'\n"].join(""); }
-function authorizationHeader(scheme, quoted = false) { const value = [scheme, ["really", "secret", "value"].join("")].join(" "); return [["Auth", "orization"].join(""), ": ", quoted ? `\"${value}\"` : value, "\n"].join(""); }
+function authorizationAssignment(scheme, credential = ["really", "secret", "value"].join("")) { return ["export const ", authorizationLabel(), " = ", "'", [scheme, credential].join(" "), "'\n"].join(""); }
+function authorizationHeader(scheme, quoted = false, credential = ["really", "secret", "value"].join("")) { const value = [scheme, credential].join(" "); return [["Auth", "orization"].join(""), ": ", quoted ? `\"${value}\"` : value, "\n"].join(""); }
+function shortCredential(...parts) { return parts.join(""); }
 function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
 function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, withInstalledWrapper = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
@@ -213,12 +214,15 @@ test("authorization assignments, deleted forms, and quoted Basic headers refuse 
     for (const f of allowed) assert.equal(dry(f).status, 0, dry(f).stderr);
   } finally { for (const f of [...refused, ...allowed]) rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("ordinary authorization schemes refuse current and deleted material before live fetch", async () => {
+test("Authorization schemes reject short and punctuated credentials in current and deleted material before live fetch", async () => {
+  const basic = ["Ba", "sic"].join(""), token = ["To", "ken"].join(""), punctuated = ["X", "!", "^", "~", "|"].join(""), one = shortCredential("x"), two = shortCredential("y");
   const refused = [
-    fixture({ candidateSource: authorizationAssignment("Basic") }),
-    fixture({ candidateSource: authorizationAssignment("Token") }),
-    fixture({ baseSource: authorizationHeader("Basic"), candidateSource: "export const removed = true;\n" }),
-    fixture({ baseSource: authorizationHeader("Token"), candidateSource: "export const removed = true;\n" }),
+    fixture({ candidateSource: authorizationHeader(basic, false, one) }),
+    fixture({ candidateSource: authorizationHeader(token, false, two) }),
+    fixture({ candidateSource: authorizationHeader(punctuated, false, one) }),
+    fixture({ baseSource: authorizationHeader(basic, false, one), candidateSource: "export const removed = true;\n" }),
+    fixture({ baseSource: authorizationAssignment(token, two), candidateSource: "export const removed = true;\n" }),
+    fixture({ baseSource: authorizationHeader(punctuated, false, two), candidateSource: "export const removed = true;\n" }),
   ];
   const placeholders = [
     fixture({ candidateSource: "export const AUTHORIZATION = 'Token ${TOKEN_AUTH}';\n" }),
