@@ -1,6 +1,14 @@
-# workflow-kit — v2.27.0
+# workflow-kit — v2.28.0
 
-## What's new in v2.27.0 — the kit starts measuring itself
+## What's new in v2.28.0 — frozen Gemini receipts are provenance-bound
+
+The frozen direct Gemini path now binds every live request and durable record to the checked-out
+candidate endpoint, regular Git blobs, exact normalized scope, ordered full-material ingestion proof,
+and a complete fsynced reply record. `--no-log` is diagnostic-only for dry-run/fingerprint work;
+live direct reviews always retain a receipt. The following v2.27.0 sensor material remains included
+for adopters upgrading across both releases.
+
+## v2.27.0 — the kit starts measuring itself
 
 Four mechanisms and one checklist, taken from a survey of `affaan-m/ECC` (pinned `22e8cf0`, MIT) and
 rewritten in this kit's idiom. None touches a gate, a tier or a `core/` document; every one is a

@@ -681,15 +681,20 @@ bash scripts/cold-review-gemini.sh \
   --rig-id <nonsecret-provider-configuration-id> --context docs/contract.md
 ```
 
-The runner verifies that the base is an ancestor, the candidate owns the supplied tree, and the
-checkout is clean apart from the durable journal/sanctioned artifacts. It assembles full text from
+The runner disables Git replacement-object processing for every read, verifies that the base is an
+ancestor, the checked-out HEAD and tree equal the supplied candidate tuple, and rechecks that clean
+endpoint before every provider call and final release record. The checkout is clean apart from the
+durable journal/sanctioned artifacts. It accepts only regular-blob additions, modifications, and
+deletions; symlinks, gitlinks, type changes, renames, copies, escaping/nonregular manifests, and
+malformed slice boundaries refuse before any provider request. It assembles full text from
 Git blobs only: current changed files, old deleted files, the diff, the candidate's invariants, and
 candidate-relative contract context. Binary, non-UTF-8, renamed/type-changed, escaping, dirty, or
 secret-looking input refuses before any provider request. It never creates a snapshot, stages the
 caller tree, supplies a directory, or lets Gemini execute a tool.
 
 The direct request is one fixed-host HTTPS `generateContent` call with text-only contents and one
-candidate requested. There are no tools/function declarations and no function-call executor. Its
+candidate requested. Every response part must contain exactly one `text` field; there are no
+tools/function declarations and no function-call executor. Its
 complete serialized request is strictly below **81,920 bytes**; no setting can raise that cap. A
 larger complete candidate requires a v2 manifest augmented with `scope.candidate_commit` and
 `scope.candidate_tree`. First preflight every envelope and copy the emitted plan ID into the PM
@@ -708,13 +713,19 @@ bash scripts/cold-review-gemini.sh \
 
 Every coverage slice and the final cross-boundary slice is preflighted against the same byte bound,
 then run in manifest order. A slice is non-release; the sole aggregate is eligible only when every
-tuple/plan-bound receipt is valid and GO. A valid `NO-GO` is delivered evidence but exits nonzero and
-cannot create a release receipt. The journal records only nonsecret rig/transport, tuple, envelope
-and verdict metadata. Auth/provider/transport/timeout failures are cached by effective rig identity;
-change the nonsecret rig ID only after an actual provider configuration or availability recovery.
+tuple/plan-bound receipt is valid and GO. Each request carries stable, independently derived ordered
+material markers, including an EOF-only receipt, and the reply must print their exact order plus the
+exact normalized scope (tuple, files, contexts, invariants, material identity, and slice). A valid
+`NO-GO` is delivered evidence but exits nonzero and cannot create a release receipt. A verified reply
+is printed and stored as a checksummed complete fsynced record with its reply SHA and attempt ID;
+aggregate records retain ordered contributors. The journal records only nonsecret rig/transport,
+tuple, envelope and verdict metadata. Auth/provider/transport/timeout failures are cached by effective
+rig identity only from complete records; change the nonsecret rig ID only after an actual provider
+configuration or availability recovery.
 
-`--dry-run` validates and prints frozen envelope identities without reading `GEMINI_API_KEY` or
-contacting Gemini. `--selftest` is a shipped no-network response-firewall smoke; it does not prove
+`--dry-run` and `--fingerprint` validate and print stable material/request identities without reading
+`GEMINI_API_KEY` or contacting Gemini. `--no-log` is refused for a live direct review, so a paid call
+cannot lose its durable receipt. `--selftest` is a shipped no-network response-firewall smoke; it does not prove
 live API credentials, billing, model availability, or review quality. The legacy `--design` and
 working-tree `agy` modes remain available for their documented routing roles; they do not inherit
 this no-tools guarantee, and this explicit tuple invocation does not silently reroute them.
