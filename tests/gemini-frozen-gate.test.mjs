@@ -84,6 +84,7 @@ if (mode === "overflow") { process.stdout.write("x".repeat(4 * 1024 * 1024 + 1))
 if (mode === "overflow-ignore-term") { process.on("SIGTERM", () => {}); setInterval(() => process.stdout.write("x".repeat(128 * 1024)), 0); }
 if (mode === "signal-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); setInterval(() => {}, 1000); }
 if (mode === "immediate-signal-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); process.kill(process.ppid, "SIGINT"); setInterval(() => {}, 1000); }
+if (mode === "double-signal-child") { process.on("SIGTERM", () => {}); const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); process.kill(process.ppid, "SIGINT"); setTimeout(() => process.kill(process.ppid, "SIGTERM"), 50); setInterval(() => {}, 1000); }
 if (mode === "hold") { const until = Date.now() + 30000, cell = new Int32Array(new SharedArrayBuffer(4)); while (!fs.existsSync(process.env.AGY_FAKE_RELEASE_FILE) && Date.now() < until) Atomics.wait(cell, 0, 0, 25); if (!fs.existsSync(process.env.AGY_FAKE_RELEASE_FILE)) process.exit(9); }
 if (mode === "malformed") { process.stdout.write("not-json\\n"); process.exit(0); }
 const model = args[args.indexOf("--model") + 1];
@@ -293,6 +294,15 @@ test("subscription handles an immediate provider SIGINT after listener attachmen
     assert.match(readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"), /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
   } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
 });
+test("subscription coalesces a second signal until TERM-ignoring descendants are killed", async () => {
+  const f = fixture(), fake = fakeAgy(); let child = null;
+  try {
+    child = spawn(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: "double-signal-child" } });
+    const outcome = await new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal }))); assert.equal(outcome.code, 130, `runner exited ${outcome.code} (${outcome.signal || "no signal"})`);
+    const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0));
+    assert.match(readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"), /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
+  } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
+});
 test("repository invariant, operator contract, and runner default agree on subscription dispatch", () => {
   const invariant = readFileSync(path.join(root, "core", "REPO_INVARIANTS.md"), "utf8"), gates = readFileSync(path.join(root, "core", "GATES.md"), "utf8"), source = readFileSync(runner, "utf8");
   assert.match(invariant, /defaults to the\n  disposable, stream-verified subscription transport; direct Gemini REST is explicit-only/);
@@ -300,6 +310,9 @@ test("repository invariant, operator contract, and runner default agree on subsc
   assert.match(source, /transport: "subscription"/);
   assert.match(source, /"--input-format", "stream-json"/);
   assert.doesNotMatch(invariant, /frozen tuple path uses the direct/);
+  assert.match(gates, /legacy INLINE and FILE runner paths never use stdin[\s\S]*frozen subscription transport uses exactly\n+one NDJSON standard-input user event/);
+  assert.match(gates, /frozen subscription runner's handled `INT` \/ `TERM` exits after owned-group/);
+  assert.doesNotMatch(gates, /^The runner never uses stdin\.$|Never re-add stdin;/m);
 });
 test("subscription aggregate preserves frozen tuple and installed wrapper forwarding", () => {
   const f = fixture({ withInstalledWrapper: true }), fake = fakeAgy(); try {

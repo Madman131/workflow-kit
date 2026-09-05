@@ -578,7 +578,8 @@ These are random-token checks, not a natural-language truncation regex. Do not a
 
 ### Transport tiers
 
-The runner never uses stdin.
+The legacy INLINE and FILE runner paths never use stdin. The frozen subscription transport uses exactly
+one NDJSON standard-input user event in its disposable workspace; it does not inherit legacy routing.
 
 ### INLINE
 
@@ -811,8 +812,13 @@ parts may carry an opaque `thoughtSignature`, but no other non-text part field i
 - `3`: a frozen subscription/API `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
-- `130` / `143`: direct `INT` / `TERM` paths may preserve the signal code; always non-verdict.
+- `130` / `143`: the frozen subscription runner's handled `INT` / `TERM` exits after owned-group
+  teardown; always non-verdict. The direct API path has no equivalent scoped signal handler.
 
-Never re-add stdin; never treat OS argv acceptance as ingestion; never omit EOF, ordered distributed tokens, or response completion; never broaden process cleanup beyond the owned group/verified lock; never let rejected output appear unqualified; never present `--no-log` or individual/incomplete slices as the release gate.
+Never re-add stdin to legacy INLINE or FILE routing; preserve the frozen subscription transport's one
+NDJSON standard-input user event. Never treat OS argv acceptance as ingestion; never omit EOF, ordered
+distributed tokens, or response completion; never broaden process cleanup beyond the owned group/verified
+lock; never let rejected output appear unqualified; never present `--no-log` or individual/incomplete
+slices as the release gate.
 
 History: `docs/journal/gemini_gate_inline_only_fix.md`, `docs/journal/gemini_gate_filemode.md`, and `docs/journal/gemini_gate_reliability_remediation_design.md` (which records the held upstream ingestion-canary evidence reconciled here).

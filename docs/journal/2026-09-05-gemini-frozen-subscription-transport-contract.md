@@ -125,3 +125,26 @@ interrupt window. A fake that signals the runner immediately after provider star
 receipt and descendant teardown. The runner also consumes asynchronous stdin write errors such as EPIPE
 as a transport failure and waits for the owned child to close, so an early provider exit cannot crash or
 orphan the runner.
+
+### Typed Round 2 disposition
+
+`GATE ROUND 2 · changeset gemini-frozen-subscription-transport · verdict NO-GO · HARM-PASSING 2 ·
+NOTES 4 · ACTION-SCREEN remediate bounded signal and doctrine drift; LADDER continue`.
+
+1. **REMEDIATE — HARM:** a second termination signal can invoke Node's default handler during the
+   two-second TERM→KILL interval, ending the runner before it kills a TERM-ignoring provider group.
+   **TRIGGER:** SIGINT starts teardown and SIGTERM follows while the provider and a descendant ignore
+   TERM. Scoped persistent listeners now coalesce repeats, preserve the first signal's 130/143 exit
+   code, and are removed only after teardown; the regression proves a 130 non-verdict receipt and
+   descendant death.
+2. **REMEDIATE — HARM:** an operator following unqualified legacy doctrine can remove the frozen
+   subscription input channel and break the private-prompt transport. **TRIGGER:** `core/GATES.md`
+   stated both “The runner never uses stdin” and “Never re-add stdin” without limiting them to legacy
+   INLINE/FILE routing. Both statements now preserve the subscription's one NDJSON standard-input event,
+   and the exit-code wording names subscription-only handled signals.
+
+We declined requiring empty `init.tools`: actual Antigravity advertises available tools, while actual
+execution remains rejected by the stream and schema boundary. We also declined local-hostile
+binary/settings TOCTOU controls, a Windows task-tree implementation (subscription remains HOLD there),
+and multi-turn reuse; none is a new demonstrated reachable harm within this candidate, and fresh
+per-slice process isolation remains the bounded cost control.

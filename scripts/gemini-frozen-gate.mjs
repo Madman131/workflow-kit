@@ -448,7 +448,7 @@ async function callSubscription(o, transport, e) {
       killTimer = setTimeout(() => { signalGroup("SIGKILL"); teardownDone = true; finish(); }, 2000);
     };
     const onInterrupt = signal => { interruptedSignal ||= signal; terminate(); };
-    process.once("SIGINT", onInterrupt); process.once("SIGTERM", onInterrupt);
+    process.on("SIGINT", onInterrupt); process.on("SIGTERM", onInterrupt);
     let outcome;
     try {
       outcome = await new Promise((resolve, reject) => {
