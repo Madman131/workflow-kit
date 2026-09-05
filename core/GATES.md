@@ -675,15 +675,50 @@ The validator compares `scope.files` with the exact tracked/untracked surface (e
 
 Every slice record contains the entire normalized plan, exact diff ranges plus diff hashes, full-file hashes, canonical context paths plus byte hashes, current HEAD, pinned base commit, and the PM-approved SHA-256 plan ID. During one validator run, each selected full file and contract context is read once into a byte buffer; that same buffer is hashed and written to a private snapshot, while each computed diff is likewise cached and snapshotted. The runner consumes only those approved full-file, diff, and context snapshots—never a later live reread—so mutation after validation cannot alter the reviewed bytes under an old plan ID. An individual successful slice is `Record-Kind: SLICE_RESULT`, `Release-Gate: NO`. After every named coverage slice and a later final cross-boundary slice has a durable pass under the same plan ID, `--finalize-slices` emits the sole `SLICE_SET` release receipt with all contributing attempt IDs. Missing, failed, out-of-order, stale-HEAD, mutated-context, or differently hashed slices make finalization fail before any release verdict.
 
-### Frozen direct Gemini API gate
+### Frozen Gemini exact-candidate gate
 
-For an exact committed code candidate, the recommended frozen-candidate path is the direct text
-transport rather than the legacy `agy` agent path:
+For an exact committed code candidate, the ordinary non-API path is the explicit subscription
+transport. Direct Gemini REST remains available only when explicitly selected; neither path falls back
+to the other.
 
 ```sh
 bash scripts/cold-review-gemini.sh \
   --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
-  --rig-id <nonsecret-provider-configuration-id> --context docs/contract.md
+  --rig-id <nonsecret-provider-configuration-id> --transport subscription --context docs/contract.md
+```
+
+The subscription runner resolves `agy` from an explicit absolute `--agy-bin`, then `PATH`, then the
+current user's `.local/bin`; receipts bind the stable subscription transport name, its `--version`,
+model, settings fingerprint, and nonsecret rig ID, never an operator home path. It requires
+`gemini-3.1-pro-high`, an empty disposable system-temp workspace, and one inline `-p` prompt. It
+passes `--sandbox --disable-slash-commands --output-format stream-json --print-timeout <N>s`; it never
+passes a repository cwd, stdin, `--add-dir`, `--new-project`, `--mode plan`, permission bypass, or a
+broad permission configuration. `--new-project` is forbidden because it creates durable global project
+records. `--timeout-seconds` may lower the bounded 600-second default but cannot raise it.
+
+Before launch it parses `~/.gemini/antigravity-cli/settings.json` and refuses a malformed file,
+`toolPermission` other than absent or `request-review`, `allowNonWorkspaceAccess` other than absent or
+false, or a nonempty/malformed `permissions.allow`. The NDJSON stream must contain exactly one initial
+`init` and final `result`, identify that real disposable cwd, model, and `request-review` mode, and use
+only documented user-input, agent-response, or checkpoint step events. Any tool event, tool output,
+subagent information, denied action, stderr diagnostic, workspace mutation, signal, nonzero exit,
+timeout, malformed/unknown event, non-success result, empty response, or receipt mismatch is a
+non-verdict failure. The runner owns the detached `agy` process group and escalates TERM to KILL on a
+timeout or bounded-output overflow. It does not infer no tool activity from an omitted
+`denied_actions` field: the event stream is the authoritative local execution record.
+
+The deterministic fake-`agy` suite proves this runner behavior only. No live subscription review,
+current-account eligibility, or review quality was exercised here. **Activation remains HOLD** until an
+Owner separately authorizes live use and retains the resulting current-rig preflight and review receipt;
+do not change permissions or retry by widening them to obtain that receipt.
+
+For separately authorized direct REST, select `--transport api`; it retains the text-only endpoint and
+requires `GEMINI_API_KEY` only at that live invocation:
+
+```sh
+bash scripts/cold-review-gemini.sh \
+  --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
+  --rig-id <nonsecret-provider-configuration-id> --transport api --context docs/contract.md
 ```
 
 The runner disables Git replacement-object processing for every read, verifies that the base is an
@@ -697,7 +732,7 @@ candidate-relative contract context. Binary, non-UTF-8, renamed/type-changed, es
 secret-looking input refuses before any provider request. It never creates a snapshot, stages the
 caller tree, supplies a directory, or lets Gemini execute a tool.
 
-The direct request is one fixed-host HTTPS `generateContent` call with text-only contents and one
+The direct REST request is one fixed-host HTTPS `generateContent` call with text-only contents and one
 candidate requested. Every response part must contain exactly one `text` field; there are no
 tools/function declarations and no function-call executor. Its
 complete serialized request is strictly below **81,920 bytes**; no setting can raise that cap. A
@@ -749,9 +784,10 @@ timeout failures are cached by effective rig identity only from complete records
 nonsecret rig ID only after an actual provider configuration or availability recovery.
 
 `--dry-run` and `--fingerprint` validate and print stable material/request identities without reading
-`GEMINI_API_KEY` or contacting Gemini. `--no-log` is refused for a live direct review, so a paid call
-cannot lose its durable receipt. `--selftest` is a shipped no-network response-firewall smoke; it does not prove
-live API credentials, billing, model availability, or review quality. The legacy `--design` and
+`GEMINI_API_KEY`, resolving `agy`, or contacting either transport. `--no-log` is refused for a live
+frozen review, so an API or subscription call cannot lose its durable receipt. `--selftest` is a shipped
+no-network response-firewall smoke; it does not prove live API credentials, subscription eligibility,
+model availability, or review quality. The legacy `--design` and
 working-tree `agy` modes remain available for their documented routing roles; they do not inherit
 this no-tools guarantee, and this explicit tuple invocation does not silently reroute them.
 
@@ -764,9 +800,9 @@ parts may carry an opaque `thoughtSignature`, but no other non-text part field i
 
 ### Exit codes and traps
 
-- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. The frozen direct path returns `0` only for a verified `GO`; Git discovery failure is never “no changes.”
+- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. The frozen subscription or API path returns `0` only for a verified `GO`; Git discovery failure is never “no changes.”
 - `2`: bad arguments or invalid environment value.
-- `3`: a frozen direct `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
+- `3`: a frozen subscription/API `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
 - `130` / `143`: direct `INT` / `TERM` paths may preserve the signal code; always non-verdict.

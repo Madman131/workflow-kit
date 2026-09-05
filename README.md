@@ -1,5 +1,13 @@
 # workflow-kit — v2.29.0
 
+## Frozen Gemini subscription transport is local-test complete, activation HOLD
+
+Exact committed Gemini gates now default to an explicit Antigravity subscription stream transport;
+direct REST is `--transport api` only. The runner sends only an inline frozen envelope from an empty
+disposable cwd and rejects any stream-recorded tool/subagent activity. Deterministic fakes cover the
+route, but no live subscription review was made, so activation remains held pending separate Owner
+authorization and a current-rig receipt.
+
 ## What's new in v2.29.0 — frozen Gemini receipts are provenance-bound
 
 The frozen direct Gemini path now binds every live request and durable record to the checked-out

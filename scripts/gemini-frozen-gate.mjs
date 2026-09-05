@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models", JOURNAL = "docs/journal/gemini_review_log.md";
+const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models", JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.1-pro-high", SUBSCRIPTION_TIMEOUT_SECONDS = 600;
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 const FRAGMENT_KINDS = new Set(["frozen_source", "deleted_source", "per_file_diff"]);
@@ -67,8 +68,8 @@ function journalPath(repo) {
 }
 function parse(argv) {
   for (const key of GIT_LOCATION_OVERRIDES) if (process.env[key]) die(`ambient ${key} is not allowed for a frozen review`, 3);
-  const o = { repo: process.cwd(), model: "gemini-2.5-pro", dryRun: false, noLog: false, runSlices: false, fingerprint: false };
-  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "model", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "sharedLockDir", "lockOwnerPid"]);
+  const o = { repo: process.cwd(), transport: "subscription", model: undefined, timeoutSeconds: SUBSCRIPTION_TIMEOUT_SECONDS, dryRun: false, noLog: false, runSlices: false, fingerprint: false };
+  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "transport", "model", "agyBin", "timeoutSeconds", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "sharedLockDir", "lockOwnerPid"]);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--run-slices": "runSlices", "--fingerprint": "fingerprint" }[key]] = true; continue; }
@@ -80,7 +81,13 @@ function parse(argv) {
   }
   for (const key of ["base", "candidate", "tree", "rigId"]) if (!o[key]) die(`missing --${key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
   if (![o.base, o.candidate, o.tree].every(value => HEX.test(value))) die("base, candidate, and tree must be exact lowercase 40-hex IDs");
+  if (!new Set(["subscription", "api"]).has(o.transport)) die("--transport must be subscription or api");
+  o.model ||= o.transport === "subscription" ? SUBSCRIPTION_MODEL : "gemini-2.5-pro";
   if (!RIG.test(o.rigId) || !MODEL.test(o.model)) die("invalid nonsecret rig ID or Gemini model ID");
+  if (o.transport === "subscription" && o.model !== SUBSCRIPTION_MODEL) die(`subscription transport requires --model ${SUBSCRIPTION_MODEL}`);
+  if (o.agyBin && (o.transport !== "subscription" || !path.isAbsolute(o.agyBin))) die("--agy-bin is an absolute subscription-only executable path");
+  if (!/^\d+$/.test(String(o.timeoutSeconds)) || Number(o.timeoutSeconds) < 1 || Number(o.timeoutSeconds) > SUBSCRIPTION_TIMEOUT_SECONDS || (o.transport !== "subscription" && o.timeoutSeconds !== SUBSCRIPTION_TIMEOUT_SECONDS)) die("--timeout-seconds is a subscription-only whole number from 1 through 600");
+  o.timeoutSeconds = Number(o.timeoutSeconds);
   if (o.sliceManifest ? ((!o.runSlices && !o.fingerprint) || o.context) : (o.runSlices || o.fingerprint || !o.context)) die("use --context for one full review, or --slice-manifest with --run-slices/--fingerprint");
   if (o.context) o.context = relative(o.context, "--context"); if (o.sliceManifest) o.sliceManifest = relative(o.sliceManifest, "--slice-manifest");
   if (o.noLog && !o.dryRun && !o.fingerprint) die("--no-log is only allowed with --dry-run or --fingerprint; live reviews require a durable receipt", 3);
@@ -279,7 +286,7 @@ function envelope(repo, o, rows, contexts, name, rawFragments, complete, covered
   if (CREDENTIAL_LIKE.test(supplied)) die("possible credential-like value in final supplied review material", 3);
   const prompt = "Review this exact frozen committed artifact using only supplied material. Return findings, exactly one `VERDICT: GO` or `VERDICT: NO-GO` line, exactly one `INSPECTED SCOPE:` line copied exactly from supplied material, and exactly one `INGESTION PROOF:` line that contains the three supplied ingestion markers in encountered order, separated by ` | `. End the reply with the supplied response-completion token as its final nonblank line.";
   const request = { contents: [{ role: "user", parts: [{ text: `${prompt}\n\n${supplied}` }] }], generationConfig: { candidateCount: 1 } }, serialized = JSON.stringify(request);
-  return { request, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name };
+  return { request, prompt: `${prompt}\n\n${supplied}`, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name };
 }
 export function verifyResponse(body, e) {
   if (!body || !Array.isArray(body.candidates) || body.candidates.length !== 1) die("provider response must contain exactly one candidate", 3);
@@ -295,7 +302,7 @@ export function verifyResponse(body, e) {
 }
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
 function recordBody(record) {
-  const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", "direct-gemini-rest-v1"], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
+  const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", record.transport], ["Transport-Identity", record.transportIdentity], ["Model", record.model], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
   if (record.verdict) {
     fields.push(["Gate-Verdict", record.verdict], ["Inspected-Scope", record.scope]);
     if (typeof record.reply === "string") fields.push(["Reply-SHA256", record.replySha], ["Completion-Token-SHA256", record.completionSha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
@@ -323,7 +330,7 @@ function sharedLock(repo, o) {
   return lock;
 }
 function complete(block) { const candidate = block.startsWith("## Gemini frozen gate attempt — ") ? `\n${block}` : block, match = candidate.match(/^([\s\S]*?)- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`\n?$/); return Boolean(match && sha(match[1]) === match[2]); }
-function rigKey(o) { return sha(`direct-gemini-rest-v1|${ENDPOINT}|${o.model}|${o.rigId}`); }
+function rigKey(o, transport) { return sha(`${transport.name}|${transport.identity}|${o.model}|${o.rigId}`); }
 function cachedFailure(repo, key) {
   let journal = ""; try { journal = fs.readFileSync(path.join(repo, JOURNAL), "utf8"); } catch { return null; }
   for (const block of journal.split(/(?=^## Gemini frozen gate attempt — )/m).reverse()) {
@@ -333,7 +340,97 @@ function cachedFailure(repo, key) {
   } return null;
 }
 function failureClass(error) { const message = String(error.message || ""); if (/HTTP 401|HTTP 403/.test(message)) return "AUTH"; if (/HTTP \d+/.test(message)) return "PROVIDER"; if (/timed out/.test(message)) return "TIMEOUT"; if (/response|ingestion|verdict|scope|text field/.test(message)) return "CANDIDATE_RESPONSE"; return "TRANSPORT"; }
-async function call(o, e) {
+function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+export function preflightSubscriptionSettings(settingsPath = path.join(os.homedir(), ".gemini", "antigravity-cli", "settings.json")) {
+  const stat = fs.lstatSync(settingsPath, { throwIfNoEntry: false });
+  if (!stat) return { identity: "settings-absent" };
+  if (!stat.isFile() || stat.isSymbolicLink()) die("Antigravity settings must be a regular non-symlink file", 3);
+  const bytes = fs.readFileSync(settingsPath);
+  let settings; try { settings = JSON.parse(bytes); } catch { die("Antigravity settings are malformed JSON", 3); }
+  if (!plainObject(settings)) die("Antigravity settings must be an object", 3);
+  if (settings.toolPermission !== undefined && settings.toolPermission !== "request-review") die("Antigravity toolPermission must be absent or request-review", 3);
+  if (settings.allowNonWorkspaceAccess !== undefined && settings.allowNonWorkspaceAccess !== false) die("Antigravity allowNonWorkspaceAccess must be absent or false", 3);
+  if (settings.permissions !== undefined) {
+    if (!plainObject(settings.permissions)) die("Antigravity permissions must be an object", 3);
+    if (settings.permissions.allow !== undefined && (!Array.isArray(settings.permissions.allow) || settings.permissions.allow.length)) die("Antigravity permissions.allow must be an empty array when present", 3);
+  }
+  return { identity: `settings-sha256:${sha(bytes)}` };
+}
+function resolveSubscriptionTransport(o) {
+  const fromPath = () => (process.env.PATH || "").split(path.delimiter).filter(Boolean).map(directory => path.join(directory, "agy")).find(candidate => {
+    const stat = fs.statSync(candidate, { throwIfNoEntry: false }); return Boolean(stat?.isFile() && (stat.mode & 0o111));
+  });
+  const requested = o.agyBin || fromPath() || path.join(os.homedir(), ".local", "bin", "agy"), stat = fs.statSync(requested, { throwIfNoEntry: false });
+  if (!stat || !stat.isFile() || !(stat.mode & 0o111)) die(`agy binary is not a regular executable: ${requested}`, 127);
+  const binary = fs.realpathSync(requested);
+  let version;
+  try { version = String(execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10000 })).trim(); }
+  catch (error) { die(`agy --version failed: ${String(error.stderr || error.message).trim()}`, 3); }
+  if (!version || version.length > 240 || /[\r\n\x00]/.test(version)) die("agy --version returned an invalid identity", 3);
+  const settings = preflightSubscriptionSettings();
+  return { name: "antigravity-agy-subscription-stream-v1", identity: `${version}|${settings.identity}`, binary };
+}
+function resolveTransport(o) { return o.transport === "api" ? { name: "direct-gemini-rest-v1", identity: `${ENDPOINT}|${o.model}` } : resolveSubscriptionTransport(o); }
+function parseSubscriptionStream(stdout, workspace, model, e) {
+  const lines = stdout.split(/\r?\n/); if (lines.at(-1) === "") lines.pop();
+  if (!lines.length || lines.some(line => !line)) die("agy stream-json output is empty or contains a blank event", 3);
+  let initCount = 0, resultCount = 0, result;
+  for (const [index, line] of lines.entries()) {
+    let event; try { event = JSON.parse(line); } catch { die("agy stream-json output contains malformed JSON", 3); }
+    if (!plainObject(event) || typeof event.event !== "string") die("agy stream-json output contains an unrecognized event", 3);
+    if (event.event === "init") {
+      if (index !== 0 || ++initCount !== 1 || !plainObject(event.init)) die("agy stream-json must begin with exactly one init event", 3);
+      const init = event.init;
+      let cwd; try { cwd = fs.realpathSync(init.cwd); } catch { die("agy init cwd is invalid", 3); }
+      if (cwd !== workspace || init.permission_mode !== "request-review" || init.model !== model || !Array.isArray(init.tools)) die("agy init does not prove the required disposable request-review rig", 3);
+      continue;
+    }
+    if (event.event === "step_update") {
+      const step = event.step_update;
+      if (!plainObject(step) || Object.hasOwn(step, "subagent_info") || step.step_type === "tool" || step.step_type === "subagent") die("agy stream recorded a tool or subagent action", 3);
+      if (!["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state)) die("agy stream contains an unrecognized step", 3);
+      continue;
+    }
+    if (event.event === "result") {
+      if (index !== lines.length - 1 || ++resultCount !== 1 || !plainObject(event.result)) die("agy stream must end with exactly one result event", 3);
+      result = event.result; continue;
+    }
+    die("agy stream-json output contains an unrecognized event", 3);
+  }
+  if (initCount !== 1 || resultCount !== 1 || result.status !== "SUCCESS" || typeof result.response !== "string" || !result.response.trim()) die("agy subscription response is not one successful nonempty result", 3);
+  if (Object.hasOwn(result, "denied_actions") && (!Array.isArray(result.denied_actions) || result.denied_actions.length)) die("agy subscription response reported denied actions", 3);
+  return verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: result.response }] } }] }, e);
+}
+async function callSubscription(o, transport, e) {
+  const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gemini-subscription-")));
+  let stdout = "", stderr = "", timedOut = false, stdoutOverflow = false, stderrOverflow = false;
+  try {
+    if (fs.readdirSync(workspace).length) die("subscription workspace is not empty", 3);
+    const child = spawn(transport.binary, ["-p", e.prompt, "--model", o.model, "--sandbox", "--disable-slash-commands", "--output-format", "stream-json", "--print-timeout", `${o.timeoutSeconds}s`], { cwd: workspace, stdio: ["ignore", "pipe", "pipe"], shell: false, detached: process.platform !== "win32" });
+    const outcome = await new Promise((resolve, reject) => {
+      let killTimer, terminated = false, teardownDone = false, closeOutcome;
+      const finish = () => { if (closeOutcome && (!terminated || teardownDone)) resolve(closeOutcome); };
+      const terminate = () => {
+        if (terminated) return; terminated = true;
+        try { if (process.platform !== "win32") process.kill(-child.pid, "SIGTERM"); else child.kill("SIGTERM"); } catch { child.kill("SIGTERM"); }
+        killTimer = setTimeout(() => { try { if (process.platform !== "win32") process.kill(-child.pid, "SIGKILL"); else child.kill("SIGKILL"); } catch { child.kill("SIGKILL"); } teardownDone = true; finish(); }, 2000);
+      };
+      const timer = setTimeout(() => { timedOut = true; terminate(); }, o.timeoutSeconds * 1000);
+      child.stdout.on("data", chunk => { stdout += chunk; if (Buffer.byteLength(stdout) > 4 * 1024 * 1024) { stdoutOverflow = true; terminate(); } });
+      child.stderr.on("data", chunk => { stderr += chunk; if (Buffer.byteLength(stderr) > 1024 * 1024) { stderrOverflow = true; terminate(); } });
+      child.once("error", error => { clearTimeout(timer); clearTimeout(killTimer); reject(error); });
+      child.once("close", (code, signal) => { clearTimeout(timer); closeOutcome = { code, signal }; finish(); });
+    });
+    if (timedOut) die("agy subscription transport timed out", 3);
+    if (stdoutOverflow || stderrOverflow) die("agy subscription transport exceeded its bounded output limit", 3);
+    if (outcome.signal || outcome.code !== 0) die(`agy subscription transport exited ${outcome.signal || outcome.code}`, 3);
+    if (stderr.trim()) die("agy subscription transport emitted stderr diagnostics or a permission notice", 3);
+    if (fs.readdirSync(workspace).length) die("agy subscription transport mutated its disposable workspace", 3);
+    return parseSubscriptionStream(stdout, workspace, o.model, e);
+  } finally { fs.rmSync(workspace, { recursive: true, force: true }); }
+}
+async function call(o, transport, e) {
+  if (o.transport === "subscription") return callSubscription(o, transport, e);
   const key = process.env.GEMINI_API_KEY; if (!key) die("GEMINI_API_KEY is required only for a live direct API invocation", 3);
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 600000);
   try { const response = await fetch(`${ENDPOINT}/${o.model}:generateContent`, { method: "POST", redirect: "error", signal: controller.signal, headers: { "content-type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(e.request) }); if (!response.ok) die(`Gemini provider returned HTTP ${response.status}`, 3); return verifyResponse(await response.json(), e); }
@@ -354,22 +451,22 @@ export async function run(argv = process.argv.slice(2)) {
   if (o.dryRun) { process.stdout.write(JSON.stringify({ frozen: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan?.planId || null, envelopes: identities }, null, 2) + "\n"); return; }
   preflightJournal(repo); const lock = sharedLock(repo, o);
   try {
-    const key = rigKey(o), contributors = [], results = []; let allGo = true;
+    const transport = resolveTransport(o), key = rigKey(o, transport), contributors = [], results = []; let allGo = true;
     for (const item of prepared) {
       if (cachedFailure(repo, key)) die(`cached transport rig failure for --rig-id ${o.rigId}; change the nonsecret rig declaration after a real recovery`, 3);
       const attemptId = random("PIL-FROZEN-ATTEMPT");
       try {
-        endpoint(repo, o); const result = await call(o, item); endpoint(repo, o);
-        append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
+        endpoint(repo, o); const result = await call(o, transport, item); endpoint(repo, o);
+        append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
         contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
-      } catch (error) { const failure = failureClass(error); append(repo, { status: failure === "CANDIDATE_RESPONSE" ? "FAILED_CANDIDATE_RESPONSE" : "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", attemptId, rigId: o.rigId, rigKey: key, failureClass: failure, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail: error.message }); throw error; }
+      } catch (error) { const failure = failureClass(error); append(repo, { status: failure === "CANDIDATE_RESPONSE" ? "FAILED_CANDIDATE_RESPONSE" : "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, failureClass: failure, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail: error.message }); throw error; }
     }
     if (plan) {
       endpoint(repo, o);
       const aggregateMaterialId = sha(JSON.stringify({ plan_id: plan.planId, envelopes: prepared.map(item => ({ slice: item.name, material_sha256: item.materialId, request_sha256: item.envelopeSha })), contributors: results }));
       const scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: aggregateMaterialId, contributors: results });
       const verdict = allGo ? "GO" : "NO-GO", resultSha = sha(JSON.stringify({ verdict, scope }));
-      append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict, scope, resultSha });
+      append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict, scope, resultSha });
     }
     if (!allGo) process.exitCode = 3;
   } finally { fs.rmSync(lock, { recursive: true, force: true }); }

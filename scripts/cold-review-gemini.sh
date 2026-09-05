@@ -54,7 +54,7 @@ cd "$REPO_ROOT"
 # ---- args ----
 CONTEXT_FILE="${GEMINI_REVIEW_CONTEXT:-}"
 DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""; FOLDED_IS_FILE=0; CONTEXT_FILE_CANONICAL=""; SLICE_MANIFEST=""; SLICE_MANIFEST_CANONICAL=""; SLICE_NAME=""; FINALIZE_SLICES=0; DRY_RUN=0; DO_LOG=1; SELFTEST=0
-FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_MODEL="gemini-2.5-pro"; RUN_SLICES=0
+FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_TRANSPORT="subscription"; FROZEN_MODEL=""; FROZEN_AGY_BIN=""; FROZEN_TIMEOUT_SECONDS=""; RUN_SLICES=0
 FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0
 require_option_value() {
   [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "cold-review-gemini: $1 requires a nonempty value." >&2; exit 2; }
@@ -73,7 +73,10 @@ while [ $# -gt 0 ]; do
     --candidate) require_option_value "$@"; FROZEN_CANDIDATE="$2"; FROZEN_INTENT=1; shift 2 ;;
     --tree) require_option_value "$@"; FROZEN_TREE="$2"; FROZEN_INTENT=1; shift 2 ;;
     --rig-id) require_option_value "$@"; FROZEN_RIG_ID="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --transport) require_option_value "$@"; FROZEN_TRANSPORT="$2"; FROZEN_INTENT=1; shift 2 ;;
     --gemini-model) require_option_value "$@"; FROZEN_MODEL="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --agy-bin) require_option_value "$@"; FROZEN_AGY_BIN="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --timeout-seconds) require_option_value "$@"; FROZEN_TIMEOUT_SECONDS="$2"; FROZEN_INTENT=1; shift 2 ;;
     --run-slices) RUN_SLICES=1; FROZEN_INTENT=1; shift ;;
     --fingerprint) FROZEN_FINGERPRINT=1; FROZEN_INTENT=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -90,8 +93,8 @@ if [ "$SELFTEST" = "1" ] && [ "$ORIGINAL_ARGC" -ne 1 ]; then
 fi
 
 # The frozen path is intentionally dispatched before the legacy working-tree runner establishes a
-# snapshot or discovers `agy`. Its transport is the direct text API; it never exposes a directory,
-# shell, MCP server, browser, or agent tool to the model.
+# snapshot or discovers `agy`. It forwards the explicit frozen transport unchanged; the subscription
+# transport receives only an inline envelope in its own disposable workspace.
 frozen_count=0
 for frozen_value in "$FROZEN_BASE" "$FROZEN_CANDIDATE" "$FROZEN_TREE" "$FROZEN_RIG_ID"; do [ -n "$frozen_value" ] && frozen_count=$((frozen_count + 1)); done
 if [ "$FROZEN_INTENT" = "1" ]; then
@@ -338,7 +341,9 @@ acquire_single_flight() {
         echo "repo=$common"
         echo "script=$SCRIPT_DIR/cold-review-gemini.sh"
         echo "command=$self_command"
-        [ "$FROZEN_DISPATCH" = "1" ] && echo "kind=direct"
+        if [ "$FROZEN_DISPATCH" = "1" ]; then
+          [ "$FROZEN_TRANSPORT" = "api" ] && echo "kind=direct" || echo "kind=subscription"
+        fi
       } > "$owner_tmp" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot write single-flight owner record." >&2; exit 3; }
       mv "$owner_tmp" "$LOCK_DIR/owner" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot publish single-flight owner record." >&2; exit 3; }
       LOCK_HELD=1
@@ -572,7 +577,10 @@ trap 'on_signal TERM 143' TERM
 
 if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && [ "$FROZEN_FINGERPRINT" = "1" ]; }; then acquire_single_flight; fi
 if [ "$FROZEN_DISPATCH" = "1" ]; then
-  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --model "$FROZEN_MODEL")
+  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --transport "$FROZEN_TRANSPORT")
+  [ -n "$FROZEN_MODEL" ] && frozen_args+=(--model "$FROZEN_MODEL")
+  [ -n "$FROZEN_AGY_BIN" ] && frozen_args+=(--agy-bin "$FROZEN_AGY_BIN")
+  [ -n "$FROZEN_TIMEOUT_SECONDS" ] && frozen_args+=(--timeout-seconds "$FROZEN_TIMEOUT_SECONDS")
   [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
   [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST" --run-slices)
   [ "$FROZEN_FINGERPRINT" = 1 ] && frozen_args+=(--fingerprint)

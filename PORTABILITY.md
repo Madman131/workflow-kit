@@ -684,12 +684,15 @@ no behavioral gain — bounded > tidy). A later version may neutralize the prefi
 The gate runners are optional (`init --with-gate-runners`). They need tools you provide:
 - `codex-gate.sh` → the `codex` CLI (a ChatGPT-subscription session).
 - `cold-review-gemini.sh` legacy modes → the `agy` CLI (an Antigravity / Google AI Pro session);
-  exact `--base --candidate --tree` frozen reviews → Node's native HTTPS client plus an explicitly
-  supplied `GEMINI_API_KEY` at the authorized live invocation only.
+  exact `--base --candidate --tree` frozen reviews → the ordinary `--transport subscription` `agy`
+  stream rig, or the explicitly selected `--transport api` Node HTTPS client plus a supplied
+  `GEMINI_API_KEY` at an authorized live invocation only. Subscription activation remains HOLD until
+  the current rig is separately authorized and receipted; deterministic fakes do not prove it.
 
 The legacy Codex/`agy` harnesses are **not** wired into the kit's default control suite because they
-need those tools or their fakes. The frozen direct-API response-firewall tests are wired into `npm test`
-and make no network or credential request; they do not prove a live provider. If you gate by hand instead, record that in `core/BINDINGS.md § Tool bindings` and treat
+need those tools or their fakes. The frozen subscription stream and direct-API response-firewall tests
+are wired into `npm test` with deterministic fakes and make no network or credential request; they do
+not prove a live provider. If you gate by hand instead, record that in `core/BINDINGS.md § Tool bindings` and treat
 `core/GATES.md` as the doctrine (freeze the artifact · require a verdict not just a receipt · exit 3 is
 never a pass) rather than a script you must run.
 
