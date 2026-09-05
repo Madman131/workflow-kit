@@ -3,19 +3,22 @@
 ## Intent and scope
 
 Extend the existing Gemini gate command to review exact committed candidates without worktree
-projection or model access to tools. The frozen path uses the Gemini REST API; legacy design/working
-tree paths remain explicitly legacy. No service, skill, permission framework, controller, parallel
-release ledger, provider substitution, global permission change, or adopter mutation is in scope.
+projection or model access to tools. The frozen path defaults to the disposable Antigravity subscription
+stream; direct Gemini REST is available only with explicit `--transport api`, and neither transport
+falls back to the other. Legacy design/working-tree paths remain explicitly legacy. No service, skill,
+permission framework, controller, parallel release ledger, provider substitution, global permission
+change, or adopter mutation is in scope.
 
 ## Inputs and artifact
 
-The frozen public invocation accepts exact lowercase 40-hex `--base`, `--candidate`, `--tree`, a
-nonsecret `--rig-id`, and candidate-relative contract context. Reject symbolic refs, incorrect object
-types, tree mismatch, non-ancestor base, repository identity change, replacement-object influence,
-unsupported entries, and dirty/untracked source state except sanctioned gate artifacts and the existing
-review journal. Freeze and recheck the initial checkout endpoint before any provider call and before
-finalization; a new checkout endpoint requires a new invocation. Neither a clean checkout nor a
-branch name substitutes for the supplied object tuple.
+The frozen public invocation accepts exact lowercase 40-hex `--base`, `--candidate`, `--tree`, and a
+nonsecret `--rig-id`. Full review and DRAFT generation select candidate-relative contract context; an
+approved sliced run carries its selected contexts in the manifest and therefore forbids `--context`.
+Reject symbolic refs, incorrect object types, tree mismatch, non-ancestor base, repository identity
+change, replacement-object influence, unsupported entries, and dirty/untracked source state except
+sanctioned gate artifacts and the existing review journal. Freeze and recheck the initial checkout
+endpoint before any provider call and before finalization; a new checkout endpoint requires a new
+invocation. Neither a clean checkout nor a branch name substitutes for the supplied object tuple.
 
 Read Git blobs and no-external-diff/no-textconv diffs directly from the exact endpoints. Include full
 new/changed files and deleted old content, full applicable diff, portable and repository invariants,
@@ -28,13 +31,18 @@ text as nonprivate.
 
 ## Transport and completion
 
-Use Node native fetch to a fixed official HTTPS generateContent endpoint, with a validated Gemini
-model ID, redirects refused, a bounded timeout, one candidate requested, text contents, and no tools
-or function-call execution loop. Read the API key only for authorized live execution; do not log,
-hash, expose, or recover credentials. Dry-run and deterministic tests never read credentials or call
-a live provider. Model access to the source repository, filesystem, shell, browser and MCP is absent.
-Returned tool calls are errors, never executed. Require exactly one response candidate, STOP finish
-reason, and text-only content. Refuse empty or interrupted output.
+The default subscription transport passes the already-screened bounded text envelope as one NDJSON
+user event to validated `agy` in an empty disposable workspace, with its stream acting as the local
+tool/subagent execution record. Tool or subagent activity, permission notices, workspace mutation,
+malformed stream output, interruption, timeout, or a non-success result is a non-verdict failure.
+Direct REST uses Node native fetch with redirects refused, a bounded timeout, and one text candidate
+requested from the fixed official HTTPS `generateContent` endpoint only when `--transport api` is
+explicit; it reads `GEMINI_API_KEY` only for that authorized live invocation. Neither path receives
+the repository, shell, browser, or MCP access, and neither falls back to the other. REST
+tool-like output and subscription tool/subagent stream activity are refused, never executed. Both
+reach the same response verifier, which requires exactly one text candidate, `STOP`, an unambiguous
+verdict, and the bound receipt evidence; it refuses empty, interrupted, or malformed output. Dry-run
+and deterministic tests never read credentials or call a live provider.
 
 Instrument the entire supplied review content with random ordered canaries, an EOF receipt, and a
 response completion token. Validate those plus one unambiguous GO/NO-GO and the claimed inspected
@@ -59,10 +67,11 @@ Boundary coverage remains a PM judgment backed by full selected content, not a p
 hashes. Missing, malformed, duplicate, reordered, incomplete or mismatched plan/receipt input refuses.
 
 The ordinary approved-plan execution is one `cold-review-gemini.sh` invocation with the exact tuple,
-context, manifest and `--run-slices`. It validates, executes each coverage slice in order, runs the
-final cross-boundary review and finalizes once. Each individual slice is non-release. Only a complete,
-ordered, tuple/plan-bound, verified aggregate can constitute a full gate. A valid slice NO-GO is
-durable evidence and stops execution before any later call or incomplete aggregate.
+manifest, and `--run-slices`; the manifest carries its contract contexts and the invocation forbids
+`--context`. It validates, executes each coverage slice in order, runs the final cross-boundary review
+and finalizes once. Each individual slice is non-release. Only a complete, ordered, tuple/plan-bound,
+verified aggregate can constitute a full gate. A valid slice NO-GO is durable evidence and stops
+execution before any later call or incomplete aggregate.
 
 ## Durable state and retries
 
@@ -85,6 +94,7 @@ all missing/malformed/duplicate/reordered cases; denied tool response, empty/mis
 verdict, receipt/canary/scope mismatch, timeout, no unrelated inclusion or repository mutation,
 no dangerous/broad permissions and no repeat call under unchanged rig failure.
 
-Live Gemini API authorization is a separate boundary. Fake-provider tests prove local behavior,
-not API access, billing, model availability, live ingestion or useful review quality. Legacy agent
-paths do not inherit the frozen path's no-tools guarantee. No change to family-decorrelation rules.
+Live Gemini transport authorization or subscription eligibility is a separate Owner boundary.
+Fake-provider and fake-`agy` tests prove local behavior, not API access, billing, account eligibility,
+model availability, live ingestion, or useful review quality. Legacy agent paths do not inherit the
+frozen path's no-tools guarantee. No change to family-decorrelation rules.
