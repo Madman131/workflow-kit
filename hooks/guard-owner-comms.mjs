@@ -5,7 +5,7 @@
 // THIS IS A SENSOR, NOT A CONTROL. It **FAILS OPEN** — every parse error, missing field, unreadable
 // transcript, absent or unfinished `core/OWNER_COMMS.md`, and every unrecognized shape ALLOWS. A
 // clean run therefore proves NOTHING about a message. Do not describe it as enforcement anywhere
-// (`PORTABILITY.md` § the Owner-comms sensor; `core/INVARIANTS.md` epistemic rules 2 & 10 — a control
+// (the kit's `PORTABILITY.md` § the Owner-comms sensor, in the workflow-kit repository; `core/INVARIANTS.md` epistemic rules 2 & 10 — a control
 // believed to enforce something it does not is worse than no control).
 //
 // WHY IT EXISTS: rule 1 already said "answer first, in one sentence" when an Owner asked a three-word

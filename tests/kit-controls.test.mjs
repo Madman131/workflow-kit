@@ -155,6 +155,28 @@ test("init rejects a flag-shaped value for every value-taking flag", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("--worktree-roots reaches kit.config.json, and a RELATIVE root is refused before anything is written", () => {
+  // The installer half of the worktreeRoots family. guard-cross-repo-writes DENIES every gated write
+  // on a config it cannot read, so a relative entry written here would hand the adopter a repo whose
+  // file tools are dead until they hand-edit JSON — which is why the refusal lives in arg parsing.
+  const { dir, cleanup } = adopt(["--worktree-roots", "/opt/worktrees,/srv/lanes"]);
+  try {
+    assert.deepEqual(JSON.parse(readFileSync(path.join(dir, ".claude", "kit.config.json"), "utf8")).worktreeRoots,
+      ["/opt/worktrees", "/srv/lanes"], "both declared roots reach the config intact");
+  } finally { cleanup(); }
+
+  const rel = mkdtempSync(path.join(os.tmpdir(), "kit-wtrel-"));
+  try {
+    execFileSync("git", ["init", "-q", rel]);
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", rel, "--repo-name",
+      "adopter", "--skip-codex-prompt", "--worktree-roots", "../worktrees"], { encoding: "utf8" });
+    assert.equal(r.status, 2, `a relative --worktree-roots entry must exit 2: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /ABSOLUTE/, "and the message must say what shape it wanted");
+    assert.equal(existsSync(path.join(rel, ".claude", "kit.config.json")), false,
+      "…and it must abort in arg parsing, before anything is written");
+  } finally { rmSync(rel, { recursive: true, force: true }); }
+});
+
 test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, not grandfathered", () => {
   // `exempt` was the one route carrying no tier, so a reason set entirely about review-SEAT
   // availability selected the mode that skipped tier declaration. Both layers, both directions.

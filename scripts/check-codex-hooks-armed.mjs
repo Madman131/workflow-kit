@@ -41,7 +41,7 @@
 //  · ARMED means "the guard ran on THIS invocation, in this repo, for this trust state". It says
 //    nothing about whether the guard's DECISIONS are right — that is the test suite's job.
 //  · It exercises the apply_patch path. A Codex write issued through a plain shell command is not
-//    covered by these hooks at all (PORTABILITY.md); this check cannot make that gap visible.
+//    covered by these hooks at all (the kit's PORTABILITY.md, in the workflow-kit repository); this check cannot make that gap visible.
 //  · A ledger that cannot be APPENDED TO (symlinked, unwritable) makes the guard fail closed with no
 //    row, which reads here as NOT ARMED. That direction is safe — it never reports a false ARMED —
 //    but if you see NOT ARMED on hooks you know are trusted, check the ledger file itself.

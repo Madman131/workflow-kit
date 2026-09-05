@@ -1,7 +1,7 @@
 // workflow-kit — portable FM1 test. `init` installs this into the ADOPTER's tests/ so the adopter's
 // CI goes RED when the harness-agnostic pre-commit control is not actually wired up.
 //
-// FM1 (PORTABILITY.md): core.hooksPath is LOCAL git config, not tracked. A fresh clone / new worktree
+// FM1 (the kit's PORTABILITY.md, workflow-kit repository): core.hooksPath is LOCAL git config, not tracked. A fresh clone / new worktree
 // / CI checkout with it unset has the pre-commit control silently ABSENT — a dormant control that
 // manufactures assurance (core/INVARIANTS.md rules 2 & 10). This test makes that state loud: it fails
 // unless core.hooksPath resolves to the tracked .githooks dir AND the hook exists and is executable.

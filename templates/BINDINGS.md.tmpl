@@ -18,7 +18,7 @@ thread** · Builder = **{{DEFAULT_BUILDER}}** · Cold reviewer = **blind {{COLD_
 **Frontier consult (`/frontier-review`) — role bindings:** frontier judge = **{{FRONTIER_MODEL}}**
 (the most capable, most expensive tier; judges the packet, nothing else) · workhorse =
 **{{DEFAULT_BUILDER}}** (builds the packet, resumes as decider) · Codex-lane frontier =
-**{{CODEX_FRONTIER_MODEL}}**. Re-binding the seat files themselves: `PORTABILITY.md` § the consult
+**{{CODEX_FRONTIER_MODEL}}**. Re-binding the seat files themselves: the kit's `PORTABILITY.md` § the consult
 seat.
 
 ## When Codex is the Builder
@@ -91,7 +91,7 @@ a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is
 
 ## Tool bindings
 - **Cross-family lens / external gate:** {{GATE_TOOLING}} *(if you use the shipped Codex/Gemini
-  runners, they need `codex` / `agy` at runtime — see `PORTABILITY.md`; if you gate by hand, say so
+  runners, they need `codex` / `agy` at runtime — see the kit's `PORTABILITY.md` (workflow-kit repository); if you gate by hand, say so
   here).*
 - **Task-lane declaration — enforcement paths:** declaration `.claude/task-lane.json`; ledger
   `.claude/lane-ledger.jsonl` (gitignored); write-time guard `.claude/hooks/guard-lane-authoring.mjs`,
