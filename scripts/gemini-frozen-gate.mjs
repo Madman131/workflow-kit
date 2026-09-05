@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models", JOURNAL = "docs/journal/gemini_review_log.md";
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
+const FRAGMENT_KINDS = new Set(["frozen_source", "deleted_source", "per_file_diff"]);
 const GIT_LOCATION_OVERRIDES = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
 const CREDENTIAL_LIKE = /(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[^}\r\n]+\}|\$\([^\)\r\n]+\)|\$\d+|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[A-Za-z0-9][^\s#]{7,})|\bauthorization\s*[:=]\s*(?!["']?(?:[A-Za-z][A-Za-z0-9._-]*\s+)?(?:\$\{[^}\r\n]+\}|\$\([^\)\r\n]+\)|\$\d+|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))["']?(?:[A-Za-z][A-Za-z0-9._-]*\s+)?(?:["'][^"']{1,}|[A-Za-z0-9][^\s#]{7,})|\bbearer\s+[A-Za-z0-9._~+/=-]{8,})/i;
 function lexical(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
@@ -29,12 +30,21 @@ function paths(values, label) {
   if (new Set(out).size !== out.length) die(`${label} contains duplicate paths`);
   return out.sort(lexical);
 }
-function blob(repo, commit, file) {
+function artifactBytes(repo, commit, file, label = "artifact") {
   file = relative(file, "artifact path");
   const bytes = git(repo, ["show", `${commit}:${file}`], "buffer");
-  let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { die(`non-UTF-8 artifact is unsupported: ${file}`); }
-  if (/\0/.test(text)) die(`binary artifact is unsupported: ${file}`);
-  return text;
+  let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { die(`non-UTF-8 ${label} is unsupported: ${file}`); }
+  if (/\0/.test(text)) die(`binary ${label} is unsupported: ${file}`);
+  return bytes;
+}
+function blob(repo, commit, file) {
+  return artifactBytes(repo, commit, file).toString("utf8");
+}
+function diffBytes(repo, base, candidate, file) {
+  const bytes = git(repo, ["diff", "--no-ext-diff", "--no-textconv", "--unified=80", base, candidate, "--", file], "buffer");
+  let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { die(`non-UTF-8 per-file diff is unsupported: ${file}`); }
+  if (/\0/.test(text)) die(`binary per-file diff is unsupported: ${file}`);
+  return bytes;
 }
 function regularTreeBlob(repo, commit, file, label) {
   file = relative(file, label);
@@ -136,7 +146,7 @@ function verifyManifest(repo, o, rows) {
   if (new Set(slices.map(item => item.name)).size !== slices.length) die("slice names must be unique");
   const coverage = slices.filter(item => item.kind === "coverage"), cross = slices.filter(item => item.kind === "cross_boundary");
   if (!coverage.length || cross.length !== 1 || slices.at(-1) !== cross[0]) die("manifest requires exactly one final cross_boundary slice");
-  const covered = new Set(); for (const item of coverage) for (const file of item.files) { if (covered.has(file)) die(`coverage slices overlap: ${file}`); covered.add(file); }
+  const covered = new Set(); for (const item of coverage) for (const file of item.files) { if (covered.has(file) && item.raw.fragments === undefined && !coverage.some(other => other !== item && other.files.includes(file) && other.raw.fragments !== undefined)) die(`coverage slices overlap: ${file}`); covered.add(file); }
   if ([...covered].sort(lexical).join("\0") !== actualFiles.join("\0")) die("coverage slices do not exactly and disjointly cover the candidate");
   const boundaries = {}, final = cross[0];
   for (const name of BOUNDARIES) {
@@ -148,16 +158,114 @@ function verifyManifest(repo, o, rows) {
     if ((claim.status === "covered" && !scope_files.length) || (claim.status === "not_applicable" && !contract_context.length)) die(`cross_boundary ${name} lacks required evidence`);
     boundaries[name] = { status: claim.status, scope_files, contract_context, rationale: claim.rationale.trim() };
   }
-  const normalized = { version: 2, scope: { base_commit: o.base, candidate_commit: o.candidate, candidate_tree: o.tree, files: declared }, slices: slices.map(item => ({ name: item.name, kind: item.kind, files: item.files, contract_context: item.contract_context, ...(item.kind === "cross_boundary" ? { boundaries } : {}) })), approval: { by: manifest.approval.by } };
+  const normalized = { version: 2, scope: { base_commit: o.base, candidate_commit: o.candidate, candidate_tree: o.tree, files: declared }, slices: slices.map(item => ({ name: item.name, kind: item.kind, files: item.files, contract_context: item.contract_context, ...(item.raw.fragments !== undefined ? { fragments: item.raw.fragments } : {}), ...(item.kind === "cross_boundary" ? { boundaries } : {}) })), approval: { by: manifest.approval.by } };
   const planId = sha(JSON.stringify(normalized)); if (!o.fingerprint && planId !== manifest.approval.expected_plan_id) die("manifest expected_plan_id mismatch");
   return { planId, slices: normalized.slices };
 }
-function envelope(repo, o, rows, contexts, name) {
+function component(repo, o, row, kind) {
+  if (kind === "frozen_source") return { path: row.file, kind, bytes: artifactBytes(repo, o.candidate, row.file, "source") };
+  if (kind === "deleted_source") return { path: row.file, kind, bytes: artifactBytes(repo, o.base, row.file, "deleted source") };
+  if (kind === "per_file_diff") return { path: row.file, kind, bytes: diffBytes(repo, o.base, o.candidate, row.file) };
+  die(`unknown fragment component kind: ${kind}`);
+}
+function componentKey(pathname, kind) { return `${pathname}\0${kind}`; }
+function fragmentKey(fragment) { return `${fragment.path}\0${fragment.component_kind}\0${String(fragment.byte_start).padStart(20, "0")}`; }
+function validateFragments(repo, o, rows, rawFragments, complete, coveredComponents = new Set(), enforceCovered = !complete) {
+  if (rawFragments === undefined) return null;
+  if (!Array.isArray(rawFragments) || !rawFragments.length) die("fragmented slice requires a nonempty fragments array");
+  const rowMap = new Map(rows.map(row => [row.file, row])), components = new Map();
+  for (const row of rows) {
+    const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";
+    for (const kind of [sourceKind, "per_file_diff"]) components.set(componentKey(row.file, kind), component(repo, o, row, kind));
+  }
+  const normalized = [];
+  for (const [index, raw] of rawFragments.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) die(`fragments[${index}] must be an object`);
+    if (raw.base_commit !== o.base || raw.candidate_commit !== o.candidate || raw.candidate_tree !== o.tree) die(`fragments[${index}] does not bind the exact frozen tuple`);
+    if (typeof raw.path !== "string" || !rowMap.has(raw.path)) die(`fragments[${index}] names an unknown path`);
+    if (!FRAGMENT_KINDS.has(raw.component_kind)) die(`fragments[${index}] has an unknown component kind`);
+    const row = rowMap.get(raw.path), expectedKind = row.status === "D" ? "deleted_source" : "frozen_source";
+    if (raw.component_kind !== expectedKind && raw.component_kind !== "per_file_diff") die(`fragments[${index}] has the wrong component kind for ${raw.path}`);
+    const key = componentKey(raw.path, raw.component_kind), original = components.get(key);
+    if (!original) die(`fragments[${index}] names an unavailable component`);
+    if (!["component_byte_length", "byte_start", "byte_end"].every(field => Number.isSafeInteger(raw[field]) && raw[field] >= 0)) die(`fragments[${index}] has invalid byte offsets or component length`);
+    if (raw.component_byte_length !== original.bytes.length || raw.component_sha256 !== sha(original.bytes)) die(`fragments[${index}] component length/hash does not match original bytes`);
+    if (raw.byte_start > raw.byte_end || raw.byte_end > original.bytes.length) die(`fragments[${index}] byte range is outside its component`);
+    if (typeof raw.fragment_sha256 !== "string" || !SHA256.test(raw.fragment_sha256)) die(`fragments[${index}] requires fragment_sha256`);
+    const bytes = original.bytes.subarray(raw.byte_start, raw.byte_end);
+    try { new TextDecoder("utf-8", { fatal: true }).decode(original.bytes.subarray(0, raw.byte_start)); new TextDecoder("utf-8", { fatal: true }).decode(original.bytes.subarray(raw.byte_end)); } catch { die(`fragments[${index}] offsets must align to UTF-8 boundaries`); }
+    if (sha(bytes) !== raw.fragment_sha256) die(`fragments[${index}] bytes do not match fragment_sha256`);
+    if (enforceCovered && !coveredComponents.has(key)) die(`cross_boundary fragment ${raw.path}/${raw.component_kind} is not drawn from covered material`);
+    normalized.push({ base_commit: raw.base_commit, candidate_commit: raw.candidate_commit, candidate_tree: raw.candidate_tree, path: raw.path, component_kind: raw.component_kind, component_byte_length: raw.component_byte_length, component_sha256: raw.component_sha256, byte_start: raw.byte_start, byte_end: raw.byte_end, fragment_sha256: raw.fragment_sha256, bytes });
+  }
+  const ordered = [...normalized].sort((a, b) => lexical(fragmentKey(a), fragmentKey(b)));
+  if (ordered.some((fragment, index) => fragment !== normalized[index])) die("fragments must be in deterministic path/kind/byte-start order");
+  const groups = new Map();
+  for (const fragment of normalized) { const key = componentKey(fragment.path, fragment.component_kind); const list = groups.get(key) || []; list.push(fragment); groups.set(key, list); }
+  if (complete) {
+    for (const [key, original] of components) {
+      const list = groups.get(key) || [];
+      let offset = 0;
+      for (const fragment of list) { if (fragment.byte_start !== offset) die(`fragment partition for ${key.replace("\0", "/")} has a gap, overlap, duplicate, or reorder`); offset = fragment.byte_end; }
+      if (offset !== original.bytes.length) die(`fragment partition for ${key.replace("\0", "/")} does not cover the complete component`);
+    }
+  }
+  return normalized;
+}
+function validateCoveragePartitions(repo, o, rows, units) {
+  const coverage = units.filter(unit => unit.kind === "coverage"), all = [], perFile = new Map();
+  for (const unit of coverage) {
+    const unitRows = unit.rows;
+    if (unit.fragments === undefined) {
+      for (const row of unitRows) {
+        const key = row.file, entries = perFile.get(key) || [];
+        entries.push({ implicit: true, unit }); perFile.set(key, entries);
+      }
+      continue;
+    }
+    const normalized = validateFragments(repo, o, unitRows, unit.fragments, false, new Set(), false) || [];
+    all.push(...normalized);
+    for (const row of unitRows) {
+      const key = row.file, entries = perFile.get(key) || [];
+      entries.push({ implicit: false, unit }); perFile.set(key, entries);
+    }
+  }
+  for (const [file, entries] of perFile) {
+    if (entries.length > 1 && entries.some(entry => entry.implicit)) die(`coverage file ${file} mixes whole-file and fragment evidence`);
+  }
+  const componentRows = new Map(rows.map(row => [row.file, row]));
+  for (const [file, row] of componentRows) {
+    const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";
+    const explicit = all.filter(fragment => fragment.path === file);
+    if (!explicit.length) continue;
+    for (const kind of [sourceKind, "per_file_diff"]) {
+      const original = component(repo, o, row, kind).bytes;
+      const list = all.filter(fragment => fragment.path === file && fragment.component_kind === kind).sort((a, b) => a.byte_start - b.byte_start);
+      let offset = 0;
+      for (const fragment of list) { if (fragment.byte_start !== offset) die(`fragment partition for ${file}/${kind} has a gap, overlap, duplicate, or reorder`); offset = fragment.byte_end; }
+      if (offset !== original.length) die(`fragment partition for ${file}/${kind} does not cover the complete component`);
+    }
+  }
+}
+function envelope(repo, o, rows, contexts, name, rawFragments, complete, coveredComponents) {
   const material = [];
+  const files = rows.map(row => row.file);
   for (const file of INVARIANTS) { regularTreeBlob(repo, o.candidate, file, "invariant"); material.push(`=== INVARIANT ${file} ===\n${blob(repo, o.candidate, file)}`); }
   for (const file of contexts) { regularTreeBlob(repo, o.candidate, file, "contract context"); material.push(`=== CONTRACT ${file} ===\n${blob(repo, o.candidate, file)}`); }
-  for (const row of rows) material.push(`=== ${row.status === "D" ? "DELETED OLD" : "CURRENT"} FILE ${row.file} ===\n${blob(repo, row.status === "D" ? o.base : o.candidate, row.file)}`);
-  const files = rows.map(row => row.file); material.push(`=== DIFF ${o.base}..${o.candidate} ===\n${git(repo, ["diff", "--no-ext-diff", "--no-textconv", "--unified=80", o.base, o.candidate, "--", ...files])}`);
+  const completeComponents = rows.flatMap(row => [component(repo, o, row, row.status === "D" ? "deleted_source" : "frozen_source"), component(repo, o, row, "per_file_diff")]);
+  const completeScan = Buffer.concat([...material.map(value => Buffer.from(value)), ...completeComponents.map(item => item.bytes)]).toString("utf8");
+  if (CREDENTIAL_LIKE.test(completeScan)) die("possible credential-like value in complete unpartitioned review material", 3);
+  const fragments = validateFragments(repo, o, rows, rawFragments, false, coveredComponents, complete);
+  if (fragments) {
+    const byKey = new Map(); for (const fragment of fragments) { const key = componentKey(fragment.path, fragment.component_kind); const list = byKey.get(key) || []; list.push(fragment); byKey.set(key, list); }
+    for (const row of rows) {
+      const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";
+      for (const kind of [sourceKind, "per_file_diff"]) for (const fragment of byKey.get(componentKey(row.file, kind)) || []) material.push(`=== ${kind} ${row.file} ${fragment.byte_start}-${fragment.byte_end} ===\n${fragment.bytes.toString("utf8")}`);
+    }
+  } else {
+    for (const row of rows) material.push(`=== ${row.status === "D" ? "DELETED OLD" : "CURRENT"} FILE ${row.file} ===\n${blob(repo, row.status === "D" ? o.base : o.candidate, row.file)}`);
+    material.push(`=== DIFF ${o.base}..${o.candidate} ===\n${git(repo, ["diff", "--no-ext-diff", "--no-textconv", "--unified=80", o.base, o.candidate, "--", ...files])}`);
+  }
   const materialId = sha(JSON.stringify({ tuple: [o.base, o.candidate, o.tree], slice: name, material }));
   const markers = ["HEAD", "MIDDLE", "EOF"].map(position => `PIL-INGEST-${position}-${sha(`${materialId}|${position}`).slice(0, 24)}`);
   const done = `PIL-DONE-${sha(`${materialId}|DONE`).slice(0, 24)}`;
@@ -228,7 +336,13 @@ async function call(o, e) {
 }
 export async function run(argv = process.argv.slice(2)) {
   const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o), plan = o.sliceManifest ? verifyManifest(repo, o, rows) : null;
-  const units = plan ? plan.slices.map(item => ({ name: item.name, rows: rows.filter(row => item.files.includes(row.file)), contexts: item.contract_context })) : [{ name: "full", rows, contexts: [o.context] }], prepared = units.map(unit => envelope(repo, o, unit.rows, unit.contexts, unit.name));
+  const coveredComponents = new Set();
+  if (plan) for (const item of plan.slices.filter(slice => slice.kind === "coverage")) for (const row of rows.filter(row => item.files.includes(row.file))) {
+    coveredComponents.add(componentKey(row.file, row.status === "D" ? "deleted_source" : "frozen_source")); coveredComponents.add(componentKey(row.file, "per_file_diff"));
+  }
+  const units = plan ? plan.slices.map(item => ({ name: item.name, kind: item.kind, rows: rows.filter(row => item.files.includes(row.file)), contexts: item.contract_context, fragments: item.fragments })) : [{ name: "full", kind: "full", rows, contexts: [o.context] }];
+  if (plan) validateCoveragePartitions(repo, o, rows, units);
+  const prepared = units.map(unit => envelope(repo, o, unit.rows, unit.contexts, unit.name, unit.fragments, unit.kind === "cross_boundary", coveredComponents));
   for (const item of prepared) if (item.bytes >= LIMIT) die(`complete ${item.name} envelope is ${item.bytes} bytes; must be below ${LIMIT}`, 3);
   const identities = prepared.map(item => ({ slice: item.name, bytes: item.bytes, material_sha256: item.materialId, request_sha256: item.envelopeSha }));
   if (o.fingerprint) { process.stdout.write(JSON.stringify({ plan_id: plan.planId, envelopes: identities, next: "Set approval.status=APPROVED and approval.expected_plan_id to plan_id after PM review." }, null, 2) + "\n"); return; }

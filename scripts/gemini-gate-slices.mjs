@@ -425,6 +425,7 @@ if (!crossBoundary || plan.slices.at(-1) !== crossBoundary) fail("the final mani
 const covered = sortedUnique(coverageSlices.flatMap((slice) => slice.files), "coverage union");
 if (!sameArray(covered, declaredScope)) fail(`coverage slices are incomplete or overlapping-only; covered=${JSON.stringify(covered)} scope=${JSON.stringify(declaredScope)}`);
 for (const slice of coverageSlices) {
+  if (slice.fragments !== undefined) continue;
   const otherFiles = new Set(coverageSlices.filter((other) => other !== slice).flatMap((other) => other.files));
   if (coverageSlices.length > 1 && !slice.files.some((file) => !otherFiles.has(file))) fail(`coverage slice ${slice.name} contributes no unique surface (overlapping-only)`);
 }
@@ -451,6 +452,7 @@ const normalizedSlices = plan.slices.map((slice) => ({
   kind: slice.kind,
   files: slice.files.map((file) => fileEvidence(repo, baseCommit, file, untracked, fileCache)),
   contract_context: slice.contract_context.map((context) => contextEvidence(repo, context, contextCache)),
+  ...(slice.fragments !== undefined ? { fragments: slice.fragments } : {}),
   ...(slice.kind === "cross_boundary" ? { boundaries: normalizedBoundaries } : {}),
 }));
 const planCore = {

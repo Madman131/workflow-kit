@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -61,6 +62,12 @@ function slicedPlan(f, slices) {
 }
 function sliceArgs(f, action) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", action]; }
 function fingerprint(f) { const r = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout).plan_id; }
+function fragment(f, kind, start, end) {
+  const commit = kind === "deleted_source" ? f.base : f.candidate;
+  const bytes = kind === "per_file_diff" ? Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])) : Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${commit}:src.mjs` ]));
+  const part = bytes.subarray(start, end), digest = value => crypto.createHash("sha256").update(value).digest("hex");
+  return { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, path: "src.mjs", component_kind: kind, component_byte_length: bytes.length, component_sha256: digest(bytes), byte_start: start, byte_end: end, fragment_sha256: digest(part) };
+}
 
 test("frozen dry-run has a stable material/request identity and ignores replace objects", () => {
   const f = fixture(); try {
@@ -252,6 +259,19 @@ test("oversized full artifacts refuse while an approved ordered slice set record
     let calls = 0; globalThis.fetch = async (_url, request) => { calls += 1; const body = JSON.parse(request.body); assert.equal(body.tools, undefined); assert.equal(body.functionDeclarations, undefined); assert.doesNotMatch(JSON.stringify(body), /dangerous|functionCall/); return responseFrom(request, "GO"); };
     await run(sliceArgs(f, "--run-slices")); assert.equal(calls, f.files.length + 1); let log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `YES`[\s\S]*Gate-Verdict: `GO`[\s\S]*Inspected-Scope: `[\s\S]*Aggregate-Result-SHA256/);
     calls = 0; globalThis.fetch = async (_url, request) => responseFrom(request, calls++ === 0 ? "NO-GO" : "GO"); await run(sliceArgs(f, "--run-slices")); log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `NO`[\s\S]*Gate-Verdict: `NO-GO`/);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("one oversized source and diff component reconstruct across bounded fragment slices", async () => {
+  const f = fixture({ candidateSource: `export const payload = "${"x".repeat(110000)}";\n` });
+  try { await withFetch(async () => {
+    assert.notEqual(dry(f).status, 0, "whole-file request must exceed the cap");
+    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
+    const limit = Math.max(source.length, diff.length), cuts = [0, 30000, 60000, 90000, limit], slices = [];
+    for (let i = 0; i < cuts.length - 1; i++) slices.push({ name: `coverage-${i}`, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(cuts[i], source.length), Math.min(cuts[i + 1], source.length)), fragment(f, "per_file_diff", Math.min(cuts[i], diff.length), Math.min(cuts[i + 1], diff.length))] });
+    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+    const value = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [...slices, cross] };
+    writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value)); const planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request); }; await run(sliceArgs(f, "--run-slices")); assert.equal(calls, slices.length + 1);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("reordered, duplicate, and missing slice coverage plans refuse before fetch", () => {
