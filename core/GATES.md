@@ -762,8 +762,25 @@ UTF-8 boundaries. Across coverage slices, fragments for every required source an
 must be ordered, gap-free, non-overlapping, and reconstruct the component hash exactly. The final
 cross-boundary slice may select only raw ranges already covered by that complete set. This direct
 manifest is preflighted only with the frozen command below; `gemini-gate-slices.mjs` does not create
-or validate frozen fragment plans. First preflight every envelope and copy the emitted plan ID into the PM
-approval; then one ordered command executes the approved set:
+or validate frozen fragment plans. Every fragment packet explicitly labels its verified whole/partial
+half-open range and repeats its descriptors in the exact copied inspected scope; range cuts alone are
+not a NO-GO basis, while visible defects and insufficient boundary evidence remain reviewable.
+
+For a local mechanical DRAFT, use the native runner (no credential lookup, provider call, journal
+append, or approval action):
+
+```sh
+bash scripts/cold-review-gemini.sh --base <base> --candidate <candidate> --tree <tree> \
+  --rig-id <rig> --context docs/contract.md \
+  --generate-slice-plan .gemini-gate/GEMINI_SLICE_PLAN.json
+```
+
+It uses actual serialized-envelope measurements: whole components and fitting diff hunks start a
+fresh slice instead of being cut for residual space; oversized sources/hunks split at newlines, with
+UTF-8 forced splits explicitly surfaced. It writes complete mechanical coverage plus an unrunnable
+`cross-boundary-DRAFT`. A human must select that final fragment evidence, write all five semantic
+boundary rationales, and remove its draft marker. Then fingerprint every envelope and copy the emitted
+plan ID into the PM approval; execute the resulting approved set:
 
 ```sh
 bash scripts/cold-review-gemini.sh --base <base> --candidate <candidate> --tree <tree> \
@@ -782,7 +799,8 @@ tuple/plan-bound receipt is valid and GO. Each request carries stable, independe
 material markers, including an EOF-only receipt, plus a distinct final `PIL-DONE` completion token.
 The reply must print the markers in their exact order, copy the exact normalized scope (tuple, files,
 contexts, invariants, material identity, and slice), and end with that completion token. A valid
-`NO-GO` is delivered evidence but exits nonzero and cannot create a release receipt. A verified reply
+`NO-GO` is delivered evidence but exits nonzero, stops before any later provider call or incomplete
+aggregate, and cannot create a release receipt. A verified reply
 is printed and stored as a checksummed complete fsynced record with its reply SHA and attempt ID;
 aggregate records retain ordered contributors and a deterministic aggregate result identity. The
 journal stores nonsecret rig/transport, tuple, envelope and verdict metadata plus the verified reply

@@ -45,9 +45,11 @@ completed review but is not a passing release gate; failed verification remains 
 
 The complete serialized request including prompt, metadata, full contract/invariants, source/diff,
 canaries and receipt instructions must be strictly below 81,920 bytes. No environment override may
-raise that gate bound. A full payload above it requires a PM-approved complete manifest. A file or
-required boundary slice that cannot fit is refused before spending calls; no automatic range engine
-or claim of partial source as full coverage is introduced.
+raise that gate bound. A full payload above it requires a complete manifest. The measured fragment
+coherence successor supersedes this contract's earlier decline of automatic range generation: its
+narrow native DRAFT generator mechanically partitions exact source/diff bytes by measured envelopes,
+but never claims cross-boundary semantic coverage or approves a plan. See
+`2026-09-05-gemini-fragment-coherence-successor-contract.md`.
 
 Extend the existing v2 slice-plan contract with exact candidate/tree fields in the frozen path.
 Bind plan identity to repository/base/candidate/tree and all reviewed bytes. Preserve complete scope
@@ -59,7 +61,8 @@ hashes. Missing, malformed, duplicate, reordered, incomplete or mismatched plan/
 The ordinary approved-plan execution is one `cold-review-gemini.sh` invocation with the exact tuple,
 context, manifest and `--run-slices`. It validates, executes each coverage slice in order, runs the
 final cross-boundary review and finalizes once. Each individual slice is non-release. Only a complete,
-ordered, tuple/plan-bound, verified aggregate can constitute a full gate; any NO-GO prevents GO.
+ordered, tuple/plan-bound, verified aggregate can constitute a full gate. A valid slice NO-GO is
+durable evidence and stops execution before any later call or incomplete aggregate.
 
 ## Durable state and retries
 

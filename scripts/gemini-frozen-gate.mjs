@@ -69,8 +69,8 @@ function journalPath(repo) {
 }
 function parse(argv) {
   for (const key of GIT_LOCATION_OVERRIDES) if (process.env[key]) die(`ambient ${key} is not allowed for a frozen review`, 3);
-  const o = { repo: process.cwd(), transport: "subscription", model: undefined, timeoutSeconds: SUBSCRIPTION_TIMEOUT_SECONDS, dryRun: false, noLog: false, runSlices: false, fingerprint: false };
-  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "transport", "model", "agyBin", "timeoutSeconds", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "sharedLockDir", "lockOwnerPid"]);
+  const o = { repo: process.cwd(), transport: "subscription", model: undefined, timeoutSeconds: SUBSCRIPTION_TIMEOUT_SECONDS, dryRun: false, noLog: false, runSlices: false, fingerprint: false, generateSlicePlan: undefined };
+  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "transport", "model", "agyBin", "timeoutSeconds", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "generateSlicePlan", "sharedLockDir", "lockOwnerPid"]);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--run-slices": "runSlices", "--fingerprint": "fingerprint" }[key]] = true; continue; }
@@ -89,7 +89,11 @@ function parse(argv) {
   if (o.agyBin && (o.transport !== "subscription" || !path.isAbsolute(o.agyBin))) die("--agy-bin is an absolute subscription-only executable path");
   if (!/^\d+$/.test(String(o.timeoutSeconds)) || Number(o.timeoutSeconds) < 1 || Number(o.timeoutSeconds) > SUBSCRIPTION_TIMEOUT_SECONDS || (o.transport !== "subscription" && o.timeoutSeconds !== SUBSCRIPTION_TIMEOUT_SECONDS)) die("--timeout-seconds is a subscription-only whole number from 1 through 600");
   o.timeoutSeconds = Number(o.timeoutSeconds);
-  if (o.sliceManifest ? ((!o.runSlices && !o.fingerprint) || o.context) : (o.runSlices || o.fingerprint || !o.context)) die("use --context for one full review, or --slice-manifest with --run-slices/--fingerprint");
+  if (o.generateSlicePlan) {
+    if (o.sliceManifest || o.runSlices || o.fingerprint || o.dryRun || o.noLog || !o.context) die("--generate-slice-plan requires --context and forbids review, fingerprint, and logging flags");
+    o.generateSlicePlan = relative(o.generateSlicePlan, "--generate-slice-plan");
+    if (!o.generateSlicePlan.startsWith(".gemini-gate/")) die("--generate-slice-plan must name a repository-relative .gemini-gate/ manifest");
+  } else if (o.sliceManifest ? ((!o.runSlices && !o.fingerprint) || o.context) : (o.runSlices || o.fingerprint || !o.context)) die("use --context for one full review, or --slice-manifest with --run-slices/--fingerprint");
   if (o.context) o.context = relative(o.context, "--context"); if (o.sliceManifest) o.sliceManifest = relative(o.sliceManifest, "--slice-manifest");
   if (o.noLog && !o.dryRun && !o.fingerprint) die("--no-log is only allowed with --dry-run or --fingerprint; live reviews require a durable receipt", 3);
   if (Boolean(o.sharedLockDir) !== Boolean(o.lockOwnerPid)) die("--shared-lock-dir and --lock-owner-pid must be supplied together", 3);
@@ -146,6 +150,7 @@ function slice(raw, actual) {
 function verifyManifest(repo, o, rows) {
   const manifest = readManifest(repo, o.sliceManifest), actualFiles = rows.map(row => row.file), actual = new Set(actualFiles);
   if (manifest.version !== 2 || manifest.scope?.base_commit !== o.base || manifest.scope?.candidate_commit !== o.candidate || manifest.scope?.candidate_tree !== o.tree) die("slice manifest does not bind the exact frozen base/candidate/tree");
+  if (manifest.slices?.some(item => item?.draft?.state === "NEEDS_HUMAN_CROSS_BOUNDARY")) die("generated DRAFT cross-boundary placeholder requires human fragment selections and all five boundary rationales before fingerprint or run", 3);
   if (!manifest.approval?.by || typeof manifest.approval.by !== "string" || (!o.fingerprint && (manifest.approval.status !== "APPROVED" || !SHA256.test(manifest.approval.expected_plan_id || "")))) die("slice manifest is not PM-approved");
   const declared = paths(manifest.scope.files, "manifest scope.files");
   if (declared.join("\0") !== actualFiles.join("\0") || !Array.isArray(manifest.uncovered) || manifest.uncovered.length) die("manifest scope is not complete for the committed candidate");
@@ -259,7 +264,11 @@ function validateCoveragePartitions(repo, o, rows, units) {
     }
   }
 }
-function envelope(repo, o, rows, contexts, name, rawFragments, complete, coveredComponents) {
+function fragmentDescriptor(fragment) {
+  const range_status = fragment.byte_start === 0 && fragment.byte_end === fragment.component_byte_length ? "whole" : "partial";
+  return { path: fragment.path, component_kind: fragment.component_kind, component_byte_length: fragment.component_byte_length, component_sha256: fragment.component_sha256, byte_start: fragment.byte_start, byte_end: fragment.byte_end, fragment_sha256: fragment.fragment_sha256, range_status };
+}
+function envelope(repo, o, rows, contexts, name, rawFragments, complete, coveredComponents, sliceKind = "full") {
   const material = [];
   const files = rows.map(row => row.file);
   for (const file of INVARIANTS) { regularTreeBlob(repo, o.candidate, file, "invariant"); material.push(`=== INVARIANT ${file} ===\n${blob(repo, o.candidate, file)}`); }
@@ -273,7 +282,10 @@ function envelope(repo, o, rows, contexts, name, rawFragments, complete, covered
     const byKey = new Map(); for (const fragment of fragments) { const key = componentKey(fragment.path, fragment.component_kind); const list = byKey.get(key) || []; list.push(fragment); byKey.set(key, list); }
     for (const row of rows) {
       const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";
-      for (const kind of [sourceKind, "per_file_diff"]) for (const fragment of byKey.get(componentKey(row.file, kind)) || []) material.push(`=== ${kind} ${row.file} ${fragment.byte_start}-${fragment.byte_end} ===\n${fragment.bytes.toString("utf8")}`);
+      for (const kind of [sourceKind, "per_file_diff"]) for (const fragment of byKey.get(componentKey(row.file, kind)) || []) {
+        const descriptor = fragmentDescriptor(fragment), missing = descriptor.range_status === "partial" ? "Bytes outside this declared range are intentionally absent from this slice and are covered by ordered companion slices." : "This verified range is the complete component.";
+        material.push(`=== VERIFIED ${descriptor.range_status.toUpperCase()} FRAGMENT ===\nThis block is an intentional verified half-open byte range of a larger frozen source or diff component.\nPath: ${descriptor.path}\nComponent kind: ${descriptor.component_kind}\nComponent byte length: ${descriptor.component_byte_length}\nComponent SHA-256: ${descriptor.component_sha256}\nVerified half-open byte range: [${descriptor.byte_start}, ${descriptor.byte_end})\nFragment SHA-256: ${descriptor.fragment_sha256}\n${missing}\n=== FRAGMENT BYTES ===\n${fragment.bytes.toString("utf8")}`);
+      }
     }
   } else {
     for (const row of rows) material.push(`=== ${row.status === "D" ? "DELETED OLD" : "CURRENT"} FILE ${row.file} ===\n${blob(repo, row.status === "D" ? o.base : o.candidate, row.file)}`);
@@ -282,10 +294,13 @@ function envelope(repo, o, rows, contexts, name, rawFragments, complete, covered
   const materialId = sha(JSON.stringify({ tuple: [o.base, o.candidate, o.tree], slice: name, material }));
   const markers = ["HEAD", "MIDDLE", "EOF"].map(position => `PIL-INGEST-${position}-${sha(`${materialId}|${position}`).slice(0, 24)}`);
   const done = `PIL-DONE-${sha(`${materialId}|DONE`).slice(0, 24)}`;
-  const scope = JSON.stringify({ slice: name, base: o.base, candidate: o.candidate, tree: o.tree, files, contract_context: [...contexts].sort(lexical), invariants: INVARIANTS, material_sha256: materialId });
+  const scopePayload = { slice: name, base: o.base, candidate: o.candidate, tree: o.tree, files, contract_context: [...contexts].sort(lexical), invariants: INVARIANTS, material_sha256: materialId };
+  if (fragments) Object.assign(scopePayload, { slice_kind: sliceKind, material_mode: fragments.every(fragment => fragment.byte_start === 0 && fragment.byte_end === fragment.component_byte_length) ? "whole_components" : "verified_fragments", fragments: fragments.map(fragmentDescriptor) });
+  const scope = JSON.stringify(scopePayload);
   const middle = Math.ceil(material.length / 2), supplied = [`=== INGESTION MARKER 1 OF 3 ===\n${markers[0]}`, ...material.slice(0, middle), `=== INGESTION MARKER 2 OF 3 ===\n${markers[1]}`, ...material.slice(middle), `=== NORMALIZED INSPECTED SCOPE ===\n${scope}`, `=== RESPONSE COMPLETION TOKEN ===\n${done}`, "=== END OF SUPPLIED MATERIAL ===", `=== EOF-ONLY INGESTION RECEIPT 3 OF 3 ===\n${markers[2]}`].join("\n\n");
   if (CREDENTIAL_LIKE.test(supplied)) die("possible credential-like value in final supplied review material", 3);
-  const prompt = "Review this exact frozen committed artifact using only supplied material. Return findings, exactly one `VERDICT: GO` or `VERDICT: NO-GO` line, exactly one `INSPECTED SCOPE:` line copied exactly from supplied material, and exactly one `INGESTION PROOF:` line that contains the three supplied ingestion markers in encountered order, separated by ` | `. End the reply with the supplied response-completion token as its final nonblank line.";
+  const fragmentInstruction = fragments ? " This unit is one complete approved fragment slice. Every VERIFIED FRAGMENT block declares an intentional, hash-verified half-open byte range of a larger frozen source or diff component. Missing bytes outside declared ranges are expected and covered by other ordered slices. Do not issue NO-GO solely because a range boundary cuts a file, line, word, or diff hunk. Still issue NO-GO for defects visible in supplied bytes or genuinely insufficient cross-boundary evidence; do not suppress substantive findings." : "";
+  const prompt = `Review this exact frozen committed artifact using only supplied material.${fragmentInstruction} Return findings, exactly one \`VERDICT: GO\` or \`VERDICT: NO-GO\` line, exactly one \`INSPECTED SCOPE:\` line copied exactly from supplied material, and exactly one \`INGESTION PROOF:\` line that contains the three supplied ingestion markers in encountered order, separated by \` | \`. End the reply with the supplied response-completion token as its final nonblank line.`;
   const request = { contents: [{ role: "user", parts: [{ text: `${prompt}\n\n${supplied}` }] }], generationConfig: { candidateCount: 1 } }, serialized = JSON.stringify(request);
   return { request, prompt: `${prompt}\n\n${supplied}`, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name };
 }
@@ -300,6 +315,111 @@ export function verifyResponse(body, e) {
   if (proofs.length !== 1 || proofs[0] !== e.markers.join(" | ")) die("response did not prove ordered ingestion through the EOF receipt", 3);
   if (reply.trimEnd().split(/\r?\n/).at(-1) !== e.done) die("response completion token is missing, misplaced, or not final", 3);
   return { reply, verdict: verdicts[0], replySha: sha(reply), completionSha: sha(e.done) };
+}
+function rawFragment(o, item, byte_start, byte_end) {
+  const bytes = item.bytes.subarray(byte_start, byte_end);
+  return { base_commit: o.base, candidate_commit: o.candidate, candidate_tree: o.tree, path: item.path, component_kind: item.kind, component_byte_length: item.bytes.length, component_sha256: sha(item.bytes), byte_start, byte_end, fragment_sha256: sha(bytes) };
+}
+function sortFragments(items) { return [...items].sort((a, b) => lexical(fragmentKey(a), fragmentKey(b))); }
+function diffAtoms(bytes) {
+  const hunkStarts = [];
+  for (let start = 0; start < bytes.length;) {
+    const newline = bytes.indexOf(0x0a, start), end = newline === -1 ? bytes.length : newline + 1;
+    if (bytes.subarray(start, Math.min(end, start + 3)).toString("utf8") === "@@ ") hunkStarts.push(start);
+    start = end;
+  }
+  if (!hunkStarts.length) return [[0, bytes.length]];
+  return [[0, hunkStarts[0]], ...hunkStarts.map((start, index) => [start, index + 1 < hunkStarts.length ? hunkStarts[index + 1] : bytes.length])].filter(([start, end]) => start !== end);
+}
+function utf8Offsets(bytes, start, end) {
+  const offsets = [];
+  for (let index = start + 1; index <= end; index++) if (index === end || (bytes[index] & 0xc0) !== 0x80) offsets.push(index);
+  return offsets;
+}
+function generatedManifestPath(repo, rel) {
+  const output = path.resolve(repo, rel), inside = path.relative(repo, output);
+  if (!inside || inside === ".." || inside.startsWith(`..${path.sep}`) || !inside.split(path.sep).join("/").startsWith(".gemini-gate/")) die("generated slice manifest escapes .gemini-gate", 3);
+  for (let current = repo, next; current !== path.dirname(output); current = next) {
+    next = path.join(current, path.relative(current, path.dirname(output)).split(path.sep)[0]);
+    const stat = fs.lstatSync(next, { throwIfNoEntry: false });
+    if (stat?.isSymbolicLink()) die("generated slice manifest parent must not be a symlink", 3);
+    if (!stat) fs.mkdirSync(next);
+  }
+  const existing = fs.lstatSync(output, { throwIfNoEntry: false });
+  if (existing && (!existing.isFile() || existing.isSymbolicLink())) die("generated slice manifest must be a regular non-symlink file", 3);
+  return output;
+}
+function generateSlicePlan(repo, o, rows) {
+  const components = rows.flatMap(row => {
+    const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";
+    return [component(repo, o, row, sourceKind), component(repo, o, row, "per_file_diff")];
+  });
+  const coverage = [], forced_splits = [];
+  let pending = [];
+  const coverageName = () => `coverage-${String(coverage.length + 1).padStart(3, "0")}`;
+  const measure = fragments => {
+    const files = new Set(fragments.map(fragment => fragment.path)), unitRows = rows.filter(row => files.has(row.file));
+    return envelope(repo, o, unitRows, [o.context], coverageName(), sortFragments(fragments), false, new Set(), "coverage");
+  };
+  const fits = fragments => measure(fragments).bytes < LIMIT;
+  const finish = () => {
+    if (!pending.length) return;
+    const fragments = sortFragments(pending), e = measure(fragments), files = [...new Set(fragments.map(fragment => fragment.path))].sort(lexical);
+    coverage.push({ name: coverageName(), kind: "coverage", files, contract_context: [o.context], fragments, _bytes: e.bytes });
+    pending = [];
+  };
+  const splitOversizeAtom = (item, start, end) => {
+    let offset = start;
+    while (offset < end) {
+      const newlineEnds = [];
+      for (let index = offset; index < end; index++) if (item.bytes[index] === 0x0a) newlineEnds.push(index + 1);
+      const choose = values => {
+        let low = 0, high = values.length - 1, picked = -1;
+        while (low <= high) {
+          const middle = Math.floor((low + high) / 2), fragment = rawFragment(o, item, offset, values[middle]);
+          if (fits([fragment])) { picked = middle; low = middle + 1; } else high = middle - 1;
+        }
+        return picked === -1 ? null : values[picked];
+      };
+      let next = choose(newlineEnds), forced = false;
+      if (next === null) { next = choose(utf8Offsets(item.bytes, offset, end)); forced = true; }
+      if (next === null || next <= offset) die(`cannot fit even one UTF-8-safe byte of ${item.path}/${item.kind} below ${LIMIT}`, 3);
+      const fragment = rawFragment(o, item, offset, next);
+      if (forced) forced_splits.push({ path: item.path, component_kind: item.kind, byte_start: offset, byte_end: next, reason: "single_oversized_line_utf8_boundary" });
+      pending.push(fragment);
+      if (next < end) finish();
+      offset = next;
+    }
+  };
+  for (const item of components) {
+    const atoms = item.kind === "per_file_diff" ? diffAtoms(item.bytes) : [[0, item.bytes.length]];
+    for (const [start, end] of atoms) {
+      const fragment = rawFragment(o, item, start, end);
+      if (fits([...pending, fragment])) { pending.push(fragment); continue; }
+      finish();
+      if (fits([fragment])) { pending.push(fragment); continue; }
+      splitOversizeAtom(item, start, end);
+    }
+  }
+  finish();
+  const summary = coverage.map(slice => ({ name: slice.name, envelope_bytes: slice._bytes, material_bytes: slice.fragments.reduce((sum, fragment) => sum + fragment.byte_end - fragment.byte_start, 0) }));
+  const slices = coverage.map(({ _bytes, ...slice }) => slice);
+  const plan = {
+    version: 2,
+    approval: { status: "DRAFT", by: "PM_REQUIRED", expected_plan_id: "" },
+    scope: { base_commit: o.base, candidate_commit: o.candidate, candidate_tree: o.tree, files: rows.map(row => row.file) },
+    uncovered: [],
+    generation: { method: "native-mechanical-v1", coverage_call_count: slices.length, coverage_envelope_bytes: summary, forced_splits },
+    slices: [...slices, { name: "cross-boundary-DRAFT", kind: "cross_boundary", files: [], contract_context: [o.context], fragments: [], boundaries: {}, draft: { state: "NEEDS_HUMAN_CROSS_BOUNDARY", required: ["select cross-boundary fragments", ...BOUNDARIES.map(name => `write ${name} status, evidence, and rationale`)] } }],
+  };
+  return { plan, summary };
+}
+function writeGeneratedPlan(repo, o, generated) {
+  const output = generatedManifestPath(repo, o.generateSlicePlan), text = `${JSON.stringify(generated.plan, null, 2)}\n`;
+  if (fs.existsSync(output)) {
+    if (fs.readFileSync(output, "utf8") !== text) die("generated slice manifest already exists with different bytes; choose a new .gemini-gate path", 3);
+  } else fs.writeFileSync(output, text, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  return { manifest: o.generateSlicePlan, coverage_call_count: generated.summary.length, coverage_bytes: generated.summary.reduce((sum, entry) => sum + entry.envelope_bytes, 0), envelopes: generated.summary, forced_splits: generated.plan.generation.forced_splits, next: "Inspect the DRAFT, select cross-boundary fragments and all five semantic rationales, remove its draft marker, fingerprint, approve the exact plan ID, then run." };
 }
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
 function recordBody(record) {
@@ -481,14 +601,20 @@ async function call(o, transport, e) {
   catch (error) { if (error.name === "AbortError") die("Gemini provider timed out", 3); throw error; } finally { clearTimeout(timer); }
 }
 export async function run(argv = process.argv.slice(2)) {
-  const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o), plan = o.sliceManifest ? verifyManifest(repo, o, rows) : null;
+  const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o);
+  if (o.generateSlicePlan) {
+    const generated = generateSlicePlan(repo, o, rows);
+    process.stdout.write(JSON.stringify(writeGeneratedPlan(repo, o, generated), null, 2) + "\n");
+    return;
+  }
+  const plan = o.sliceManifest ? verifyManifest(repo, o, rows) : null;
   const coveredComponents = new Set();
   if (plan) for (const item of plan.slices.filter(slice => slice.kind === "coverage")) for (const row of rows.filter(row => item.files.includes(row.file))) {
     coveredComponents.add(componentKey(row.file, row.status === "D" ? "deleted_source" : "frozen_source")); coveredComponents.add(componentKey(row.file, "per_file_diff"));
   }
   const units = plan ? plan.slices.map(item => ({ name: item.name, kind: item.kind, rows: rows.filter(row => item.files.includes(row.file)), contexts: item.contract_context, fragments: item.fragments })) : [{ name: "full", kind: "full", rows, contexts: [o.context] }];
   if (plan) validateCoveragePartitions(repo, o, rows, units);
-  const prepared = units.map(unit => envelope(repo, o, unit.rows, unit.contexts, unit.name, unit.fragments, unit.kind === "cross_boundary", coveredComponents));
+  const prepared = units.map(unit => envelope(repo, o, unit.rows, unit.contexts, unit.name, unit.fragments, unit.kind === "cross_boundary", coveredComponents, unit.kind));
   for (const item of prepared) if (item.bytes >= LIMIT) die(`complete ${item.name} envelope is ${item.bytes} bytes; must be below ${LIMIT}`, 3);
   const identities = prepared.map(item => ({ slice: item.name, bytes: item.bytes, material_sha256: item.materialId, request_sha256: item.envelopeSha }));
   if (o.fingerprint) { process.stdout.write(JSON.stringify({ plan_id: plan.planId, envelopes: identities, next: "Set approval.status=APPROVED and approval.expected_plan_id to plan_id after PM review." }, null, 2) + "\n"); return; }
@@ -503,6 +629,9 @@ export async function run(argv = process.argv.slice(2)) {
         endpoint(repo, o); const result = await call(o, transport, item); endpoint(repo, o);
         append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
         contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
+        // A valid NO-GO is delivered review evidence, not a transport failure. Stop at the
+        // first one so no later slice call or incomplete-set aggregate can change that fact.
+        if (result.verdict === "NO-GO") { process.exitCode = 3; return; }
       } catch (error) { const failure = failureClass(error); append(repo, { status: failure === "CANDIDATE_RESPONSE" ? "FAILED_CANDIDATE_RESPONSE" : "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, failureClass: failure, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail: error.message }); throw error; }
     }
     if (plan) {

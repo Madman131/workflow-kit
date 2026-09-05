@@ -2261,3 +2261,56 @@
 - Diagnostic: `agy stream must end with exactly one valid result event`
 - Record-SHA256: `07a2e6a4b74d92c0bef8062c5f9c1a8f4fad72c294edd9efc3e132491ed74afa`
 - Complete-Record: `YES`
+## Gemini frozen gate attempt — NO_GO — 2026-09-05T22:14:55.090Z
+
+- Status: `NO_GO`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v1`
+- Transport-Identity: `1.1.27|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f`
+- Model: `gemini-3.1-pro-high`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-878ce50bde392932eacac3d6`
+- Rig-ID: `agy-subscription-v1.1.27-nested-result-recovery-v2`
+- Rig-Key: `71f34a608654d98dd4cc112b343f72c3fdb98b017850907418bf1878dec21b4b`
+- Failure-Class: `(none)`
+- Base: `f78a52c44353719b20ef18252c91b50eca4f890d`
+- Candidate: `2faff14809304e505f4a75f508e8ca6b9be60fc2`
+- Tree: `a78ca714e883a16dd5e3047d5712e00fda4686f1`
+- Plan-ID: `28e63861ea59689fa53ab645f05eef6ebf5f22cf3d1c0944dc7b0790ac65aa14`
+- Slice: `coverage-001`
+- Material-SHA256: `c4e26661ca6473b6178ba9f095b95aa93ee5ff0b2dc37773915adbb3c6b2530b`
+- Envelope-SHA256: `64499b2e843e02ecd69a33088f3bd6e9808955e5fdbbdf58c1e8ffd412ad9c36`
+- Envelope-Bytes: `76573`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-001","base":"f78a52c44353719b20ef18252c91b50eca4f890d","candidate":"2faff14809304e505f4a75f508e8ca6b9be60fc2","tree":"a78ca714e883a16dd5e3047d5712e00fda4686f1","files":["PORTABILITY.md"],"contract_context":["docs/journal/2026-09-05-gemini-frozen-auth-scheme-closure-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"c4e26661ca6473b6178ba9f095b95aa93ee5ff0b2dc37773915adbb3c6b2530b"}`
+- Reply-SHA256: `17ec5d8fb2167641ab0dd08feab74df8c9f49f41c23d797c9ccada8d00c8d2d3`
+- Completion-Token-SHA256: `d36ba65bcb6f8f8c15b2ceccabdf002dcaf4d76d7ecf80d9cacb95ebad19f0ab`
+- Reply-UTF8-Base64: `KipGSU5ESU5HUzoqKgoxLiAqKk1hbGZvcm1lZC9UcnVuY2F0ZWQgSW5wdXQqKjogVGhlIHN1cHBsaWVkIGBwZXJfZmlsZV9kaWZmYCBmb3IgYFBPUlRBQklMSVRZLm1kYCBpcyB0cnVuY2F0ZWQgYWJydXB0bHkgbWlkLWh1bmsuIFRoZSBkaWZmIGhlYWRlciBgQEAgLTYwNiwxNjAgKzYwNiwxNjYgQEBgIHByb21pc2VzIG92ZXIgMTYwIGxpbmVzIG9mIGNvbnRleHQvY2hhbmdlcywgYnV0IHRoZSBwcm92aWRlZCB0ZXh0IGVuZHMgYWZ0ZXIgcm91Z2hseSAyNSBsaW5lcyBvbiBhbiBpbmNvbXBsZXRlIHdvcmQgKGBtZWNoYW5pY2FsIGVuZm9yY2VtZW50IHVubGApLiAKMi4gKipJbnZhcmlhbnQgVmlvbGF0aW9ucyoqOiBVbmRlciBFcGlzdGVtaWMgUnVsZSA1ICgqIkNhbm5vdCByZWFkIHlvdXIgaW5wdXQg4oeSIEFCU1RBSU4uLi4gbm8gdmVyZGljdCA9IG5vIHBhc3MiKikgYW5kIE5vbi1uZWdvdGlhYmxlIEludmFyaWFudCA2ICgqIkZhaWwgY2xvc2VkLiBVbmRlY2xhcmVkLCBtYWxmb3JtZWQsIHN0YWxlLCBvciB1bnJlYWRhYmxlIGlucHV0IHRvIGEgY29udHJvbCDih5IgQkxPQ0ssIG5ldmVyIHByb2NlZWQiKiksIHRoZSBpbmFiaWxpdHkgdG8gc2VlIHRoZSBjb21wbGV0ZSBhcnRpZmFjdCBkaWZmIG1hbmRhdGVzIGEgYmxvY2suIAoKVkVSRElDVDogTk8tR08KCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAwMSIsImJhc2UiOiJmNzhhNTJjNDQzNTM3MTliMjBlZjE4MjUyYzkxYjUwZWNhNGY4OTBkIiwiY2FuZGlkYXRlIjoiMmZhZmYxNDgwOTMwNGU1MDVmNGE3NWY1MDhlOGNhNmI5YmU2MGZjMiIsInRyZWUiOiJhNzhjYTcxNGU4ODNhMTZkZDVlMzA0N2Q1NzEyZTAwZmRhNDY4NmYxIiwiZmlsZXMiOlsiUE9SVEFCSUxJVFkubWQiXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0wNS1nZW1pbmktZnJvemVuLWF1dGgtc2NoZW1lLWNsb3N1cmUtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiJjNGUyNjY2MWNhNjQ3M2I2MTc4YmE5ZjA5NWI5NWFhOTNlZTVmZjBiMmRjMzc3NzM5MTVhZGJiM2M2YjI1MzBiIn0KCklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELTQ2MGU0NjEwMWU0YzM1MGU3ZGE1ZDA2ZSB8IFBJTC1JTkdFU1QtTUlERExFLWMzNWU4NTQ2NzM3NmM1NGJjY2VmM2ZkZiB8IFBJTC1JTkdFU1QtRU9GLWVhMzgzYTMzZDRkYzJjYTdkMTFlODFlMAoKUElMLURPTkUtN2Y2MjI0ZGEwNzg5MzhhMDM1NWM0YWUxCg==`
+- Record-SHA256: `b98913def5d4f0010ac4c5f3dac6d073f0743e05d11a5cd0369a5c3c7ccd43fb`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — FAILED_TRANSPORT — 2026-09-05T22:15:27.662Z
+
+- Status: `FAILED_TRANSPORT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v1`
+- Transport-Identity: `1.1.27|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f`
+- Model: `gemini-3.1-pro-high`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-a0537240c76a842b53ea04b3`
+- Rig-ID: `agy-subscription-v1.1.27-nested-result-recovery-v2`
+- Rig-Key: `71f34a608654d98dd4cc112b343f72c3fdb98b017850907418bf1878dec21b4b`
+- Failure-Class: `TRANSPORT`
+- Base: `f78a52c44353719b20ef18252c91b50eca4f890d`
+- Candidate: `2faff14809304e505f4a75f508e8ca6b9be60fc2`
+- Tree: `a78ca714e883a16dd5e3047d5712e00fda4686f1`
+- Plan-ID: `28e63861ea59689fa53ab645f05eef6ebf5f22cf3d1c0944dc7b0790ac65aa14`
+- Slice: `coverage-002`
+- Material-SHA256: `48b9d4a38ac99b519fd50d446ad7f72ae990836c3753e8199ac1be9747183b7c`
+- Envelope-SHA256: `be6aea1506f0dbaefd95f9437c581c59b8ddddea7506bea0532bafdd7b3ace26`
+- Envelope-Bytes: `76580`
+- Ordered-Contributors: `(none)`
+- Diagnostic: `agy subscription transport interrupted by SIGINT`
+- Record-SHA256: `57cb1ccb8e51064476c3461af754b912a18de6341880646f9b16050875f09bac`
+- Complete-Record: `YES`

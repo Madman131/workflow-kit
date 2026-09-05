@@ -115,6 +115,23 @@ function fragment(f, kind, start, end, pathname = "src.mjs") {
   const part = bytes.subarray(start, end), digest = value => crypto.createHash("sha256").update(value).digest("hex");
   return { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, path: pathname, component_kind: kind, component_byte_length: bytes.length, component_sha256: digest(bytes), byte_start: start, byte_end: end, fragment_sha256: digest(part) };
 }
+function generatedArgs(f, output = ".gemini-gate/generated/manifest.json") { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--context", "docs/contract.md", "--generate-slice-plan", output]; }
+function generatedPlan(f, output = ".gemini-gate/generated/manifest.json") {
+  const result = spawnSync(process.execPath, [runner, ...generatedArgs(f, output)], { encoding: "utf8" }); assert.equal(result.status, 0, result.stderr);
+  return { result: JSON.parse(result.stdout), plan: JSON.parse(readFileSync(path.join(f.dir, output), "utf8")), output };
+}
+function componentForFragment(f, item) {
+  const commit = item.component_kind === "deleted_source" ? f.base : f.candidate;
+  return item.component_kind === "per_file_diff" ? Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", item.path])) : Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${commit}:${item.path}`]));
+}
+function assertGeneratedPartitions(f, plan) {
+  const all = plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments);
+  for (const key of new Set(all.map(item => `${item.path}\0${item.component_kind}`))) {
+    const items = all.filter(item => `${item.path}\0${item.component_kind}` === key), bytes = componentForFragment(f, items[0]); let offset = 0;
+    for (const item of items) { assert.equal(item.byte_start, offset, `${key} has a coverage gap`); assert.deepEqual(Buffer.from(item.fragment_sha256, "hex").length, 32); offset = item.byte_end; }
+    assert.equal(offset, bytes.length, `${key} is fully reconstructed`);
+  }
+}
 
 test("frozen dry-run has a stable material/request identity and ignores replace objects", () => {
   const f = fixture(); try {
@@ -558,6 +575,68 @@ test("direct and slice validators share lexical case and punctuation ordering", 
     const out = mkdtempSync(path.join(os.tmpdir(), "gemini-slice-order-")); try {
       const slices = spawnSync(process.execPath, [path.join(root, "scripts", "gemini-gate-slices.mjs"), "fingerprint", "--repo", f.dir, "--manifest", path.join(f.dir, "plan.json"), "--out-dir", out], { encoding: "utf8" }); assert.equal(slices.status, 0, slices.stderr);
     } finally { rmSync(out, { recursive: true, force: true }); }
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("fragment envelopes declare verified ranges and reject an altered copied scope", async () => {
+  const f = fixture(); try {
+    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]));
+    const diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
+    const cut = Math.max(1, Math.floor(diff.length / 2));
+    const coverage = [
+      { name: "coverage-001", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, source.length), fragment(f, "per_file_diff", 0, cut)] },
+      { name: "coverage-002", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "per_file_diff", cut, diff.length)] },
+    ];
+    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...coverage, cross]), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    await withFetch(async () => {
+      let calls = 0;
+      globalThis.fetch = async (_url, request) => {
+        calls++;
+        const text = JSON.parse(request.body).contents[0].parts[0].text;
+        assert.match(text, /VERIFIED WHOLE FRAGMENT/); assert.match(text, /VERIFIED PARTIAL FRAGMENT/); assert.match(text, /Verified half-open byte range/);
+        const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1]; assert.match(scope, /"slice_kind":"coverage"/); assert.match(scope, /"material_mode":"verified_fragments"/);
+        const response = await responseFrom(request).json(), reply = response.candidates[0].content.parts[0].text;
+        response.candidates[0].content.parts[0].text = reply.replace(/"byte_end":(\d+)/, (_match, value) => `"byte_end":${Number(value) + 1}`);
+        return { ok: true, json: async () => response };
+      };
+      await assert.rejects(run(sliceArgs(f, "--run-slices")), /inspected scope/); assert.equal(calls, 1);
+    });
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("native generator is deterministic, cap-measured, complete, and leaves DRAFT cross-boundary evidence unrunnable", () => {
+  const baseLines = Array.from({ length: 3000 }, (_, index) => `export const value_${String(index).padStart(4, "0")} = "${"a".repeat(24)}";\n`);
+  const candidateLines = [...baseLines]; for (const index of [100, 400, 700, 1000, 1300, 1600, 1900, 2200, 2500, 2800]) candidateLines[index] = candidateLines[index].replace("a", "b");
+  const f = fixture({ withInstalledWrapper: true, baseSource: baseLines.join(""), candidateSource: candidateLines.join("") });
+  try {
+    const first = generatedPlan(f), initialJournal = path.join(f.dir, "docs", "journal", "gemini_review_log.md");
+    assert.ok(first.result.coverage_call_count > 1); assert.ok(first.result.envelopes.every(entry => entry.envelope_bytes < 81920)); assert.equal(existsSync(initialJournal), false);
+    assertGeneratedPartitions(f, first.plan);
+    const diffFragment = first.plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments).find(item => item.component_kind === "per_file_diff"), diff = componentForFragment(f, diffFragment);
+    const hunkBoundaries = new Set([0, diff.length]); for (let start = 0; start < diff.length;) { const newline = diff.indexOf(0x0a, start), end = newline === -1 ? diff.length : newline + 1; if (diff.subarray(start, Math.min(end, start + 3)).toString("utf8") === "@@ ") hunkBoundaries.add(start); start = end; }
+    for (const item of first.plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments).filter(item => item.component_kind === "per_file_diff")) { assert.ok(hunkBoundaries.has(item.byte_start)); assert.ok(hunkBoundaries.has(item.byte_end)); }
+    const second = generatedPlan(f); assert.deepEqual(second.plan, first.plan);
+    const draftArgs = ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--slice-manifest", first.output];
+    const fingerprinted = spawnSync(process.execPath, [runner, ...draftArgs, "--fingerprint"], { encoding: "utf8" }); assert.notEqual(fingerprinted.status, 0); assert.match(fingerprinted.stderr, /DRAFT cross-boundary placeholder/);
+    const attempted = spawnSync(process.execPath, [runner, ...draftArgs, "--run-slices"], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "must-not-read" } }); assert.notEqual(attempted.status, 0); assert.match(attempted.stderr, /DRAFT cross-boundary placeholder/); assert.equal(existsSync(initialJournal), false);
+    const installed = path.join(f.dir, "scripts", "cold-review-gemini.sh"), viaWrapper = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--context", "docs/contract.md", "--generate-slice-plan", ".gemini-gate/generated/wrapper-manifest.json"], { cwd: f.dir, encoding: "utf8" });
+    assert.equal(viaWrapper.status, 0, viaWrapper.stderr); assert.ok(existsSync(path.join(f.dir, ".gemini-gate", "generated", "wrapper-manifest.json")));
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("generator surfaces UTF-8 forced splits for a single oversized line without adding a final newline", () => {
+  const f = fixture({ candidateSource: `export const payload = "${"é".repeat(80000)}";` });
+  try {
+    const { plan, result } = generatedPlan(f); assert.ok(result.forced_splits.length > 0); assert.ok(plan.generation.forced_splits.every(item => item.reason === "single_oversized_line_utf8_boundary")); assertGeneratedPartitions(f, plan);
+    for (const item of plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments)) { const bytes = componentForFragment(f, item); assert.notEqual(bytes[item.byte_end] & 0xc0, 0x80, "fragment must end on UTF-8 boundary"); }
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("first valid slice NO-GO is durable evidence and stops later calls without an aggregate", async () => {
+  const f = fixture(); try {
+    plan(f); const value = JSON.parse(readFileSync(path.join(f.dir, "plan.json"), "utf8")), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    await withFetch(async () => {
+      let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request, "NO-GO"); };
+      await run(sliceArgs(f, "--run-slices")); assert.equal(calls, 1);
+    });
+    const journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("public selftest and installed runner remain deterministic and network-free", () => {

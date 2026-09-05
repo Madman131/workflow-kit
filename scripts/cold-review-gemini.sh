@@ -32,6 +32,8 @@
 #   --no-log    don't append a durable attempt record (diagnostics only; not a release receipt)
 #   --slice-manifest <json> --slice <name>
 #               run one slice from a PM-approved, complete coverage plan
+#   --generate-slice-plan <.gemini-gate/plan.json> --context <contract>
+#               write a local DRAFT mechanical frozen-fragment plan; no provider, credential, or journal access
 #   --selftest  run the deterministic fake-agy reliability harness (no network/model call)
 set -uo pipefail
 
@@ -53,9 +55,9 @@ cd "$REPO_ROOT"
 
 # ---- args ----
 CONTEXT_FILE="${GEMINI_REVIEW_CONTEXT:-}"
-DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""; FOLDED_IS_FILE=0; CONTEXT_FILE_CANONICAL=""; SLICE_MANIFEST=""; SLICE_MANIFEST_CANONICAL=""; SLICE_NAME=""; FINALIZE_SLICES=0; DRY_RUN=0; DO_LOG=1; SELFTEST=0
+DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""; FOLDED_IS_FILE=0; CONTEXT_FILE_CANONICAL=""; SLICE_MANIFEST=""; SLICE_MANIFEST_CANONICAL=""; SLICE_NAME=""; FINALIZE_SLICES=0; DRY_RUN=0; DO_LOG=1; SELFTEST=0; HELP=0
 FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_TRANSPORT="subscription"; FROZEN_MODEL=""; FROZEN_AGY_BIN=""; FROZEN_TIMEOUT_SECONDS=""; RUN_SLICES=0
-FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0
+FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0; GENERATE_SLICE_PLAN=""
 require_option_value() {
   [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "cold-review-gemini: $1 requires a nonempty value." >&2; exit 2; }
   case "$2" in --*) echo "cold-review-gemini: $1 requires a value, not an option ($2)." >&2; exit 2 ;; esac
@@ -79,12 +81,20 @@ while [ $# -gt 0 ]; do
     --timeout-seconds) require_option_value "$@"; FROZEN_TIMEOUT_SECONDS="$2"; FROZEN_INTENT=1; shift 2 ;;
     --run-slices) RUN_SLICES=1; FROZEN_INTENT=1; shift ;;
     --fingerprint) FROZEN_FINGERPRINT=1; FROZEN_INTENT=1; shift ;;
+    --generate-slice-plan) require_option_value "$@"; GENERATE_SLICE_PLAN="$2"; FROZEN_INTENT=1; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-log)  DO_LOG=0; shift ;;
     --selftest) SELFTEST=1; shift ;;
+    --help) HELP=1; shift ;;
     *) echo "cold-review-gemini: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
+
+if [ "$HELP" = "1" ]; then
+  [ "$ORIGINAL_ARGC" -eq 1 ] || { echo "cold-review-gemini: --help does not accept additional arguments." >&2; exit 2; }
+  printf '%s\n' "usage: bash scripts/cold-review-gemini.sh [--context <contract> | --design <doc>]" "       frozen DRAFT: --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> --context <contract> --generate-slice-plan .gemini-gate/<plan>.json" "       frozen preflight/run: --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> --slice-manifest <plan> --fingerprint|--run-slices" "       --generate-slice-plan is local-only and produces an unrunnable cross-boundary DRAFT."
+  exit 0
+fi
 
 # The shipped selftest is deliberately isolated: accepting a tuple, context, model, or any other
 # live/frozen switch beside it could route through the direct dispatcher before its no-network check.
@@ -100,7 +110,9 @@ for frozen_value in "$FROZEN_BASE" "$FROZEN_CANDIDATE" "$FROZEN_TREE" "$FROZEN_R
 if [ "$FROZEN_INTENT" = "1" ]; then
   [ "$frozen_count" -eq 4 ] || { echo "cold-review-gemini: --base, --candidate, --tree, and --rig-id are required together for a frozen review." >&2; exit 2; }
   [ -z "$DESIGN_FILE$FOLDED_SRC$SLICE_NAME" ] && [ "$FINALIZE_SLICES" = 0 ] || { echo "cold-review-gemini: frozen review does not combine legacy design, --slice, or --finalize-slices modes." >&2; exit 2; }
-  if [ -n "$SLICE_MANIFEST" ]; then
+  if [ -n "$GENERATE_SLICE_PLAN" ]; then
+    [ -z "$SLICE_MANIFEST" ] && [ -n "$CONTEXT_FILE" ] && [ "$RUN_SLICES" = 0 ] && [ "$FROZEN_FINGERPRINT" = 0 ] && [ "$DRY_RUN" = 0 ] && [ "$DO_LOG" = 1 ] || { echo "cold-review-gemini: --generate-slice-plan requires --context and forbids manifest, run, fingerprint, dry-run, and no-log flags." >&2; exit 2; }
+  elif [ -n "$SLICE_MANIFEST" ]; then
     { [ "$RUN_SLICES" = 1 ] || [ "$FROZEN_FINGERPRINT" = 1 ]; } && [ -z "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen sliced review requires --slice-manifest with --run-slices (or --fingerprint) and no --context." >&2; exit 2; }
   else
     [ "$RUN_SLICES" = 0 ] && [ -n "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen full review requires --context and forbids --run-slices." >&2; exit 2; }
@@ -575,7 +587,7 @@ trap cleanup EXIT
 trap 'on_signal INT 130' INT
 trap 'on_signal TERM 143' TERM
 
-if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && [ "$FROZEN_FINGERPRINT" = "1" ]; }; then acquire_single_flight; fi
+if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && { [ "$FROZEN_FINGERPRINT" = "1" ] || [ -n "$GENERATE_SLICE_PLAN" ]; }; }; then acquire_single_flight; fi
 if [ "$FROZEN_DISPATCH" = "1" ]; then
   frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --transport "$FROZEN_TRANSPORT")
   [ -n "$FROZEN_MODEL" ] && frozen_args+=(--model "$FROZEN_MODEL")
@@ -583,6 +595,7 @@ if [ "$FROZEN_DISPATCH" = "1" ]; then
   [ -n "$FROZEN_TIMEOUT_SECONDS" ] && frozen_args+=(--timeout-seconds "$FROZEN_TIMEOUT_SECONDS")
   [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
   [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST" --run-slices)
+  [ -n "$GENERATE_SLICE_PLAN" ] && frozen_args+=(--generate-slice-plan "$GENERATE_SLICE_PLAN")
   [ "$FROZEN_FINGERPRINT" = 1 ] && frozen_args+=(--fingerprint)
   [ "$DRY_RUN" = 1 ] && frozen_args+=(--dry-run)
   [ "$DO_LOG" = 0 ] && frozen_args+=(--no-log)
