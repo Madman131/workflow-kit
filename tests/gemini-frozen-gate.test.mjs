@@ -93,8 +93,8 @@ test("committed invariant and context symlinks refuse before fetch", async () =>
 });
 test("bounded credential labels refuse values while placeholder configuration remains reviewable", async () => {
   const f = fixture(), benign = fixture(); try { await withFetch(async () => {
-    writeFileSync(path.join(f.dir, "src.mjs"), syntheticAssignment(["DB", "PASSWORD"], ["really", "secret"])); git(f.dir, ["add", "src.mjs"]); git(f.dir, ["commit", "-qm", "credential"]); const secret = refreshed(f);
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(secret))); assert.equal(calls, 0);
+    writeFileSync(path.join(f.dir, "src.mjs"), syntheticAssignment(["DB", "PASSWORD"], ["really", "secret"])); git(f.dir, ["add", "src.mjs"]); git(f.dir, ["commit", "-qm", "credential"]); const credentialCase = refreshed(f);
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(credentialCase))); assert.equal(calls, 0);
     writeFileSync(path.join(benign.dir, "src.mjs"), ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join("")); git(benign.dir, ["add", "src.mjs"]); git(benign.dir, ["commit", "-qm", "placeholder"]); assert.equal(dry(refreshed(benign)).status, 0);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(benign.dir, { recursive: true, force: true }); }
 });
