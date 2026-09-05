@@ -1744,8 +1744,7 @@ function main() {
     item(`.codex/hooks.json: init did not write it this run (your registration is preserved) and did not ignore it — it stays TRACKED with the rest of .codex/.`);
   }
   item(
-    `READ the kit's PORTABILITY.md (in the workflow-kit repository; it is NOT installed here — every`,
-    `"see PORTABILITY.md" pointer in the installed method means the kit's) — what these guards do NOT cover. They bind write TOOLS. A write`,
+    `READ the kit's PORTABILITY.md (in the workflow-kit repository; it is NOT installed here) — what these guards do NOT cover. They bind write TOOLS. A write`,
     `issued through a plain SHELL command is invisible to them, and in the Codex lane that`,
     `is a main road, not a corner case. The pre-commit hook you just installed is the only`,
     `mechanical floor that binds every lane. Do not imply otherwise to your team.`,
