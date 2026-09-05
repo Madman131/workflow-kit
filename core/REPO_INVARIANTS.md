@@ -9,8 +9,9 @@
 - The frozen Gemini gate is a read-only review control. It may read committed Git objects and write
   only its sanctioned durable journal or gate artifacts; it must never mutate an adopter, push,
   deploy, or execute provider-returned tools.
-- `scripts/cold-review-gemini.sh` is the public entrypoint. Its frozen tuple path uses the direct
-  text transport; its legacy design/working-tree paths retain their documented `agy` behavior.
+- `scripts/cold-review-gemini.sh` is the public entrypoint. Its frozen tuple path defaults to the
+  disposable, stream-verified subscription transport; direct Gemini REST is explicit-only. Its legacy
+  design/working-tree paths retain their documented `agy` behavior.
 - A release claim requires exact tuple provenance, complete ordered scope, a verified response, and
   a durable receipt. Focused tests or a selftest alone do not establish a live provider or release.
 - Changes to these repository invariants are themselves review material and require the same exact

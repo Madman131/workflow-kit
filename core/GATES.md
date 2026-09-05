@@ -611,7 +611,7 @@ Do not raise the 3 MB gate-valid envelope without a new contiguous-read experime
 > lock and a second live invocation **exits 4** — including from a sibling worktree of the same repo.
 > Two lanes cannot both hold a Gemini gate; the second must wait. This is a mechanism, not a norm.
 
-The runner owns one per-repository lock under the canonical Git common directory, shared by legacy `agy` and direct frozen dispatches, so sibling worktrees cannot run duplicate reviews against one repository. The legacy owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity; a live direct owner is likewise refused by PID and common-directory identity. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused legacy ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
+The runner owns one per-repository lock under the canonical Git common directory, shared by legacy `agy` and frozen subscription/direct dispatches, so sibling worktrees cannot run duplicate reviews against one repository. The legacy owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity; a live frozen subscription or direct owner is refused by PID and common-directory identity before command comparison. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused legacy ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
 
 ### Durable attempt records
 
@@ -690,11 +690,14 @@ bash scripts/cold-review-gemini.sh \
 The subscription runner resolves `agy` from an explicit absolute `--agy-bin`, then `PATH`, then the
 current user's `.local/bin`; receipts bind the stable subscription transport name, its `--version`,
 model, settings fingerprint, and nonsecret rig ID, never an operator home path. It requires
-`gemini-3.1-pro-high`, an empty disposable system-temp workspace, and one inline `-p` prompt. It
-passes `--sandbox --disable-slash-commands --output-format stream-json --print-timeout <N>s`; it never
-passes a repository cwd, stdin, `--add-dir`, `--new-project`, `--mode plan`, permission bypass, or a
-broad permission configuration. `--new-project` is forbidden because it creates durable global project
-records. `--timeout-seconds` may lower the bounded 600-second default but cannot raise it.
+`gemini-3.1-pro-high`, an empty disposable system-temp workspace, and exactly one NDJSON standard-input
+user event containing the complete prompt, so private review material is never an `agy` command-line
+argument. It passes `--input-format stream-json`, `--sandbox`, `--disable-slash-commands`,
+`--output-format stream-json`, and `--print-timeout <N>s`; it never passes
+a repository cwd, `--add-dir`, `--new-project`, `--mode plan`, permission bypass, or a broad permission
+configuration. `--new-project` is forbidden because it creates durable global project records.
+`--timeout-seconds` may lower the bounded 600-second default but cannot raise it. Subscription execution
+fails closed on Windows until the runner has an owned process-group teardown there.
 
 Before launch it parses `~/.gemini/antigravity-cli/settings.json` and refuses a malformed file,
 `toolPermission` other than absent or `request-review`, `allowNonWorkspaceAccess` other than absent or
@@ -703,8 +706,11 @@ false, or a nonempty/malformed `permissions.allow`. The NDJSON stream must conta
 only documented user-input, agent-response, or checkpoint step events. Any tool event, tool output,
 subagent information, denied action, stderr diagnostic, workspace mutation, signal, nonzero exit,
 timeout, malformed/unknown event, non-success result, empty response, or receipt mismatch is a
-non-verdict failure. The runner owns the detached `agy` process group and escalates TERM to KILL on a
-timeout or bounded-output overflow. It does not infer no tool activity from an omitted
+non-verdict failure. The runner accepts only allowlisted fields in those event shapes (except that a
+nonempty advertised `init.tools` list is expected) and rejects unknown or execution-like output fields.
+It owns the detached `agy` process group and escalates TERM to KILL on a timeout, bounded-output
+overflow, or runner interrupt, waiting through teardown before it releases the single-flight lock. It
+does not infer no tool activity from an omitted
 `denied_actions` field: the event stream is the authoritative local execution record.
 
 The deterministic fake-`agy` suite proves this runner behavior only. No live subscription review,

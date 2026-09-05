@@ -368,8 +368,8 @@ acquire_single_flight() {
       owner_pid_live=1
       current_start="$(ps -p "$owner_pid" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//')"
       current_command="$(ps -p "$owner_pid" -o command= 2>/dev/null | sed 's/^ *//;s/ *$//')"
-      if [ "$owner_kind" = "direct" ] && [ "$owner_repo" = "$common" ]; then
-        echo "cold-review-gemini: a live direct frozen invocation owns this repository gate (pid $owner_pid). Wait for it to release; guard: $LOCK_DIR" >&2
+      if { [ "$owner_kind" = "direct" ] || [ "$owner_kind" = "subscription" ]; } && [ "$owner_repo" = "$common" ]; then
+        echo "cold-review-gemini: a live frozen $owner_kind invocation owns this repository gate (pid $owner_pid). Wait for it to release; guard: $LOCK_DIR" >&2
         exit 4
       fi
       if [ "$owner_repo" = "$common" ] && [ -n "$owner_start" ] && [ "$current_start" = "$owner_start" ] && [ -n "$owner_command" ] && [ "$current_command" = "$owner_command" ]; then
