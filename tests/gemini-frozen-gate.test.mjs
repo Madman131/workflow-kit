@@ -36,6 +36,20 @@ function plan(f, mutate = {}) {
   const base = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [{ name: "coverage", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"] }, { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) }] };
   Object.assign(base, mutate); const file = path.join(f.dir, "plan.json"); writeFileSync(file, JSON.stringify(base)); return file;
 }
+function multiFixture() {
+  const f = fixture(), files = ["src.mjs"];
+  for (let index = 0; index < 3; index++) { const file = `slice-${index}.mjs`; writeFileSync(path.join(f.dir, file), `export const payload = "${"x".repeat(29000)}";\n`); files.push(file); }
+  git(f.dir, ["add", "."]); git(f.dir, ["commit", "-qm", "large candidate"]);
+  return { ...f, candidate: git(f.dir, ["rev-parse", "HEAD"]), tree: git(f.dir, ["rev-parse", "HEAD^{tree}"]), files };
+}
+function slicedPlan(f, slices) {
+  const coverage = f.files.map(file => ({ name: `coverage-${file}`, kind: "coverage", files: [file], contract_context: ["docs/contract.md"] }));
+  const final = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+  const value = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: f.files }, uncovered: [], slices: slices || [...coverage, final] };
+  writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value)); return value;
+}
+function sliceArgs(f, action) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", action]; }
+function fingerprint(f) { const r = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout).plan_id; }
 
 test("frozen dry-run has a stable material/request identity and ignores replace objects", () => {
   const f = fixture(); try {
@@ -71,8 +85,10 @@ test("response firewall refuses old mixed parts, conflicting verdicts, and incom
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, thought: "old runner accepted this" }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `${text}\nVERDICT: NO-GO` }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.markers[2], "missing") }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace("VERDICT: GO", "VERDICT: go") }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "" }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text }] } }] }, e));
+  assert.doesNotMatch(readFileSync(runner, "utf8"), /\bagy\b/);
 });
 test("live no-log is refused before fetch", async () => {
   const f = fixture(); try { await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls += 1; return responseFrom({ body: "{}" }); }; await assert.rejects(run(args(f, ["--no-log"]))); assert.equal(calls, 0); }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
@@ -98,6 +114,22 @@ test("a complete timeout record blocks unchanged-rig retries before fetch", asyn
     let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("Gemini provider timed out"); }; await assert.rejects(run(args(f)));
     globalThis.fetch = async (_url, request) => { calls += 1; return responseFrom(request); }; await assert.rejects(run(args(f))); assert.equal(calls, 1);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("oversized full artifacts refuse while an approved ordered slice set records aggregate GO and NO-GO", async () => {
+  const f = multiFixture(); try { await withFetch(async () => {
+    assert.notEqual(dry(f).status, 0, "full envelope must exceed the direct cap");
+    const draft = slicedPlan(f), planId = fingerprint(f); draft.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(draft));
+    let calls = 0; globalThis.fetch = async (_url, request) => { calls += 1; const body = JSON.parse(request.body); assert.equal(body.tools, undefined); assert.equal(body.functionDeclarations, undefined); assert.doesNotMatch(JSON.stringify(body), /dangerous|functionCall/); return responseFrom(request, "GO"); };
+    await run(sliceArgs(f, "--run-slices")); assert.equal(calls, f.files.length + 1); let log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `YES`[\s\S]*Gate-Verdict: `GO`[\s\S]*Inspected-Scope: `[\s\S]*Aggregate-Result-SHA256/);
+    calls = 0; globalThis.fetch = async (_url, request) => responseFrom(request, calls++ === 0 ? "NO-GO" : "GO"); await run(sliceArgs(f, "--run-slices")); log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `NO`[\s\S]*Gate-Verdict: `NO-GO`/);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("reordered, duplicate, and missing slice coverage plans refuse before fetch", () => {
+  const f = multiFixture(); try {
+    const ordered = slicedPlan(f), final = ordered.slices.at(-1); ordered.slices = [final, ...ordered.slices.slice(0, -1)]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(ordered)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
+    const duplicate = slicedPlan(f); duplicate.slices[1].files = ["src.mjs"]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(duplicate)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
+    const missing = slicedPlan(f); missing.slices = missing.slices.filter(slice => slice.name !== "coverage-slice-2.mjs"); writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(missing)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("public selftest and installed runner remain deterministic and network-free", () => {
   const selftest = spawnSync("bash", [wrapper, "--selftest"], { cwd: root, encoding: "utf8" }); assert.equal(selftest.status, 0, selftest.stderr); assert.match(selftest.stdout, /no network/);

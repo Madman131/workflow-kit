@@ -718,10 +718,11 @@ material markers, including an EOF-only receipt, and the reply must print their 
 exact normalized scope (tuple, files, contexts, invariants, material identity, and slice). A valid
 `NO-GO` is delivered evidence but exits nonzero and cannot create a release receipt. A verified reply
 is printed and stored as a checksummed complete fsynced record with its reply SHA and attempt ID;
-aggregate records retain ordered contributors. The journal records only nonsecret rig/transport,
-tuple, envelope and verdict metadata. Auth/provider/transport/timeout failures are cached by effective
-rig identity only from complete records; change the nonsecret rig ID only after an actual provider
-configuration or availability recovery.
+aggregate records retain ordered contributors and a deterministic aggregate result identity. The
+journal stores nonsecret rig/transport, tuple, envelope and verdict metadata plus the verified reply
+as UTF-8 base64 with its SHA (and never request headers or credentials). Auth/provider/transport/
+timeout failures are cached by effective rig identity only from complete records; change the
+nonsecret rig ID only after an actual provider configuration or availability recovery.
 
 `--dry-run` and `--fingerprint` validate and print stable material/request identities without reading
 `GEMINI_API_KEY` or contacting Gemini. `--no-log` is refused for a live direct review, so a paid call
@@ -732,9 +733,9 @@ this no-tools guarantee, and this explicit tuple invocation does not silently re
 
 ### Exit codes and traps
 
-- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. For a delivered review, exit 0 means it was delivered; read the log's `Gate-Verdict` field for GO vs NO-GO (the exit code does not encode the verdict). Git discovery failure is never “no changes.”
+- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. The frozen direct path returns `0` only for a verified `GO`; Git discovery failure is never “no changes.”
 - `2`: bad arguments or invalid environment value.
-- `3`: not a verdict—artifact-freeze failure, delivery/ingestion failure, timeout, tool failure, empty response, missing/malformed verdict contract, advisory, or refusal.
+- `3`: a frozen direct `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
 - `130` / `143`: direct `INT` / `TERM` paths may preserve the signal code; always non-verdict.

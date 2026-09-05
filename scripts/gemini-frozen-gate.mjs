@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models", JOURNAL = "docs/journal/gemini_review_log.md";
-const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
+const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 function die(message, exitCode = 2) { throw Object.assign(new Error(message), { exitCode }); }
 function sha(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
@@ -53,7 +53,7 @@ function parse(argv) {
 }
 function endpoint(repo, o) {
   const sanctioned = file => {
-    if (file === JOURNAL || file.startsWith(".gemini-gate/")) return true;
+    if (file === JOURNAL || file === o.sliceManifest || file.startsWith(".gemini-gate/")) return true;
     if (file !== "docs/journal/") return false;
     try { return fs.readdirSync(path.join(repo, "docs/journal")).every(entry => entry === "gemini_review_log.md"); } catch { return false; }
   };
@@ -102,7 +102,7 @@ function slice(raw, actual) {
 function verifyManifest(repo, o, rows) {
   const manifest = readManifest(repo, o.sliceManifest), actualFiles = rows.map(row => row.file), actual = new Set(actualFiles);
   if (manifest.version !== 2 || manifest.scope?.base_commit !== o.base || manifest.scope?.candidate_commit !== o.candidate || manifest.scope?.candidate_tree !== o.tree) die("slice manifest does not bind the exact frozen base/candidate/tree");
-  if (!manifest.approval?.by || typeof manifest.approval.by !== "string" || (!o.fingerprint && (manifest.approval.status !== "APPROVED" || !HEX.test(manifest.approval.expected_plan_id || "")))) die("slice manifest is not PM-approved");
+  if (!manifest.approval?.by || typeof manifest.approval.by !== "string" || (!o.fingerprint && (manifest.approval.status !== "APPROVED" || !SHA256.test(manifest.approval.expected_plan_id || "")))) die("slice manifest is not PM-approved");
   const declared = paths(manifest.scope.files, "manifest scope.files");
   if (declared.join("\0") !== actualFiles.join("\0") || !Array.isArray(manifest.uncovered) || manifest.uncovered.length) die("manifest scope is not complete for the committed candidate");
   if (!Array.isArray(manifest.slices) || manifest.slices.length < 2) die("manifest requires coverage slices plus final cross_boundary slice");
@@ -145,7 +145,7 @@ export function verifyResponse(body, e) {
   const candidate = body.candidates[0], parts = candidate.content?.parts;
   if (candidate.finishReason !== "STOP") die("provider response was not STOP", 3);
   if (!Array.isArray(parts) || !parts.length || parts.some(part => !part || Object.keys(part).length !== 1 || !Object.hasOwn(part, "text") || typeof part.text !== "string")) die("provider response parts must each contain exactly one text field", 3);
-  const reply = parts.map(part => part.text).join(""), verdicts = [...reply.matchAll(/^VERDICT:\s*(GO|NO-GO)\s*$/gmi)].map(match => match[1]), scopes = [...reply.matchAll(/^INSPECTED SCOPE:\s*(.*)$/gmi)].map(match => match[1]), proofs = [...reply.matchAll(/^INGESTION PROOF:\s*(.*)$/gmi)].map(match => match[1]);
+  const reply = parts.map(part => part.text).join(""), verdicts = [...reply.matchAll(/^VERDICT:\s*(GO|NO-GO)\s*$/gm)].map(match => match[1]), scopes = [...reply.matchAll(/^INSPECTED SCOPE:\s*(.*)$/gm)].map(match => match[1]), proofs = [...reply.matchAll(/^INGESTION PROOF:\s*(.*)$/gm)].map(match => match[1]);
   if (verdicts.length !== 1) die("response must contain exactly one verdict", 3);
   if (scopes.length !== 1 || scopes[0] !== e.scope) die("response inspected scope does not exactly bind this frozen unit", 3);
   if (proofs.length !== 1 || proofs[0] !== e.markers.join(" | ")) die("response did not prove ordered ingestion through the EOF receipt", 3);
@@ -154,7 +154,11 @@ export function verifyResponse(body, e) {
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
 function recordBody(record) {
   const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", "direct-gemini-rest-v1"], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
-  if (record.verdict) fields.push(["Gate-Verdict", record.verdict], ["Inspected-Scope", record.scope], ["Reply-SHA256", record.replySha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
+  if (record.verdict) {
+    fields.push(["Gate-Verdict", record.verdict], ["Inspected-Scope", record.scope]);
+    if (typeof record.reply === "string") fields.push(["Reply-SHA256", record.replySha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
+    else fields.push(["Aggregate-Result-SHA256", record.resultSha], ["Aggregate-Result", "assembled verified slice results; no model reply"]);
+  }
   if (record.detail) fields.push(["Diagnostic", record.detail]);
   return `\n## Gemini frozen gate attempt — ${clean(record.status)} — ${new Date().toISOString()}\n\n${fields.map(([key, value]) => `- ${key}: \`${clean(value)}\``).join("\n")}\n`;
 }
@@ -189,17 +193,23 @@ export async function run(argv = process.argv.slice(2)) {
   if (o.dryRun) { process.stdout.write(JSON.stringify({ frozen: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan?.planId || null, envelopes: identities }, null, 2) + "\n"); return; }
   preflightJournal(repo); const common = git(repo, ["rev-parse", "--git-common-dir"]).trim(), lock = path.join(path.isAbsolute(common) ? common : path.resolve(repo, common), "gemini-frozen-gate.lock"); try { fs.mkdirSync(lock); } catch { die("another frozen Gemini gate owns this repository", 4); }
   try {
-    const key = rigKey(o), contributors = []; let allGo = true;
+    const key = rigKey(o), contributors = [], results = []; let allGo = true;
     for (const item of prepared) {
       if (cachedFailure(repo, key)) die(`cached transport rig failure for --rig-id ${o.rigId}; change the nonsecret rig declaration after a real recovery`, 3);
       const attemptId = random("PIL-FROZEN-ATTEMPT");
       try {
         endpoint(repo, o); const result = await call(o, item); endpoint(repo, o);
         append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, reply: result.reply });
-        contributors.push(attemptId); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
+        contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
       } catch (error) { const failure = failureClass(error); append(repo, { status: failure === "CANDIDATE_RESPONSE" ? "FAILED_CANDIDATE_RESPONSE" : "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", attemptId, rigId: o.rigId, rigKey: key, failureClass: failure, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail: error.message }); throw error; }
     }
-    if (plan) { endpoint(repo, o); append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors }); }
+    if (plan) {
+      endpoint(repo, o);
+      const aggregateMaterialId = sha(JSON.stringify({ plan_id: plan.planId, envelopes: prepared.map(item => ({ slice: item.name, material_sha256: item.materialId, request_sha256: item.envelopeSha })), contributors: results }));
+      const scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: aggregateMaterialId, contributors: results });
+      const verdict = allGo ? "GO" : "NO-GO", resultSha = sha(JSON.stringify({ verdict, scope }));
+      append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict, scope, resultSha });
+    }
     if (!allGo) process.exitCode = 3;
   } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
