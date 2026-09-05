@@ -10,7 +10,8 @@ const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1bet
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 const GIT_LOCATION_OVERRIDES = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
-const CREDENTIAL_LIKE = /(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[^\s#]{8,})|\b(?:authorization\s*:\s*(?:bearer\s+)?|bearer\s+)[A-Za-z0-9._~+/=-]{8,})/i;
+const CREDENTIAL_LIKE = /(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[^\s#]{8,})|\bauthorization\s*[:=]\s*(?!["']?(?:(?:bearer|basic)\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:(?:bearer|basic)\s+)?(?:["'][^"']{1,}|[^\s#]{8,})|\bbearer\s+[A-Za-z0-9._~+/=-]{8,})/i;
+function lexical(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
 function die(message, exitCode = 2) { throw Object.assign(new Error(message), { exitCode }); }
 function sha(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
 function random(label) { return `${label}-${crypto.randomBytes(12).toString("hex")}`; }
@@ -26,7 +27,7 @@ function paths(values, label) {
   if (!Array.isArray(values)) die(`${label} must be an array`);
   const out = values.map(value => relative(value, label));
   if (new Set(out).size !== out.length) die(`${label} contains duplicate paths`);
-  return out.sort();
+  return out.sort(lexical);
 }
 function blob(repo, commit, file) {
   file = relative(file, "artifact path");
@@ -57,12 +58,15 @@ function journalPath(repo) {
 function parse(argv) {
   for (const key of GIT_LOCATION_OVERRIDES) if (process.env[key]) die(`ambient ${key} is not allowed for a frozen review`, 3);
   const o = { repo: process.cwd(), model: "gemini-2.5-pro", dryRun: false, noLog: false, runSlices: false, fingerprint: false };
+  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "model", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "sharedLockDir", "lockOwnerPid"]);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (key === "--dry-run") { o.dryRun = true; continue; } if (key === "--no-log") { o.noLog = true; continue; }
-    if (key === "--run-slices") { o.runSlices = true; continue; } if (key === "--fingerprint") { o.fingerprint = true; continue; }
-    const value = argv[++i]; if (!key.startsWith("--") || !value) die(`invalid argument near ${key}`);
-    o[key.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
+    if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--run-slices": "runSlices", "--fingerprint": "fingerprint" }[key]] = true; continue; }
+    if (!key?.startsWith("--")) die(`invalid argument near ${key}`);
+    const name = key.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    if (!valueOptions.has(name)) die(`unknown option ${key}`);
+    const value = argv[++i]; if (value === undefined || value === "" || value.startsWith("--")) die(`missing or option-shaped value for ${key}`);
+    o[name] = value;
   }
   for (const key of ["base", "candidate", "tree", "rigId"]) if (!o[key]) die(`missing --${key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
   if (![o.base, o.candidate, o.tree].every(value => HEX.test(value))) die("base, candidate, and tree must be exact lowercase 40-hex IDs");
@@ -105,7 +109,7 @@ function changed(repo, o) {
     rows.push({ status, file });
   }
   if (!rows.length || new Set(rows.map(row => row.file)).size !== rows.length) die("candidate must contain one or more unique regular-file changes");
-  return rows.sort((a, b) => a.file.localeCompare(b.file));
+  return rows.sort((a, b) => lexical(a.file, b.file));
 }
 function readManifest(repo, rel) {
   const input = path.resolve(repo, relative(rel, "--slice-manifest")), stat = fs.lstatSync(input, { throwIfNoEntry: false });
@@ -133,7 +137,7 @@ function verifyManifest(repo, o, rows) {
   const coverage = slices.filter(item => item.kind === "coverage"), cross = slices.filter(item => item.kind === "cross_boundary");
   if (!coverage.length || cross.length !== 1 || slices.at(-1) !== cross[0]) die("manifest requires exactly one final cross_boundary slice");
   const covered = new Set(); for (const item of coverage) for (const file of item.files) { if (covered.has(file)) die(`coverage slices overlap: ${file}`); covered.add(file); }
-  if ([...covered].sort().join("\0") !== actualFiles.join("\0")) die("coverage slices do not exactly and disjointly cover the candidate");
+  if ([...covered].sort(lexical).join("\0") !== actualFiles.join("\0")) die("coverage slices do not exactly and disjointly cover the candidate");
   const boundaries = {}, final = cross[0];
   for (const name of BOUNDARIES) {
     const claim = final.raw.boundaries?.[name];
@@ -157,7 +161,7 @@ function envelope(repo, o, rows, contexts, name) {
   const materialId = sha(JSON.stringify({ tuple: [o.base, o.candidate, o.tree], slice: name, material }));
   const markers = ["HEAD", "MIDDLE", "EOF"].map(position => `PIL-INGEST-${position}-${sha(`${materialId}|${position}`).slice(0, 24)}`);
   const done = `PIL-DONE-${sha(`${materialId}|DONE`).slice(0, 24)}`;
-  const scope = JSON.stringify({ slice: name, base: o.base, candidate: o.candidate, tree: o.tree, files, contract_context: [...contexts].sort(), invariants: INVARIANTS, material_sha256: materialId });
+  const scope = JSON.stringify({ slice: name, base: o.base, candidate: o.candidate, tree: o.tree, files, contract_context: [...contexts].sort(lexical), invariants: INVARIANTS, material_sha256: materialId });
   const middle = Math.ceil(material.length / 2), supplied = [`=== INGESTION MARKER 1 OF 3 ===\n${markers[0]}`, ...material.slice(0, middle), `=== INGESTION MARKER 2 OF 3 ===\n${markers[1]}`, ...material.slice(middle), `=== NORMALIZED INSPECTED SCOPE ===\n${scope}`, `=== RESPONSE COMPLETION TOKEN ===\n${done}`, "=== END OF SUPPLIED MATERIAL ===", `=== EOF-ONLY INGESTION RECEIPT 3 OF 3 ===\n${markers[2]}`].join("\n\n");
   if (CREDENTIAL_LIKE.test(supplied)) die("possible credential-like value in final supplied review material", 3);
   const prompt = "Review this exact frozen committed artifact using only supplied material. Return findings, exactly one `VERDICT: GO` or `VERDICT: NO-GO` line, exactly one `INSPECTED SCOPE:` line copied exactly from supplied material, and exactly one `INGESTION PROOF:` line that contains the three supplied ingestion markers in encountered order, separated by ` | `. End the reply with the supplied response-completion token as its final nonblank line.";

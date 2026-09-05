@@ -28,6 +28,8 @@ function fail(message) {
   process.exit(2);
 }
 
+function lexical(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+
 function git(repo, args, { throwOnError = false } = {}) {
   try {
     return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -52,7 +54,7 @@ function sortedUnique(values, label) {
   for (const value of values) {
     if (typeof value !== "string" || !value || /[\n\r\t]/.test(value)) fail(`${label} contains an invalid path/value`);
   }
-  return [...new Set(values)].sort();
+  return [...new Set(values)].sort(lexical);
 }
 
 function sameArray(a, b) {
@@ -390,7 +392,7 @@ if (manifestRel) excluded.add(manifestRel);
 // fails closed; that fail-closed distinction is load-bearing and must not regress to untracked-ness.
 const actualScope = [...new Set([...tracked, ...untrackedList])]
   .filter((file) => !excluded.has(file) && !isGateArtifactChild(file))
-  .sort();
+  .sort(lexical);
 if (!sameArray(declaredScope, actualScope)) {
   journalScopeMismatch(opts.log, { command, baseCommit, declared: declaredScope, actual: actualScope });
   fail(`scope.files does not equal the actual changed surface; declared=${JSON.stringify(declaredScope)} actual=${JSON.stringify(actualScope)}`);

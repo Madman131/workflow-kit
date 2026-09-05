@@ -57,7 +57,8 @@ DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""
 FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_MODEL="gemini-2.5-pro"; RUN_SLICES=0
 FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0
 require_option_value() {
-  [ "$#" -ge 2 ] || { echo "cold-review-gemini: $1 requires a value." >&2; exit 2; }
+  [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "cold-review-gemini: $1 requires a nonempty value." >&2; exit 2; }
+  case "$2" in --*) echo "cold-review-gemini: $1 requires a value, not an option ($2)." >&2; exit 2 ;; esac
 }
 ORIGINAL_ARGC=$#
 while [ $# -gt 0 ]; do
@@ -109,14 +110,18 @@ if [ "$SELFTEST" = "1" ]; then
   exec /bin/bash "$SCRIPT_DIR/cold-review-gemini-selftest.sh"
 fi
 
-if [ "$FINALIZE_SLICES" = "1" ]; then
-  [ -n "$SLICE_MANIFEST" ] && [ -z "$SLICE_NAME" ] || { echo "cold-review-gemini: --finalize-slices requires --slice-manifest and forbids --slice." >&2; exit 2; }
-  [ "$DRY_RUN" = "0" ] && [ "$DO_LOG" = "1" ] && [ -z "$CONTEXT_FILE" ] && [ -z "$FOLDED_SRC" ] || { echo "cold-review-gemini: --finalize-slices is a durable aggregate only; do not combine it with --dry-run, --no-log, --context, or --folded." >&2; exit 2; }
-elif { [ -n "$SLICE_MANIFEST" ] && [ -z "$SLICE_NAME" ]; } || { [ -z "$SLICE_MANIFEST" ] && [ -n "$SLICE_NAME" ]; }; then
-  echo "cold-review-gemini: --slice-manifest and --slice must be used together." >&2; exit 2
-fi
-if [ -n "$DESIGN_FILE" ] && [ -n "$SLICE_MANIFEST" ]; then
-  echo "cold-review-gemini: slicing is code-mode only; do not combine --design with --slice-manifest." >&2; exit 2
+if [ "$FROZEN_DISPATCH" = "0" ]; then
+  # This is the single legacy boundary. Frozen full, fingerprint, and run-slices commands have
+  # already passed their tuple-specific validation above and must not fall through these checks.
+  if [ "$FINALIZE_SLICES" = "1" ]; then
+    [ -n "$SLICE_MANIFEST" ] && [ -z "$SLICE_NAME" ] || { echo "cold-review-gemini: --finalize-slices requires --slice-manifest and forbids --slice." >&2; exit 2; }
+    [ "$DRY_RUN" = "0" ] && [ "$DO_LOG" = "1" ] && [ -z "$CONTEXT_FILE" ] && [ -z "$FOLDED_SRC" ] || { echo "cold-review-gemini: --finalize-slices is a durable aggregate only; do not combine it with --dry-run, --no-log, --context, or --folded." >&2; exit 2; }
+  elif { [ -n "$SLICE_MANIFEST" ] && [ -z "$SLICE_NAME" ]; } || { [ -z "$SLICE_MANIFEST" ] && [ -n "$SLICE_NAME" ]; }; then
+    echo "cold-review-gemini: --slice-manifest and --slice must be used together." >&2; exit 2
+  fi
+  if [ -n "$DESIGN_FILE" ] && [ -n "$SLICE_MANIFEST" ]; then
+    echo "cold-review-gemini: slicing is code-mode only; do not combine --design with --slice-manifest." >&2; exit 2
+  fi
 fi
 
 # ── CODE MODE IS RESERVED FOR THE CODEX-AS-BUILDER LADDER (owner decision, 2026-07-15) ──
@@ -143,7 +148,7 @@ fi
 # payload is a document with nothing to run, which is the mode that fits the tool.
 #
 # The receipt still fail-closes either way; this refuses BEFORE spending the call.
-if [ -z "$DESIGN_FILE" ] && [ "$SELFTEST" = "0" ] && [ "$DRY_RUN" = "0" ] && [ -z "${GEMINI_ALLOW_CODE_MODE:-}" ]; then
+if [ "$FROZEN_DISPATCH" = "0" ] && [ -z "$DESIGN_FILE" ] && [ "$SELFTEST" = "0" ] && [ "$DRY_RUN" = "0" ] && [ -z "${GEMINI_ALLOW_CODE_MODE:-}" ]; then
   cat >&2 <<'MSG'
 cold-review-gemini: CODE MODE is reserved — pick by WHO BUILT the change.
 
