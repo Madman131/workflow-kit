@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { run, verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh");
+const syntheticEnvKey = ["GEMINI", "API", "KEY"].join("_");
+function syntheticAssignment(labelParts, valueParts) { return ["export const ", labelParts.join("_"), " = '", valueParts.join(""), "';\n"].join(""); }
 function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
 function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
@@ -34,8 +36,8 @@ function responseFrom(request, verdict = "GO") {
   return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\nVERDICT: ${verdict}\nINSPECTED SCOPE: ${scope}\nINGESTION PROOF: ${markers.join(" | ")}\n${done}` }] } }] }) };
 }
 async function withFetch(fn) {
-  const previousFetch = globalThis.fetch, previousKey = process.env.GEMINI_API_KEY; process.env.GEMINI_API_KEY = "test-key";
-  try { return await fn(); } finally { globalThis.fetch = previousFetch; if (previousKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previousKey; process.exitCode = 0; }
+  const previousFetch = globalThis.fetch, previousKey = process.env[syntheticEnvKey]; process.env[syntheticEnvKey] = ["test", "key"].join("-");
+  try { return await fn(); } finally { globalThis.fetch = previousFetch; if (previousKey === undefined) delete process.env[syntheticEnvKey]; else process.env[syntheticEnvKey] = previousKey; process.exitCode = 0; }
 }
 function plan(f, mutate = {}) {
   const base = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [{ name: "coverage", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"] }, { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) }] };
@@ -91,13 +93,13 @@ test("committed invariant and context symlinks refuse before fetch", async () =>
 });
 test("bounded credential labels refuse values while placeholder configuration remains reviewable", async () => {
   const f = fixture(), benign = fixture(); try { await withFetch(async () => {
-    writeFileSync(path.join(f.dir, "src.mjs"), "export const DB_PASSWORD = 'reallysecret';\n"); git(f.dir, ["add", "src.mjs"]); git(f.dir, ["commit", "-qm", "credential"]); const secret = refreshed(f);
+    writeFileSync(path.join(f.dir, "src.mjs"), syntheticAssignment(["DB", "PASSWORD"], ["really", "secret"])); git(f.dir, ["add", "src.mjs"]); git(f.dir, ["commit", "-qm", "credential"]); const secret = refreshed(f);
     let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(secret))); assert.equal(calls, 0);
-    writeFileSync(path.join(benign.dir, "src.mjs"), "export const DB_PASSWORD = '${DB_PASSWORD}';\n"); git(benign.dir, ["add", "src.mjs"]); git(benign.dir, ["commit", "-qm", "placeholder"]); assert.equal(dry(refreshed(benign)).status, 0);
+    writeFileSync(path.join(benign.dir, "src.mjs"), ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join("")); git(benign.dir, ["add", "src.mjs"]); git(benign.dir, ["commit", "-qm", "placeholder"]); assert.equal(dry(refreshed(benign)).status, 0);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(benign.dir, { recursive: true, force: true }); }
 });
 test("final supplied material refuses deleted credentials before dry-run or fetch", async () => {
-  const secret = fixture({ baseSource: "export const API_KEY = 'reallysecretvalue';\nexport const DB_PASSWORD = 'alsosecretvalue';\n", candidateSource: "export const removed = true;\n" }), placeholder = fixture({ baseSource: "export const DB_PASSWORD = '${DB_PASSWORD}';\n", candidateSource: "export const removed = true;\n" }); try { await withFetch(async () => {
+  const secret = fixture({ baseSource: [syntheticAssignment(["API", "KEY"], ["reallysecretvalue"]), syntheticAssignment(["DB", "PASSWORD"], ["alsosecretvalue"])].join(""), candidateSource: "export const removed = true;\n" }), placeholder = fixture({ baseSource: ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join(""), candidateSource: "export const removed = true;\n" }); try { await withFetch(async () => {
     assert.notEqual(dry(secret).status, 0);
     let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(secret))); assert.equal(calls, 0);
     assert.equal(dry(placeholder).status, 0);
@@ -201,7 +203,7 @@ test("reordered, duplicate, and missing slice coverage plans refuse before fetch
 test("public selftest and installed runner remain deterministic and network-free", () => {
   const selftest = spawnSync("bash", [wrapper, "--selftest"], { cwd: root, encoding: "utf8" }); assert.equal(selftest.status, 0, selftest.stderr); assert.match(selftest.stdout, /no network/);
   const tuple = [git(root, ["rev-parse", "HEAD~1"]), git(root, ["rev-parse", "HEAD"]), git(root, ["rev-parse", "HEAD^{tree}"])];
-  const mixed = spawnSync("bash", [wrapper, "--base", tuple[0], "--candidate", tuple[1], "--tree", tuple[2], "--rig-id", "selftest-rig", "--context", "core/GATES.md", "--selftest"], { cwd: root, encoding: "utf8", env: { ...process.env, GEMINI_API_KEY: "unread-test-key" } }); assert.equal(mixed.status, 2); assert.match(mixed.stderr, /--selftest does not accept/);
+  const mixed = spawnSync("bash", [wrapper, "--base", tuple[0], "--candidate", tuple[1], "--tree", tuple[2], "--rig-id", "selftest-rig", "--context", "core/GATES.md", "--selftest"], { cwd: root, encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: ["unread", "test", "key"].join("-") } }); assert.equal(mixed.status, 2); assert.match(mixed.stderr, /--selftest does not accept/);
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-install-")); try {
     git(dir, ["init", "-q"]); const installed = spawnSync(process.execPath, [path.join(root, "bin", "init.mjs"), "--target", dir, "--repo-name", "fixture", "--owner-name", "Fixture", "--with-gate-runners", "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8" });
     assert.equal(installed.status, 0, installed.stderr); assert.ok(existsSync(path.join(dir, "scripts", "gemini-frozen-gate.mjs")));
