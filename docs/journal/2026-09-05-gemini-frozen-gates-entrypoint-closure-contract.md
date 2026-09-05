@@ -25,6 +25,29 @@ the wrapper, installed-layout execution with a test-only fake provider, and the 
 triggers. Run focused tests, syntax/selftest, diff checks, and the full `npm test`; report any
 separate global orchestrate parity result.
 
+## Round 2 approved amendment: deterministic within-file fragments
+
+The existing v2 whole-file path remains compatible. The direct slice mechanism may additionally
+carry deterministic UTF-8-safe fragments for one frozen source blob, deleted source blob, or
+per-file diff component. Each fragment binds the exact base/candidate/tree tuple, path, component
+kind (`frozen_source`, `deleted_source`, or `per_file_diff`), complete component byte length and
+SHA-256, byte `start`/`end` offsets, and a fragment hash. Starts and ends must be UTF-8 boundaries.
+
+Before approval or any provider call, the validator proves that every required source and
+per-file-diff component has an ordered, gap-free, non-overlapping partition whose concatenation
+reconstructs the original bytes and hash exactly. Gaps, overlaps, duplicates, reordering, changed
+bytes, unknown paths or kinds, tuple mismatch, and plan mismatch refuse. Invariants, contract
+contexts, sources, and diffs are scanned in their complete unpartitioned form before fragmentation;
+a credential spanning fragment boundaries therefore refuses before fetch. The final serialized
+request for every fragment is preflighted under 81,920 bytes before credential lookup or calls.
+
+Fragment results remain non-release. Only a complete approved ordered fragment set plus one final
+`cross_boundary` slice may aggregate. Cross-boundary coverage may select explicit raw ranges from
+already covered components with PM semantic sufficiency; it may not use summaries or hash-only
+evidence. Existing direct transport, shared lock, timeout, response proof, durable receipts, and
+rig-cache behavior remain unchanged. No cap increase, omitted required material, repository-doc
+split, service/framework/controller/ledger/provider, adopter, or canonical-main change is allowed.
+
 ## Explicit declines and Owner boundaries
 
 Keep the 81,920-byte cap, full selected source, final scan, direct text architecture, and existing
