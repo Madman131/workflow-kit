@@ -16,8 +16,10 @@
 # does that registration until a human grants hook trust in an INTERACTIVE codex session — an
 # untrusted hook is skipped silently. `node scripts/check-codex-hooks-armed.mjs` is what tells you
 # whether the guards are live; the kit's PORTABILITY.md § The enforcement asymmetry (workflow-kit
-# repository) has the executed reasons. If you declare your own hooks in this file, `init` keeps
-# this file and writes NO hooks.json — one representation, yours.
+# repository) has the executed reasons. If you declare your own hooks in this file, a plain `init`
+# keeps this file and writes NO hooks.json — one representation, yours, and the kit's guards are
+# then registered only if you carry them (init says so at the site). A `--force` run REPLACES this
+# file with the kit's copy, backing yours up to config.toml.bak, and writes the registration.
 
 [shell_environment_policy]
 inherit = "core"
