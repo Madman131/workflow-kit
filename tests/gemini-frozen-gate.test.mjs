@@ -629,15 +629,24 @@ test("generator surfaces UTF-8 forced splits for a single oversized line without
     for (const item of plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments)) { const bytes = componentForFragment(f, item); assert.notEqual(bytes[item.byte_end] & 0xc0, 0x80, "fragment must end on UTF-8 boundary"); }
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("first valid slice NO-GO is durable evidence and stops later calls without an aggregate", async () => {
-  const f = fixture(); try {
+test("first valid slice NO-GO is durable evidence and stops the direct CLI before later calls or aggregate", () => {
+  const f = fixture(), support = mkdtempSync(path.join(os.tmpdir(), "gemini-no-go-cli-")), marker = path.join(support, "fetch-order.log"), preload = path.join(support, "fetch-preload.mjs");
+  try {
     plan(f); const value = JSON.parse(readFileSync(path.join(f.dir, "plan.json"), "utf8")), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    await withFetch(async () => {
-      let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request, "NO-GO"); };
-      await run(sliceArgs(f, "--run-slices")); assert.equal(calls, 1);
-    });
-    const journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+    writeFileSync(preload, [
+      'import { appendFileSync } from "node:fs";',
+      'const marker = process.env.GEMINI_TEST_FETCH_MARKER;',
+      'globalThis.fetch = async (_url, request) => {',
+      '  const text = JSON.parse(request.body).contents[0].parts[0].text, scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
+      '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
+      '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
+      '  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: NO-GO\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
+      '};',
+    ].join("\n"));
+    const result = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--run-slices")], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "test-key", GEMINI_TEST_FETCH_MARKER: marker, NODE_OPTIONS: `--import=${preload}` } });
+    assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["coverage"]);
+    const journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.equal((journal.match(/^## Gemini frozen gate attempt —/gm) || []).length, 1); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
 });
 test("public selftest and installed runner remain deterministic and network-free", () => {
   const selftest = spawnSync("bash", [wrapper, "--selftest"], { cwd: root, encoding: "utf8" }); assert.equal(selftest.status, 0, selftest.stderr); assert.match(selftest.stdout, /no network/);
