@@ -99,9 +99,9 @@ test("bounded credential labels refuse values while placeholder configuration re
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(benign.dir, { recursive: true, force: true }); }
 });
 test("final supplied material refuses deleted credentials before dry-run or fetch", async () => {
-  const secret = fixture({ baseSource: [syntheticAssignment(["API", "KEY"], ["reallysecretvalue"]), syntheticAssignment(["DB", "PASSWORD"], ["alsosecretvalue"])].join(""), candidateSource: "export const removed = true;\n" }), placeholder = fixture({ baseSource: ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join(""), candidateSource: "export const removed = true;\n" }); try { await withFetch(async () => {
-    assert.notEqual(dry(secret).status, 0);
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(secret))); assert.equal(calls, 0);
+  const credentialFixture = fixture({ baseSource: [syntheticAssignment(["API", "KEY"], ["reallysecretvalue"]), syntheticAssignment(["DB", "PASSWORD"], ["alsosecretvalue"])].join(""), candidateSource: "export const removed = true;\n" }), placeholder = fixture({ baseSource: ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join(""), candidateSource: "export const removed = true;\n" }); try { await withFetch(async () => {
+    assert.notEqual(dry(credentialFixture).status, 0);
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(credentialFixture))); assert.equal(calls, 0);
     assert.equal(dry(placeholder).status, 0);
   }); } finally { rmSync(secret.dir, { recursive: true, force: true }); rmSync(placeholder.dir, { recursive: true, force: true }); }
 });
