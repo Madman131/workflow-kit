@@ -394,7 +394,7 @@ let staleKept = [];
 let backupRefused = [];
 // Per-checkout paths init just ignored that git STILL indexes (or could not be checked): an ignore
 // rule never untracks a path, and init never untracks one for the adopter, so each is a failing
-// state named at the exit code — see refuseIfIndexed.
+// state named at the exit code — see certifyIgnored.
 let indexedLeaks = [];
 function copyGuarded(src, dst, force, mechanism = true) {
   // The symlink refusal runs UNCONDITIONALLY, above both existsSync gates: existsSync FOLLOWS
@@ -711,36 +711,55 @@ function appendGitignore(target, lines, comment = "workflow-kit: lane declaratio
   return appendWrite(gi, text) ? "written" : "refused";
 }
 
-// AN IGNORE RULE NEVER UNTRACKS A PATH GIT ALREADY INDEXES. For the two per-checkout paths init
-// ignores — `.claude/metrics/` (the token ledger) and `.codex/hooks.json` (the path-baked Codex
-// registration) — an adopter who committed one before upgrading keeps committing it on every
-// blanket add until they untrack it. init does not perform that write (it rewrites what history
-// says about a file; not the installer's call to make silently), and it does not read as green
-// either: a tracked path is a FAILING state, counted into the exit code beside the refused writes,
-// with the exact command in the warning. Posture, same as core.hooksPath's: not a repository ⇒
-// nothing to ask (the hooksPath block already said so); a repository where git cannot answer ⇒ a
-// counted refusal naming git's error, because a control that cannot look never reads as green
-// (core/INVARIANTS.md rule 6). `appendResult` is the ignore append's own outcome: when the rule
-// could NOT be written, the advice must say so — untracking on a rule that is not there re-adds
-// the file on the next blanket add. Two cold seats and the cross-family lens converged on every
-// clause of this after a warn-and-exit-0 draft. `-r` only for a directory path.
-function refuseIfIndexed(target, rel, appendResult) {
+// THE SENSOR ASKS GIT, NEVER ITS OWN WRITES. Root-exit record for the per-checkout ignore sensor:
+// five findings over three rounds — a silent residual, exit 0 on a tracked path, advice that assumed
+// a refused append, a text dedupe that a later negation defeats, a redirected index certified as
+// clean — were one class: the sensor trusted what init had written instead of asking git what is in
+// effect. So, after each per-checkout ignore append, it asks git two questions about the real path
+// the sensor writes, and counts a refusal on any answer that is not "ignored, and not indexed":
+//   1. `git check-ignore -q --no-index -- <probe>` — is the rule IN EFFECT? Not the text's presence:
+//      a later negation, an overriding rule, or a refused append all read as "not ignored" here.
+//   2. `git ls-files -- <rel>` — is the path already INDEXED? An ignore rule never untracks one.
+// Posture, the installer's own: not a repository ⇒ nothing to ask (the hooksPath block already said
+// so); a git location override (GIT_DIR, GIT_INDEX_FILE, …) redirects what git would answer ⇒ a
+// counted refusal naming it, because a certification against a redirected index is no
+// certification; git failing to answer ⇒ a counted refusal naming git's error. init never untracks
+// a file and never edits a .gitignore line: each refusal carries the exact command instead.
+function certifyIgnored(target, rel, probe) {
   if (!isGitRepo(target)) return;
+  const here = path.join(target, rel);
+  const overrides = gitLocationOverrides(process.env).slice();
+  if (typeof process.env.GIT_INDEX_FILE === "string" && process.env.GIT_INDEX_FILE.trim() !== "" && !overrides.includes("GIT_INDEX_FILE")) overrides.push("GIT_INDEX_FILE");
+  if (overrides.length) {
+    indexedLeaks.push(`${here} (could NOT be certified: ${overrides.join(", ")} redirect what git answers)`);
+    warn(`REFUSED to certify ${rel}: ${overrides.join(", ")} ${overrides.length > 1 ? "are" : "is"} set, which redirects the index or repository git would answer about. Unset ${overrides.length > 1 ? "them" : "it"} and re-run, or check yourself: git check-ignore -v -- ${probe}; git ls-files -- ${rel}`);
+    return;
+  }
+  const gitq = (args) => {
+    try { execFileSync("git", ["-C", target, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); return { status: 0 }; }
+    catch (e) { return { status: typeof e?.status === "number" ? e.status : -1, err: String(e && e.stderr ? e.stderr : e).trim().split("\n")[0] }; }
+  };
+  const ig = gitq(["check-ignore", "-q", "--no-index", "--", probe]);
+  if (ig.status === 1) {
+    indexedLeaks.push(`${here} (the ignore rule is NOT in effect)`);
+    warn(`${rel} is NOT ignored by git after init's append — a later negation or overriding rule, or the append itself was refused (see above). Fix .gitignore so that  git check-ignore -q --no-index -- ${probe}  exits 0, then re-run. init does not edit .gitignore lines for you.`);
+  } else if (ig.status !== 0) {
+    indexedLeaks.push(`${here} (could NOT be certified: ${ig.err || "git failed"})`);
+    warn(`REFUSED to certify ${rel}: git could not say whether it is ignored (${ig.err || "git failed"}). A control that cannot look never reads as green — check it yourself: git check-ignore -v -- ${probe}`);
+  }
   let listed;
   try {
     listed = execFileSync("git", ["-C", target, "ls-files", "--", rel], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   } catch (e) {
     const why = String(e && e.stderr ? e.stderr : e).trim().split("\n")[0] || "git failed";
-    indexedLeaks.push(`${path.join(target, rel)} (could NOT be checked: ${why})`);
-    warn(`REFUSED to certify ${rel}: init could not ask git whether it is already tracked (${why}). A control that cannot look never reads as green — check it yourself: git ls-files -- ${rel}`);
+    indexedLeaks.push(`${here} (could NOT be certified: ${why})`);
+    warn(`REFUSED to certify ${rel}: init could not ask git whether it is already tracked (${why}). Check it yourself: git ls-files -- ${rel}`);
     return;
   }
   if (!listed.trim()) return;
   const cmd = `git rm --cached ${rel.endsWith("/") ? "-r " : ""}-- ${rel}`;
-  indexedLeaks.push(path.join(target, rel));
-  warn(appendResult === "refused"
-    ? `${rel} is ALREADY TRACKED in this repository, AND the ignore rule for it could NOT be written (see the refusal above). Fix .gitignore first, then run  ${cmd}  and commit — untracking before the rule exists re-adds the file on the next blanket add. init makes neither change for you.`
-    : `${rel} is ALREADY TRACKED in this repository. The ignore rule init just wrote does not untrack it: it keeps changing, and any blanket add keeps committing it, until you run  ${cmd}  and commit. init does not make that change for you.`);
+  indexedLeaks.push(here);
+  warn(`${rel} is ALREADY TRACKED in this repository. An ignore rule never untracks an indexed path: it keeps changing, and any blanket add keeps committing it, until you run  ${cmd}  and commit${ig.status === 1 ? " — AFTER fixing the ignore rule above, or the next blanket add re-adds it" : ""}. init does not make that change for you.`);
 }
 
 // Append the /thread-restart fallback pointer to AGENTS.md if absent (idempotent via a stable marker,
@@ -1613,8 +1632,8 @@ function main() {
   appendGitignore(T, [".claude/task-lane.json", ".claude/lane-ledger.jsonl", ".claude/brief-rung.json"]);
   // Its own call and its own comment: an adopter upgrading from v2.27.0 already carries the three
   // sidecar lines, so the ONE new line lands under a header that describes exactly it.
-  const metricsIgnore = appendGitignore(T, [".claude/metrics/"], "workflow-kit: the token ledger's metrics dir is per-session, gitignored");
-  refuseIfIndexed(T, ".claude/metrics/", metricsIgnore);
+  appendGitignore(T, [".claude/metrics/"], "workflow-kit: the token ledger's metrics dir is per-session, gitignored");
+  certifyIgnored(T, ".claude/metrics/", ".claude/metrics/tokens.jsonl");
   // ONLY THE PATH-BAKED FILE, AND ONLY BECAUSE INIT WROTE IT. `.codex/hooks.json` carries the
   // ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a hook from a
   // working directory the kit does not control, and a wrong project root is a fail-OPEN). Committed,
@@ -1643,7 +1662,7 @@ function main() {
   if (kitWroteHooksJson) {
     codexIgnore = appendGitignore(T, [".codex/hooks.json"],
       "workflow-kit: .codex/hooks.json is PER-CHECKOUT — it bakes this checkout's absolute path into every hook command; committed, it registers hooks at a path other clones do not have, and a hook that fails to start blocks nothing (silently). The rest of .codex/ stays tracked");
-    refuseIfIndexed(T, ".codex/hooks.json", codexIgnore);
+    certifyIgnored(T, ".codex/hooks.json", ".codex/hooks.json");
   } else if (!args.skipCodexLane && existsSync(hooksJsonPath) && hooksRuleActive()) {
     staleHooksRule = true;
     warn(`a .codex/hooks.json ignore rule is active, but init did not write that file this run (it preserved the registration already there), so it cannot tell whose registration it is now. If it is still the kit's path-baked registration from an earlier run, leave the rule. If it is now YOUR OWN registration, delete the .codex/hooks.json line from .gitignore — while it stands, your file never reaches a clone. init never edits .gitignore lines.`);
@@ -1782,7 +1801,7 @@ function main() {
   // A path init just ignored that git still indexes is the same failing shape: the run printed an
   // ignore, and the file keeps entering history anyway. Repeat it where the exit code is decided.
   if (indexedLeaks.length) {
-    console.error(`\ninit: ${indexedLeaks.length} per-checkout path(s) init ignores are STILL TRACKED by git, or could not be checked — an ignore rule never untracks an indexed path:`);
+    console.error(`\ninit: ${indexedLeaks.length} per-checkout path(s) init ignores could NOT be certified by git as ignored-and-untracked — an ignore rule is only what git says it is, and never untracks an indexed path:`);
     for (const f of indexedLeaks) console.error(`  · ${f}`);
     console.error(
       `Run the \`git rm --cached\` command each warning above names, then commit. init does not make that ` +

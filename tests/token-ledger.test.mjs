@@ -228,8 +228,8 @@ test("init WARNS, with the exact untrack command, when the ledger is already ind
     assert.equal(r.status, 1, "a tracked ledger is a FAILING state, counted at the exit code — not a warning at exit 0");
     assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED/, "the refusal names the path");
     assert.match(r.stdout + r.stderr, /git rm --cached -r -- \.claude\/metrics\//, "…carries the exact command (-r: a directory)");
-    assert.match(r.stdout + r.stderr, /STILL TRACKED by git, or could not be checked/, "…and is repeated in the end-of-run accounting");
-    assert.doesNotMatch(r.stdout + r.stderr, /could NOT be written/, "the rule WAS written here, so the advice does not say otherwise");
+    assert.match(r.stdout + r.stderr, /could NOT be certified by git as ignored-and-untracked/, "…and is repeated in the end-of-run accounting");
+    assert.doesNotMatch(r.stdout + r.stderr, /is NOT ignored by git/, "the rule IS in effect here, so only the index is named");
     assert.equal(spawnSync("git", ["-C", dir, "ls-files", "--", ".claude/metrics/tokens.jsonl"], { encoding: "utf8" }).stdout.trim(),
       ".claude/metrics/tokens.jsonl", "init did NOT untrack it — that write is the adopter's, not the installer's");
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -250,10 +250,43 @@ test("an indexed ledger behind a .gitignore init could not write: the advice say
     const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
       "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
     assert.equal(r.status, 1, r.stderr);
-    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED in this repository, AND the ignore rule for it could NOT be written/, "both facts, in one sentence");
-    assert.match(r.stdout + r.stderr, /Fix \.gitignore first, then run  git rm --cached -r -- \.claude\/metrics\//, "…in the right order");
+    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is NOT ignored by git after init's append/, "git, not the text, says the rule is not in effect");
+    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is ALREADY TRACKED[^\n]*AFTER fixing the ignore rule above/, "…and the untrack advice is ordered after the rule");
     assert.doesNotMatch(r.stdout + r.stderr, /The ignore rule init just wrote/, "never claims a rule it did not write");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }); }
+});
+
+test("a NEGATION below the appended rule leaves the ledger un-ignored: git's answer, not the text's presence, decides — counted refusal", () => {
+  // Round-3 finding from both families: appendGitignore dedupes by finding the literal line, but git
+  // evaluates the whole file. A later `!.claude/metrics/tokens.jsonl` wins, and the append reports
+  // "unchanged". Only `git check-ignore` knows.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-negation-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    writeFileSync(path.join(dir, ".gitignore"), ".claude/metrics/\n!.claude/metrics/\n!.claude/metrics/tokens.jsonl\n");
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: cleanTestEnv() });
+    assert.equal(r.status, 1, "an ignore rule git does not honour is a FAILING state");
+    assert.match(r.stdout + r.stderr, /\.claude\/metrics\/ is NOT ignored by git after init's append/, "named, with git's verdict");
+    assert.match(r.stdout + r.stderr, /git check-ignore -q --no-index -- \.claude\/metrics\/tokens\.jsonl/, "…and the exact command to verify the fix");
+    assert.equal(spawnSync("git", ["-C", dir, "check-ignore", "-q", "--no-index", "--", ".claude/metrics/tokens.jsonl"]).status, 1, "precondition held: git really does not ignore it");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a redirected git environment (GIT_INDEX_FILE) cannot certify anything: counted refusal, never a green against a false index", () => {
+  // Round-3 cold seat: with GIT_INDEX_FILE pointing elsewhere, `ls-files` answers about an empty
+  // alternate index and a tracked ledger reads as untracked. Reproduced by the seat; pinned here.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ledger-redirect-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    mkdirSync(path.join(dir, ".claude", "metrics"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "metrics", "tokens.jsonl"), "{}\n");
+    execFileSync("git", ["-C", dir, "add", "--", ".claude/metrics/tokens.jsonl"]);
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8", env: { ...cleanTestEnv(), GIT_INDEX_FILE: path.join(os.tmpdir(), "no-such-index") } });
+    assert.equal(r.status, 1, "a certification the environment could redirect is refused, not passed");
+    assert.match(r.stdout + r.stderr, /REFUSED to certify \.claude\/metrics\/: GIT_INDEX_FILE/, "…naming the variable");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("outside a git repository the index sensor has nothing to ask and says nothing", () => {
