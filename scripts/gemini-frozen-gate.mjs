@@ -191,6 +191,7 @@ function validateFragments(repo, o, rows, rawFragments, complete, coveredCompone
     if (!["component_byte_length", "byte_start", "byte_end"].every(field => Number.isSafeInteger(raw[field]) && raw[field] >= 0)) die(`fragments[${index}] has invalid byte offsets or component length`);
     if (raw.component_byte_length !== original.bytes.length || raw.component_sha256 !== sha(original.bytes)) die(`fragments[${index}] component length/hash does not match original bytes`);
     if (raw.byte_start > raw.byte_end || raw.byte_end > original.bytes.length) die(`fragments[${index}] byte range is outside its component`);
+    if (raw.byte_start === raw.byte_end && original.bytes.length > 0) die(`fragments[${index}] must contribute bytes for a nonempty component`);
     if (typeof raw.fragment_sha256 !== "string" || !SHA256.test(raw.fragment_sha256)) die(`fragments[${index}] requires fragment_sha256`);
     const bytes = original.bytes.subarray(raw.byte_start, raw.byte_end);
     try { new TextDecoder("utf-8", { fatal: true }).decode(original.bytes.subarray(0, raw.byte_start)); new TextDecoder("utf-8", { fatal: true }).decode(original.bytes.subarray(raw.byte_end)); } catch { die(`fragments[${index}] offsets must align to UTF-8 boundaries`); }
@@ -258,6 +259,7 @@ function envelope(repo, o, rows, contexts, name, rawFragments, complete, covered
   if (CREDENTIAL_LIKE.test(completeScan)) die("possible credential-like value in complete unpartitioned review material", 3);
   const fragments = validateFragments(repo, o, rows, rawFragments, false, coveredComponents, complete);
   if (fragments) {
+    if (complete) for (const row of rows) if (!fragments.some(fragment => fragment.path === row.file && fragment.bytes.length > 0)) die(`cross_boundary final file ${row.file} contributes no bytes`);
     const byKey = new Map(); for (const fragment of fragments) { const key = componentKey(fragment.path, fragment.component_kind); const list = byKey.get(key) || []; list.push(fragment); byKey.set(key, list); }
     for (const row of rows) {
       const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";

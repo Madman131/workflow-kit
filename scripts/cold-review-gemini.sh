@@ -338,6 +338,7 @@ acquire_single_flight() {
         echo "repo=$common"
         echo "script=$SCRIPT_DIR/cold-review-gemini.sh"
         echo "command=$self_command"
+        [ "$FROZEN_DISPATCH" = "1" ] && echo "kind=direct"
       } > "$owner_tmp" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot write single-flight owner record." >&2; exit 3; }
       mv "$owner_tmp" "$LOCK_DIR/owner" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot publish single-flight owner record." >&2; exit 3; }
       LOCK_HELD=1
