@@ -378,6 +378,22 @@ test("reordered, duplicate, and missing slice coverage plans refuse before fetch
     const missing = slicedPlan(f); missing.slices = missing.slices.filter(slice => slice.name !== "coverage-slice-2.mjs"); writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(missing)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
+test("coverage slices cannot execute a later component range before an earlier range", async () => {
+  const f = fixture({ candidateSource: `export const payload = "${"x".repeat(110000)}";\n` });
+  try {
+    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]));
+    const diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
+    const cut = Math.floor(Math.max(source.length, diff.length) / 2);
+    const coverage = (name, start, end) => ({ name, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(start, source.length), Math.min(end, source.length)), fragment(f, "per_file_diff", Math.min(start, diff.length), Math.min(end, diff.length))] });
+    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [coverage("coverage-late", cut, Math.max(source.length, diff.length)), coverage("coverage-early", 0, cut), cross]);
+    writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    const result = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /fragment partition .* has a gap, overlap, duplicate, or reorder/);
+    await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); }; await assert.rejects(run(sliceArgs(f, "--run-slices"))); assert.equal(calls, 0); });
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
 test("direct and slice validators share lexical case and punctuation ordering", () => {
   const f = fixture(); try {
     for (const file of ["A.mjs", "a-punct.mjs", "_punct.mjs", "10.mjs", "2.mjs"]) writeFileSync(path.join(f.dir, file), `export const ${file.replace(/[^A-Za-z]/g, "_")} = true;\n`);

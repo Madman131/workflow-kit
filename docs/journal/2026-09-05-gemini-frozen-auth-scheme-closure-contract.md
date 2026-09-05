@@ -17,3 +17,10 @@ length and may be unquoted. Explicit existing placeholders remain allowed.
 
 No general credential-scanner expansion, fragment, transport, lock, cap,
 version, architecture, or live-provider change is part of this successor.
+
+## R1 admitted finding
+
+Fragment coverage is validated per component in manifest execution order. A
+later byte range cannot execute before an earlier range, even when the ranges
+are otherwise contiguous; gap, overlap, duplicate, and complete-partition
+checks remain required.

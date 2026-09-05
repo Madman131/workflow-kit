@@ -242,7 +242,9 @@ function validateCoveragePartitions(repo, o, rows, units) {
     if (!explicit.length) die(`fragmented coverage file ${file} contributes no fragments`);
     for (const kind of [sourceKind, "per_file_diff"]) {
       const original = component(repo, o, row, kind).bytes;
-      const list = all.filter(fragment => fragment.path === file && fragment.component_kind === kind).sort((a, b) => a.byte_start - b.byte_start);
+      // Coverage is executed in manifest order.  Preserve that order here so
+      // a plan cannot hide an out-of-order range by sorting it back into place.
+      const list = all.filter(fragment => fragment.path === file && fragment.component_kind === kind);
       let offset = 0;
       for (const fragment of list) { if (fragment.byte_start !== offset) die(`fragment partition for ${file}/${kind} has a gap, overlap, duplicate, or reorder`); offset = fragment.byte_end; }
       if (offset !== original.length) die(`fragment partition for ${file}/${kind} does not cover the complete component`);
