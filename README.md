@@ -1,12 +1,64 @@
-# workflow-kit — v2.28.0
+# workflow-kit — v2.29.0
 
-## What's new in v2.28.0 — frozen Gemini receipts are provenance-bound
+## What's new in v2.29.0 — frozen Gemini receipts are provenance-bound
 
 The frozen direct Gemini path now binds every live request and durable record to the checked-out
 candidate endpoint, regular Git blobs, exact normalized scope, ordered full-material ingestion proof,
 and a complete fsynced reply record. `--no-log` is diagnostic-only for dry-run/fingerprint work;
-live direct reviews always retain a receipt. The following v2.27.0 sensor material remains included
-for adopters upgrading across both releases.
+live direct reviews always retain a receipt. The following v2.28.0 adopter material and v2.27.0 sensor
+material remain included for adopters upgrading across both releases.
+
+## What's new in v2.28.0 — what adopting v2.26.0 into a real repo found
+
+Five defects, each found by installing the kit somewhere other than the repo it came from, and each
+the same shape: a claim that was true inside the kit's own tree and false in an adopter's.
+
+- **The private-worktree root is data, not `/tmp`.** `core/MULTI_AGENT.md` sent concurrent work to a
+  worktree under `/tmp` and `guard-cross-repo-writes` allowed only `/tmp`; an adopter whose worktrees
+  live elsewhere had a Claude session that could not write its own worktree with the file tools.
+  `.claude/kit.config.json` gains `worktreeRoots` (absolute paths; `init --worktree-roots a,b`), the
+  guard adds them to its allowed roots, and a malformed value DENIES rather than falls back.
+- **The kit's path-baked `.codex/hooks.json` is gitignored — that file only, and only because `init`
+  wrote it.** It bakes the checkout's absolute path into every hook command; committed, it registers
+  hooks at a path other clones do not have, and a hook that fails to start blocks nothing. The rule
+  follows the one fact the installer has — that it wrote the file this run, or that the file on disk
+  is byte-identical to what it would write — never a guess from the file's content. An adopter's own
+  registration, `.codex/config.toml` (`[P]`, path-free) and `.codex/hooks/` (byte-copies of your
+  tracked `.claude/hooks/`) all stay tracked; a rule left by an earlier install over a registration
+  that is now yours is named as a CHECK, never silently kept.
+- **`codex/config.toml` says where the registration lives.** Its header still said, from v2.0, that
+  the kit registers no Codex hooks; it now names the generated `hooks.json`, the interactive trust
+  gate and the arming probe.
+- **`init` asks git to certify every per-checkout ignore, and refuses when it cannot.** After each
+  append it asks `git check-ignore` whether the rule is in effect (a later negation or a refused
+  append is not) and `git ls-files` whether the path is already tracked (an ignore rule never untracks
+  one); any answer but "ignored, and not indexed" — or a redirected git environment, or git failing to
+  answer — is counted at the exit code with the exact command to run. `init` never runs it for you.
+- **The token ledger's directory is gitignored.** Every description of `.claude/metrics/tokens.jsonl`
+  said "untracked"; nothing made it so outside the kit, whose `.gitignore` hides all of `.claude/`.
+- **Each entry stub states its own lane's real registration.** The Codex stub called the gate-ladder
+  sensor a guard and omitted `guard-brief-rung`; both stubs predated the v2.27.0 sensors. Derived from
+  `templates/settings.json` and the `.codex/hooks.json` `init` writes.
+- **`PORTABILITY.md` is installed.** Ten installed surfaces cite it; no run of `init` put it anywhere.
+  It is `[P]`, at the adopter's root, mechanism like `core/` — and an adopter's own `PORTABILITY.md`
+  at that path is recognised by its header and never overwritten, `--force` included.
+
+**Upgrade: `init --force` is REQUIRED, and a plain re-run will FAIL.** This release changes the bytes of
+eight `[P]` files an adopter already carries — `hooks/guard-cross-repo-writes.mjs`, `hooks/guard-owner-comms.mjs`,
+`core/MULTI_AGENT.md`, `codex/config.toml`, `scripts/check-codex-hooks-armed.mjs`, `skills/orchestrate/SKILL.md`,
+`skills/frontier-review/INVOKE.md` and the installed `tests/kit-precommit.test.mjs` — so a plain re-run keeps
+the stale copies and exits 1 naming `--force` (as since v2.16.0). `--force` replaces them, backing up every
+differing file first. Re-grant Codex hook trust afterwards, as always. Nothing is installed at your root
+under the name `PORTABILITY.md`: if you copied the kit's by hand at v2.26.0, that copy is yours — nothing
+the kit ships points at it any more; delete it or keep it, but do not read it as current. The corrected
+entry-stub paragraphs are `[G]` and reach a completed `CLAUDE.md` / `AGENTS.md` only by hand: port the
+§ Enforcement paragraph from the regenerated stub (or from `templates/`) into your completed one — `--force`
+regenerates the stubs with placeholders and backs your completed ones up beside them. Then pass
+`--worktree-roots` if your worktrees live outside `/tmp`. And if `init` exits 1 because git could not
+certify `.codex/hooks.json` or `.claude/metrics/` as ignored-and-untracked: **a gitignore rule never
+untracks an indexed path, and only git's answer counts** — run the exact `git rm --cached` command it
+printed (or fix the ignore rule it named), commit, and re-run; init makes neither change for you, and an
+already-tracked `tokens.jsonl` keeps receiving rows until you do.
 
 ## v2.27.0 — the kit starts measuring itself
 
@@ -1903,6 +1955,15 @@ uses** — a mis-parameterized `executedPathDirs` blocks the write guard, it nev
 `laneRiskTokens` key from a pre-v1.5 adopt is ignored, never fatal; and even with no config at all,
 the `pre-commit` floor gates every non-docs path, so an *undeclared code commit* is blocked
 regardless.)
+
+`guard-cross-repo-writes` reads that same file for one family, `worktreeRoots` (v2.28.0):
+the ABSOLUTE roots where **this** repo's private worktrees live, written by
+`init --worktree-roots <abs>,<abs>` and added to the guard's allowed write roots alongside the
+project dir, `~/.claude` and `/tmp` / `/private/tmp`. Omit the flag and you get the shipped roots
+only. It obeys the same fail-closed rule as every other family: a `worktreeRoots` that is not an
+array of non-empty absolute paths — or a `kit.config.json` that is symlinked, unreadable or not
+JSON — **denies every gated write** until you fix it (with a shell command; this guard binds write
+*tools*), delete the file, or re-run `init`.
 
 **Coverage: a tripwire and a floor.** The Claude `guard-lane-authoring` write-time gate is a *tripwire*
 — it catches undeclared writes to known code extensions and to your configured/default source dirs, but

@@ -25,21 +25,26 @@ On demand: `core/GATES.md` (running a gate) · `core/README.md` (index).
 Do **not** "read everything in `core/`" — the read is staged.
 
 ## ⚠ Enforcement asymmetry — which guards bind you, and when
-Three PreToolUse GUARDS (cross-repo writes, lane-authoring, gate-ladder) have been registered in BOTH
-lanes since kit v2.1; **kit v2.2 adds two PreToolUse SENSORS** (sweep-owed, mutation-owed — they
-print and never deny) alongside them — `.claude/hooks/` for Claude Code, `.codex/hooks/` +
-`.codex/hooks.json` for Codex. **In the Codex lane they are INERT until a human grants Codex hook trust in an interactive
-session, and an untrusted hook is skipped SILENTLY** (no prompt, no warning, no exit-code change), so
+Your lane's registration is `.codex/hooks.json` (Claude Code's is `.claude/settings.json`; the hook
+files in `.codex/hooks/` and `.claude/hooks/` are byte-identical). On `apply_patch` it registers
+**three fail-CLOSED GUARDS** — cross-repo writes, lane-authoring, brief-rung (its brief-write half;
+its cross-session SEND half has no Codex tool to bind) — and **two SENSORS** (sweep-owed,
+mutation-owed) that print and never deny. On Bash it registers **one more SENSOR**, the gate ladder,
+which surfaces the declared tier's ladder and never denies anything. That is the whole Codex
+registration: the context-pressure sensor and the two Stop sensors (Owner-comms, token ledger) are
+Claude-lane only — a Codex payload carries no transcript and no observed Stop event. **In the Codex
+lane even these are INERT until a human grants Codex hook trust in an interactive session, and an
+untrusted hook is skipped SILENTLY** (no prompt, no warning, no exit-code change), so
 never assume they are live: `node scripts/check-codex-hooks-armed.mjs` is the only thing that answers
 it. They also bind write TOOLS — a file you change with a plain SHELL command is invisible to them,
 which in the Codex lane is a main road, not a corner case. A human with an editor loads none of them.
-**So what binds you unconditionally is THIS prose + the `.githooks/pre-commit` hook**
-(`core.hooksPath=.githooks`),
+**So what binds you unconditionally is THIS prose, the PM-disposition emission `core/WORKFLOW.md`
+§ Gate requires after every verdict, and the `.githooks/pre-commit` hook** (`core.hooksPath=.githooks`),
 which runs at commit time regardless of harness and blocks a commit that has no valid lane declaration.
-It checks the DECLARATION, not your task scope — since kit v1.5.0 no control carries a per-file
-allowlist, so staying inside your task's scope binds you on your honor alone (§ Multi-writer checkout).
+It checks the DECLARATION, not your task scope — no control carries a per-file allowlist, so
+staying inside your task's scope binds you on your honor alone (§ Multi-writer checkout).
 Treat these rules as binding on your honor AND enforced at the commit.
-Full model: `PORTABILITY.md`.
+Full model: the kit's `PORTABILITY.md` (workflow-kit repository; not installed here).
 
 ## Multi-writer checkout — surgical staging only
 If more than one agent lane writes this checkout, these rules bind **EVERY** agent. **The canonical
@@ -51,8 +56,9 @@ violating one is unrecoverable, but that section governs.
 2. **Verify before every commit:** run `git status`; every staged file must belong to YOUR task.
    Unexplained dirty files are the other lane's in-flight work — never stage, stash, revert, or edit
    them. If YOUR task needs a file the other lane has dirtied, STOP and ask the Owner.
-3. **Substantial concurrent work → a private worktree** (never inside the shared checkout). Commit
-   early and often there: `/tmp` is purged on reboot, and only commits survive it.
+3. **Substantial concurrent work → a private worktree** under a root this repo declares
+   (`.claude/kit.config.json` `worktreeRoots`; `/tmp` by default) — never inside the shared checkout.
+   Commit early and often there: a scratch root is purged on reboot, and only commits survive it.
 4. **Merge + test in the worktree, never in the shared checkout:** merge the shared branch INTO your
    worktree, install deps there (**`npm ci`** if the merge touched the lockfile), run the **full
    `npm test`** THERE, and only then land the merge.

@@ -11,7 +11,18 @@
 //   - this project directory (CLAUDE_PROJECT_DIR, falling back to cwd)
 //   - ~/.claude/**            (auto-memory + Claude config live here)
 //   - /tmp, /private/tmp      (scratch; selftests use Bash subprocesses anyway)
+//   - every absolute path listed in `.claude/kit.config.json` `worktreeRoots` (adopter-declared)
 // Everything else → permissionDecision "deny" with an explanatory reason.
+//
+// WHY `worktreeRoots` EXISTS (2026-09-03, found by adopting v2.26.0 into a repo whose worktrees do
+// not live under /tmp). The method sends substantial concurrent work into a PRIVATE WORKTREE, and
+// this guard hard-coded `/tmp` as the only place one could sit. An adopter who keeps worktrees
+// anywhere else got a session that could not write its OWN worktree with the file tools — so the
+// portable doctrine and the shipped control contradicted each other, and the entry stubs had to
+// carry the contradiction. The root set is now DATA the adopter declares, exactly the
+// `executedPathDirs` seam: the MECHANISM is copied verbatim and only `.claude/kit.config.json` is
+// per-repo. Absent config ⇒ the shipped roots alone. Present-but-corrupt ⇒ DENY — a widened
+// allowlist that cannot be read must never fall back to a set the adopter did not choose.
 //
 // THE NO-TARGET BRANCH CHANGED POLARITY AT v2.1, and that is the point of this file. It used to
 // read `if (!target) process.exit(0)` — harmless in the Claude lane, where a write tool always
@@ -28,13 +39,50 @@
 //
 // SCOPE, UNCHANGED AND WORTH RE-READING IN THE CODEX LANE: this guards write TOOLS. A write issued
 // through a plain SHELL command is not covered — and in the Codex lane that is a main road, not a
-// corner case (PORTABILITY.md § The enforcement asymmetry). Treat this as a tripwire; the
+// corner case (the kit's PORTABILITY.md § The enforcement asymmetry, in the workflow-kit repository). Treat this as a tripwire; the
 // `.githooks/pre-commit` floor is what binds every lane.
 
 import path from "node:path";
 import os from "node:os";
+import { lstatSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { extractTargets, resolvePatchBase, resolveProjectRoot } from "./payload-targets.mjs";
+
+const KIT_CONFIG = path.join(".claude", "kit.config.json");
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+}
+// ABSOLUTE paths, not path segments — the sibling families (`executedPathDirs`, `briefPathDirs`)
+// name directories INSIDE the repo, while a worktree root names a place OUTSIDE it. A relative
+// entry would resolve against whatever cwd the harness happened to hand this hook, which is the
+// same wrong-base fail-open `resolvePatchBase` exists to stop, so it is REFUSED rather than guessed.
+function isAbsolutePathArray(v) {
+  return Array.isArray(v) && v.every((s) => typeof s === "string" && s.length > 0 && path.isAbsolute(s));
+}
+// Absent config ⇒ the shipped roots only (a legitimate minimal state). Present-but-corrupt ⇒
+// { ok:false } so the handler DENIES. Same lstat-before-read discipline as guard-lane-authoring's
+// loader, and for the same two reasons: a permission/IO error means the file EXISTS but cannot be
+// read (cannot-read-input ⇒ abstain, never green), and a SYMLINKED config is config injection that
+// must not read as "absent".
+function loadWorktreeRoots(projectRoot) {
+  const file = path.join(projectRoot, KIT_CONFIG);
+  let st;
+  try { st = lstatSync(file); }
+  catch (e) {
+    if (e && e.code === "ENOENT") return { ok: true, worktreeRoots: [] };
+    return { ok: false };
+  }
+  if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(file, "utf8")); } catch { return { ok: false }; }
+  if (!isPlainObject(parsed)) return { ok: false };
+  const declared = parsed.worktreeRoots === undefined ? [] : parsed.worktreeRoots;
+  if (!isAbsolutePathArray(declared)) return { ok: false };
+  // Every other key is deliberately NOT validated here: a field this hook does not read cannot make
+  // this hook fail open. Structural corruption (handled above) still fails closed.
+  return { ok: true, worktreeRoots: declared };
+}
 
 const SELF = fileURLToPath(import.meta.url);   // names the RUNNING file, so the message is lane-correct
 
@@ -85,11 +133,25 @@ process.stdin.on("end", () => {
   if (result.shape === "none") process.exit(0);          // no write intent — unchanged behavior
 
   const projectRoot = resolveProjectRoot(input);
+  const config = loadWorktreeRoots(projectRoot);
+  if (!config.ok) {
+    deny(
+      `Write blocked by ${SELF}: ${path.join(projectRoot, KIT_CONFIG)} is present but MALFORMED (not ` +
+      `valid JSON, not an object, symlinked, unreadable, or \`worktreeRoots\` is not an array of ` +
+      `non-empty ABSOLUTE paths). This guard reads that file for the adopter's declared worktree ` +
+      `roots, so it fails CLOSED rather than gate against a root set it could not read. Fix that ` +
+      `file with a SHELL command (this guard binds write TOOLS, not the shell), delete it to fall ` +
+      `back to the kit's shipped roots, or re-run \`node bin/init.mjs --worktree-roots <abs>,<abs>\`.`
+    );
+  }
   const roots = [
     projectRoot,
     path.join(os.homedir(), ".claude"),
     "/tmp",
     "/private/tmp",
+    // The adopter's declared worktree roots. path.resolve normalises a trailing separator, which the
+    // prefix test below would otherwise turn into a root that matches nothing.
+    ...config.worktreeRoots.map((r) => path.resolve(r)),
   ];
   const within = (root, abs) => abs === root || abs.startsWith(root + path.sep);
 
@@ -107,10 +169,12 @@ process.stdin.on("end", () => {
   deny(
     `Cross-repo write blocked by ${SELF}: ` +
     `${outside.length === 1 ? `target ${outside[0]} is` : `${outside.length} of ${result.targets.length} targets are`} ` +
-    `outside this repo (allowed: project dir, ~/.claude, /tmp)${outside.length === 1 ? "" : ` — ${outside.join(", ")}`}. ` +
+    `outside this repo (allowed: project dir, ~/.claude, /tmp${config.worktreeRoots.length ? `, plus the ${config.worktreeRoots.length} declared worktreeRoots` : ""})${outside.length === 1 ? "" : ` — ${outside.join(", ")}`}. ` +
     `This guard exists because a sibling-repo thread once overwrote files here (2026-06-11). ` +
     `A patch envelope is applied as a unit, so one out-of-repo target denies the whole call. ` +
-    `If this write is genuinely intended, use a shell command (explicit user approval) or ask the ` +
-    `Owner to temporarily disable the hook in the registration for your lane.`
+    `If this write is genuinely intended, use a shell command (explicit user approval), declare the ` +
+    `root in \`.claude/kit.config.json\` \`worktreeRoots\` (\`init --worktree-roots <abs>\`) when it is a ` +
+    `worktree of THIS repo, or ask the Owner to temporarily disable the hook in the registration for ` +
+    `your lane.`
   );
 });

@@ -31,9 +31,12 @@ Owner) do the committing.
    Unexplained dirty files are the other lane's in-flight work — never stage, stash, revert, or edit them.
    If YOUR task needs a file the other lane has dirtied, STOP and ask the Owner — never interleave two
    lanes in one file.
-3. **Substantial concurrent work → private worktree under `/tmp`** (never inside the checkout). When
-   unsure whether the other lane is live, use the worktree — fail closed. Commit early and often there:
-   `/tmp` is purged on reboot; only commits survive it (main object store).
+3. **Substantial concurrent work → a private worktree under the roots this repo declares**
+   (`.claude/kit.config.json` `worktreeRoots`; `/tmp` by default) — never inside the checkout. Those
+   are the roots `guard-cross-repo-writes` allows, so a root the repo has NOT declared is a worktree
+   the Claude lane cannot write with its file tools. When unsure whether the other lane is live, use
+   the worktree — fail closed. Commit early and often there: a scratch root is purged on reboot, so
+   only commits survive it (they land in the main object store).
 4. **Merge + test in the worktree, never in the shared checkout:** merge the shared branch INTO your
    worktree, install deps there (`npm ci` if the merge touched `package-lock.json` — a clean install of
    exactly the merged lockfile), run the full `npm test` THERE, and only then land the merge on the
