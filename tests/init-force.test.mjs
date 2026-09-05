@@ -55,8 +55,16 @@ function adopt(extra = []) {
     { encoding: "utf8", env: { ...process.env, PATH: HERMETIC_PATH } });
   const first = run();
   assert.equal(first.status, 0, `fresh adopt failed: ${first.stderr}`);
-  return { dir, codexDir, run, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
+  return { dir, codexDir, run, first, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
+
+test("gate-runner install summary names subscription default and explicit live API key use", () => {
+  const { first, cleanup } = adopt(["--with-gate-runners", "--skip-codex-lane"]);
+  try {
+    assert.match(first.stdout, /frozen Gemini defaults to an authorized Antigravity subscription; direct API needs GEMINI_API_KEY only for an explicitly authorized live API invocation/);
+    assert.doesNotMatch(first.stdout, /frozen Gemini needs an authorized API key only at live invocation/);
+  } finally { cleanup(); }
+});
 
 test("a refused mechanism backup under --force is COUNTED: exit 1, named in the report, file untouched", () => {
   const { dir, run, cleanup } = adopt(["--skip-codex-lane"]);
