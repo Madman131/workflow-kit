@@ -59,6 +59,7 @@ FROZEN_FINGERPRINT=0
 require_option_value() {
   [ "$#" -ge 2 ] || { echo "cold-review-gemini: $1 requires a value." >&2; exit 2; }
 }
+ORIGINAL_ARGC=$#
 while [ $# -gt 0 ]; do
   case "$1" in
     --context) require_option_value "$@"; CONTEXT_FILE="$2"; shift 2 ;;
@@ -80,6 +81,12 @@ while [ $# -gt 0 ]; do
     *) echo "cold-review-gemini: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
+
+# The shipped selftest is deliberately isolated: accepting a tuple, context, model, or any other
+# live/frozen switch beside it could route through the direct dispatcher before its no-network check.
+if [ "$SELFTEST" = "1" ] && [ "$ORIGINAL_ARGC" -ne 1 ]; then
+  echo "cold-review-gemini: --selftest does not accept frozen or live review arguments." >&2; exit 2
+fi
 
 # The frozen path is intentionally dispatched before the legacy working-tree runner establishes a
 # snapshot or discovers `agy`. Its transport is the direct text API; it never exposes a directory,

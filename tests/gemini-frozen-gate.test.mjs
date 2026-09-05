@@ -10,23 +10,28 @@ import { run, verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh");
 function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
-function fixture() {
+function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
   git(dir, ["init", "-q"]); git(dir, ["config", "user.email", "test@example.invalid"]); git(dir, ["config", "user.name", "Test"]);
-  mkdirSync(path.join(dir, "core"), { recursive: true }); mkdirSync(path.join(dir, "docs"), { recursive: true });
-  writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n"); writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n");
-  writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); writeFileSync(path.join(dir, "unchanged.md"), "UNRELATED-SENTINEL\n"); writeFileSync(path.join(dir, "src.mjs"), "export const before = 1;\n");
+  mkdirSync(path.join(dir, "core"), { recursive: true }); if (!noDocs) mkdirSync(path.join(dir, "docs"), { recursive: true });
+  if (invariantSymlink) { writeFileSync(path.join(dir, "invariant-target.md"), "portable invariant\n"); symlinkSync("../invariant-target.md", path.join(dir, "core", "INVARIANTS.md")); } else writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n");
+  writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n");
+  if (!noDocs) { if (contextSymlink) { writeFileSync(path.join(dir, "contract-target.md"), "acceptance context\n"); symlinkSync("../contract-target.md", path.join(dir, "docs", "contract.md")); } else writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); }
+  writeFileSync(path.join(dir, "unchanged.md"), "UNRELATED-SENTINEL\n"); writeFileSync(path.join(dir, "src.mjs"), "export const before = 1;\n");
   git(dir, ["add", "."]); git(dir, ["commit", "-qm", "base"]); const base = git(dir, ["rev-parse", "HEAD"]);
   writeFileSync(path.join(dir, "src.mjs"), "export const after = 2;\n"); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
   return { dir, base, candidate: git(dir, ["rev-parse", "HEAD"]), tree: git(dir, ["rev-parse", "HEAD^{tree}"]) };
 }
 function args(f, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--context", "docs/contract.md", ...extra]; }
+function contextArgs(f, context, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--context", context, ...extra]; }
 function dry(f, extra = []) { return spawnSync(process.execPath, [runner, ...args(f, ["--dry-run", ...extra])], { encoding: "utf8" }); }
+function refreshed(f) { return { ...f, candidate: git(f.dir, ["rev-parse", "HEAD"]), tree: git(f.dir, ["rev-parse", "HEAD^{tree}"]) }; }
 function responseFrom(request, verdict = "GO") {
   const text = JSON.parse(request.body).contents[0].parts[0].text;
-  const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)\n\n=== END/)[1];
+  const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1];
   const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]);
-  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\nVERDICT: ${verdict}\nINSPECTED SCOPE: ${scope}\nINGESTION PROOF: ${markers.join(" | ")}` }] } }] }) };
+  const done = text.match(/PIL-DONE-[0-9a-f]+/)[0];
+  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\nVERDICT: ${verdict}\nINSPECTED SCOPE: ${scope}\nINGESTION PROOF: ${markers.join(" | ")}\n${done}` }] } }] }) };
 }
 async function withFetch(fn) {
   const previousFetch = globalThis.fetch, previousKey = process.env.GEMINI_API_KEY; process.env.GEMINI_API_KEY = "test-key";
@@ -78,14 +83,54 @@ test("type changes and malformed slice plans refuse before a review", () => {
     const r = spawnSync(process.execPath, [runner, "--repo", g.dir, "--base", g.base, "--candidate", g.candidate, "--tree", g.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { encoding: "utf8" }); assert.notEqual(r.status, 0);
   } finally { rmSync(g.dir, { recursive: true, force: true }); }
 });
+test("committed invariant and context symlinks refuse before fetch", async () => {
+  for (const f of [fixture({ invariantSymlink: true }), fixture({ contextSymlink: true })]) try { await withFetch(async () => {
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); };
+    await assert.rejects(run(args(f))); assert.equal(calls, 0);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("bounded credential labels refuse values while placeholder configuration remains reviewable", async () => {
+  const f = fixture(), benign = fixture(); try { await withFetch(async () => {
+    writeFileSync(path.join(f.dir, "src.mjs"), "export const DB_PASSWORD = 'reallysecret';\n"); git(f.dir, ["add", "src.mjs"]); git(f.dir, ["commit", "-qm", "credential"]); const secret = refreshed(f);
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(secret))); assert.equal(calls, 0);
+    writeFileSync(path.join(benign.dir, "src.mjs"), "export const DB_PASSWORD = '${DB_PASSWORD}';\n"); git(benign.dir, ["add", "src.mjs"]); git(benign.dir, ["commit", "-qm", "placeholder"]); assert.equal(dry(refreshed(benign)).status, 0);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(benign.dir, { recursive: true, force: true }); }
+});
+test("ordinary additions reach envelope assembly while exact renames refuse", () => {
+  const f = fixture(), renamed = fixture(); try {
+    writeFileSync(path.join(f.dir, "ordinary-added.mjs"), "export const ordinary = true;\n"); git(f.dir, ["add", "ordinary-added.mjs"]); git(f.dir, ["commit", "-qm", "ordinary add"]); assert.equal(dry(refreshed(f)).status, 0);
+    git(renamed.dir, ["mv", "src.mjs", "renamed.mjs"]); writeFileSync(path.join(renamed.dir, "renamed.mjs"), "export const before = 1;\n"); git(renamed.dir, ["add", "renamed.mjs"]); git(renamed.dir, ["commit", "-qm", "exact rename"]); assert.notEqual(dry(refreshed(renamed)).status, 0);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(renamed.dir, { recursive: true, force: true }); }
+});
+test("journal paths, ambient Git locations, and hidden untracked files refuse before fetch", async () => {
+  const f = fixture(), external = path.join(os.tmpdir(), `gemini-external-${process.pid}.md`); try { await withFetch(async () => {
+    writeFileSync(external, "outside sentinel\n"); mkdirSync(path.join(f.dir, "docs", "journal"), { recursive: true }); symlinkSync(external, path.join(f.dir, "docs", "journal", "gemini_review_log.md"));
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(f))); assert.equal(calls, 0); assert.equal(readFileSync(external, "utf8"), "outside sentinel\n"); unlinkSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md")); rmSync(path.join(f.dir, "docs", "journal"), { recursive: true, force: true });
+    const oldIndex = process.env.GIT_INDEX_FILE; process.env.GIT_INDEX_FILE = path.join(f.dir, "redirected-index"); try { await assert.rejects(run(args(f))); assert.equal(calls, 0); } finally { if (oldIndex === undefined) delete process.env.GIT_INDEX_FILE; else process.env.GIT_INDEX_FILE = oldIndex; }
+    git(f.dir, ["config", "status.showUntrackedFiles", "no"]); writeFileSync(path.join(f.dir, "hidden.txt"), "must still be dirt\n"); assert.notEqual(dry(f).status, 0);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(external, { force: true }); }
+});
+test("a new journal directory is sanctioned alone but no sibling dirt is", async () => {
+  const f = fixture({ noDocs: true }); try { await withFetch(async () => {
+    let calls = 0; globalThis.fetch = async (_url, request) => { calls += 1; return responseFrom(request); }; await run(contextArgs(f, "core/INVARIANTS.md")); assert.equal(calls, 1); assert.ok(existsSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md")));
+    writeFileSync(path.join(f.dir, "docs", "journal", "sibling.md"), "unrelated dirt\n"); calls = 0; await assert.rejects(run(contextArgs(f, "core/INVARIANTS.md"))); assert.equal(calls, 0);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
 test("response firewall refuses old mixed parts, conflicting verdicts, and incomplete proof", () => {
-  const e = { scope: "{\"slice\":\"full\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"] };
-  const text = `VERDICT: GO\nINSPECTED SCOPE: ${e.scope}\nINGESTION PROOF: ${e.markers.join(" | ")}`;
+  const e = { scope: "{\"slice\":\"full\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"], done: "PIL-DONE-test" };
+  const text = `VERDICT: GO\nINSPECTED SCOPE: ${e.scope}\nINGESTION PROOF: ${e.markers.join(" | ")}\n${e.done}`;
   assert.equal(verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text }] } }] }, e).verdict, "GO");
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, thought: "old runner accepted this" }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `${text}\nVERDICT: NO-GO` }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.markers[2], "missing") }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace("VERDICT: GO", "VERDICT: go") }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.done, "") }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `${text}\ntrailing` }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.done, `${e.done}\nfindings`) }] } }] }, e));
+  assert.equal(verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, thoughtSignature: "opaque-provider-signature" }] } }] }, e).verdict, "GO");
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, executableCode: { code: "x" } }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, functionCall: { name: "x" } }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, inlineData: { mimeType: "text/plain", data: "eA==" } }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "" }] } }] }, e));
   assert.throws(() => verifyResponse({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text }] } }] }, e));
   assert.doesNotMatch(readFileSync(runner, "utf8"), /\bagy\b/);
@@ -95,7 +140,7 @@ test("live no-log is refused before fetch", async () => {
 });
 test("verified GO and NO-GO print and persist complete records", async () => {
   const f = fixture(); try { await withFetch(async () => {
-    globalThis.fetch = async (_url, request) => { assert.doesNotMatch(JSON.parse(request.body).contents[0].parts[0].text, /UNRELATED-SENTINEL/); return responseFrom(request, "GO"); }; let printed = "", write = process.stdout.write; process.stdout.write = value => { printed += value; return true; };
+    globalThis.fetch = async (_url, request) => { const body = JSON.parse(request.body); assert.equal(body.tools, undefined); assert.equal(body.functionDeclarations, undefined); assert.doesNotMatch(JSON.stringify(body), /dangerous|functionCall/); assert.doesNotMatch(body.contents[0].parts[0].text, /UNRELATED-SENTINEL/); return responseFrom(request, "GO"); }; let printed = "", write = process.stdout.write; process.stdout.write = value => { printed += value; return true; };
     try { await run(args(f)); } finally { process.stdout.write = write; }
     let log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(printed, /VERDICT: GO/); assert.match(log, /Reply-UTF8-Base64/); assert.match(log, /Complete-Record: `YES`/);
     globalThis.fetch = async (_url, request) => responseFrom(request, "NO-GO"); await run(args(f)); log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Status: `NO_GO`/);
@@ -133,6 +178,8 @@ test("reordered, duplicate, and missing slice coverage plans refuse before fetch
 });
 test("public selftest and installed runner remain deterministic and network-free", () => {
   const selftest = spawnSync("bash", [wrapper, "--selftest"], { cwd: root, encoding: "utf8" }); assert.equal(selftest.status, 0, selftest.stderr); assert.match(selftest.stdout, /no network/);
+  const tuple = [git(root, ["rev-parse", "HEAD~1"]), git(root, ["rev-parse", "HEAD"]), git(root, ["rev-parse", "HEAD^{tree}"])];
+  const mixed = spawnSync("bash", [wrapper, "--base", tuple[0], "--candidate", tuple[1], "--tree", tuple[2], "--rig-id", "selftest-rig", "--context", "core/GATES.md", "--selftest"], { cwd: root, encoding: "utf8", env: { ...process.env, GEMINI_API_KEY: "unread-test-key" } }); assert.equal(mixed.status, 2); assert.match(mixed.stderr, /--selftest does not accept/);
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-install-")); try {
     git(dir, ["init", "-q"]); const installed = spawnSync(process.execPath, [path.join(root, "bin", "init.mjs"), "--target", dir, "--repo-name", "fixture", "--owner-name", "Fixture", "--with-gate-runners", "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8" });
     assert.equal(installed.status, 0, installed.stderr); assert.ok(existsSync(path.join(dir, "scripts", "gemini-frozen-gate.mjs")));

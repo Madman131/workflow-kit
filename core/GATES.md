@@ -714,8 +714,9 @@ bash scripts/cold-review-gemini.sh \
 Every coverage slice and the final cross-boundary slice is preflighted against the same byte bound,
 then run in manifest order. A slice is non-release; the sole aggregate is eligible only when every
 tuple/plan-bound receipt is valid and GO. Each request carries stable, independently derived ordered
-material markers, including an EOF-only receipt, and the reply must print their exact order plus the
-exact normalized scope (tuple, files, contexts, invariants, material identity, and slice). A valid
+material markers, including an EOF-only receipt, plus a distinct final `PIL-DONE` completion token.
+The reply must print the markers in their exact order, copy the exact normalized scope (tuple, files,
+contexts, invariants, material identity, and slice), and end with that completion token. A valid
 `NO-GO` is delivered evidence but exits nonzero and cannot create a release receipt. A verified reply
 is printed and stored as a checksummed complete fsynced record with its reply SHA and attempt ID;
 aggregate records retain ordered contributors and a deterministic aggregate result identity. The
@@ -730,6 +731,12 @@ cannot lose its durable receipt. `--selftest` is a shipped no-network response-f
 live API credentials, billing, model availability, or review quality. The legacy `--design` and
 working-tree `agy` modes remain available for their documented routing roles; they do not inherit
 this no-tools guarantee, and this explicit tuple invocation does not silently reroute them.
+
+The direct runner rejects ambient `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE`; each invariant
+and selected context must be a committed regular blob. It also rejects a journal file or parent that is a symlink before
+the provider call. Its bounded artifact scan refuses credential-like API-key, password, passphrase, authorization, and
+bearer values while allowing explicit placeholders such as `${NAME}`; it is not a universal secret detector. Gemini text
+parts may carry an opaque `thoughtSignature`, but no other non-text part field is accepted.
 
 ### Exit codes and traps
 

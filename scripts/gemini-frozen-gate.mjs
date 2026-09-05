@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models", JOURNAL = "docs/journal/gemini_review_log.md";
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
+const GIT_LOCATION_OVERRIDES = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
 function die(message, exitCode = 2) { throw Object.assign(new Error(message), { exitCode }); }
 function sha(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
 function random(label) { return `${label}-${crypto.randomBytes(12).toString("hex")}`; }
@@ -31,10 +32,30 @@ function blob(repo, commit, file) {
   const bytes = git(repo, ["show", `${commit}:${file}`], "buffer");
   let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { die(`non-UTF-8 artifact is unsupported: ${file}`); }
   if (/\0/.test(text)) die(`binary artifact is unsupported: ${file}`);
-  if (/(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token)\s*[:=]\s*["'][^"']{8,})/i.test(text)) die(`possible secret in review artifact: ${file}`);
+  if (/(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[^\s#]{8,})|\b(?:authorization\s*:\s*(?:bearer\s+)?|bearer\s+)[A-Za-z0-9._~+/=-]{8,})/i.test(text)) die(`possible credential-like value in review artifact: ${file}`);
   return text;
 }
+function regularTreeBlob(repo, commit, file, label) {
+  file = relative(file, label);
+  const entry = git(repo, ["ls-tree", commit, "--", file]).trim();
+  const match = entry.match(/^(100644|100755) blob [0-9a-f]{40}\t(.+)$/);
+  if (!match || match[2] !== file) die(`${label} must be a regular blob in the candidate tree: ${file}`, 3);
+}
+function journalPath(repo) {
+  const target = path.resolve(repo, JOURNAL), relativeTarget = path.relative(repo, target);
+  if (!relativeTarget || relativeTarget === ".." || relativeTarget.startsWith(`..${path.sep}`)) die("journal path escapes the repository", 3);
+  const parent = path.dirname(target);
+  for (let current = repo;;) {
+    const stat = fs.lstatSync(current, { throwIfNoEntry: false }); if (stat?.isSymbolicLink()) die("journal parent must not be a symlink", 3);
+    if (current === parent) break;
+    current = path.join(current, path.relative(current, parent).split(path.sep)[0]);
+  }
+  const stat = fs.lstatSync(target, { throwIfNoEntry: false });
+  if (stat && (stat.isSymbolicLink() || !stat.isFile())) die("journal must be a regular non-symlink file", 3);
+  return target;
+}
 function parse(argv) {
+  for (const key of GIT_LOCATION_OVERRIDES) if (process.env[key]) die(`ambient ${key} is not allowed for a frozen review`, 3);
   const o = { repo: process.cwd(), model: "gemini-2.5-pro", dryRun: false, noLog: false, runSlices: false, fingerprint: false };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
@@ -57,7 +78,7 @@ function endpoint(repo, o) {
     if (file !== "docs/journal/") return false;
     try { return fs.readdirSync(path.join(repo, "docs/journal")).every(entry => entry === "gemini_review_log.md"); } catch { return false; }
   };
-  const dirt = git(repo, ["status", "--porcelain=v1", "-z"]).split("\0").filter(Boolean).map(row => row.slice(3)).filter(file => !sanctioned(file));
+  const dirt = git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]).split("\0").filter(Boolean).map(row => row.slice(3)).filter(file => !sanctioned(file));
   if (dirt.length) die(`source checkout is dirty outside sanctioned artifacts: ${dirt.join(", ")}`, 3);
   if (git(repo, ["rev-parse", "HEAD"]).trim() !== o.candidate) die("checkout HEAD does not equal --candidate", 3);
   if (git(repo, ["rev-parse", "HEAD^{tree}"]).trim() !== o.tree) die("checkout HEAD tree does not equal --tree", 3);
@@ -70,7 +91,7 @@ function validate(repo, o) {
   return repo;
 }
 function changed(repo, o) {
-  const values = git(repo, ["diff", "--raw", "--no-abbrev", "-z", "--no-ext-diff", "--no-textconv", "--find-renames=1%", "--find-copies-harder", "--find-copies=1%", o.base, o.candidate]).split("\0").filter(Boolean), rows = [];
+  const values = git(repo, ["diff", "--raw", "--no-abbrev", "-z", "--no-ext-diff", "--no-textconv", "--find-renames=100%", o.base, o.candidate]).split("\0").filter(Boolean), rows = [];
   for (let i = 0; i < values.length;) {
     const header = values[i++], match = header.match(/^:(\d{6}) (\d{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) ([A-Z][0-9]*)$/), file = values[i++];
     if (!match || !file) die(`unsupported changed entry: ${header || "missing"}`);
@@ -128,45 +149,47 @@ function verifyManifest(repo, o, rows) {
 }
 function envelope(repo, o, rows, contexts, name) {
   const material = [];
-  for (const file of INVARIANTS) material.push(`=== INVARIANT ${file} ===\n${blob(repo, o.candidate, file)}`);
-  for (const file of contexts) material.push(`=== CONTRACT ${file} ===\n${blob(repo, o.candidate, file)}`);
+  for (const file of INVARIANTS) { regularTreeBlob(repo, o.candidate, file, "invariant"); material.push(`=== INVARIANT ${file} ===\n${blob(repo, o.candidate, file)}`); }
+  for (const file of contexts) { regularTreeBlob(repo, o.candidate, file, "contract context"); material.push(`=== CONTRACT ${file} ===\n${blob(repo, o.candidate, file)}`); }
   for (const row of rows) material.push(`=== ${row.status === "D" ? "DELETED OLD" : "CURRENT"} FILE ${row.file} ===\n${blob(repo, row.status === "D" ? o.base : o.candidate, row.file)}`);
   const files = rows.map(row => row.file); material.push(`=== DIFF ${o.base}..${o.candidate} ===\n${git(repo, ["diff", "--no-ext-diff", "--no-textconv", "--unified=80", o.base, o.candidate, "--", ...files])}`);
   const materialId = sha(JSON.stringify({ tuple: [o.base, o.candidate, o.tree], slice: name, material }));
   const markers = ["HEAD", "MIDDLE", "EOF"].map(position => `PIL-INGEST-${position}-${sha(`${materialId}|${position}`).slice(0, 24)}`);
+  const done = `PIL-DONE-${sha(`${materialId}|DONE`).slice(0, 24)}`;
   const scope = JSON.stringify({ slice: name, base: o.base, candidate: o.candidate, tree: o.tree, files, contract_context: [...contexts].sort(), invariants: INVARIANTS, material_sha256: materialId });
-  const middle = Math.ceil(material.length / 2), supplied = [`=== INGESTION MARKER 1 OF 3 ===\n${markers[0]}`, ...material.slice(0, middle), `=== INGESTION MARKER 2 OF 3 ===\n${markers[1]}`, ...material.slice(middle), `=== NORMALIZED INSPECTED SCOPE ===\n${scope}`, "=== END OF SUPPLIED MATERIAL ===", `=== EOF-ONLY INGESTION RECEIPT 3 OF 3 ===\n${markers[2]}`].join("\n\n");
-  const prompt = "Review this exact frozen committed artifact using only supplied material. Return findings, exactly one `VERDICT: GO` or `VERDICT: NO-GO` line, exactly one `INSPECTED SCOPE:` line copied exactly from supplied material, and exactly one `INGESTION PROOF:` line that contains the three supplied ingestion markers in encountered order, separated by ` | `.";
+  const middle = Math.ceil(material.length / 2), supplied = [`=== INGESTION MARKER 1 OF 3 ===\n${markers[0]}`, ...material.slice(0, middle), `=== INGESTION MARKER 2 OF 3 ===\n${markers[1]}`, ...material.slice(middle), `=== NORMALIZED INSPECTED SCOPE ===\n${scope}`, `=== RESPONSE COMPLETION TOKEN ===\n${done}`, "=== END OF SUPPLIED MATERIAL ===", `=== EOF-ONLY INGESTION RECEIPT 3 OF 3 ===\n${markers[2]}`].join("\n\n");
+  const prompt = "Review this exact frozen committed artifact using only supplied material. Return findings, exactly one `VERDICT: GO` or `VERDICT: NO-GO` line, exactly one `INSPECTED SCOPE:` line copied exactly from supplied material, and exactly one `INGESTION PROOF:` line that contains the three supplied ingestion markers in encountered order, separated by ` | `. End the reply with the supplied response-completion token as its final nonblank line.";
   const request = { contents: [{ role: "user", parts: [{ text: `${prompt}\n\n${supplied}` }] }], generationConfig: { candidateCount: 1 } }, serialized = JSON.stringify(request);
-  return { request, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, scope, name };
+  return { request, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name };
 }
 export function verifyResponse(body, e) {
   if (!body || !Array.isArray(body.candidates) || body.candidates.length !== 1) die("provider response must contain exactly one candidate", 3);
   const candidate = body.candidates[0], parts = candidate.content?.parts;
   if (candidate.finishReason !== "STOP") die("provider response was not STOP", 3);
-  if (!Array.isArray(parts) || !parts.length || parts.some(part => !part || Object.keys(part).length !== 1 || !Object.hasOwn(part, "text") || typeof part.text !== "string")) die("provider response parts must each contain exactly one text field", 3);
+  if (!Array.isArray(parts) || !parts.length || parts.some(part => !part || !Object.hasOwn(part, "text") || typeof part.text !== "string" || Object.keys(part).some(key => key !== "text" && key !== "thoughtSignature") || (Object.hasOwn(part, "thoughtSignature") && typeof part.thoughtSignature !== "string"))) die("provider response parts must contain text and optional thoughtSignature only", 3);
   const reply = parts.map(part => part.text).join(""), verdicts = [...reply.matchAll(/^VERDICT:\s*(GO|NO-GO)\s*$/gm)].map(match => match[1]), scopes = [...reply.matchAll(/^INSPECTED SCOPE:\s*(.*)$/gm)].map(match => match[1]), proofs = [...reply.matchAll(/^INGESTION PROOF:\s*(.*)$/gm)].map(match => match[1]);
   if (verdicts.length !== 1) die("response must contain exactly one verdict", 3);
   if (scopes.length !== 1 || scopes[0] !== e.scope) die("response inspected scope does not exactly bind this frozen unit", 3);
   if (proofs.length !== 1 || proofs[0] !== e.markers.join(" | ")) die("response did not prove ordered ingestion through the EOF receipt", 3);
-  return { reply, verdict: verdicts[0], replySha: sha(reply) };
+  if (reply.trimEnd().split(/\r?\n/).at(-1) !== e.done) die("response completion token is missing, misplaced, or not final", 3);
+  return { reply, verdict: verdicts[0], replySha: sha(reply), completionSha: sha(e.done) };
 }
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
 function recordBody(record) {
   const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", "direct-gemini-rest-v1"], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
   if (record.verdict) {
     fields.push(["Gate-Verdict", record.verdict], ["Inspected-Scope", record.scope]);
-    if (typeof record.reply === "string") fields.push(["Reply-SHA256", record.replySha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
+    if (typeof record.reply === "string") fields.push(["Reply-SHA256", record.replySha], ["Completion-Token-SHA256", record.completionSha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
     else fields.push(["Aggregate-Result-SHA256", record.resultSha], ["Aggregate-Result", "assembled verified slice results; no model reply"]);
   }
   if (record.detail) fields.push(["Diagnostic", record.detail]);
   return `\n## Gemini frozen gate attempt — ${clean(record.status)} — ${new Date().toISOString()}\n\n${fields.map(([key, value]) => `- ${key}: \`${clean(value)}\``).join("\n")}\n`;
 }
 function append(repo, record) {
-  const body = recordBody(record), complete = `${body}- Record-SHA256: \`${sha(body)}\`\n- Complete-Record: \`YES\`\n`, fd = fs.openSync(path.join(repo, JOURNAL), "a");
+  const body = recordBody(record), complete = `${body}- Record-SHA256: \`${sha(body)}\`\n- Complete-Record: \`YES\`\n`, fd = fs.openSync(journalPath(repo), "a");
   try { fs.writeSync(fd, complete); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
-function preflightJournal(repo) { const file = path.join(repo, JOURNAL); fs.mkdirSync(path.dirname(file), { recursive: true }); const fd = fs.openSync(file, "a"); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); } }
+function preflightJournal(repo) { const file = journalPath(repo); fs.mkdirSync(path.dirname(file), { recursive: true }); const safe = journalPath(repo), fd = fs.openSync(safe, "a"); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); } }
 function complete(block) { const candidate = block.startsWith("## Gemini frozen gate attempt — ") ? `\n${block}` : block, match = candidate.match(/^([\s\S]*?)- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`\n?$/); return Boolean(match && sha(match[1]) === match[2]); }
 function rigKey(o) { return sha(`direct-gemini-rest-v1|${ENDPOINT}|${o.model}|${o.rigId}`); }
 function cachedFailure(repo, key) {
@@ -199,7 +222,7 @@ export async function run(argv = process.argv.slice(2)) {
       const attemptId = random("PIL-FROZEN-ATTEMPT");
       try {
         endpoint(repo, o); const result = await call(o, item); endpoint(repo, o);
-        append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, reply: result.reply });
+        append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
         contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
       } catch (error) { const failure = failureClass(error); append(repo, { status: failure === "CANDIDATE_RESPONSE" ? "FAILED_CANDIDATE_RESPONSE" : "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", attemptId, rigId: o.rigId, rigKey: key, failureClass: failure, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail: error.message }); throw error; }
     }
