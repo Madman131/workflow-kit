@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -12,7 +12,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), r
 const syntheticEnvKey = ["GEMINI", "API", "KEY"].join("_");
 function syntheticAssignment(labelParts, valueParts) { return ["export const ", labelParts.join("_"), " = '", valueParts.join(""), "';\n"].join(""); }
 function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
-function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
+function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, withInstalledWrapper = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
   git(dir, ["init", "-q"]); git(dir, ["config", "user.email", "test@example.invalid"]); git(dir, ["config", "user.name", "Test"]);
   mkdirSync(path.join(dir, "core"), { recursive: true }); if (!noDocs) mkdirSync(path.join(dir, "docs"), { recursive: true });
@@ -20,6 +20,7 @@ function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = fa
   writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n");
   if (!noDocs) { if (contextSymlink) { writeFileSync(path.join(dir, "contract-target.md"), "acceptance context\n"); symlinkSync("../contract-target.md", path.join(dir, "docs", "contract.md")); } else writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); }
   writeFileSync(path.join(dir, "unchanged.md"), "UNRELATED-SENTINEL\n"); writeFileSync(path.join(dir, "src.mjs"), baseSource);
+  if (withInstalledWrapper) { mkdirSync(path.join(dir, "scripts"), { recursive: true }); copyFileSync(wrapper, path.join(dir, "scripts", "cold-review-gemini.sh")); copyFileSync(runner, path.join(dir, "scripts", "gemini-frozen-gate.mjs")); chmodSync(path.join(dir, "scripts", "cold-review-gemini.sh"), 0o755); }
   git(dir, ["add", "."]); git(dir, ["commit", "-qm", "base"]); const base = git(dir, ["rev-parse", "HEAD"]);
   writeFileSync(path.join(dir, "src.mjs"), candidateSource); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
   return { dir, base, candidate: git(dir, ["rev-parse", "HEAD"]), tree: git(dir, ["rev-parse", "HEAD^{tree}"]) };
@@ -43,8 +44,8 @@ function plan(f, mutate = {}) {
   const base = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [{ name: "coverage", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"] }, { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) }] };
   Object.assign(base, mutate); const file = path.join(f.dir, "plan.json"); writeFileSync(file, JSON.stringify(base)); return file;
 }
-function multiFixture() {
-  const f = fixture(), files = ["src.mjs"];
+function multiFixture(withInstalledWrapper = false) {
+  const f = fixture({ withInstalledWrapper }), files = ["src.mjs"];
   for (let index = 0; index < 3; index++) { const file = `slice-${index}.mjs`; writeFileSync(path.join(f.dir, file), `export const payload = "${"x".repeat(29000)}";\n`); files.push(file); }
   git(f.dir, ["add", "."]); git(f.dir, ["commit", "-qm", "large candidate"]);
   return { ...f, candidate: git(f.dir, ["rev-parse", "HEAD"]), tree: git(f.dir, ["rev-parse", "HEAD^{tree}"]), files };
@@ -103,7 +104,7 @@ test("final supplied material refuses deleted credentials before dry-run or fetc
     assert.notEqual(dry(credentialFixture).status, 0);
     let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(credentialFixture))); assert.equal(calls, 0);
     assert.equal(dry(placeholder).status, 0);
-  }); } finally { rmSync(secret.dir, { recursive: true, force: true }); rmSync(placeholder.dir, { recursive: true, force: true }); }
+  }); } finally { rmSync(credentialFixture.dir, { recursive: true, force: true }); rmSync(placeholder.dir, { recursive: true, force: true }); }
 });
 test("ordinary additions reach envelope assembly while exact renames refuse", () => {
   const f = fixture(), renamed = fixture(); try {
@@ -140,6 +141,30 @@ test("frozen-only wrapper options refuse before legacy agy discovery", () => {
     }
   } finally { rmSync(fake, { force: true }); rmSync(marker, { force: true }); }
 });
+test("public wrapper reaches frozen full dry-run and sliced fingerprint", () => {
+  const full = fixture({ withInstalledWrapper: true }), sliced = multiFixture(true); try {
+    const fullWrapper = path.join(full.dir, "scripts", "cold-review-gemini.sh"), fullResult = spawnSync("bash", [fullWrapper, "--base", full.base, "--candidate", full.candidate, "--tree", full.tree, "--rig-id", "test-rig", "--context", "docs/contract.md", "--dry-run"], { cwd: full.dir, encoding: "utf8" });
+    assert.equal(fullResult.status, 0, fullResult.stderr); assert.equal(JSON.parse(fullResult.stdout).frozen.candidate, full.candidate);
+    slicedPlan(sliced); const slicedWrapper = path.join(sliced.dir, "scripts", "cold-review-gemini.sh"), slicedResult = spawnSync("bash", [slicedWrapper, "--base", sliced.base, "--candidate", sliced.candidate, "--tree", sliced.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { cwd: sliced.dir, encoding: "utf8" });
+    assert.equal(slicedResult.status, 0, slicedResult.stderr); assert.match(slicedResult.stdout, /"plan_id"\s*:/);
+  } finally { rmSync(full.dir, { recursive: true, force: true }); rmSync(sliced.dir, { recursive: true, force: true }); }
+});
+test("missing, option-shaped, and unknown entrypoint values refuse before dispatch", () => {
+  const fake = path.join(os.tmpdir(), `gemini-frozen-malformed-${process.pid}`), marker = `${fake}.called`;
+  try {
+    writeFileSync(fake, `#!/bin/sh\nprintf called > '${marker}'\n`); chmodSync(fake, 0o755);
+    for (const argv of [["--context"], ["--context", ""], ["--context", "--base"], ["--bogus", "value"]]) {
+      const wrapperResult = spawnSync("bash", [wrapper, ...argv], { cwd: root, encoding: "utf8", env: { ...process.env, GEMINI_AGY_BIN: fake, GEMINI_ALLOW_CODE_MODE: "1" } });
+      assert.equal(wrapperResult.status, 2, `${argv}: ${wrapperResult.stderr}`); assert.equal(existsSync(marker), false);
+    }
+    const f = fixture(); try {
+      for (const argv of [["--context", "--base"], ["--unknown", "value"]]) {
+        const directResult = spawnSync(process.execPath, [runner, ...args(f, argv)], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "unused" } });
+        assert.equal(directResult.status, 2, `${argv}: ${directResult.stderr}`);
+      }
+    } finally { rmSync(f.dir, { recursive: true, force: true }); }
+  } finally { rmSync(fake, { force: true }); rmSync(marker, { force: true }); }
+});
 test("response firewall refuses old mixed parts, conflicting verdicts, and incomplete proof", () => {
   const e = { scope: "{\"slice\":\"full\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"], done: "PIL-DONE-test" };
   const text = `VERDICT: GO\nINSPECTED SCOPE: ${e.scope}\nINGESTION PROOF: ${e.markers.join(" | ")}\n${e.done}`;
@@ -161,6 +186,22 @@ test("response firewall refuses old mixed parts, conflicting verdicts, and incom
 });
 test("live no-log is refused before fetch", async () => {
   const f = fixture(); try { await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls += 1; return responseFrom({ body: "{}" }); }; await assert.rejects(run(args(f, ["--no-log"]))); assert.equal(calls, 0); }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("authorization assignments, deleted forms, and quoted Basic headers refuse while placeholders pass", () => {
+  const refused = [
+    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic reallysecretvalue';\n" }),
+    fixture({ baseSource: "export const AUTHORIZATION = 'Basic reallysecretvalue';\n", candidateSource: "export const removed = true;\n" }),
+    fixture({ candidateSource: "Authorization: \"Basic reallysecretvalue\"\n" }),
+  ];
+  const allowed = [
+    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic ${BASIC_AUTH}';\n" }),
+    fixture({ candidateSource: "Authorization: \"Basic $(read-auth)\"\n" }),
+    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic $1';\n" }),
+  ];
+  try {
+    for (const f of refused) assert.notEqual(dry(f).status, 0);
+    for (const f of allowed) assert.equal(dry(f).status, 0, dry(f).stderr);
+  } finally { for (const f of [...refused, ...allowed]) rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("verified GO and NO-GO print and persist complete records", async () => {
   const f = fixture(); try { await withFetch(async () => {
@@ -198,6 +239,17 @@ test("reordered, duplicate, and missing slice coverage plans refuse before fetch
     const ordered = slicedPlan(f), final = ordered.slices.at(-1); ordered.slices = [final, ...ordered.slices.slice(0, -1)]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(ordered)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
     const duplicate = slicedPlan(f); duplicate.slices[1].files = ["src.mjs"]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(duplicate)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
     const missing = slicedPlan(f); missing.slices = missing.slices.filter(slice => slice.name !== "coverage-slice-2.mjs"); writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(missing)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("direct and slice validators share lexical case and punctuation ordering", () => {
+  const f = fixture(); try {
+    for (const file of ["A.mjs", "a-punct.mjs", "_punct.mjs", "10.mjs", "2.mjs"]) writeFileSync(path.join(f.dir, file), `export const ${file.replace(/[^A-Za-z]/g, "_")} = true;\n`);
+    git(f.dir, ["add", "."]); git(f.dir, ["commit", "-qm", "lexical paths"]);
+    Object.assign(f, refreshed(f), { files: ["A.mjs", "a-punct.mjs", "_punct.mjs", "10.mjs", "2.mjs", "src.mjs"] }); slicedPlan(f);
+    const direct = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.equal(direct.status, 0, direct.stderr);
+    const out = mkdtempSync(path.join(os.tmpdir(), "gemini-slice-order-")); try {
+      const slices = spawnSync(process.execPath, [path.join(root, "scripts", "gemini-gate-slices.mjs"), "fingerprint", "--repo", f.dir, "--manifest", path.join(f.dir, "plan.json"), "--out-dir", out], { encoding: "utf8" }); assert.equal(slices.status, 0, slices.stderr);
+    } finally { rmSync(out, { recursive: true, force: true }); }
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("public selftest and installed runner remain deterministic and network-free", () => {
