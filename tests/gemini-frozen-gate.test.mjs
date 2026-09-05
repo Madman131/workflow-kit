@@ -274,6 +274,28 @@ test("one oversized source and diff component reconstruct across bounded fragmen
     let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request); }; await run(sliceArgs(f, "--run-slices")); assert.equal(calls, slices.length + 1);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
+test("fragmented coverage cannot name an unfragmented second file before fingerprint or fetch", async () => {
+  const f = fixture(); try {
+    writeFileSync(path.join(f.dir, "other.mjs"), "export const other = true;\n"); git(f.dir, ["add", "other.mjs"]); git(f.dir, ["commit", "-qm", "second changed file"]);
+    Object.assign(f, refreshed(f), { files: ["other.mjs", "src.mjs"] });
+    const coverage = { name: "coverage", kind: "coverage", files: ["other.mjs", "src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, Buffer.byteLength("export const after = 2;\n")), fragment(f, "per_file_diff", 0, Buffer.byteLength(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])))] };
+    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+    const value = slicedPlan(f, [coverage, cross]); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: "0".repeat(64) }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    const preflight = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.notEqual(preflight.status, 0); assert.match(preflight.stderr, /other\.mjs.*no fragments/);
+    await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); }; await assert.rejects(run(sliceArgs(f, "--run-slices"))); assert.equal(calls, 0); });
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("installed wrapper fingerprints a complete frozen fragment plan before direct run", async () => {
+  const f = fixture({ withInstalledWrapper: true, candidateSource: `export const payload = "${"x".repeat(110000)}";\n` });
+  try { await withFetch(async () => {
+    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])), limit = Math.max(source.length, diff.length), cuts = [0, 30000, 60000, 90000, limit];
+    const slices = cuts.slice(0, -1).map((start, index) => ({ name: `coverage-${index}`, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(start, source.length), Math.min(cuts[index + 1], source.length)), fragment(f, "per_file_diff", Math.min(start, diff.length), Math.min(cuts[index + 1], diff.length))] }));
+    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...slices, cross]); const installed = path.join(f.dir, "scripts", "cold-review-gemini.sh"), wrapperFingerprint = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { cwd: f.dir, encoding: "utf8" }); assert.equal(wrapperFingerprint.status, 0, wrapperFingerprint.stderr);
+    value.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(wrapperFingerprint.stdout).plan_id }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request); }; await run(sliceArgs(f, "--run-slices")); assert.equal(calls, slices.length + 1);
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
 test("reordered, duplicate, and missing slice coverage plans refuse before fetch", () => {
   const f = multiFixture(); try {
     const ordered = slicedPlan(f), final = ordered.slices.at(-1); ordered.slices = [final, ...ordered.slices.slice(0, -1)]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(ordered)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);

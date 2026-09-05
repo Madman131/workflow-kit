@@ -630,6 +630,11 @@ A documented release gate requires all three machine fields: `Status: PASS_VERDI
 
 ### Bounded slicing
 
+This is the legacy working-tree `agy` workflow. Its `scripts/gemini-gate-slices.mjs` fingerprints
+and snapshots legacy slices only; do not use it to fingerprint or execute an exact committed frozen
+candidate, including a fragmented one. The frozen direct workflow below has its own tuple-bound plan
+identity and commands.
+
 Slicing is a coverage strategy, not an automatic remediation loop. The pinned frontier PM approves the plan before model calls.
 
 The JSON manifest must contain:
@@ -697,7 +702,25 @@ candidate requested. Every response part must contain exactly one `text` field; 
 tools/function declarations and no function-call executor. Its
 complete serialized request is strictly below **81,920 bytes**; no setting can raise that cap. A
 larger complete candidate requires a v2 manifest augmented with `scope.candidate_commit` and
-`scope.candidate_tree`. First preflight every envelope and copy the emitted plan ID into the PM
+`scope.candidate_tree`. A changed source, deleted source, or per-file diff that cannot fit whole is
+represented by ordered `fragments` on its coverage slices. Every fragment binds the same tuple and
+has this shape:
+
+```json
+{
+  "base_commit": "<base>", "candidate_commit": "<candidate>", "candidate_tree": "<tree>",
+  "path": "exact/changed/file", "component_kind": "frozen_source",
+  "component_byte_length": 123, "component_sha256": "<64-lowercase-hex>",
+  "byte_start": 0, "byte_end": 123, "fragment_sha256": "<64-lowercase-hex>"
+}
+```
+
+`component_kind` is `frozen_source`, `deleted_source`, or `per_file_diff`. Starts and ends are
+UTF-8 boundaries. Across coverage slices, fragments for every required source and diff component
+must be ordered, gap-free, non-overlapping, and reconstruct the component hash exactly. The final
+cross-boundary slice may select only raw ranges already covered by that complete set. This direct
+manifest is preflighted only with the frozen command below; `gemini-gate-slices.mjs` does not create
+or validate frozen fragment plans. First preflight every envelope and copy the emitted plan ID into the PM
 approval; then one ordered command executes the approved set:
 
 ```sh

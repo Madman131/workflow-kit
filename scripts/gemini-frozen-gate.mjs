@@ -237,7 +237,8 @@ function validateCoveragePartitions(repo, o, rows, units) {
   for (const [file, row] of componentRows) {
     const sourceKind = row.status === "D" ? "deleted_source" : "frozen_source";
     const explicit = all.filter(fragment => fragment.path === file);
-    if (!explicit.length) continue;
+    if (!perFile.get(file)?.some(entry => !entry.implicit)) continue;
+    if (!explicit.length) die(`fragmented coverage file ${file} contributes no fragments`);
     for (const kind of [sourceKind, "per_file_diff"]) {
       const original = component(repo, o, row, kind).bytes;
       const list = all.filter(fragment => fragment.path === file && fragment.component_kind === kind).sort((a, b) => a.byte_start - b.byte_start);
