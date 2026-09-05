@@ -39,7 +39,7 @@
 //
 // SCOPE, UNCHANGED AND WORTH RE-READING IN THE CODEX LANE: this guards write TOOLS. A write issued
 // through a plain SHELL command is not covered — and in the Codex lane that is a main road, not a
-// corner case (PORTABILITY.md § The enforcement asymmetry). Treat this as a tripwire; the
+// corner case (the kit's PORTABILITY.md § The enforcement asymmetry, in the workflow-kit repository). Treat this as a tripwire; the
 // `.githooks/pre-commit` floor is what binds every lane.
 
 import path from "node:path";

@@ -26,7 +26,7 @@ gate on your question rather than this seat. *(Nor is the Claude lane: its cage 
 inputs.)* Mechanics for running it:
 
 - It ships only with `init --with-gate-runners` and needs the `codex` CLI at runtime
-  (`PORTABILITY.md` § External tool dependencies).
+  (the kit's `PORTABILITY.md` § External tool dependencies, in the workflow-kit repository).
 - **Launch it detached** and wait on the process, per `core/GATES.md` § How to run. A foreground
   call under the caller's own time cap gets killed before the gate can fail closed.
 - **Never hand-rolled `codex exec`** — `core/GATES.md` § Gotchas / traps.

@@ -726,9 +726,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 ## What is portable verbatim vs generated
 
-- `[P]` (verbatim): **this file** (`PORTABILITY.md`, installed at the adopter's root since v2.28.0 — every
-  entry stub, both reviewer skills and two guards cite it, and a citation to a file `init` never
-  installed read as assurance), `core/*` method docs, the four PreToolUse guards, the three PreToolUse sensors
+- `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the three PreToolUse sensors
   (`sensor-sweep-owed`, `sensor-mutation-owed`, and `sensor-context-pressure`, which reads the real
   context size from the transcript tail and says when the thread-restart digest is owed — Claude lane
   only, a Codex payload carries no transcript; all three print, never deny), the `guard-owner-comms` and
@@ -750,6 +748,14 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 
 Copying one repo's `[G]` files into another re-creates the cross-repo confusion the identity
 fingerprint exists to prevent. `init` generates them; you never copy them.
+
+**This file is neither.** `PORTABILITY.md` stays in the workflow-kit repository and is not installed:
+every "see `PORTABILITY.md`" pointer the kit ships — both entry stubs, both reviewer skills, two guards'
+headers, `codex/config.toml`, the pre-commit test and `init`'s own checklist — names it as the kit's,
+in the kit. Installing it at an adopter's root was tried in this release's review and withdrawn:
+`PORTABILITY.md` is a generic filename, and a kit cannot occupy it without overwriting an adopter's
+own document, failing every run for a repo that legitimately owns one, or leaving a pointer that
+resolves to the wrong file. A pointer that says where the file actually is does none of those.
 
 **What the kit deliberately does NOT ship.** The origin repo carries a per-repo Codex-lane binding doc
 (`core/LANE_CODEX.md`) holding the concrete Codex-as-Builder seats, the `codex-heavy` compute-weather

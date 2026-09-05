@@ -182,12 +182,12 @@ Usage: node bin/init.mjs [--target <dir>] [options]
                           placeholder stays and that seat is UNUSABLE until you fill it by hand
   --skip-codex-lane       do not write <repo>/.codex/ at all (config.toml + the cold-review seat).
                           These are Codex-lane CONVENIENCES — they carry NO enforcement (see
-                          PORTABILITY.md § The enforcement asymmetry)
+                          the kit's PORTABILITY.md § The enforcement asymmetry)
   --force                 overwrite existing generated files (settings.json is always merged)
   --print-package-scripts print the npm scripts to add to your package.json, then exit
   -h, --help              this help
 
-Every family is OPTIONAL — omitted ⇒ the kit's portable defaults. See PORTABILITY.md for the
+Every family is OPTIONAL — omitted ⇒ the kit's portable defaults. See the kit's PORTABILITY.md for the
 enforcement asymmetry (the PreToolUse hooks bind only the Claude Code lane; the pre-commit hook and
 AGENTS.md prose are what bind every lane).`;
 
@@ -916,38 +916,6 @@ function main() {
   const core = copyTree(path.join(KIT_ROOT, "core"), path.join(T, "core"), force, (name) => !GENERATED_CORE.has(name));
   log(`  core/ method docs: ${core.filter(([, s]) => s === "written").length} written, ${core.filter(([, s]) => s === "skipped").length} kept`);
 
-  // 1b. [P] PORTABILITY.md (verbatim), at the adopter's ROOT. Every generated entry stub, both
-  // reviewer skills, two guards' own headers, codex/config.toml and this installer's end-of-run
-  // summary say "see PORTABILITY.md" for what the controls do NOT cover — and until v2.28.0 no run
-  // of init put that file anywhere the reader could open it. A citation to a missing file is read
-  // as "there is a fuller model somewhere", which is the assurance-by-belief PORTABILITY exists to
-  // kill. The one adopter measured had copied it by hand, byte-identical, and edited nothing.
-  // MECHANISM, like core/: a stale copy mis-states which lane a control binds, so a plain re-run
-  // over an older copy keeps it and FAILS naming --force, exactly as a stale guard does.
-  //
-  // PROVENANCE BEFORE THE COPY. `PORTABILITY.md` is a generic filename an adopter may already own at
-  // the root. Handed straight to copyGuarded, an adopter's own doc would be reported "KEPT BUT STALE
-  // against this kit" on a plain run and, under --force, replaced (backed up, but replaced). Neither
-  // is right for a file the kit did not write. The kit's file is identified by its first line;
-  // anything else at that path is the adopter's — kept untouched on plain AND forced runs, named in
-  // the report, and COUNTED as a refusal so the run cannot read as a clean install of a file it did
-  // not install. A symlink at that path falls through to copyGuarded, which refuses links itself.
-  const portDst = path.join(T, "PORTABILITY.md");
-  const kitPortabilityHeader = readFileSync(path.join(KIT_ROOT, "PORTABILITY.md"), "utf8").split("\n")[0];
-  const adopterOwnedPortability = () => {
-    if (!existsSync(portDst) || isSymlinkAt(portDst)) return false;
-    try { return readFileSync(portDst, "utf8").split("\n")[0] !== kitPortabilityHeader; } catch { return true; }
-  };
-  let portability;
-  if (adopterOwnedPortability()) {
-    backupRefused.push(portDst);
-    warn(`REFUSED to install PORTABILITY.md: ${portDst} exists and is NOT this kit's file (its first line is not the kit's header) — it is yours, and init does not overwrite an adopter-owned file, --force included. Move or rename yours to receive the kit's copy, or read the kit's from the workflow-kit repository; every "see PORTABILITY.md" pointer in the installed method means the kit's.`);
-    portability = "refused";
-  } else {
-    portability = copyGuarded(path.join(KIT_ROOT, "PORTABILITY.md"), portDst, force);
-  }
-  log(`  PORTABILITY.md: ${portability === "written" ? "installed at the repo root" : portability === "skipped" ? "EXISTING kept — may be STALE; re-run with --force to update" : "REFUSED (see above)"}`);
-
   // 2. [P] Claude-lane hooks (verbatim mechanism): the four PreToolUse guards, which fail CLOSED,
   // the two PreToolUse sensors, which never deny,
   // plus the Stop-event Owner-comms SENSOR, which fails OPEN and is a nudge, not enforcement (see
@@ -1058,7 +1026,7 @@ function main() {
     }
     const guard = path.join(T, "scripts", "codex-gate-guard", "claude");
     if (copyGuarded(path.join(KIT_ROOT, "scripts", "codex-gate-guard", "claude"), guard, force) === "written") chmodX(guard);
-    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + gate runners (need codex/agy at runtime — see PORTABILITY.md)`);
+    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + gate runners (need codex/agy at runtime — see the kit's PORTABILITY.md)`);
   } else {
     // Skipped is not UNEXAMINED: runners a previous adopt installed are mechanism kept-files even
     // when this run omits the flag — read-only compared, like the skipped .codex lane below.
@@ -1757,11 +1725,8 @@ function main() {
     item(`.codex/hooks.json: init did not write it this run (your registration is preserved) and did not ignore it — it stays TRACKED with the rest of .codex/.`);
   }
   item(
-    // The pointer must describe what THIS run did: a refused collision leaves the adopter's own file
-    // at that path, and "installed at your repo root" would send them to it as the kit's contract.
-    portability === "refused"
-      ? `READ the kit's PORTABILITY.md from the workflow-kit repository — your root PORTABILITY.md is your OWN and was left UNTOUCHED (see the refusal above); every "see PORTABILITY.md" pointer in the installed method means the kit's. It covers what these guards do NOT: they bind write TOOLS. A write`
-      : `READ PORTABILITY.md (installed at your repo root) — what these guards do NOT cover. They bind write TOOLS. A write`,
+    `READ the kit's PORTABILITY.md (in the workflow-kit repository; it is NOT installed here — every`,
+    `"see PORTABILITY.md" pointer in the installed method means the kit's) — what these guards do NOT cover. They bind write TOOLS. A write`,
     `issued through a plain SHELL command is invisible to them, and in the Codex lane that`,
     `is a main road, not a corner case. The pre-commit hook you just installed is the only`,
     `mechanical floor that binds every lane. Do not imply otherwise to your team.`,

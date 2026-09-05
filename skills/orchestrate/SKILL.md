@@ -118,5 +118,5 @@ armed hook walls the cadence (terminal states, batch caps, path ownership). No c
 gave a GO. `guard-brief-rung` denies a brief WRITE lacking a fresh, session- and
 target-bound, SINGLE-USE record of executed checks — proving such a RECORD EXISTS, never that its
 commands were run or were the right ones. The kit ships controls for the declaration and the commit
-floor, and their lane, trust, fresh-clone and bypass limits are in `PORTABILITY.md` — and a rung you
+floor, and their lane, trust, fresh-clone and bypass limits are in the kit's `PORTABILITY.md` (workflow-kit repository) — and a rung you
 did not name is a rung you did not run.
