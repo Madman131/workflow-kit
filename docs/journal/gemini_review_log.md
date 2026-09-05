@@ -2236,3 +2236,28 @@
     INSPECTED SCOPE: docs/journal/terminal_round_breaker_contract.md (Sections 0 through 9)
     
     PIL-DONE-fa2f221109674db068974eea
+
+## Gemini frozen gate attempt — FAILED_TRANSPORT — 2026-09-05T21:14:24.099Z
+
+- Status: `FAILED_TRANSPORT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v1`
+- Transport-Identity: `1.1.27|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f`
+- Model: `gemini-3.1-pro-high`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-46e76559124477590424e325`
+- Rig-ID: `agy-subscription-v1.1.27-gemini-3.1-pro-high`
+- Rig-Key: `e48cbff67a67a55fe8305ee06bafd44378ed7e3a69252d6408dec371f28f5239`
+- Failure-Class: `TRANSPORT`
+- Base: `f78a52c44353719b20ef18252c91b50eca4f890d`
+- Candidate: `7f47e2a9a6366e4b00bf961ce6cdbd279f86ef70`
+- Tree: `5c9effec63b3212cf4b7f9a3f1aeb657ef5b81af`
+- Plan-ID: `e769359c57174eb44b9e16745b08b48c0d07d83ad3cea099eafd5a4de0d8a1e1`
+- Slice: `coverage-001`
+- Material-SHA256: `3d9dfd90eb7c75247e4f81da99e500a7460865117b94401ec81fcda66e98278b`
+- Envelope-SHA256: `003624137bda065eb83b7c2af1a7e0778893c1e69dc7ba2e2acf8753fc9d9e36`
+- Envelope-Bytes: `79889`
+- Ordered-Contributors: `(none)`
+- Diagnostic: `agy stream must end with exactly one valid result event`
+- Record-SHA256: `07a2e6a4b74d92c0bef8062c5f9c1a8f4fad72c294edd9efc3e132491ed74afa`
+- Complete-Record: `YES`

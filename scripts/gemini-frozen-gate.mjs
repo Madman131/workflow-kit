@@ -421,9 +421,9 @@ function parseSubscriptionStream(stdout, workspace, model, e) {
       continue;
     }
     if (event.event === "result") {
-      const fields = new Set(["event", "conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"]);
-      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, fields) || event.conversation_id !== expectedConversation || typeof event.status !== "string" || typeof event.response !== "string" || !nonnegativeNumber(event.duration_seconds) || !Number.isSafeInteger(event.num_turns) || event.num_turns < 0 || !usage(event.usage) || (Object.hasOwn(event, "error") && typeof event.error !== "string") || (Object.hasOwn(event, "denied_actions") && !Array.isArray(event.denied_actions))) die("agy stream must end with exactly one valid result event", 3);
-      result = event; continue;
+      const fields = new Set(["conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"]), terminal = event.result;
+      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, new Set(["event", "result"])) || !plainObject(terminal) || !onlyKeys(terminal, fields) || terminal.conversation_id !== expectedConversation || typeof terminal.status !== "string" || typeof terminal.response !== "string" || !nonnegativeNumber(terminal.duration_seconds) || !Number.isSafeInteger(terminal.num_turns) || terminal.num_turns < 0 || !usage(terminal.usage) || (Object.hasOwn(terminal, "error") && typeof terminal.error !== "string") || (Object.hasOwn(terminal, "denied_actions") && (!Array.isArray(terminal.denied_actions) || terminal.denied_actions.some(action => typeof action !== "string" || !action)))) die("agy stream must end with exactly one valid result event", 3);
+      result = terminal; continue;
     }
     die("agy stream-json output contains an unrecognized event", 3);
   }

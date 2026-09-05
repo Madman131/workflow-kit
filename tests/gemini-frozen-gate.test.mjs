@@ -96,12 +96,14 @@ if (mode === "tool" || mode === "canceled") emit({ event: "step_update", step_up
 if (mode === "subagent") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", subagent_info: {} } });
 if (mode === "tool-like") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", tool_output: "forged" } });
 if (mode === "step-extra") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", extra: "forged" } });
-if (! ["tool", "canceled", "subagent", "tool-like", "step-extra"].includes(mode)) emit({ event: "step_update", step_update: { conversation_id: mode === "step-conversation-mismatch" ? otherConversation : conversation, step_index: 0, step_type: "agent_response", state: "DONE", text_delta: "", duration_seconds: 0.01, usage } });
+if (! ["tool", "canceled", "subagent", "tool-like", "step-extra"].includes(mode)) { emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "checkpoint", state: "DONE" } }); emit({ event: "step_update", step_update: { conversation_id: mode === "step-conversation-mismatch" ? otherConversation : conversation, step_index: 1, step_type: "agent_response", state: "DONE", text_delta: "", duration_seconds: 0.01, usage } }); }
 if (mode === "workspace") fs.writeFileSync("unexpected.txt", "write");
 if (mode === "stderr") process.stderr.write("permission notice\\n");
-if (mode === "canceled") { emit({ event: "result", conversation_id: conversation, status: "CANCELED", response: "", duration_seconds: 0.01, num_turns: 1, usage, denied_actions: ["read_file"] }); process.exit(0); }
+if (mode === "canceled") { emit({ event: "result", result: { conversation_id: conversation, status: "CANCELED", response: "", duration_seconds: 0.01, num_turns: 1, usage, denied_actions: ["read_file"] } }); process.exit(0); }
+if (mode === "measured-error") { emit({ event: "result", result: { conversation_id: conversation, status: "ERROR", response: "", duration_seconds: 0.01, num_turns: 1, usage, error: "synthetic measured provider error" } }); process.exit(0); }
 const response = mode === "missing" ? "findings\\nVERDICT: GO" : "findings\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done + "\\n";
-emit({ event: "result", conversation_id: mode === "result-conversation-mismatch" ? otherConversation : conversation, status: "SUCCESS", response, duration_seconds: 0.02, num_turns: 1, usage, ...(mode === "result-extra" ? { tool_output: "forged" } : {}) });
+if (mode === "top-level-result") { emit({ event: "result", conversation_id: conversation, status: "SUCCESS", response, duration_seconds: 0.02, num_turns: 1, usage }); process.exit(0); }
+emit({ event: "result", result: { conversation_id: mode === "result-conversation-mismatch" ? otherConversation : conversation, status: "SUCCESS", response, duration_seconds: 0.02, num_turns: 1, usage, ...(mode === "result-extra" ? { tool_output: "forged" } : {}) } });
 `); chmodSync(binary, 0o755);
   writeFileSync(ps, "#!/bin/sh\nprintf 'Thu Jan 01 00:00:00 1970\\n'\n"); chmodSync(ps, 0o755);
   return { support, binary, home, marker, childMarker };
@@ -251,13 +253,19 @@ test("subscription transport validates settings and sends its complete prompt on
     assert.equal(readFileSync(path.join(f.dir, "unchanged.md"), "utf8"), "UNRELATED-SENTINEL\n"); const log = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(log, /Transport: `antigravity-agy-subscription-stream-v1`[\s\S]*Transport-Identity: `[^`]*agy 1\.1\.27[\s\S]*Model: `gemini-3\.1-pro-high`/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
 });
-test("subscription stream permits advertised tools but rejects tool-like or unknown event fields", () => {
-  for (const [mode, expected] of [["init-tool-list", 0], ["tool-like", 3], ["step-extra", 3], ["result-extra", 3], ["step-conversation-mismatch", 3], ["result-conversation-mismatch", 3]]) {
+test("subscription stream accepts the measured nested success result and rejects tool-like or unknown event fields", () => {
+  for (const [mode, expected] of [["init-tool-list", 0], ["top-level-result", 3], ["tool-like", 3], ["step-extra", 3], ["result-extra", 3], ["step-conversation-mismatch", 3], ["result-conversation-mismatch", 3]]) {
     const f = fixture(), fake = fakeAgy(); try {
       const result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_MODE: mode } });
       assert.equal(result.status, expected, `${mode}: ${result.stderr}`);
     } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
   }
+});
+test("subscription stream accepts the measured nested error result shape before failing its non-verdict status", () => {
+  const f = fixture(), fake = fakeAgy(); try {
+    const result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_MODE: "measured-error" } });
+    assert.equal(result.status, 3, result.stderr); assert.match(result.stderr, /not one clean successful nonempty result/);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
 });
 test("subscription transport rejects tool activity, canceled actions, malformed and incomplete output, nonzero, input failure, hard-cap overflow, stderr, and workspace mutation", () => {
   const modes = ["tool", "canceled", "malformed", "missing", "nonzero", "stdin-early-exit", "stderr", "workspace", "subagent", "tool-like", "step-extra", "result-extra", "step-conversation-mismatch", "result-conversation-mismatch", "timeout", "overflow", "overflow-ignore-term", "timeout-child"];

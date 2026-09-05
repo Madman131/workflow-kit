@@ -2,7 +2,9 @@
 
 ## Parent and bounded purpose
 
-This is a parent-linked successor to `b1e19ac3c3f6def108fb7d14f9ce09ba41c4d51d`. It preserves the
+This is a parent-linked successor to `7f47e2a9a6366e4b00bf961ce6cdbd279f86ef70`, which ended with a
+`FAILED_TRANSPORT` receipt because its terminal stream parser expected result fields at the top level.
+It preserves the
 frozen exact-object envelope, complete screening, ordered fragment/slice execution, final aggregate
 receipt, credential firewall, lock, timeout, cache, and endpoint/tree recheck controls. It adds one
 ordinary non-API transport: an existing Antigravity subscription command (`agy`). Direct Gemini REST
@@ -33,7 +35,13 @@ workspace is removed and the source repository endpoint/tree is checked before a
 Subscription execution fails closed on Windows until owned process-group teardown is implemented there.
 
 The stream must name the real disposable cwd, model, and request-review mode, and end in one successful
-nonempty result. Any tool event or tool output, subagent event, denied action, stderr diagnostic,
+nonempty result. A successful public synthetic probe of installed `agy 1.1.27` measured the terminal
+record exactly as top-level `{event:"result",result:{conversation_id,status,response,duration_seconds,num_turns,usage}}`;
+the nested `usage` has exactly `input_tokens`, `output_tokens`, `thinking_tokens`, `cache_read_tokens`,
+and `total_tokens`. An error result may add nested `error`, and a denied-action result may add nested
+`denied_actions`. The runner accepts only those two top-level terminal keys, strictly validates the
+nested fields and one stable conversation ID, and passes the nested response to verdict verification.
+Any tool event or tool output, subagent event, denied action, stderr diagnostic,
 workspace mutation, nonzero exit, signal, timeout, bounded-output overflow, malformed/unknown event,
 or receipt/canary/scope/verdict/completion mismatch is a non-verdict failure. Accepted stream structures
 are allowlisted; a nonempty advertised `init.tools` list is permitted because tool availability is not
@@ -110,15 +118,16 @@ NOTES 5 · ACTION-SCREEN remediate bounded transport controls; LADDER continue`.
 
 #### Pre-R2 compatibility completion for item 6
 
-The first allowlist used a simplified nested-result fixture and would reject the documented/current
+The first allowlist put terminal fields on the outer result event and would reject the measured
 Antigravity 1.1.27 stream before it could judge a candidate. **TRIGGER:** a normal stream has top-level
-`init.conversation_id`, `step_update.conversation_id`/`step_index` plus optional response telemetry,
-and a top-level terminal result with duration, turn count, and usage. The parser now accepts only those
-precise shapes, binds one stable nonempty conversation ID from init through result, and validates the
-closed nonnegative usage object (`input_tokens`, `output_tokens`, `thinking_tokens`,
-`cache_read_tokens`, `total_tokens`). The fake success path now emits that complete shape; mismatched
-conversation IDs and unexpected fields still fail closed. This completes the admitted stream-schema
-repair; it does not widen the transport or introduce a new review round.
+`init.conversation_id`, `step_update.conversation_id`/`step_index` plus a checkpoint and agent-response
+telemetry, then only top-level `event` and nested `result` at termination. The parser now accepts only
+that precise terminal shape, binds one stable nonempty conversation ID from init through nested result,
+and validates the closed nonnegative usage object (`input_tokens`, `output_tokens`, `thinking_tokens`,
+`cache_read_tokens`, `total_tokens`). The fake fixtures cover the measured success and error shapes;
+mismatched conversation IDs and unexpected or tool-like nested result fields still fail closed. This
+completes the admitted stream-schema repair; it does not widen the transport or introduce a new review
+round.
 
 The scoped signal handler now owns group termination before it is attached, closing the immediate
 interrupt window. A fake that signals the runner immediately after provider startup proves the 130
