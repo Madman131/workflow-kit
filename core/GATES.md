@@ -544,7 +544,7 @@ attempt record, so ordinary Git garbage collection cannot erase the bytes behind
 - Diagnostic only: add `--no-log`. A receipt-verified `--no-log` run is not a release-gate receipt.
 - Bounded slice: `bash scripts/cold-review-gemini.sh --slice-manifest <plan.json> --slice <name>`
 - Finalize a fully successful slice set: `bash scripts/cold-review-gemini.sh --slice-manifest <plan.json> --finalize-slices`
-- Deterministic harness: `bash scripts/cold-review-gemini-selftest.sh` (fake `agy`; no network or model quota).
+- Deterministic harness: `bash scripts/cold-review-gemini.sh --selftest` (the shipped direct-API response firewall; no network, key lookup, or model quota).
 - Compatibility selftest entrypoint: `bash scripts/cold-review-gemini.sh --selftest` delegates to the same deterministic harness.
 
 At a design gate, use `--design`; a diff review of a docs-only changeset is the wrong artifact. Code mode reviews the uncommitted diff, full changed code files up to 120 KB each, untracked code files below 300 KB, invariants, and optional contract context.
@@ -669,6 +669,55 @@ Replace the example commit with the exact 40-hex output of `git rev-parse HEAD`;
 The validator compares `scope.files` with the exact tracked/untracked surface (excluding, by RECOGNIZED EXACT PATH, the durable log, the manifest, and the one canonical `.gemini-gate/` artifact dir — never by "is this file untracked", which would fail open: an unknown untracked sibling still fails closed and is journaled to the durable log), requires the coverage union to equal scope, rejects overlapping-only slices, requires `uncovered: []`, and makes the final entry the single cross-boundary slice. A `covered` boundary requires selected scope-file evidence; a `not_applicable` boundary requires contract evidence and rationale. PM approval remains the semantic truth check.
 
 Every slice record contains the entire normalized plan, exact diff ranges plus diff hashes, full-file hashes, canonical context paths plus byte hashes, current HEAD, pinned base commit, and the PM-approved SHA-256 plan ID. During one validator run, each selected full file and contract context is read once into a byte buffer; that same buffer is hashed and written to a private snapshot, while each computed diff is likewise cached and snapshotted. The runner consumes only those approved full-file, diff, and context snapshots—never a later live reread—so mutation after validation cannot alter the reviewed bytes under an old plan ID. An individual successful slice is `Record-Kind: SLICE_RESULT`, `Release-Gate: NO`. After every named coverage slice and a later final cross-boundary slice has a durable pass under the same plan ID, `--finalize-slices` emits the sole `SLICE_SET` release receipt with all contributing attempt IDs. Missing, failed, out-of-order, stale-HEAD, mutated-context, or differently hashed slices make finalization fail before any release verdict.
+
+### Frozen direct Gemini API gate
+
+For an exact committed code candidate, the recommended frozen-candidate path is the direct text
+transport rather than the legacy `agy` agent path:
+
+```sh
+bash scripts/cold-review-gemini.sh \
+  --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
+  --rig-id <nonsecret-provider-configuration-id> --context docs/contract.md
+```
+
+The runner verifies that the base is an ancestor, the candidate owns the supplied tree, and the
+checkout is clean apart from the durable journal/sanctioned artifacts. It assembles full text from
+Git blobs only: current changed files, old deleted files, the diff, the candidate's invariants, and
+candidate-relative contract context. Binary, non-UTF-8, renamed/type-changed, escaping, dirty, or
+secret-looking input refuses before any provider request. It never creates a snapshot, stages the
+caller tree, supplies a directory, or lets Gemini execute a tool.
+
+The direct request is one fixed-host HTTPS `generateContent` call with text-only contents and one
+candidate requested. There are no tools/function declarations and no function-call executor. Its
+complete serialized request is strictly below **81,920 bytes**; no setting can raise that cap. A
+larger complete candidate requires a v2 manifest augmented with `scope.candidate_commit` and
+`scope.candidate_tree`. First preflight every envelope and copy the emitted plan ID into the PM
+approval; then one ordered command executes the approved set:
+
+```sh
+bash scripts/cold-review-gemini.sh --base <base> --candidate <candidate> --tree <tree> \
+  --rig-id <rig> --slice-manifest GEMINI_SLICE_PLAN.json --fingerprint
+```
+
+```sh
+bash scripts/cold-review-gemini.sh \
+  --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> \
+  --slice-manifest GEMINI_SLICE_PLAN.json --run-slices
+```
+
+Every coverage slice and the final cross-boundary slice is preflighted against the same byte bound,
+then run in manifest order. A slice is non-release; the sole aggregate is eligible only when every
+tuple/plan-bound receipt is valid and GO. A valid `NO-GO` is delivered evidence but exits nonzero and
+cannot create a release receipt. The journal records only nonsecret rig/transport, tuple, envelope
+and verdict metadata. Auth/provider/transport/timeout failures are cached by effective rig identity;
+change the nonsecret rig ID only after an actual provider configuration or availability recovery.
+
+`--dry-run` validates and prints frozen envelope identities without reading `GEMINI_API_KEY` or
+contacting Gemini. `--selftest` is a shipped no-network response-firewall smoke; it does not prove
+live API credentials, billing, model availability, or review quality. The legacy `--design` and
+working-tree `agy` modes remain available for their documented routing roles; they do not inherit
+this no-tools guarantee, and this explicit tuple invocation does not silently reroute them.
 
 ### Exit codes and traps
 

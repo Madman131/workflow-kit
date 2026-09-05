@@ -54,6 +54,8 @@ cd "$REPO_ROOT"
 # ---- args ----
 CONTEXT_FILE="${GEMINI_REVIEW_CONTEXT:-}"
 DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""; FOLDED_IS_FILE=0; CONTEXT_FILE_CANONICAL=""; SLICE_MANIFEST=""; SLICE_MANIFEST_CANONICAL=""; SLICE_NAME=""; FINALIZE_SLICES=0; DRY_RUN=0; DO_LOG=1; SELFTEST=0
+FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_MODEL="gemini-2.5-pro"; RUN_SLICES=0
+FROZEN_FINGERPRINT=0
 require_option_value() {
   [ "$#" -ge 2 ] || { echo "cold-review-gemini: $1 requires a value." >&2; exit 2; }
 }
@@ -65,12 +67,41 @@ while [ $# -gt 0 ]; do
     --slice-manifest) require_option_value "$@"; SLICE_MANIFEST="$2"; shift 2 ;;
     --slice) require_option_value "$@"; SLICE_NAME="$2"; shift 2 ;;
     --finalize-slices) FINALIZE_SLICES=1; shift ;;
+    --base) require_option_value "$@"; FROZEN_BASE="$2"; shift 2 ;;
+    --candidate) require_option_value "$@"; FROZEN_CANDIDATE="$2"; shift 2 ;;
+    --tree) require_option_value "$@"; FROZEN_TREE="$2"; shift 2 ;;
+    --rig-id) require_option_value "$@"; FROZEN_RIG_ID="$2"; shift 2 ;;
+    --gemini-model) require_option_value "$@"; FROZEN_MODEL="$2"; shift 2 ;;
+    --run-slices) RUN_SLICES=1; shift ;;
+    --fingerprint) FROZEN_FINGERPRINT=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-log)  DO_LOG=0; shift ;;
     --selftest) SELFTEST=1; shift ;;
     *) echo "cold-review-gemini: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
+
+# The frozen path is intentionally dispatched before the legacy working-tree runner establishes a
+# snapshot or discovers `agy`. Its transport is the direct text API; it never exposes a directory,
+# shell, MCP server, browser, or agent tool to the model.
+frozen_count=0
+for frozen_value in "$FROZEN_BASE" "$FROZEN_CANDIDATE" "$FROZEN_TREE" "$FROZEN_RIG_ID"; do [ -n "$frozen_value" ] && frozen_count=$((frozen_count + 1)); done
+if [ "$frozen_count" -ne 0 ]; then
+  [ "$frozen_count" -eq 4 ] || { echo "cold-review-gemini: --base, --candidate, --tree, and --rig-id are required together for a frozen review." >&2; exit 2; }
+  [ -z "$DESIGN_FILE$FOLDED_SRC$SLICE_NAME" ] && [ "$FINALIZE_SLICES" = 0 ] || { echo "cold-review-gemini: frozen review does not combine legacy design, --slice, or --finalize-slices modes." >&2; exit 2; }
+  if [ -n "$SLICE_MANIFEST" ]; then
+    { [ "$RUN_SLICES" = 1 ] || [ "$FROZEN_FINGERPRINT" = 1 ]; } && [ -z "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen sliced review requires --slice-manifest with --run-slices (or --fingerprint) and no --context." >&2; exit 2; }
+  else
+    [ "$RUN_SLICES" = 0 ] && [ -n "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen full review requires --context and forbids --run-slices." >&2; exit 2; }
+  fi
+  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --model "$FROZEN_MODEL")
+  [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
+  [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST" --run-slices)
+  [ "$FROZEN_FINGERPRINT" = 1 ] && frozen_args+=(--fingerprint)
+  [ "$DRY_RUN" = 1 ] && frozen_args+=(--dry-run)
+  [ "$DO_LOG" = 0 ] && frozen_args+=(--no-log)
+  exec node "$SCRIPT_DIR/gemini-frozen-gate.mjs" "${frozen_args[@]}"
+fi
 
 if [ "$SELFTEST" = "1" ]; then
   [ "$#" -eq 0 ] || { echo "cold-review-gemini: --selftest does not accept additional arguments." >&2; exit 2; }
