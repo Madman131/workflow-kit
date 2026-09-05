@@ -10,6 +10,7 @@ const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1bet
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 const GIT_LOCATION_OVERRIDES = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
+const CREDENTIAL_LIKE = /(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[^\s#]{8,})|\b(?:authorization\s*:\s*(?:bearer\s+)?|bearer\s+)[A-Za-z0-9._~+/=-]{8,})/i;
 function die(message, exitCode = 2) { throw Object.assign(new Error(message), { exitCode }); }
 function sha(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
 function random(label) { return `${label}-${crypto.randomBytes(12).toString("hex")}`; }
@@ -32,7 +33,6 @@ function blob(repo, commit, file) {
   const bytes = git(repo, ["show", `${commit}:${file}`], "buffer");
   let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { die(`non-UTF-8 artifact is unsupported: ${file}`); }
   if (/\0/.test(text)) die(`binary artifact is unsupported: ${file}`);
-  if (/(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[^\s#]{8,})|\b(?:authorization\s*:\s*(?:bearer\s+)?|bearer\s+)[A-Za-z0-9._~+/=-]{8,})/i.test(text)) die(`possible credential-like value in review artifact: ${file}`);
   return text;
 }
 function regularTreeBlob(repo, commit, file, label) {
@@ -70,6 +70,7 @@ function parse(argv) {
   if (o.sliceManifest ? ((!o.runSlices && !o.fingerprint) || o.context) : (o.runSlices || o.fingerprint || !o.context)) die("use --context for one full review, or --slice-manifest with --run-slices/--fingerprint");
   if (o.context) o.context = relative(o.context, "--context"); if (o.sliceManifest) o.sliceManifest = relative(o.sliceManifest, "--slice-manifest");
   if (o.noLog && !o.dryRun && !o.fingerprint) die("--no-log is only allowed with --dry-run or --fingerprint; live reviews require a durable receipt", 3);
+  if (Boolean(o.sharedLockDir) !== Boolean(o.lockOwnerPid)) die("--shared-lock-dir and --lock-owner-pid must be supplied together", 3);
   return o;
 }
 function endpoint(repo, o) {
@@ -158,6 +159,7 @@ function envelope(repo, o, rows, contexts, name) {
   const done = `PIL-DONE-${sha(`${materialId}|DONE`).slice(0, 24)}`;
   const scope = JSON.stringify({ slice: name, base: o.base, candidate: o.candidate, tree: o.tree, files, contract_context: [...contexts].sort(), invariants: INVARIANTS, material_sha256: materialId });
   const middle = Math.ceil(material.length / 2), supplied = [`=== INGESTION MARKER 1 OF 3 ===\n${markers[0]}`, ...material.slice(0, middle), `=== INGESTION MARKER 2 OF 3 ===\n${markers[1]}`, ...material.slice(middle), `=== NORMALIZED INSPECTED SCOPE ===\n${scope}`, `=== RESPONSE COMPLETION TOKEN ===\n${done}`, "=== END OF SUPPLIED MATERIAL ===", `=== EOF-ONLY INGESTION RECEIPT 3 OF 3 ===\n${markers[2]}`].join("\n\n");
+  if (CREDENTIAL_LIKE.test(supplied)) die("possible credential-like value in final supplied review material", 3);
   const prompt = "Review this exact frozen committed artifact using only supplied material. Return findings, exactly one `VERDICT: GO` or `VERDICT: NO-GO` line, exactly one `INSPECTED SCOPE:` line copied exactly from supplied material, and exactly one `INGESTION PROOF:` line that contains the three supplied ingestion markers in encountered order, separated by ` | `. End the reply with the supplied response-completion token as its final nonblank line.";
   const request = { contents: [{ role: "user", parts: [{ text: `${prompt}\n\n${supplied}` }] }], generationConfig: { candidateCount: 1 } }, serialized = JSON.stringify(request);
   return { request, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name };
@@ -190,6 +192,19 @@ function append(repo, record) {
   try { fs.writeSync(fd, complete); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
 function preflightJournal(repo) { const file = journalPath(repo); fs.mkdirSync(path.dirname(file), { recursive: true }); const safe = journalPath(repo), fd = fs.openSync(safe, "a"); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); } }
+function sharedLock(repo, o) {
+  const commonValue = git(repo, ["rev-parse", "--git-common-dir"]).trim(), common = path.resolve(repo, commonValue), lock = path.join(common, "cold-review-gemini.lock");
+  if (o.sharedLockDir) {
+    if (path.resolve(o.sharedLockDir) !== lock || String(process.pid) !== o.lockOwnerPid) die("wrapper shared lock ownership does not match this direct runner", 3);
+    if (!fs.readFileSync(path.join(lock, "owner"), "utf8").match(new RegExp(`^pid=${process.pid}$`, "m"))) die("wrapper shared lock owner is not this direct runner", 3);
+    return lock;
+  }
+  try { fs.mkdirSync(lock); } catch { die("another frozen Gemini gate owns this repository", 4); }
+  try {
+    fs.writeFileSync(path.join(lock, "owner"), `pid=${process.pid}\nrepo=${common}\nkind=direct\nscript=${fileURLToPath(import.meta.url)}\ncommand=${process.argv.join(" ")}\n`, { flag: "wx" });
+  } catch (error) { fs.rmSync(lock, { recursive: true, force: true }); die(`cannot publish direct shared lock owner: ${error.message}`, 3); }
+  return lock;
+}
 function complete(block) { const candidate = block.startsWith("## Gemini frozen gate attempt — ") ? `\n${block}` : block, match = candidate.match(/^([\s\S]*?)- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`\n?$/); return Boolean(match && sha(match[1]) === match[2]); }
 function rigKey(o) { return sha(`direct-gemini-rest-v1|${ENDPOINT}|${o.model}|${o.rigId}`); }
 function cachedFailure(repo, key) {
@@ -214,7 +229,7 @@ export async function run(argv = process.argv.slice(2)) {
   const identities = prepared.map(item => ({ slice: item.name, bytes: item.bytes, material_sha256: item.materialId, request_sha256: item.envelopeSha }));
   if (o.fingerprint) { process.stdout.write(JSON.stringify({ plan_id: plan.planId, envelopes: identities, next: "Set approval.status=APPROVED and approval.expected_plan_id to plan_id after PM review." }, null, 2) + "\n"); return; }
   if (o.dryRun) { process.stdout.write(JSON.stringify({ frozen: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan?.planId || null, envelopes: identities }, null, 2) + "\n"); return; }
-  preflightJournal(repo); const common = git(repo, ["rev-parse", "--git-common-dir"]).trim(), lock = path.join(path.isAbsolute(common) ? common : path.resolve(repo, common), "gemini-frozen-gate.lock"); try { fs.mkdirSync(lock); } catch { die("another frozen Gemini gate owns this repository", 4); }
+  preflightJournal(repo); const lock = sharedLock(repo, o);
   try {
     const key = rigKey(o), contributors = [], results = []; let allGo = true;
     for (const item of prepared) {

@@ -611,7 +611,7 @@ Do not raise the 3 MB gate-valid envelope without a new contiguous-read experime
 > lock and a second live invocation **exits 4** — including from a sibling worktree of the same repo.
 > Two lanes cannot both hold a Gemini gate; the second must wait. This is a mechanism, not a norm.
 
-The runner owns a per-repository lock under the canonical Git common directory, so sibling worktrees cannot run duplicate reviews against one repository. The owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
+The runner owns one per-repository lock under the canonical Git common directory, shared by legacy `agy` and direct frozen dispatches, so sibling worktrees cannot run duplicate reviews against one repository. The legacy owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity; a live direct owner is likewise refused by PID and common-directory identity. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused legacy ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
 
 ### Durable attempt records
 
@@ -734,8 +734,9 @@ this no-tools guarantee, and this explicit tuple invocation does not silently re
 
 The direct runner rejects ambient `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE`; each invariant
 and selected context must be a committed regular blob. It also rejects a journal file or parent that is a symlink before
-the provider call. Its bounded artifact scan refuses credential-like API-key, password, passphrase, authorization, and
-bearer values while allowing explicit placeholders such as `${NAME}`; it is not a universal secret detector. Gemini text
+the provider call. Its bounded final-material scan refuses credential-like API-key, password, passphrase, authorization,
+and bearer values, including deleted diff lines, while allowing explicit placeholders such as `${NAME}`; it is not a
+universal secret detector. Gemini text
 parts may carry an opaque `thoughtSignature`, but no other non-text part field is accepted.
 
 ### Exit codes and traps

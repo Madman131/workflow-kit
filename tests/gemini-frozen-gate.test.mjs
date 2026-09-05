@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -10,16 +10,16 @@ import { run, verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh");
 function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
-function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false } = {}) {
+function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
   git(dir, ["init", "-q"]); git(dir, ["config", "user.email", "test@example.invalid"]); git(dir, ["config", "user.name", "Test"]);
   mkdirSync(path.join(dir, "core"), { recursive: true }); if (!noDocs) mkdirSync(path.join(dir, "docs"), { recursive: true });
   if (invariantSymlink) { writeFileSync(path.join(dir, "invariant-target.md"), "portable invariant\n"); symlinkSync("../invariant-target.md", path.join(dir, "core", "INVARIANTS.md")); } else writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n");
   writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n");
   if (!noDocs) { if (contextSymlink) { writeFileSync(path.join(dir, "contract-target.md"), "acceptance context\n"); symlinkSync("../contract-target.md", path.join(dir, "docs", "contract.md")); } else writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); }
-  writeFileSync(path.join(dir, "unchanged.md"), "UNRELATED-SENTINEL\n"); writeFileSync(path.join(dir, "src.mjs"), "export const before = 1;\n");
+  writeFileSync(path.join(dir, "unchanged.md"), "UNRELATED-SENTINEL\n"); writeFileSync(path.join(dir, "src.mjs"), baseSource);
   git(dir, ["add", "."]); git(dir, ["commit", "-qm", "base"]); const base = git(dir, ["rev-parse", "HEAD"]);
-  writeFileSync(path.join(dir, "src.mjs"), "export const after = 2;\n"); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
+  writeFileSync(path.join(dir, "src.mjs"), candidateSource); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
   return { dir, base, candidate: git(dir, ["rev-parse", "HEAD"]), tree: git(dir, ["rev-parse", "HEAD^{tree}"]) };
 }
 function args(f, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--context", "docs/contract.md", ...extra]; }
@@ -96,6 +96,13 @@ test("bounded credential labels refuse values while placeholder configuration re
     writeFileSync(path.join(benign.dir, "src.mjs"), "export const DB_PASSWORD = '${DB_PASSWORD}';\n"); git(benign.dir, ["add", "src.mjs"]); git(benign.dir, ["commit", "-qm", "placeholder"]); assert.equal(dry(refreshed(benign)).status, 0);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(benign.dir, { recursive: true, force: true }); }
 });
+test("final supplied material refuses deleted credentials before dry-run or fetch", async () => {
+  const secret = fixture({ baseSource: "export const API_KEY = 'reallysecretvalue';\nexport const DB_PASSWORD = 'alsosecretvalue';\n", candidateSource: "export const removed = true;\n" }), placeholder = fixture({ baseSource: "export const DB_PASSWORD = '${DB_PASSWORD}';\n", candidateSource: "export const removed = true;\n" }); try { await withFetch(async () => {
+    assert.notEqual(dry(secret).status, 0);
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(secret))); assert.equal(calls, 0);
+    assert.equal(dry(placeholder).status, 0);
+  }); } finally { rmSync(secret.dir, { recursive: true, force: true }); rmSync(placeholder.dir, { recursive: true, force: true }); }
+});
 test("ordinary additions reach envelope assembly while exact renames refuse", () => {
   const f = fixture(), renamed = fixture(); try {
     writeFileSync(path.join(f.dir, "ordinary-added.mjs"), "export const ordinary = true;\n"); git(f.dir, ["add", "ordinary-added.mjs"]); git(f.dir, ["commit", "-qm", "ordinary add"]); assert.equal(dry(refreshed(f)).status, 0);
@@ -115,6 +122,21 @@ test("a new journal directory is sanctioned alone but no sibling dirt is", async
     let calls = 0; globalThis.fetch = async (_url, request) => { calls += 1; return responseFrom(request); }; await run(contextArgs(f, "core/INVARIANTS.md")); assert.equal(calls, 1); assert.ok(existsSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md")));
     writeFileSync(path.join(f.dir, "docs", "journal", "sibling.md"), "unrelated dirt\n"); calls = 0; await assert.rejects(run(contextArgs(f, "core/INVARIANTS.md"))); assert.equal(calls, 0);
   }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("the shared legacy lock refuses direct provider entry before fetch", async () => {
+  const f = fixture(); try { await withFetch(async () => {
+    const common = path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), lock = path.join(common, "cold-review-gemini.lock"), wrapperSource = readFileSync(wrapper, "utf8"); mkdirSync(lock); writeFileSync(path.join(lock, "owner"), "pid=999999\nrepo=legacy\n");
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(f))); assert.equal(calls, 0);
+    assert.match(wrapperSource, /LOCK_DIR="\$common\/cold-review-gemini\.lock"/); assert.ok(wrapperSource.indexOf("acquire_single_flight; fi") < wrapperSource.indexOf("resolve_agy()"));
+  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("frozen-only wrapper options refuse before legacy agy discovery", () => {
+  const fake = path.join(os.tmpdir(), `gemini-frozen-intent-${process.pid}`), marker = `${fake}.called`; try {
+    writeFileSync(fake, `#!/bin/sh\nprintf called > '${marker}'\n`); chmodSync(fake, 0o755);
+    for (const argv of [["--fingerprint"], ["--gemini-model", "gemini-3-pro"], ["--base", "a".repeat(40)]]) {
+      const result = spawnSync("bash", [wrapper, ...argv], { cwd: root, encoding: "utf8", env: { ...process.env, GEMINI_AGY_BIN: fake, GEMINI_ALLOW_CODE_MODE: "1" } }); assert.equal(result.status, 2, result.stderr); assert.equal(existsSync(marker), false);
+    }
+  } finally { rmSync(fake, { force: true }); rmSync(marker, { force: true }); }
 });
 test("response firewall refuses old mixed parts, conflicting verdicts, and incomplete proof", () => {
   const e = { scope: "{\"slice\":\"full\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"], done: "PIL-DONE-test" };

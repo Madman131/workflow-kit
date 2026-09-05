@@ -55,7 +55,7 @@ cd "$REPO_ROOT"
 CONTEXT_FILE="${GEMINI_REVIEW_CONTEXT:-}"
 DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""; FOLDED_IS_FILE=0; CONTEXT_FILE_CANONICAL=""; SLICE_MANIFEST=""; SLICE_MANIFEST_CANONICAL=""; SLICE_NAME=""; FINALIZE_SLICES=0; DRY_RUN=0; DO_LOG=1; SELFTEST=0
 FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_MODEL="gemini-2.5-pro"; RUN_SLICES=0
-FROZEN_FINGERPRINT=0
+FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0
 require_option_value() {
   [ "$#" -ge 2 ] || { echo "cold-review-gemini: $1 requires a value." >&2; exit 2; }
 }
@@ -68,13 +68,13 @@ while [ $# -gt 0 ]; do
     --slice-manifest) require_option_value "$@"; SLICE_MANIFEST="$2"; shift 2 ;;
     --slice) require_option_value "$@"; SLICE_NAME="$2"; shift 2 ;;
     --finalize-slices) FINALIZE_SLICES=1; shift ;;
-    --base) require_option_value "$@"; FROZEN_BASE="$2"; shift 2 ;;
-    --candidate) require_option_value "$@"; FROZEN_CANDIDATE="$2"; shift 2 ;;
-    --tree) require_option_value "$@"; FROZEN_TREE="$2"; shift 2 ;;
-    --rig-id) require_option_value "$@"; FROZEN_RIG_ID="$2"; shift 2 ;;
-    --gemini-model) require_option_value "$@"; FROZEN_MODEL="$2"; shift 2 ;;
-    --run-slices) RUN_SLICES=1; shift ;;
-    --fingerprint) FROZEN_FINGERPRINT=1; shift ;;
+    --base) require_option_value "$@"; FROZEN_BASE="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --candidate) require_option_value "$@"; FROZEN_CANDIDATE="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --tree) require_option_value "$@"; FROZEN_TREE="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --rig-id) require_option_value "$@"; FROZEN_RIG_ID="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --gemini-model) require_option_value "$@"; FROZEN_MODEL="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --run-slices) RUN_SLICES=1; FROZEN_INTENT=1; shift ;;
+    --fingerprint) FROZEN_FINGERPRINT=1; FROZEN_INTENT=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-log)  DO_LOG=0; shift ;;
     --selftest) SELFTEST=1; shift ;;
@@ -93,7 +93,7 @@ fi
 # shell, MCP server, browser, or agent tool to the model.
 frozen_count=0
 for frozen_value in "$FROZEN_BASE" "$FROZEN_CANDIDATE" "$FROZEN_TREE" "$FROZEN_RIG_ID"; do [ -n "$frozen_value" ] && frozen_count=$((frozen_count + 1)); done
-if [ "$frozen_count" -ne 0 ]; then
+if [ "$FROZEN_INTENT" = "1" ]; then
   [ "$frozen_count" -eq 4 ] || { echo "cold-review-gemini: --base, --candidate, --tree, and --rig-id are required together for a frozen review." >&2; exit 2; }
   [ -z "$DESIGN_FILE$FOLDED_SRC$SLICE_NAME" ] && [ "$FINALIZE_SLICES" = 0 ] || { echo "cold-review-gemini: frozen review does not combine legacy design, --slice, or --finalize-slices modes." >&2; exit 2; }
   if [ -n "$SLICE_MANIFEST" ]; then
@@ -101,13 +101,7 @@ if [ "$frozen_count" -ne 0 ]; then
   else
     [ "$RUN_SLICES" = 0 ] && [ -n "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen full review requires --context and forbids --run-slices." >&2; exit 2; }
   fi
-  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --model "$FROZEN_MODEL")
-  [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
-  [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST" --run-slices)
-  [ "$FROZEN_FINGERPRINT" = 1 ] && frozen_args+=(--fingerprint)
-  [ "$DRY_RUN" = 1 ] && frozen_args+=(--dry-run)
-  [ "$DO_LOG" = 0 ] && frozen_args+=(--no-log)
-  exec node "$SCRIPT_DIR/gemini-frozen-gate.mjs" "${frozen_args[@]}"
+  FROZEN_DISPATCH=1
 fi
 
 if [ "$SELFTEST" = "1" ]; then
@@ -319,7 +313,7 @@ recover_stale_lock() {
 }
 
 acquire_single_flight() {
-  local common owner_tmp owner_pid owner_start owner_repo owner_command owner_pid_live supervisor_owner_pid supervisor_owner_start supervisor_owner_command current_start current_command self_start self_command attempt age now mtime
+  local common owner_tmp owner_pid owner_start owner_repo owner_command owner_kind owner_pid_live supervisor_owner_pid supervisor_owner_start supervisor_owner_command current_start current_command self_start self_command attempt age now mtime
   common="$(git rev-parse --git-common-dir 2>/dev/null)" || { echo "cold-review-gemini: cannot resolve git common directory." >&2; exit 2; }
   case "$common" in /*) ;; *) common="$REPO_ROOT/$common" ;; esac
   common="$(cd "$common" 2>/dev/null && pwd -P)" || { echo "cold-review-gemini: cannot canonicalize git common directory." >&2; exit 2; }
@@ -356,13 +350,17 @@ acquire_single_flight() {
       continue
     fi
 
-    owner_pid="$(lock_owner_value pid || true)"; owner_start="$(lock_owner_value start || true)"; owner_repo="$(lock_owner_value repo || true)"; owner_command="$(lock_owner_value command || true)"
+    owner_pid="$(lock_owner_value pid || true)"; owner_start="$(lock_owner_value start || true)"; owner_repo="$(lock_owner_value repo || true)"; owner_command="$(lock_owner_value command || true)"; owner_kind="$(lock_owner_value kind || true)"
     case "$owner_pid" in ''|*[!0-9]*) recover_stale_lock && continue; continue ;; esac
     owner_pid_live=0
     if kill -0 "$owner_pid" 2>/dev/null; then
       owner_pid_live=1
       current_start="$(ps -p "$owner_pid" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//')"
       current_command="$(ps -p "$owner_pid" -o command= 2>/dev/null | sed 's/^ *//;s/ *$//')"
+      if [ "$owner_kind" = "direct" ] && [ "$owner_repo" = "$common" ]; then
+        echo "cold-review-gemini: a live direct frozen invocation owns this repository gate (pid $owner_pid). Wait for it to release; guard: $LOCK_DIR" >&2
+        exit 4
+      fi
       if [ "$owner_repo" = "$common" ] && [ -n "$owner_start" ] && [ "$current_start" = "$owner_start" ] && [ -n "$owner_command" ] && [ "$current_command" = "$owner_command" ]; then
         echo "cold-review-gemini: another live invocation owns this repository gate (pid $owner_pid). Wait for it or terminate that exact runner; guard: $LOCK_DIR" >&2
         exit 4
@@ -566,7 +564,17 @@ trap cleanup EXIT
 trap 'on_signal INT 130' INT
 trap 'on_signal TERM 143' TERM
 
-if [ "$DRY_RUN" = "0" ]; then acquire_single_flight; fi
+if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && [ "$FROZEN_FINGERPRINT" = "1" ]; }; then acquire_single_flight; fi
+if [ "$FROZEN_DISPATCH" = "1" ]; then
+  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --model "$FROZEN_MODEL")
+  [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
+  [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST" --run-slices)
+  [ "$FROZEN_FINGERPRINT" = 1 ] && frozen_args+=(--fingerprint)
+  [ "$DRY_RUN" = 1 ] && frozen_args+=(--dry-run)
+  [ "$DO_LOG" = 0 ] && frozen_args+=(--no-log)
+  [ "${LOCK_HELD:-0}" = "1" ] && frozen_args+=(--shared-lock-dir "$LOCK_DIR" --lock-owner-pid "$$")
+  exec node "$SCRIPT_DIR/gemini-frozen-gate.mjs" "${frozen_args[@]}"
+fi
 TMPD="$(mktemp -d)" || { ATTEMPT_DETAIL="could not create a temp dir"; echo "cold-review-gemini: $ATTEMPT_DETAIL." >&2; record_attempt FAILED_TOOL "$ATTEMPT_DETAIL"; exit 3; }
 if [ "$DRY_RUN" = "0" ]; then
   if ! refuse_hardlinked_durable_log; then
