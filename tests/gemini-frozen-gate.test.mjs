@@ -11,6 +11,9 @@ import { run, verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh");
 const syntheticEnvKey = ["GEMINI", "API", "KEY"].join("_");
 function syntheticAssignment(labelParts, valueParts) { return ["export const ", labelParts.join("_"), " = '", valueParts.join(""), "';\n"].join(""); }
+function authorizationLabel() { return ["AUTH", "ORIZATION"].join(""); }
+function authorizationAssignment(scheme) { return ["export const ", authorizationLabel(), " = ", "'", [scheme, ["really", "secret", "value"].join("")].join(" "), "'\n"].join(""); }
+function authorizationHeader(scheme, quoted = false) { const value = [scheme, ["really", "secret", "value"].join("")].join(" "); return [["Auth", "orization"].join(""), ": ", quoted ? `\"${value}\"` : value, "\n"].join(""); }
 function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
 function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, withInstalledWrapper = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
@@ -189,9 +192,9 @@ test("live no-log is refused before fetch", async () => {
 });
 test("authorization assignments, deleted forms, and quoted Basic headers refuse while placeholders pass", () => {
   const refused = [
-    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic reallysecretvalue';\n" }),
-    fixture({ baseSource: "export const AUTHORIZATION = 'Basic reallysecretvalue';\n", candidateSource: "export const removed = true;\n" }),
-    fixture({ candidateSource: "Authorization: \"Basic reallysecretvalue\"\n" }),
+    fixture({ candidateSource: authorizationAssignment("Basic") }),
+    fixture({ baseSource: authorizationAssignment("Basic"), candidateSource: "export const removed = true;\n" }),
+    fixture({ candidateSource: authorizationHeader("Basic", true) }),
   ];
   const allowed = [
     fixture({ candidateSource: "export const AUTHORIZATION = 'Basic ${BASIC_AUTH}';\n" }),
@@ -205,10 +208,10 @@ test("authorization assignments, deleted forms, and quoted Basic headers refuse 
 });
 test("ordinary authorization schemes refuse current and deleted material before live fetch", async () => {
   const refused = [
-    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic reallysecretvalue';\n" }),
-    fixture({ candidateSource: "export const AUTHORIZATION = 'Token reallysecretvalue';\n" }),
-    fixture({ baseSource: "Authorization: Basic reallysecretvalue\n", candidateSource: "export const removed = true;\n" }),
-    fixture({ baseSource: "Authorization: Token reallysecretvalue\n", candidateSource: "export const removed = true;\n" }),
+    fixture({ candidateSource: authorizationAssignment("Basic") }),
+    fixture({ candidateSource: authorizationAssignment("Token") }),
+    fixture({ baseSource: authorizationHeader("Basic"), candidateSource: "export const removed = true;\n" }),
+    fixture({ baseSource: authorizationHeader("Token"), candidateSource: "export const removed = true;\n" }),
   ];
   const placeholders = [
     fixture({ candidateSource: "export const AUTHORIZATION = 'Token ${TOKEN_AUTH}';\n" }),
