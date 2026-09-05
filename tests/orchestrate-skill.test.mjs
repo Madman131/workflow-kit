@@ -119,7 +119,10 @@ test("the body states EXACTLY how much of it is enforced — one rung, and no mo
   // absent on a fresh clone until `core.hooksPath` is set and is bypassable with `--no-verify`.
   // "Ships controls for" is the supportable verb; the pointer to the limits is the load-bearing half.
   pin(body, "The kit ships controls for the declaration and the commit\nfloor", "what IS shipped");
-  pin(body, "fresh-clone and bypass limits are in `PORTABILITY.md`", "limits are pointed at");
+  // The pointer names the KIT's copy: the file is not installed into adopters (a generic root name a
+  // kit cannot occupy safely — withdrawn in v2.28.0 review), so a bare name would send an adopter
+  // looking for a file that is not there.
+  pin(body, "fresh-clone and bypass limits are in the kit's `PORTABILITY.md`", "limits are pointed at, in the kit");
 });
 
 test("the freeze rule is stated as panel-enforced, not as an intention", () => {
