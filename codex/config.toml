@@ -10,11 +10,14 @@
 #
 # DELIBERATELY NO `hooks` KEY HERE, and that is not an oversight. Codex accepts hook registrations in
 # EITHER this file or <repo>/.codex/hooks.json, and warns when both carry them ("prefer a single
-# representation for this layer"). **As of v2.0 the kit registers NO Codex hooks at all** — see
-# the kit's PORTABILITY.md § The enforcement asymmetry (workflow-kit repository) for the executed reasons, and note that installing this
-# file buys you NO write-time enforcement in the Codex lane. A kit-built Codex guard is in flight as
-# its own gated changeset; when it lands it will own the hooks.json representation, so if you add
-# your own hooks here, expect to reconcile them then.
+# representation for this layer"). The kit's registration lives in <repo>/.codex/hooks.json, which
+# `init` GENERATES (it bakes this checkout's absolute path into every hook command, so it is
+# per-checkout and gitignored). Installing this file buys you NO enforcement by itself, and neither
+# does that registration until a human grants hook trust in an INTERACTIVE codex session — an
+# untrusted hook is skipped silently. `node scripts/check-codex-hooks-armed.mjs` is what tells you
+# whether the guards are live; the kit's PORTABILITY.md § The enforcement asymmetry (workflow-kit
+# repository) has the executed reasons. If you declare your own hooks in this file, `init` keeps
+# this file and writes NO hooks.json — one representation, yours.
 
 [shell_environment_policy]
 inherit = "core"
