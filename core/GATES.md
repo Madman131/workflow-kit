@@ -784,13 +784,13 @@ plan ID into the PM approval; execute the resulting approved set:
 
 ```sh
 bash scripts/cold-review-gemini.sh --base <base> --candidate <candidate> --tree <tree> \
-  --rig-id <rig> --slice-manifest GEMINI_SLICE_PLAN.json --fingerprint
+  --rig-id <rig> --slice-manifest .gemini-gate/GEMINI_SLICE_PLAN.json --fingerprint
 ```
 
 ```sh
 bash scripts/cold-review-gemini.sh \
   --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> \
-  --slice-manifest GEMINI_SLICE_PLAN.json --run-slices
+  --slice-manifest .gemini-gate/GEMINI_SLICE_PLAN.json --run-slices
 ```
 
 Every coverage slice and the final cross-boundary slice is preflighted against the same byte bound,
