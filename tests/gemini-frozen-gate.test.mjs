@@ -203,6 +203,23 @@ test("authorization assignments, deleted forms, and quoted Basic headers refuse 
     for (const f of allowed) assert.equal(dry(f).status, 0, dry(f).stderr);
   } finally { for (const f of [...refused, ...allowed]) rmSync(f.dir, { recursive: true, force: true }); }
 });
+test("ordinary authorization schemes refuse current and deleted material before live fetch", async () => {
+  const refused = [
+    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic reallysecretvalue';\n" }),
+    fixture({ candidateSource: "export const AUTHORIZATION = 'Token reallysecretvalue';\n" }),
+    fixture({ baseSource: "Authorization: Basic reallysecretvalue\n", candidateSource: "export const removed = true;\n" }),
+    fixture({ baseSource: "Authorization: Token reallysecretvalue\n", candidateSource: "export const removed = true;\n" }),
+  ];
+  const placeholders = [
+    fixture({ candidateSource: "export const AUTHORIZATION = 'Token ${TOKEN_AUTH}';\n" }),
+    fixture({ baseSource: "Authorization: Basic ${BASIC_AUTH}\n", candidateSource: "export const removed = true;\n" }),
+  ];
+  try { await withFetch(async () => {
+    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); };
+    for (const f of refused) { await assert.rejects(run(args(f))); assert.equal(calls, 0); }
+    for (const f of placeholders) assert.equal(dry(f).status, 0, dry(f).stderr);
+  }); } finally { for (const f of [...refused, ...placeholders]) rmSync(f.dir, { recursive: true, force: true }); }
+});
 test("verified GO and NO-GO print and persist complete records", async () => {
   const f = fixture(); try { await withFetch(async () => {
     globalThis.fetch = async (_url, request) => { const body = JSON.parse(request.body); assert.equal(body.tools, undefined); assert.equal(body.functionDeclarations, undefined); assert.doesNotMatch(JSON.stringify(body), /dangerous|functionCall/); assert.doesNotMatch(body.contents[0].parts[0].text, /UNRELATED-SENTINEL/); return responseFrom(request, "GO"); }; let printed = "", write = process.stdout.write; process.stdout.write = value => { printed += value; return true; };
