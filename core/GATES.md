@@ -678,7 +678,23 @@ Every slice record contains the entire normalized plan, exact diff ranges plus d
 
 ### Frozen Gemini exact-candidate gate
 
-For an exact committed code candidate, the ordinary non-API path is the explicit subscription
+> **2026-09-06 supersession — strict manual subscription handoff.** The automated frozen
+> subscription and direct-REST procedures below are historical transport evidence, not live commands.
+> `--run-slices`, `--transport`, `--agy-bin`, `--timeout-seconds`, and every frozen full live call now
+> refuse before provider/settings/credential access. Keep their measured receipts unchanged. The active
+> procedure is: generate and inspect the local DRAFT; fingerprint and approve the exact manifest; run
+> `--handoff-export .gemini-gate/<dir>`; submit each numbered packet manually in the operator-attested
+> Gemini subscription UI using `gemini-3.1-pro-high`; save exact UTF-8 replies as `replies/0001.txt`;
+> then run `--handoff-import .gemini-gate/<dir>`. Export/import recheck the exact tuple, plan,
+> fragments, packets, scopes, replies, and endpoint. A source-only NO-GO remains nonterminal
+> `UNRESOLVED_ATTRIBUTION`; only a diff-bearing/full terminal NO-GO permits a prefix, and all other
+> complete reply sets aggregate GO or `ATTRIBUTION_HOLD`. Manual UI/model identity is operator-attested,
+> not cryptographically verified by the runner.
+
+> **Historical automated-transport record begins.** The following transport commands and controls
+> explain preserved receipts from the superseded procedure. They are not supported current commands.
+
+For an exact committed code candidate, the ordinary non-API path was the explicit subscription
 transport. Direct Gemini REST remains available only when explicitly selected; neither path falls back
 to the other.
 
@@ -823,8 +839,8 @@ timeout failures are cached by effective rig identity only from complete records
 nonsecret rig ID only after an actual provider configuration or availability recovery.
 
 `--dry-run` and `--fingerprint` validate and print stable material/request identities without reading
-`GEMINI_API_KEY`, resolving `agy`, or contacting either transport. `--no-log` is refused for a live
-frozen review, so an API or subscription call cannot lose its durable receipt. `--selftest` is a shipped
+credentials, resolving `agy`, or contacting a provider. Frozen handoff import always retains durable
+receipts. `--selftest` is a shipped
 no-network response-firewall smoke; it does not prove live API credentials, subscription eligibility,
 model availability, or review quality. The legacy `--design` and
 working-tree `agy` modes remain available for their documented routing roles; they do not inherit
@@ -839,13 +855,12 @@ parts may carry an opaque `thoughtSignature`, but no other non-text part field i
 
 ### Exit codes and traps
 
-- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. The frozen subscription or API path returns `0` only for a verified `GO`; Git discovery failure is never “no changes.”
+- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. A frozen strict-manual import returns `0` only for a verified aggregate `GO`; Git discovery failure is never “no changes.”
 - `2`: bad arguments or invalid environment value.
-- `3`: a frozen subscription/API `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `UNRESOLVED_ATTRIBUTION` is a provider observation and `ATTRIBUTION_HOLD` is its non-release aggregate, while `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
+- `3`: a frozen strict-manual terminal `NO-GO`, `UNRESOLVED_ATTRIBUTION`/`ATTRIBUTION_HOLD`, or refusal is non-release. The durable record distinguishes terminal evidence from a refusal. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
-- `130` / `143`: the frozen subscription runner's handled `INT` / `TERM` exits after owned-group
-  teardown; always non-verdict. The direct API path has no equivalent scoped signal handler.
+- `130` / `143`: legacy runner handled `INT` / `TERM` exits; always non-verdict.
 
 Never re-add stdin to legacy INLINE or FILE routing; preserve the frozen subscription transport's one
 NDJSON standard-input user event. Never treat OS argv acceptance as ingestion; never omit EOF, ordered

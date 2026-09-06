@@ -58,11 +58,11 @@ function adopt(extra = []) {
   return { dir, codexDir, run, first, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
-test("gate-runner install summary names subscription default and explicit live API key use", () => {
+test("gate-runner install summary names strict manual frozen Gemini handoff", () => {
   const { first, cleanup } = adopt(["--with-gate-runners", "--skip-codex-lane"]);
   try {
-    assert.match(first.stdout, /frozen Gemini defaults to an authorized Antigravity subscription; direct API needs GEMINI_API_KEY only for an explicitly authorized live API invocation/);
-    assert.doesNotMatch(first.stdout, /frozen Gemini needs an authorized API key only at live invocation/);
+    assert.match(first.stdout, /frozen Gemini uses strict manual Gemini-subscription handoff; no frozen API key or automated provider invocation/);
+    assert.doesNotMatch(first.stdout, /direct API needs GEMINI_API_KEY/);
   } finally { cleanup(); }
 });
 

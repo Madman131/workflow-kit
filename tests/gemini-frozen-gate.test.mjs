@@ -1,711 +1,97 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { assertSubscriptionPlatform, preflightSubscriptionSettings, run, verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh");
-const syntheticEnvKey = ["GEMINI", "API", "KEY"].join("_");
-function syntheticAssignment(labelParts, valueParts) { return ["export const ", labelParts.join("_"), " = '", valueParts.join(""), "';\n"].join(""); }
-function authorizationLabel() { return ["AUTH", "ORIZATION"].join(""); }
-function authorizationAssignment(scheme, credential = ["really", "secret", "value"].join("")) { return ["export const ", authorizationLabel(), " = ", "'", [scheme, credential].join(" "), "'\n"].join(""); }
-function authorizationHeader(scheme, quoted = false, credential = ["really", "secret", "value"].join("")) { const value = [scheme, credential].join(" "); return [["Auth", "orization"].join(""), ": ", quoted ? `\"${value}\"` : value, "\n"].join(""); }
-function shortCredential(...parts) { return parts.join(""); }
-function git(dir, args) { return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim(); }
-function fixture({ contextSymlink = false, invariantSymlink = false, noDocs = false, withInstalledWrapper = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = {}) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-gate-"));
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh"), journal = "docs/journal/gemini_review_log.md";
+const sha = value => crypto.createHash("sha256").update(value).digest("hex");
+function git(dir, args, encoding = "utf8") { return execFileSync("git", ["-C", dir, ...args], { encoding }).trim(); }
+function fixture(installed = false) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-manual-handoff-"));
   git(dir, ["init", "-q"]); git(dir, ["config", "user.email", "test@example.invalid"]); git(dir, ["config", "user.name", "Test"]);
-  mkdirSync(path.join(dir, "core"), { recursive: true }); if (!noDocs) mkdirSync(path.join(dir, "docs"), { recursive: true });
-  if (invariantSymlink) { writeFileSync(path.join(dir, "invariant-target.md"), "portable invariant\n"); symlinkSync("../invariant-target.md", path.join(dir, "core", "INVARIANTS.md")); } else writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n");
-  writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n");
-  if (!noDocs) { if (contextSymlink) { writeFileSync(path.join(dir, "contract-target.md"), "acceptance context\n"); symlinkSync("../contract-target.md", path.join(dir, "docs", "contract.md")); } else writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); }
-  writeFileSync(path.join(dir, "unchanged.md"), "UNRELATED-SENTINEL\n"); writeFileSync(path.join(dir, "src.mjs"), baseSource);
-  if (withInstalledWrapper) { mkdirSync(path.join(dir, "scripts"), { recursive: true }); copyFileSync(wrapper, path.join(dir, "scripts", "cold-review-gemini.sh")); copyFileSync(runner, path.join(dir, "scripts", "gemini-frozen-gate.mjs")); chmodSync(path.join(dir, "scripts", "cold-review-gemini.sh"), 0o755); }
+  mkdirSync(path.join(dir, "core"), { recursive: true }); mkdirSync(path.join(dir, "docs"), { recursive: true });
+  writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n"); writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n"); writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); writeFileSync(path.join(dir, "src.mjs"), "export const before = 1;\n");
+  if (installed) { mkdirSync(path.join(dir, "scripts")); for (const name of ["cold-review-gemini.sh", "gemini-frozen-gate.mjs"]) writeFileSync(path.join(dir, "scripts", name), readFileSync(path.join(root, "scripts", name))); chmodSync(path.join(dir, "scripts/cold-review-gemini.sh"), 0o755); }
   git(dir, ["add", "."]); git(dir, ["commit", "-qm", "base"]); const base = git(dir, ["rev-parse", "HEAD"]);
-  writeFileSync(path.join(dir, "src.mjs"), candidateSource); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
+  writeFileSync(path.join(dir, "src.mjs"), "export const after = 2;\n"); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
   return { dir, base, candidate: git(dir, ["rev-parse", "HEAD"]), tree: git(dir, ["rev-parse", "HEAD^{tree}"]) };
 }
-function args(f, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--context", "docs/contract.md", ...extra]; }
-function contextArgs(f, context, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--context", context, ...extra]; }
-function dry(f, extra = []) { return spawnSync(process.execPath, [runner, ...args(f, ["--dry-run", ...extra])], { encoding: "utf8" }); }
-function refreshed(f) { return { ...f, candidate: git(f.dir, ["rev-parse", "HEAD"]), tree: git(f.dir, ["rev-parse", "HEAD^{tree}"]) }; }
-function responseFrom(request, verdict = "GO") {
-  const text = JSON.parse(request.body).contents[0].parts[0].text;
-  const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1];
-  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]);
-  const done = text.match(/PIL-DONE-[0-9a-f]+/)[0];
-  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\nVERDICT: ${verdict}\nINSPECTED SCOPE: ${scope}\nINGESTION PROOF: ${markers.join(" | ")}\n${done}` }] } }] }) };
+function component(f, kind) {
+  const bytes = kind === "frozen_source" ? execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]) : execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]);
+  return { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, path: "src.mjs", component_kind: kind, component_byte_length: bytes.length, component_sha256: sha(bytes), byte_start: 0, byte_end: bytes.length, fragment_sha256: sha(bytes) };
 }
-async function withFetch(fn) {
-  const previousFetch = globalThis.fetch, previousKey = process.env[syntheticEnvKey]; process.env[syntheticEnvKey] = ["test", "key"].join("-");
-  try { return await fn(); } finally { globalThis.fetch = previousFetch; if (previousKey === undefined) delete process.env[syntheticEnvKey]; else process.env[syntheticEnvKey] = previousKey; process.exitCode = 0; }
+function manifest(f) {
+  const source = component(f, "frozen_source"), diff = component(f, "per_file_diff"), boundaries = Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }]));
+  const value = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [
+    { name: "coverage-source", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [source] },
+    { name: "coverage-diff", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [diff] },
+    { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [source, diff], boundaries }
+  ] };
+  writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+  const finger = invoke(f, ["--slice-manifest", "plan.json", "--fingerprint"]); assert.equal(finger.status, 0, finger.stderr); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(finger.stdout).plan_id }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
 }
-function plan(f, mutate = {}) {
-  const base = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [{ name: "coverage", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"] }, { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) }] };
-  Object.assign(base, mutate); const file = path.join(f.dir, "plan.json"); writeFileSync(file, JSON.stringify(base)); return file;
+function args(f, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", ...extra]; }
+function invoke(f, extra = []) { return spawnSync(process.execPath, [runner, ...args(f, extra)], { encoding: "utf8" }); }
+function exportHandoff(f) { manifest(f); const result = invoke(f, ["--slice-manifest", "plan.json", "--handoff-export", ".gemini-gate/handoff"]); assert.equal(result.status, 0, result.stderr); return JSON.parse(result.stdout); }
+function reply(packet, verdict) {
+  const scope = packet.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1], markers = [...packet.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = packet.match(/PIL-DONE-[0-9a-f]+/)[0];
+  return `finding\nVERDICT: ${verdict}\nINSPECTED SCOPE: ${scope}\nINGESTION PROOF: ${markers.join(" | ")}\n${done}\n`;
 }
-function multiFixture(withInstalledWrapper = false) {
-  const f = fixture({ withInstalledWrapper }), files = ["src.mjs"];
-  for (let index = 0; index < 3; index++) { const file = `slice-${index}.mjs`; writeFileSync(path.join(f.dir, file), `export const payload = "${"x".repeat(29000)}";\n`); files.push(file); }
-  git(f.dir, ["add", "."]); git(f.dir, ["commit", "-qm", "large candidate"]);
-  return { ...f, candidate: git(f.dir, ["rev-parse", "HEAD"]), tree: git(f.dir, ["rev-parse", "HEAD^{tree}"]), files };
-}
-function slicedPlan(f, slices) {
-  const coverage = f.files.map(file => ({ name: `coverage-${file}`, kind: "coverage", files: [file], contract_context: ["docs/contract.md"] }));
-  const final = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-  const value = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: f.files }, uncovered: [], slices: slices || [...coverage, final] };
-  writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value)); return value;
-}
-function sliceArgs(f, action) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--slice-manifest", "plan.json", action]; }
-function subscriptionArgs(f, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "subscription-rig", "--transport", "subscription", "--context", "docs/contract.md", ...extra]; }
-function fakeAgy() {
-  const support = mkdtempSync(path.join(os.tmpdir(), "fake-agy-")), binary = path.join(support, "agy"), home = path.join(support, "home"), marker = path.join(support, "calls.ndjson"), childMarker = path.join(support, "child.pid"), ps = path.join(support, "ps");
-  mkdirSync(path.join(home, ".gemini", "antigravity-cli"), { recursive: true }); writeFileSync(path.join(home, ".gemini", "antigravity-cli", "settings.json"), JSON.stringify({ trustedWorkspaces: [] }));
-  writeFileSync(binary, `#!/usr/bin/env node
-import fs from "node:fs";
-import { spawn } from "node:child_process";
-const args = process.argv.slice(2), mode = process.env.AGY_FAKE_MODE || "success", marker = process.env.AGY_FAKE_MARKER;
-if (args[0] === "--version") { process.stdout.write("agy 1.1.27\\n"); process.exit(0); }
-if (mode === "stdin-early-exit") process.exit(9);
-const stdin = fs.readFileSync(0, "utf8");
-let input; try { input = JSON.parse(stdin); } catch { process.exit(91); }
-if (!input || input.event !== "user" || !input.message || typeof input.message.content !== "string" || stdin.trim().split("\\n").length !== 1) process.exit(92);
-const prompt = input.message.content;
-if (marker) fs.appendFileSync(marker, JSON.stringify({ args, cwd: process.cwd(), stdin }) + "\\n");
-if (mode === "nonzero") process.exit(9);
-if (mode === "timeout") setInterval(() => {}, 1000);
-if (mode === "timeout-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); setInterval(() => {}, 1000); }
-if (mode === "overflow") { process.stdout.write("x".repeat(4 * 1024 * 1024 + 1)); setInterval(() => {}, 1000); }
-if (mode === "overflow-ignore-term") { process.on("SIGTERM", () => {}); setInterval(() => process.stdout.write("x".repeat(128 * 1024)), 0); }
-if (mode === "signal-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); setInterval(() => {}, 1000); }
-if (mode === "immediate-signal-child") { const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); process.kill(process.ppid, "SIGINT"); setInterval(() => {}, 1000); }
-if (mode === "double-signal-child") { process.on("SIGTERM", () => {}); const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" }); fs.writeFileSync(process.env.AGY_FAKE_CHILD_MARKER, String(child.pid)); process.kill(process.ppid, "SIGINT"); setTimeout(() => process.kill(process.ppid, "SIGTERM"), 50); setInterval(() => {}, 1000); }
-if (mode === "hold") { const until = Date.now() + 30000, cell = new Int32Array(new SharedArrayBuffer(4)); while (!fs.existsSync(process.env.AGY_FAKE_RELEASE_FILE) && Date.now() < until) Atomics.wait(cell, 0, 0, 25); if (!fs.existsSync(process.env.AGY_FAKE_RELEASE_FILE)) process.exit(9); }
-if (mode === "malformed") { process.stdout.write("not-json\\n"); process.exit(0); }
-const model = args[args.indexOf("--model") + 1];
-const scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0];
-const emit = value => process.stdout.write(JSON.stringify(value) + "\\n");
-const conversation = "conversation-1", otherConversation = "conversation-2", usage = { input_tokens: 1, output_tokens: 2, thinking_tokens: 3, cache_read_tokens: 4, total_tokens: 10 };
-emit({ event: "init", conversation_id: conversation, init: { cwd: process.cwd(), tools: mode === "init-tool-list" ? ["read_file"] : [], permission_mode: "request-review", model } });
-if (mode === "tool" || mode === "canceled") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "tool", state: "DONE", tool_info: {} } });
-if (mode === "subagent") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", subagent_info: {} } });
-if (mode === "tool-like") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", tool_output: "forged" } });
-if (mode === "step-extra") emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "agent_response", state: "DONE", extra: "forged" } });
-if (! ["tool", "canceled", "subagent", "tool-like", "step-extra"].includes(mode)) { emit({ event: "step_update", step_update: { conversation_id: conversation, step_index: 0, step_type: "checkpoint", state: "DONE" } }); emit({ event: "step_update", step_update: { conversation_id: mode === "step-conversation-mismatch" ? otherConversation : conversation, step_index: 1, step_type: "agent_response", state: "DONE", text_delta: "", duration_seconds: 0.01, usage } }); }
-if (mode === "workspace") fs.writeFileSync("unexpected.txt", "write");
-if (mode === "stderr") process.stderr.write("permission notice\\n");
-if (mode === "canceled") { emit({ event: "result", result: { conversation_id: conversation, status: "CANCELED", response: "", duration_seconds: 0.01, num_turns: 1, usage, denied_actions: ["read_file"] } }); process.exit(0); }
-if (mode === "measured-error") { emit({ event: "result", result: { conversation_id: conversation, status: "ERROR", response: "", duration_seconds: 0.01, num_turns: 1, usage, error: "synthetic measured provider error" } }); process.exit(0); }
-const response = mode === "missing" ? "findings\\nVERDICT: GO" : "findings\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done + "\\n";
-if (mode === "top-level-result") { emit({ event: "result", conversation_id: conversation, status: "SUCCESS", response, duration_seconds: 0.02, num_turns: 1, usage }); process.exit(0); }
-emit({ event: "result", result: { conversation_id: mode === "result-conversation-mismatch" ? otherConversation : conversation, status: "SUCCESS", response, duration_seconds: 0.02, num_turns: 1, usage, ...(mode === "result-extra" ? { tool_output: "forged" } : {}) } });
-`); chmodSync(binary, 0o755);
-  writeFileSync(ps, "#!/bin/sh\nprintf 'Thu Jan 01 00:00:00 1970\\n'\n"); chmodSync(ps, 0o755);
-  return { support, binary, home, marker, childMarker };
-}
-function fingerprint(f) { const r = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout).plan_id; }
-function fragment(f, kind, start, end, pathname = "src.mjs") {
-  const commit = kind === "deleted_source" ? f.base : f.candidate;
-  const bytes = kind === "per_file_diff" ? Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", pathname])) : Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${commit}:${pathname}` ]));
-  const part = bytes.subarray(start, end), digest = value => crypto.createHash("sha256").update(value).digest("hex");
-  return { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, path: pathname, component_kind: kind, component_byte_length: bytes.length, component_sha256: digest(bytes), byte_start: start, byte_end: end, fragment_sha256: digest(part) };
-}
-function generatedArgs(f, output = ".gemini-gate/generated/manifest.json") { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--context", "docs/contract.md", "--generate-slice-plan", output]; }
-function generatedPlan(f, output = ".gemini-gate/generated/manifest.json") {
-  const result = spawnSync(process.execPath, [runner, ...generatedArgs(f, output)], { encoding: "utf8" }); assert.equal(result.status, 0, result.stderr);
-  return { result: JSON.parse(result.stdout), plan: JSON.parse(readFileSync(path.join(f.dir, output), "utf8")), output };
-}
-function componentForFragment(f, item) {
-  const commit = item.component_kind === "deleted_source" ? f.base : f.candidate;
-  return item.component_kind === "per_file_diff" ? Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", item.path])) : Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${commit}:${item.path}`]));
-}
-function assertGeneratedPartitions(f, plan) {
-  const all = plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments);
-  for (const key of new Set(all.map(item => `${item.path}\0${item.component_kind}`))) {
-    const items = all.filter(item => `${item.path}\0${item.component_kind}` === key), bytes = componentForFragment(f, items[0]); let offset = 0;
-    for (const item of items) { assert.equal(item.byte_start, offset, `${key} has a coverage gap`); assert.deepEqual(Buffer.from(item.fragment_sha256, "hex").length, 32); offset = item.byte_end; }
-    assert.equal(offset, bytes.length, `${key} is fully reconstructed`);
-  }
-}
+function packets(f) { const root = path.join(f.dir, ".gemini-gate", "handoff"); return JSON.parse(readFileSync(path.join(root, "handoff.json"), "utf8")).packets.map(item => readFileSync(path.join(root, "packets", item.filename), "utf8")); }
+function replies(f, verdicts) { const dir = path.join(f.dir, ".gemini-gate", "handoff", "replies"); for (const [index, verdict] of verdicts.entries()) writeFileSync(path.join(dir, `${String(index + 1).padStart(4, "0")}.txt`), reply(packets(f)[index], verdict)); }
+function importHandoff(f) { return invoke(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]); }
 
-test("frozen dry-run has a stable material/request identity and ignores replace objects", () => {
+test("export is local-only and binds deterministic packets to the exact approved plan", () => {
   const f = fixture(); try {
-    const first = dry(f); assert.equal(first.status, 0, first.stderr); const baseline = JSON.parse(first.stdout);
-    const second = dry(f); assert.deepEqual(JSON.parse(second.stdout).envelopes, baseline.envelopes);
-    git(f.dir, ["replace", f.base, f.candidate]); const replaced = dry(f); assert.equal(replaced.status, 0, replaced.stderr); assert.deepEqual(JSON.parse(replaced.stdout).envelopes, baseline.envelopes);
+    const source = readFileSync(runner, "utf8"); assert.doesNotMatch(source, /\bfetch\s*\(/); assert.doesNotMatch(source, /\bspawn\s*\(/); assert.doesNotMatch(source, /antigravity-cli|GEMINI_API_KEY/);
+    const output = exportHandoff(f), handoff = JSON.parse(readFileSync(path.join(f.dir, ".gemini-gate/handoff/handoff.json"), "utf8"));
+    assert.match(output.handoff_id, /^PIL-GEMINI-HANDOFF-[0-9a-f]{24}$/); assert.equal(handoff.tuple.candidate, f.candidate); assert.equal(handoff.plan_id.length, 64); assert.equal(handoff.manual_transport.model, "gemini-3.1-pro-high"); assert.equal(handoff.packets.length, 3); assert.equal(existsSync(path.join(f.dir, journal)), false); assert.deepEqual(readdirSync(path.join(f.dir, ".gemini-gate/handoff/replies")), []);
+    assert.ok(handoff.packets.every(item => item.prompt_sha256 === sha(readFileSync(path.join(f.dir, ".gemini-gate/handoff/packets", item.filename)))));
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("exact tuple, clean endpoint, regular files, and non-escaping manifests fail closed", () => {
+test("all verified manual GO replies append ordered receipts and aggregate GO, then refuse replay", () => {
   const f = fixture(); try {
-    assert.notEqual(dry(f, ["--tree", "0".repeat(40)]).status, 0);
-    writeFileSync(path.join(f.dir, "unrelated.txt"), "dirty\n"); assert.notEqual(dry(f).status, 0); unlinkSync(path.join(f.dir, "unrelated.txt"));
-    const outside = path.join(path.dirname(f.dir), "outside-plan.json"); writeFileSync(outside, "{}");
-    const escaped = spawnSync(process.execPath, [runner, "--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "../outside-plan.json", "--fingerprint"], { encoding: "utf8" }); assert.notEqual(escaped.status, 0); rmSync(outside, { force: true });
-    writeFileSync(path.join(f.dir, "real-plan.json"), "{}"); symlinkSync("real-plan.json", path.join(f.dir, "plan.json"));
-    const linked = spawnSync(process.execPath, [runner, "--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { encoding: "utf8" }); assert.notEqual(linked.status, 0);
+    exportHandoff(f); replies(f, ["GO", "GO", "GO"]); const result = importHandoff(f); assert.equal(result.status, 0, result.stderr);
+    const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((text.match(/Status: `PASS_VERDICT`/g) || []).length, 4); assert.match(text, /Release-Gate: `YES`/); assert.match(text, /Slice: `aggregate`/); assert.match(text, /Handoff-ID: `PIL-GEMINI-HANDOFF-/); const replay = importHandoff(f); assert.equal(replay.status, 3); assert.match(replay.stderr, /already has a complete durable receipt/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("type changes and malformed slice plans refuse before a review", () => {
+test("source-only NO-GO is retained as attribution hold after later GO replies", () => {
   const f = fixture(); try {
-    unlinkSync(path.join(f.dir, "src.mjs")); symlinkSync("docs/contract.md", path.join(f.dir, "src.mjs")); git(f.dir, ["add", "-A"]); git(f.dir, ["commit", "-qm", "symlink"]);
-    const typeChanged = { ...f, candidate: git(f.dir, ["rev-parse", "HEAD"]), tree: git(f.dir, ["rev-parse", "HEAD^{tree}"]) }; assert.notEqual(dry(typeChanged).status, 0);
+    exportHandoff(f); replies(f, ["NO-GO", "GO", "GO"]); const result = importHandoff(f); assert.equal(result.status, 3, result.stderr);
+    const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(text, /Status: `UNRESOLVED_ATTRIBUTION`/); assert.match(text, /Status: `ATTRIBUTION_HOLD`/); assert.doesNotMatch(text, /Slice: `aggregate`[\s\S]*Release-Gate: `YES`/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
-  const g = fixture(); try {
-    plan(g, { slices: [{ name: "only", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"] }, { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], boundaries: {} }] });
-    const r = spawnSync(process.execPath, [runner, "--repo", g.dir, "--base", g.base, "--candidate", g.candidate, "--tree", g.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { encoding: "utf8" }); assert.notEqual(r.status, 0);
-  } finally { rmSync(g.dir, { recursive: true, force: true }); }
 });
-test("committed invariant and context symlinks refuse before fetch", async () => {
-  for (const f of [fixture({ invariantSymlink: true }), fixture({ contextSymlink: true })]) try { await withFetch(async () => {
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); };
-    await assert.rejects(run(args(f))); assert.equal(calls, 0);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
+test("a final supplied diff NO-GO is terminal and permits no aggregate", () => {
+  const f = fixture(); try {
+    exportHandoff(f); replies(f, ["GO", "NO-GO"]); const result = importHandoff(f); assert.equal(result.status, 3, result.stderr);
+    const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(text, /Slice: `coverage-diff`[\s\S]*Status: `NO_GO`|Status: `NO_GO`[\s\S]*Slice: `coverage-diff`/); assert.doesNotMatch(text, /Record-Kind: `SLICE_SET`/);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("bounded credential labels refuse values while placeholder configuration remains reviewable", async () => {
-  const f = fixture(), benign = fixture(); try { await withFetch(async () => {
-    writeFileSync(path.join(f.dir, "src.mjs"), syntheticAssignment(["DB", "PASSWORD"], ["really", "secret"])); git(f.dir, ["add", "src.mjs"]); git(f.dir, ["commit", "-qm", "credential"]); const credentialCase = refreshed(f);
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(credentialCase))); assert.equal(calls, 0);
-    writeFileSync(path.join(benign.dir, "src.mjs"), ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join("")); git(benign.dir, ["add", "src.mjs"]); git(benign.dir, ["commit", "-qm", "placeholder"]); assert.equal(dry(refreshed(benign)).status, 0);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(benign.dir, { recursive: true, force: true }); }
+test("tampered packets and incomplete, nonterminal replies fail before journal mutation", () => {
+  const f = fixture(), g = fixture(); try {
+    exportHandoff(f); writeFileSync(path.join(f.dir, ".gemini-gate/handoff/packets/0001.txt"), "tampered\n"); const tampered = importHandoff(f); assert.equal(tampered.status, 3); assert.equal(existsSync(path.join(f.dir, journal)), false);
+    exportHandoff(g); replies(g, ["NO-GO"]); const partial = importHandoff(g); assert.equal(partial.status, 3); assert.equal(existsSync(path.join(g.dir, journal)), false);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(g.dir, { recursive: true, force: true }); }
 });
-test("final supplied material refuses deleted credentials before dry-run or fetch", async () => {
-  const credentialFixture = fixture({ baseSource: [syntheticAssignment(["API", "KEY"], ["reallysecretvalue"]), syntheticAssignment(["DB", "PASSWORD"], ["alsosecretvalue"])].join(""), candidateSource: "export const removed = true;\n" }), placeholder = fixture({ baseSource: ["export const ", ["DB", "PASSWORD"].join("_"), " = '${DB_PASSWORD}';\n"].join(""), candidateSource: "export const removed = true;\n" }); try { await withFetch(async () => {
-    assert.notEqual(dry(credentialFixture).status, 0);
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(credentialFixture))); assert.equal(calls, 0);
-    assert.equal(dry(placeholder).status, 0);
-  }); } finally { rmSync(credentialFixture.dir, { recursive: true, force: true }); rmSync(placeholder.dir, { recursive: true, force: true }); }
-});
-test("ordinary additions reach envelope assembly while exact renames refuse", () => {
-  const f = fixture(), renamed = fixture(); try {
-    writeFileSync(path.join(f.dir, "ordinary-added.mjs"), "export const ordinary = true;\n"); git(f.dir, ["add", "ordinary-added.mjs"]); git(f.dir, ["commit", "-qm", "ordinary add"]); assert.equal(dry(refreshed(f)).status, 0);
-    git(renamed.dir, ["mv", "src.mjs", "renamed.mjs"]); writeFileSync(path.join(renamed.dir, "renamed.mjs"), "export const before = 1;\n"); git(renamed.dir, ["add", "renamed.mjs"]); git(renamed.dir, ["commit", "-qm", "exact rename"]); assert.notEqual(dry(refreshed(renamed)).status, 0);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(renamed.dir, { recursive: true, force: true }); }
-});
-test("journal paths, ambient Git locations, and hidden untracked files refuse before fetch", async () => {
-  const f = fixture(), external = path.join(os.tmpdir(), `gemini-external-${process.pid}.md`); try { await withFetch(async () => {
-    writeFileSync(external, "outside sentinel\n"); mkdirSync(path.join(f.dir, "docs", "journal"), { recursive: true }); symlinkSync(external, path.join(f.dir, "docs", "journal", "gemini_review_log.md"));
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(f))); assert.equal(calls, 0); assert.equal(readFileSync(external, "utf8"), "outside sentinel\n"); unlinkSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md")); rmSync(path.join(f.dir, "docs", "journal"), { recursive: true, force: true });
-    const oldIndex = process.env.GIT_INDEX_FILE; process.env.GIT_INDEX_FILE = path.join(f.dir, "redirected-index"); try { await assert.rejects(run(args(f))); assert.equal(calls, 0); } finally { if (oldIndex === undefined) delete process.env.GIT_INDEX_FILE; else process.env.GIT_INDEX_FILE = oldIndex; }
-    git(f.dir, ["config", "status.showUntrackedFiles", "no"]); writeFileSync(path.join(f.dir, "hidden.txt"), "must still be dirt\n"); assert.notEqual(dry(f).status, 0);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(external, { force: true }); }
-});
-test("a new journal directory is sanctioned alone but no sibling dirt is", async () => {
-  const f = fixture({ noDocs: true }); try { await withFetch(async () => {
-    let calls = 0; globalThis.fetch = async (_url, request) => { calls += 1; return responseFrom(request); }; await run(contextArgs(f, "core/INVARIANTS.md")); assert.equal(calls, 1); assert.ok(existsSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md")));
-    writeFileSync(path.join(f.dir, "docs", "journal", "sibling.md"), "unrelated dirt\n"); calls = 0; await assert.rejects(run(contextArgs(f, "core/INVARIANTS.md"))); assert.equal(calls, 0);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("the shared legacy lock refuses direct provider entry before fetch", async () => {
-  const f = fixture(); try { await withFetch(async () => {
-    const common = path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), lock = path.join(common, "cold-review-gemini.lock"), wrapperSource = readFileSync(wrapper, "utf8"); mkdirSync(lock); writeFileSync(path.join(lock, "owner"), "pid=999999\nrepo=legacy\n");
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); }; await assert.rejects(run(args(f))); assert.equal(calls, 0);
-    assert.match(wrapperSource, /LOCK_DIR="\$common\/cold-review-gemini\.lock"/); assert.ok(wrapperSource.indexOf("acquire_single_flight; fi") < wrapperSource.indexOf("resolve_agy()"));
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("frozen-only wrapper options refuse before legacy agy discovery", () => {
-  const fake = path.join(os.tmpdir(), `gemini-frozen-intent-${process.pid}`), marker = `${fake}.called`; try {
-    writeFileSync(fake, `#!/bin/sh\nprintf called > '${marker}'\n`); chmodSync(fake, 0o755);
-    for (const argv of [["--fingerprint"], ["--gemini-model", "gemini-3-pro"], ["--base", "a".repeat(40)]]) {
-      const result = spawnSync("bash", [wrapper, ...argv], { cwd: root, encoding: "utf8", env: { ...process.env, GEMINI_AGY_BIN: fake, GEMINI_ALLOW_CODE_MODE: "1" } }); assert.equal(result.status, 2, result.stderr); assert.equal(existsSync(marker), false);
-    }
-  } finally { rmSync(fake, { force: true }); rmSync(marker, { force: true }); }
-});
-test("public wrapper reaches frozen full dry-run and sliced fingerprint", () => {
-  const full = fixture({ withInstalledWrapper: true }), sliced = multiFixture(true); try {
-    const fullWrapper = path.join(full.dir, "scripts", "cold-review-gemini.sh"), fullResult = spawnSync("bash", [fullWrapper, "--base", full.base, "--candidate", full.candidate, "--tree", full.tree, "--rig-id", "test-rig", "--context", "docs/contract.md", "--dry-run"], { cwd: full.dir, encoding: "utf8" });
-    assert.equal(fullResult.status, 0, fullResult.stderr); assert.equal(JSON.parse(fullResult.stdout).frozen.candidate, full.candidate);
-    slicedPlan(sliced); const slicedWrapper = path.join(sliced.dir, "scripts", "cold-review-gemini.sh"), slicedResult = spawnSync("bash", [slicedWrapper, "--base", sliced.base, "--candidate", sliced.candidate, "--tree", sliced.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { cwd: sliced.dir, encoding: "utf8" });
-    assert.equal(slicedResult.status, 0, slicedResult.stderr); assert.match(slicedResult.stdout, /"plan_id"\s*:/);
-  } finally { rmSync(full.dir, { recursive: true, force: true }); rmSync(sliced.dir, { recursive: true, force: true }); }
-});
-test("missing, option-shaped, and unknown entrypoint values refuse before dispatch", () => {
-  const fake = path.join(os.tmpdir(), `gemini-frozen-malformed-${process.pid}`), marker = `${fake}.called`;
-  try {
-    writeFileSync(fake, `#!/bin/sh\nprintf called > '${marker}'\n`); chmodSync(fake, 0o755);
-    for (const argv of [["--context"], ["--context", ""], ["--context", "--base"], ["--bogus", "value"]]) {
-      const wrapperResult = spawnSync("bash", [wrapper, ...argv], { cwd: root, encoding: "utf8", env: { ...process.env, GEMINI_AGY_BIN: fake, GEMINI_ALLOW_CODE_MODE: "1" } });
-      assert.equal(wrapperResult.status, 2, `${argv}: ${wrapperResult.stderr}`); assert.equal(existsSync(marker), false);
-    }
-    const f = fixture(); try {
-      for (const argv of [["--context", "--base"], ["--unknown", "value"]]) {
-        const directResult = spawnSync(process.execPath, [runner, ...args(f, argv)], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "unused" } });
-        assert.equal(directResult.status, 2, `${argv}: ${directResult.stderr}`);
-      }
-    } finally { rmSync(f.dir, { recursive: true, force: true }); }
-  } finally { rmSync(fake, { force: true }); rmSync(marker, { force: true }); }
-});
-test("response firewall refuses old mixed parts, conflicting verdicts, and incomplete proof", () => {
-  const e = { scope: "{\"slice\":\"full\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"], done: "PIL-DONE-test" };
-  const text = `VERDICT: GO\nINSPECTED SCOPE: ${e.scope}\nINGESTION PROOF: ${e.markers.join(" | ")}\n${e.done}`;
-  assert.equal(verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text }] } }] }, e).verdict, "GO");
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, thought: "old runner accepted this" }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `${text}\nVERDICT: NO-GO` }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.markers[2], "missing") }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace("VERDICT: GO", "VERDICT: go") }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.done, "") }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `${text}\ntrailing` }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: text.replace(e.done, `${e.done}\nfindings`) }] } }] }, e));
-  assert.equal(verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, thoughtSignature: "opaque-provider-signature" }] } }] }, e).verdict, "GO");
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, executableCode: { code: "x" } }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, functionCall: { name: "x" } }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, inlineData: { mimeType: "text/plain", data: "eA==" } }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "" }] } }] }, e));
-  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text }] } }] }, e));
-  const runnerText = readFileSync(runner, "utf8"); assert.doesNotMatch(runnerText, /--add-dir|dangerously-skip-permissions|--new-project|--mode\s+plan/);
-});
-test("subscription transport validates settings and sends its complete prompt only on standard input", () => {
-  const f = fixture(), fake = fakeAgy(); try {
-    const result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker } });
-    assert.equal(result.status, 0, result.stderr); const calls = readFileSync(fake.marker, "utf8").trim().split("\n").map(JSON.parse); assert.equal(calls.length, 1);
-    assert.equal(calls[0].cwd.startsWith(f.dir), false); assert.ok(!existsSync(calls[0].cwd));
-    const input = JSON.parse(calls[0].stdin); assert.deepEqual(Object.keys(input), ["event", "message"]); assert.equal(input.event, "user"); assert.equal(typeof input.message.content, "string"); assert.ok(input.message.content.includes(f.candidate));
-    assert.ok(!calls[0].args.includes("-p")); assert.ok(!calls[0].args.some(arg => arg.includes("=== NORMALIZED INSPECTED SCOPE ===")));
-    assert.ok(calls[0].args.includes("--sandbox")); assert.ok(calls[0].args.includes("--disable-slash-commands")); assert.ok(calls[0].args.includes("--input-format")); assert.ok(calls[0].args.includes("--output-format")); assert.ok(calls[0].args.includes("stream-json"));
-    assert.ok(!calls[0].args.includes("--add-dir")); assert.ok(!calls[0].args.includes("--new-project")); assert.ok(!calls[0].args.includes("--dangerously-skip-permissions")); assert.ok(!calls[0].args.includes("--mode")); assert.ok(calls[0].args.includes("600s"));
-    assert.equal(readFileSync(path.join(f.dir, "unchanged.md"), "utf8"), "UNRELATED-SENTINEL\n"); const log = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(log, /Transport: `antigravity-agy-subscription-stream-v1`[\s\S]*Transport-Identity: `[^`]*agy 1\.1\.27[\s\S]*Model: `gemini-3\.1-pro-high`/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("subscription stream accepts the measured nested success result and rejects tool-like or unknown event fields", () => {
-  for (const [mode, expected] of [["init-tool-list", 0], ["top-level-result", 3], ["tool-like", 3], ["step-extra", 3], ["result-extra", 3], ["step-conversation-mismatch", 3], ["result-conversation-mismatch", 3]]) {
-    const f = fixture(), fake = fakeAgy(); try {
-      const result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_MODE: mode } });
-      assert.equal(result.status, expected, `${mode}: ${result.stderr}`);
-    } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-  }
-});
-test("subscription stream accepts the measured nested error result shape before failing its non-verdict status", () => {
-  const f = fixture(), fake = fakeAgy(); try {
-    const result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_MODE: "measured-error" } });
-    assert.equal(result.status, 3, result.stderr); assert.match(result.stderr, /not one clean successful nonempty result/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("subscription transport rejects tool activity, canceled actions, malformed and incomplete output, nonzero, input failure, hard-cap overflow, stderr, and workspace mutation", () => {
-  const modes = ["tool", "canceled", "malformed", "missing", "nonzero", "stdin-early-exit", "stderr", "workspace", "subagent", "tool-like", "step-extra", "result-extra", "step-conversation-mismatch", "result-conversation-mismatch", "timeout", "overflow", "overflow-ignore-term", "timeout-child"];
-  for (const mode of modes) {
-    const f = fixture(), fake = fakeAgy(); try {
-      const extra = ["--agy-bin", fake.binary, ...(mode.includes("timeout") ? ["--timeout-seconds", "1"] : [])], result = spawnSync(process.execPath, [runner, ...subscriptionArgs(f, extra)], { encoding: "utf8", timeout: 7000, env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: mode } });
-      assert.equal(result.status, 3, `${mode}: ${result.stderr}`); assert.equal(readFileSync(path.join(f.dir, "unchanged.md"), "utf8"), "UNRELATED-SENTINEL\n");
-      if (mode === "timeout-child") { const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0)); }
-    } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-  }
-});
-test("subscription platform gate holds Windows until process-group teardown is owned", () => {
-  assert.throws(() => assertSubscriptionPlatform("win32"), /unavailable on Windows/);
-  assert.doesNotThrow(() => assertSubscriptionPlatform("darwin"));
-});
-test("subscription SIGINT tears down descendants, records non-verdict evidence, and returns 130", async () => {
-  const f = fixture(), fake = fakeAgy(); let child = null;
-  try {
-    child = spawn(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: "signal-child" } });
-    const closed = new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal })));
-    for (let attempt = 0; attempt < 200 && !existsSync(fake.childMarker); attempt++) await new Promise(resolve => setTimeout(resolve, 10));
-    assert.ok(existsSync(fake.childMarker), "fake subscription child was not started");
-    child.kill("SIGINT"); const outcome = await closed; assert.equal(outcome.code, 130, `runner exited ${outcome.code} (${outcome.signal || "no signal"})`);
-    const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0));
-    const log = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(log, /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
-  } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("subscription handles an immediate provider SIGINT after listener attachment", async () => {
-  const f = fixture(), fake = fakeAgy(); let child = null;
-  try {
-    child = spawn(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: "immediate-signal-child" } });
-    const outcome = await new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal }))); assert.equal(outcome.code, 130, `runner exited ${outcome.code} (${outcome.signal || "no signal"})`);
-    const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0));
-    assert.match(readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"), /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
-  } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("subscription coalesces a second signal until TERM-ignoring descendants are killed", async () => {
-  const f = fixture(), fake = fakeAgy(); let child = null;
-  try {
-    child = spawn(process.execPath, [runner, ...subscriptionArgs(f, ["--agy-bin", fake.binary])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_CHILD_MARKER: fake.childMarker, AGY_FAKE_MODE: "double-signal-child" } });
-    const outcome = await new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal }))); assert.equal(outcome.code, 130, `runner exited ${outcome.code} (${outcome.signal || "no signal"})`);
-    const pid = Number(readFileSync(fake.childMarker, "utf8")); assert.throws(() => process.kill(pid, 0));
-    assert.match(readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"), /Status: `FAILED_TRANSPORT`[\s\S]*interrupted by SIGINT/);
-  } finally { if (child && child.exitCode === null) child.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("repository invariant, operator contract, and runner default agree on subscription dispatch", () => {
-  const invariant = readFileSync(path.join(root, "core", "REPO_INVARIANTS.md"), "utf8"), gates = readFileSync(path.join(root, "core", "GATES.md"), "utf8"), source = readFileSync(runner, "utf8");
-  assert.match(invariant, /defaults to the\n  disposable, stream-verified subscription transport; direct Gemini REST is explicit-only/);
-  assert.match(gates, /ordinary non-API path is the explicit subscription\ntransport/);
-  assert.match(source, /transport: "subscription"/);
-  assert.match(source, /"--input-format", "stream-json"/);
-  assert.doesNotMatch(invariant, /frozen tuple path uses the direct/);
-  assert.match(gates, /legacy INLINE and FILE runner paths never use stdin[\s\S]*frozen subscription transport uses exactly\n+one NDJSON standard-input user event/);
-  assert.match(gates, /frozen subscription runner's handled `INT` \/ `TERM` exits after owned-group/);
-  assert.doesNotMatch(gates, /^The runner never uses stdin\.$|Never re-add stdin;/m);
-});
-test("subscription aggregate preserves frozen tuple and installed wrapper forwarding", () => {
-  const f = fixture({ withInstalledWrapper: true }), fake = fakeAgy(); try {
-    const value = plan(f), baseArgs = ["--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "subscription-rig", "--transport", "subscription", "--agy-bin", fake.binary, "--slice-manifest", "plan.json"], fingerprintResult = spawnSync("bash", [path.join(f.dir, "scripts", "cold-review-gemini.sh"), ...baseArgs, "--fingerprint"], { cwd: f.dir, encoding: "utf8" });
-    assert.equal(fingerprintResult.status, 0, fingerprintResult.stderr); const planValue = JSON.parse(readFileSync(value, "utf8")); planValue.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(fingerprintResult.stdout).plan_id }; writeFileSync(value, JSON.stringify(planValue));
-    const result = spawnSync("bash", [path.join(f.dir, "scripts", "cold-review-gemini.sh"), ...baseArgs, "--run-slices"], { cwd: f.dir, encoding: "utf8", env: { ...process.env, PATH: `${fake.support}:${process.env.PATH}`, HOME: fake.home, AGY_FAKE_MARKER: fake.marker } }); assert.equal(result.status, 0, result.stderr);
-    const calls = readFileSync(fake.marker, "utf8").trim().split("\n").map(JSON.parse); assert.equal(calls.length, 2); for (const call of calls) { assert.equal(JSON.parse(call.stdin).event, "user"); assert.ok(!call.args.includes("-p")); }
-    const log = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `YES`[\s\S]*Transport: `antigravity-agy-subscription-stream-v1`/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("subscription settings reject permissive and malformed allow rules", () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "agy-settings-")); try {
-    const settings = path.join(dir, "settings.json");
-    for (const value of [{ toolPermission: "proceed-in-sandbox" }, { allowNonWorkspaceAccess: true }, { permissions: { allow: ["command(*)"] } }, { permissions: { allow: "invalid" } }]) { writeFileSync(settings, JSON.stringify(value)); assert.throws(() => preflightSubscriptionSettings(settings)); }
-    writeFileSync(settings, JSON.stringify({ trustedWorkspaces: [] })); assert.match(preflightSubscriptionSettings(settings).identity, /^settings-sha256:/);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-test("live no-log is refused before fetch", async () => {
-  const f = fixture(); try { await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls += 1; return responseFrom({ body: "{}" }); }; await assert.rejects(run(args(f, ["--no-log"]))); assert.equal(calls, 0); }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("authorization assignments, deleted forms, and quoted Basic headers refuse while placeholders pass", () => {
-  const refused = [
-    fixture({ candidateSource: authorizationAssignment("Basic") }),
-    fixture({ baseSource: authorizationAssignment("Basic"), candidateSource: "export const removed = true;\n" }),
-    fixture({ candidateSource: authorizationHeader("Basic", true) }),
+test("tampered state, tuple, plan, endpoint, and reply enumeration fail before journal mutation", () => {
+  const cases = [
+    f => { const file = path.join(f.dir, ".gemini-gate/handoff/handoff.json"), value = JSON.parse(readFileSync(file, "utf8")); value.tuple.candidate = "0".repeat(40); writeFileSync(file, JSON.stringify(value)); },
+    f => { const file = path.join(f.dir, "plan.json"), value = JSON.parse(readFileSync(file, "utf8")); value.approval.expected_plan_id = "0".repeat(64); writeFileSync(file, JSON.stringify(value)); },
+    f => { replies(f, ["GO", "GO", "GO"]); writeFileSync(path.join(f.dir, ".gemini-gate/handoff/replies/0004.txt"), "extra\n"); },
+    f => { replies(f, ["GO"]); writeFileSync(path.join(f.dir, ".gemini-gate/handoff/replies/0002.txt"), reply(packets(f)[1], "GO")); },
+    f => { writeFileSync(path.join(f.dir, "outside.txt"), "dirty\n"); }
   ];
-  const allowed = [
-    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic ${BASIC_AUTH}';\n" }),
-    fixture({ candidateSource: "Authorization: \"Basic $(read-auth)\"\n" }),
-    fixture({ candidateSource: "export const AUTHORIZATION = 'Basic $1';\n" }),
-  ];
-  try {
-    for (const f of refused) assert.notEqual(dry(f).status, 0);
-    for (const f of allowed) assert.equal(dry(f).status, 0, dry(f).stderr);
-  } finally { for (const f of [...refused, ...allowed]) rmSync(f.dir, { recursive: true, force: true }); }
+  for (const mutate of cases) { const f = fixture(); try { exportHandoff(f); mutate(f); const result = importHandoff(f); assert.notEqual(result.status, 0, result.stderr); assert.equal(existsSync(path.join(f.dir, journal)), false); } finally { rmSync(f.dir, { recursive: true, force: true }); } }
+  const linked = fixture(); try { exportHandoff(linked); const packetsDir = path.join(linked.dir, ".gemini-gate/handoff/packets"), saved = path.join(linked.dir, ".gemini-gate/handoff/packets-real"); renameSync(packetsDir, saved); symlinkSync("packets-real", packetsDir); const result = importHandoff(linked); assert.equal(result.status, 3); assert.equal(existsSync(path.join(linked.dir, journal)), false); } finally { rmSync(linked.dir, { recursive: true, force: true }); }
 });
-test("Authorization schemes reject short and punctuated credentials in current and deleted material before live fetch", async () => {
-  const basic = ["Ba", "sic"].join(""), token = ["To", "ken"].join(""), punctuated = ["X", "!", "^", "~", "|"].join(""), one = shortCredential("x"), two = shortCredential("y");
-  const refused = [
-    fixture({ candidateSource: authorizationHeader(basic, false, one) }),
-    fixture({ candidateSource: authorizationHeader(token, false, two) }),
-    fixture({ candidateSource: authorizationHeader(punctuated, false, one) }),
-    fixture({ baseSource: authorizationHeader(basic, false, one), candidateSource: "export const removed = true;\n" }),
-    fixture({ baseSource: authorizationAssignment(token, two), candidateSource: "export const removed = true;\n" }),
-    fixture({ baseSource: authorizationHeader(punctuated, false, two), candidateSource: "export const removed = true;\n" }),
-  ];
-  const placeholders = [
-    fixture({ candidateSource: "export const AUTHORIZATION = 'Token ${TOKEN_AUTH}';\n" }),
-    fixture({ baseSource: "Authorization: Basic ${BASIC_AUTH}\n", candidateSource: "export const removed = true;\n" }),
-  ];
-  try { await withFetch(async () => {
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("must not fetch"); };
-    for (const f of refused) { await assert.rejects(run(args(f))); assert.equal(calls, 0); }
-    for (const f of placeholders) assert.equal(dry(f).status, 0, dry(f).stderr);
-  }); } finally { for (const f of [...refused, ...placeholders]) rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("verified GO and NO-GO print and persist complete records", async () => {
-  const f = fixture(); try { await withFetch(async () => {
-    globalThis.fetch = async (_url, request) => { const body = JSON.parse(request.body); assert.equal(body.tools, undefined); assert.equal(body.functionDeclarations, undefined); assert.doesNotMatch(JSON.stringify(body), /dangerous|functionCall/); assert.doesNotMatch(body.contents[0].parts[0].text, /UNRELATED-SENTINEL/); return responseFrom(request, "GO"); }; let printed = "", write = process.stdout.write; process.stdout.write = value => { printed += value; return true; };
-    try { await run(args(f)); } finally { process.stdout.write = write; }
-    let log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(printed, /VERDICT: GO/); assert.match(log, /Reply-UTF8-Base64/); assert.match(log, /Complete-Record: `YES`/);
-    globalThis.fetch = async (_url, request) => responseFrom(request, "NO-GO"); await run(args(f)); log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Status: `NO_GO`/);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("incomplete journal records do not cache a transport failure and endpoint mutation cannot release", async () => {
-  const f = fixture(); try { await withFetch(async () => {
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("Gemini provider returned HTTP 503"); }; await assert.rejects(run(args(f)));
-    const journal = path.join(f.dir, "docs/journal/gemini_review_log.md"), size = readFileSync(journal).length; truncateSync(journal, size - 20);
-    globalThis.fetch = async (_url, request) => { calls += 1; return responseFrom(request); }; await run(args(f)); assert.equal(calls, 2);
-    globalThis.fetch = async (_url, request) => { writeFileSync(path.join(f.dir, "mutated.txt"), "after preflight\n"); return responseFrom(request); }; await assert.rejects(run(args(f))); assert.doesNotMatch(readFileSync(journal, "utf8"), /mutated\.txt[\s\S]*Release-Gate: `YES`/);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("a complete timeout record blocks unchanged-rig retries before fetch", async () => {
-  const f = fixture(); try { await withFetch(async () => {
-    let calls = 0; globalThis.fetch = async () => { calls += 1; throw new Error("Gemini provider timed out"); }; await assert.rejects(run(args(f)));
-    globalThis.fetch = async (_url, request) => { calls += 1; return responseFrom(request); }; await assert.rejects(run(args(f))); assert.equal(calls, 1);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("oversized full artifacts refuse while an approved ordered slice set records aggregate GO and NO-GO", async () => {
-  const f = multiFixture(); try { await withFetch(async () => {
-    assert.notEqual(dry(f).status, 0, "full envelope must exceed the direct cap");
-    const draft = slicedPlan(f), planId = fingerprint(f); draft.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(draft));
-    let calls = 0; globalThis.fetch = async (_url, request) => { calls += 1; const body = JSON.parse(request.body); assert.equal(body.tools, undefined); assert.equal(body.functionDeclarations, undefined); assert.doesNotMatch(JSON.stringify(body), /dangerous|functionCall/); return responseFrom(request, "GO"); };
-    await run(sliceArgs(f, "--run-slices")); assert.equal(calls, f.files.length + 1); let log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `YES`[\s\S]*Gate-Verdict: `GO`[\s\S]*Inspected-Scope: `[\s\S]*Aggregate-Result-SHA256/);
-    calls = 0; globalThis.fetch = async (_url, request) => responseFrom(request, calls++ === 0 ? "NO-GO" : "GO"); await run(sliceArgs(f, "--run-slices")); log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `NO`[\s\S]*Gate-Verdict: `NO-GO`/);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("one oversized source and diff component reconstruct across bounded fragment slices", async () => {
-  const f = fixture({ candidateSource: `export const payload = "${"x".repeat(110000)}";\n` });
-  try { await withFetch(async () => {
-    assert.notEqual(dry(f).status, 0, "whole-file request must exceed the cap");
-    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
-    const limit = Math.max(source.length, diff.length), cuts = [0, 30000, 60000, 90000, limit], slices = [];
-    for (let i = 0; i < cuts.length - 1; i++) slices.push({ name: `coverage-${i}`, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(cuts[i], source.length), Math.min(cuts[i + 1], source.length)), fragment(f, "per_file_diff", Math.min(cuts[i], diff.length), Math.min(cuts[i + 1], diff.length))] });
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = { version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: f.base, candidate_commit: f.candidate, candidate_tree: f.tree, files: ["src.mjs"] }, uncovered: [], slices: [...slices, cross] };
-    writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value)); const planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request); }; await run(sliceArgs(f, "--run-slices")); assert.equal(calls, slices.length + 1);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("fragmented coverage cannot name an unfragmented second file before fingerprint or fetch", async () => {
-  const f = fixture(); try {
-    writeFileSync(path.join(f.dir, "other.mjs"), "export const other = true;\n"); git(f.dir, ["add", "other.mjs"]); git(f.dir, ["commit", "-qm", "second changed file"]);
-    Object.assign(f, refreshed(f), { files: ["other.mjs", "src.mjs"] });
-    const coverage = { name: "coverage", kind: "coverage", files: ["other.mjs", "src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, Buffer.byteLength("export const after = 2;\n")), fragment(f, "per_file_diff", 0, Buffer.byteLength(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])))] };
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan(f, [coverage, cross]); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: "0".repeat(64) }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const preflight = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.notEqual(preflight.status, 0); assert.match(preflight.stderr, /other\.mjs.*no fragments/);
-    await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); }; await assert.rejects(run(sliceArgs(f, "--run-slices"))); assert.equal(calls, 0); });
+test("retired automated flags refuse before access and the installed wrapper forwards manual handoff", () => {
+  const f = fixture(true); try {
+    for (const flag of [["--transport", "api"], ["--run-slices"], ["--agy-bin", "ignored"], ["--timeout-seconds", "1"]]) { const result = invoke(f, flag); assert.equal(result.status, 3, result.stderr); }
+    manifest(f); const result = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json", "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env: { ...process.env, GEMINI_REVIEW_CONTEXT: "" } }); assert.equal(result.status, 0, result.stderr); assert.ok(existsSync(path.join(f.dir, ".gemini-gate/wrapper-handoff/handoff.json")));
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("fragmented cross boundary cannot claim a final file without contributing bytes", async () => {
-  const f = fixture();
-  try {
-    writeFileSync(path.join(f.dir, "package.json"), "{\"name\":\"fixture\"}\n"); git(f.dir, ["add", "package.json"]); git(f.dir, ["commit", "-qm", "second changed file"]); Object.assign(f, refreshed(f), { files: ["package.json", "src.mjs"] });
-    const packageBytes = Buffer.byteLength("{\"name\":\"fixture\"}\n"), diffBytes = Buffer.byteLength(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "package.json"]));
-    const coverage = { name: "coverage-package", kind: "coverage", files: ["package.json"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, packageBytes, "package.json"), fragment(f, "per_file_diff", 0, diffBytes, "package.json")] }, sourceDiffBytes = Buffer.byteLength(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])), sourceCoverage = { name: "coverage-src", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, Buffer.byteLength("export const after = 2;\n"), "src.mjs"), fragment(f, "per_file_diff", 0, sourceDiffBytes, "src.mjs")] };
-    const cross = { name: "cross", kind: "cross_boundary", files: f.files, contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1, "src.mjs"), fragment(f, "per_file_diff", 0, 1, "src.mjs")], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: f.files, contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan(f, [coverage, sourceCoverage, cross]); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: "0".repeat(64) }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const preflight = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.notEqual(preflight.status, 0); assert.match(preflight.stderr, /final file package\.json contributes no bytes/);
-    await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); }; await assert.rejects(run(sliceArgs(f, "--run-slices"))); assert.equal(calls, 0); });
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("installed wrapper fingerprints a complete frozen fragment plan before direct run", async () => {
-  const f = fixture({ withInstalledWrapper: true, candidateSource: `export const payload = "${"x".repeat(110000)}";\n` });
-  try { await withFetch(async () => {
-    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])), limit = Math.max(source.length, diff.length), cuts = [0, 30000, 60000, 90000, limit];
-    const slices = cuts.slice(0, -1).map((start, index) => ({ name: `coverage-${index}`, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(start, source.length), Math.min(cuts[index + 1], source.length)), fragment(f, "per_file_diff", Math.min(start, diff.length), Math.min(cuts[index + 1], diff.length))] }));
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...slices, cross]); const installed = path.join(f.dir, "scripts", "cold-review-gemini.sh"), wrapperFingerprint = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { cwd: f.dir, encoding: "utf8" }); assert.equal(wrapperFingerprint.status, 0, wrapperFingerprint.stderr);
-    value.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(wrapperFingerprint.stdout).plan_id }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    let calls = 0; globalThis.fetch = async (_url, request) => { calls++; return responseFrom(request); }; await run(sliceArgs(f, "--run-slices")); assert.equal(calls, slices.length + 1);
-  }); } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("installed wrapper runs approved fragments through its copied entrypoint and records aggregate GO", () => {
-  const f = fixture({ withInstalledWrapper: true, candidateSource: `export const payload = "${"x".repeat(110000)}";\n` }), support = mkdtempSync(path.join(os.tmpdir(), "gemini-installed-wrapper-")), marker = path.join(support, "fetch-order.log"), preload = path.join(support, "fetch-preload.mjs"), psStub = path.join(support, "ps");
-  try {
-    const preloadSource = [
-      'import { appendFileSync } from "node:fs";',
-      'const marker = process.env.GEMINI_TEST_FETCH_MARKER;',
-      'globalThis.fetch = async (_url, request) => {',
-      '  const text = JSON.parse(request.body).contents[0].parts[0].text;',
-      '  const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
-      '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
-      '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]);',
-      '  const done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
-      '  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: GO\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
-      '};',
-    ].join("\n");
-    writeFileSync(preload, preloadSource);
-    writeFileSync(psStub, "#!/bin/sh\nprintf 'Thu Jan 01 00:00:00 1970\\n'\n"); chmodSync(psStub, 0o755);
-    const sourceLength = Buffer.byteLength(`export const payload = "${"x".repeat(110000)}";\n`), diffLength = Buffer.byteLength(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])), cuts = [0, 30000, 60000, 90000, Math.max(sourceLength, diffLength)], slices = cuts.slice(0, -1).map((start, index) => ({ name: `coverage-${index}`, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(start, sourceLength), Math.min(cuts[index + 1], sourceLength)), fragment(f, "per_file_diff", Math.min(start, diffLength), Math.min(cuts[index + 1], diffLength))] }));
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...slices, cross]), installed = path.join(f.dir, "scripts", "cold-review-gemini.sh");
-    writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const fingerprint = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { cwd: f.dir, encoding: "utf8" });
-    assert.equal(fingerprint.status, 0, fingerprint.stderr);
-    value.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(fingerprint.stdout).plan_id }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const result = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--slice-manifest", "plan.json", "--run-slices"], { cwd: f.dir, encoding: "utf8", env: { ...process.env, PATH: `${support}:${process.env.PATH}`, [syntheticEnvKey]: ["test", "key"].join("-"), GEMINI_TEST_FETCH_MARKER: marker, NODE_OPTIONS: `--import=${preload}` } });
-    assert.equal(result.status, 0, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), [...slices.map(slice => slice.name), "cross"]);
-    const log = readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"); assert.match(log, /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `YES`[\s\S]*Gate-Verdict: `GO`[\s\S]*Aggregate-Result-SHA256/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
-});
-test("overlapping installed subscription wrappers honor the live frozen single-flight lock", async () => {
-  const f = fixture({ withInstalledWrapper: true }), fake = fakeAgy(), release = path.join(fake.support, "release-subscription"); let first = null, firstStderr = "";
-  try {
-    const installed = path.join(f.dir, "scripts", "cold-review-gemini.sh"), frozenArgs = [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "subscription-rig", "--transport", "subscription", "--agy-bin", fake.binary, "--context", "docs/contract.md"], env = { ...process.env, PATH: `${fake.support}:${process.env.PATH}`, HOME: fake.home, AGY_FAKE_MARKER: fake.marker, AGY_FAKE_MODE: "hold", AGY_FAKE_RELEASE_FILE: release };
-    first = spawn("bash", frozenArgs, { cwd: f.dir, env, stdio: ["ignore", "ignore", "pipe"] }); first.stderr.on("data", chunk => { firstStderr += chunk; }); const firstExit = new Promise(resolve => first.once("close", (code, signal) => resolve({ code, signal })));
-    for (let attempt = 0; attempt < 200 && !existsSync(fake.marker); attempt++) await new Promise(resolve => setTimeout(resolve, 10));
-    assert.ok(existsSync(fake.marker), `first subscription wrapper did not reach fake agy: ${firstStderr}`);
-    const lock = path.join(path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), "cold-review-gemini.lock"); assert.match(readFileSync(path.join(lock, "owner"), "utf8"), /\nkind=subscription\n/);
-    const second = spawnSync("bash", frozenArgs, { cwd: f.dir, env, encoding: "utf8" }); assert.equal(second.status, 4, second.stderr); assert.match(second.stderr, /live frozen subscription invocation owns this repository gate/);
-    writeFileSync(release, "release\n"); const outcome = await firstExit; assert.equal(outcome.code, 0, `first wrapper exited ${outcome.code} (${outcome.signal || "no signal"})`);
-  } finally { writeFileSync(release, "release\n"); if (first && first.exitCode === null) first.kill("SIGKILL"); rmSync(f.dir, { recursive: true, force: true }); rmSync(fake.support, { recursive: true, force: true }); }
-});
-test("overlapping installed fragment wrappers honor the live direct single-flight lock", async () => {
-  const f = fixture({ withInstalledWrapper: true, candidateSource: `export const payload = "${"x".repeat(110000)}";\n` }), support = mkdtempSync(path.join(os.tmpdir(), "gemini-installed-wrapper-")), marker = path.join(support, "fetch-order.log"), release = path.join(support, "release-fetch"), preload = path.join(support, "fetch-preload.mjs"), psStub = path.join(support, "ps");
-  let first = null, firstExit = null;
-  try {
-    writeFileSync(preload, [
-      'import { appendFileSync, existsSync } from "node:fs";',
-      'const marker = process.env.GEMINI_TEST_FETCH_MARKER, release = process.env.GEMINI_TEST_RELEASE_FILE;',
-      'globalThis.fetch = async (_url, request) => {',
-      '  const text = JSON.parse(request.body).contents[0].parts[0].text, scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
-      '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
-      '  while (!existsSync(release)) await new Promise(resolve => setTimeout(resolve, 10));',
-      '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
-      '  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: GO\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
-      '};',
-    ].join("\n"));
-    writeFileSync(psStub, "#!/bin/sh\nprintf 'Thu Jan 01 00:00:00 1970\\n'\n"); chmodSync(psStub, 0o755);
-    const diffLength = Buffer.byteLength(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"])), sourceLength = Buffer.byteLength(`export const payload = "${"x".repeat(110000)}";\n`), cuts = [0, 30000, 60000, 90000, Math.max(sourceLength, diffLength)], slices = cuts.slice(0, -1).map((start, index) => ({ name: `coverage-${index}`, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(start, sourceLength), Math.min(cuts[index + 1], sourceLength)), fragment(f, "per_file_diff", Math.min(start, diffLength), Math.min(cuts[index + 1], diffLength))] }));
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...slices, cross]), installed = path.join(f.dir, "scripts", "cold-review-gemini.sh"); writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const fingerprint = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--slice-manifest", "plan.json", "--fingerprint"], { cwd: f.dir, encoding: "utf8" }); assert.equal(fingerprint.status, 0, fingerprint.stderr);
-    value.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(fingerprint.stdout).plan_id }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const frozenArgs = [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--slice-manifest", "plan.json", "--run-slices"], env = { ...process.env, PATH: `${support}:${process.env.PATH}`, [syntheticEnvKey]: ["test", "key"].join("-"), GEMINI_TEST_FETCH_MARKER: marker, GEMINI_TEST_RELEASE_FILE: release, NODE_OPTIONS: `--import=${preload}` };
-    first = spawn("bash", frozenArgs, { cwd: f.dir, env, stdio: ["ignore", "ignore", "pipe"] }); firstExit = new Promise(resolve => first.on("close", (code, signal) => resolve({ code, signal })));
-    for (let attempt = 0; attempt < 200 && !existsSync(marker); attempt++) await new Promise(resolve => setTimeout(resolve, 10));
-    assert.ok(existsSync(marker), "first wrapper did not reach the provider stub"); const lock = path.join(path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), "cold-review-gemini.lock"); assert.match(readFileSync(path.join(lock, "owner"), "utf8"), /\nkind=direct\n/);
-    const second = spawnSync("bash", frozenArgs, { cwd: f.dir, env, encoding: "utf8" }); assert.equal(second.status, 4, second.stderr); assert.match(second.stderr, /live frozen direct invocation owns this repository gate/); assert.equal(readFileSync(marker, "utf8").trim().split("\n").length, 1);
-    writeFileSync(release, "release\n"); const exit = await firstExit; assert.equal(exit.code, 0, `first wrapper exited ${exit.code} (${exit.signal || "no signal"})`); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), [...slices.map(slice => slice.name), "cross"]);
-    assert.match(readFileSync(path.join(f.dir, "docs/journal/gemini_review_log.md"), "utf8"), /Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `YES`[\s\S]*Gate-Verdict: `GO`/);
-  } finally { writeFileSync(release, "release\n"); if (first && firstExit) await Promise.race([firstExit, new Promise(resolve => setTimeout(() => { first.kill("SIGTERM"); resolve(); }, 1000))]); rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
-});
-test("reordered, duplicate, and missing slice coverage plans refuse before fetch", () => {
-  const f = multiFixture(); try {
-    const ordered = slicedPlan(f), final = ordered.slices.at(-1); ordered.slices = [final, ...ordered.slices.slice(0, -1)]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(ordered)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
-    const duplicate = slicedPlan(f); duplicate.slices[1].files = ["src.mjs"]; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(duplicate)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
-    const missing = slicedPlan(f); missing.slices = missing.slices.filter(slice => slice.name !== "coverage-slice-2.mjs"); writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(missing)); assert.notEqual(spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }).status, 0);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("coverage slices cannot execute a later component range before an earlier range", async () => {
-  const f = fixture({ candidateSource: `export const payload = "${"x".repeat(110000)}";\n` });
-  try {
-    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]));
-    const diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
-    const cut = Math.floor(Math.max(source.length, diff.length) / 2);
-    const coverage = (name, start, end) => ({ name, kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", Math.min(start, source.length), Math.min(end, source.length)), fragment(f, "per_file_diff", Math.min(start, diff.length), Math.min(end, diff.length))] });
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [coverage("coverage-late", cut, Math.max(source.length, diff.length)), coverage("coverage-early", 0, cut), cross]);
-    writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    const result = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" });
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /fragment partition .* has a gap, overlap, duplicate, or reorder/);
-    await withFetch(async () => { let calls = 0; globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); }; await assert.rejects(run(sliceArgs(f, "--run-slices"))); assert.equal(calls, 0); });
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("direct and slice validators share lexical case and punctuation ordering", () => {
-  const f = fixture(); try {
-    for (const file of ["A.mjs", "a-punct.mjs", "_punct.mjs", "10.mjs", "2.mjs"]) writeFileSync(path.join(f.dir, file), `export const ${file.replace(/[^A-Za-z]/g, "_")} = true;\n`);
-    git(f.dir, ["add", "."]); git(f.dir, ["commit", "-qm", "lexical paths"]);
-    Object.assign(f, refreshed(f), { files: ["A.mjs", "a-punct.mjs", "_punct.mjs", "10.mjs", "2.mjs", "src.mjs"] }); slicedPlan(f);
-    const direct = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--fingerprint")], { encoding: "utf8" }); assert.equal(direct.status, 0, direct.stderr);
-    const out = mkdtempSync(path.join(os.tmpdir(), "gemini-slice-order-")); try {
-      const slices = spawnSync(process.execPath, [path.join(root, "scripts", "gemini-gate-slices.mjs"), "fingerprint", "--repo", f.dir, "--manifest", path.join(f.dir, "plan.json"), "--out-dir", out], { encoding: "utf8" }); assert.equal(slices.status, 0, slices.stderr);
-    } finally { rmSync(out, { recursive: true, force: true }); }
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("fragment envelopes declare verified ranges and reject an altered copied scope", async () => {
-  const f = fixture(); try {
-    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]));
-    const diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
-    const cut = Math.max(1, Math.floor(diff.length / 2));
-    const coverage = [
-      { name: "coverage-001", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, source.length), fragment(f, "per_file_diff", 0, cut)] },
-      { name: "coverage-002", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "per_file_diff", cut, diff.length)] },
-    ];
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...coverage, cross]), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    await withFetch(async () => {
-      let calls = 0;
-      globalThis.fetch = async (_url, request) => {
-        calls++;
-        const text = JSON.parse(request.body).contents[0].parts[0].text;
-        assert.match(text, /VERIFIED WHOLE FRAGMENT/); assert.match(text, /VERIFIED PARTIAL FRAGMENT/); assert.match(text, /Verified half-open byte range/);
-        const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1]; assert.match(scope, /"gate_kind":"base\.\.candidate_change"/); assert.match(scope, /"slice_kind":"coverage"/); assert.match(scope, /"material_mode":"verified_fragments"/); assert.match(scope, /"exact_per_file_diff_transition_evidence":true/);
-        assert.match(text, /base\.\.candidate change gate/); assert.doesNotMatch(text, /defects visible/i);
-        const response = await responseFrom(request).json(), reply = response.candidates[0].content.parts[0].text;
-        response.candidates[0].content.parts[0].text = reply.replace(/"byte_end":(\d+)/, (_match, value) => `"byte_end":${Number(value) + 1}`);
-        return { ok: true, json: async () => response };
-      };
-      await assert.rejects(run(sliceArgs(f, "--run-slices")), /inspected scope/); assert.equal(calls, 1);
-    });
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("fragment prompts bind source-only versus diff-bearing change attribution", async () => {
-  const f = fixture(); try {
-    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]));
-    const diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
-    const coverage = [
-      { name: "source-only", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, source.length)] },
-      { name: "diff-bearing", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "per_file_diff", 0, diff.length)] },
-    ];
-    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...coverage, cross]), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    await withFetch(async () => {
-      const packets = [];
-      globalThis.fetch = async (_url, request) => { const text = JSON.parse(request.body).contents[0].parts[0].text, scope = JSON.parse(text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1]); packets.push({ text, scope }); return responseFrom(request); };
-      await run(sliceArgs(f, "--run-slices"));
-      const sourceOnly = packets.find(packet => packet.scope.slice === "source-only"), diffBearing = packets.find(packet => packet.scope.slice === "diff-bearing");
-      assert.equal(sourceOnly.scope.gate_kind, "base..candidate_change"); assert.equal(sourceOnly.scope.exact_per_file_diff_transition_evidence, false); assert.match(sourceOnly.text, /cannot by itself establish change attribution/);
-      assert.equal(diffBearing.scope.exact_per_file_diff_transition_evidence, true); assert.match(diffBearing.text, /includes exact per_file_diff transition evidence/);
-      for (const packet of packets) { assert.match(packet.text, /A valid NO-GO requires concrete reachable harm introduced or worsened by changed diff evidence/); assert.match(packet.text, /Age alone never excuses a harm/); assert.doesNotMatch(packet.text, /defects visible/i); }
-    });
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("native generator is deterministic, cap-measured, complete, and leaves DRAFT cross-boundary evidence unrunnable", () => {
-  const baseLines = Array.from({ length: 3000 }, (_, index) => `export const value_${String(index).padStart(4, "0")} = "${"a".repeat(24)}";\n`);
-  const candidateLines = [...baseLines]; for (const index of [100, 400, 700, 1000, 1300, 1600, 1900, 2200, 2500, 2800]) candidateLines[index] = candidateLines[index].replace("a", "b");
-  const f = fixture({ withInstalledWrapper: true, baseSource: baseLines.join(""), candidateSource: candidateLines.join("") });
-  try {
-    const first = generatedPlan(f), initialJournal = path.join(f.dir, "docs", "journal", "gemini_review_log.md");
-    assert.ok(first.result.coverage_call_count > 1); assert.ok(first.result.envelopes.every(entry => entry.envelope_bytes < 81920)); assert.equal(existsSync(initialJournal), false);
-    assertGeneratedPartitions(f, first.plan);
-    const diffFragment = first.plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments).find(item => item.component_kind === "per_file_diff"), diff = componentForFragment(f, diffFragment);
-    const hunkBoundaries = new Set([0, diff.length]); for (let start = 0; start < diff.length;) { const newline = diff.indexOf(0x0a, start), end = newline === -1 ? diff.length : newline + 1; if (diff.subarray(start, Math.min(end, start + 3)).toString("utf8") === "@@ ") hunkBoundaries.add(start); start = end; }
-    for (const item of first.plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments).filter(item => item.component_kind === "per_file_diff")) { assert.ok(hunkBoundaries.has(item.byte_start)); assert.ok(hunkBoundaries.has(item.byte_end)); }
-    const second = generatedPlan(f); assert.deepEqual(second.plan, first.plan);
-    const draftArgs = ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--slice-manifest", first.output];
-    const fingerprinted = spawnSync(process.execPath, [runner, ...draftArgs, "--fingerprint"], { encoding: "utf8" }); assert.notEqual(fingerprinted.status, 0); assert.match(fingerprinted.stderr, /DRAFT cross-boundary placeholder/);
-    const attempted = spawnSync(process.execPath, [runner, ...draftArgs, "--run-slices"], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "must-not-read" } }); assert.notEqual(attempted.status, 0); assert.match(attempted.stderr, /DRAFT cross-boundary placeholder/); assert.equal(existsSync(initialJournal), false);
-    const installed = path.join(f.dir, "scripts", "cold-review-gemini.sh"), viaWrapper = spawnSync("bash", [installed, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "test-rig", "--transport", "api", "--context", "docs/contract.md", "--generate-slice-plan", ".gemini-gate/generated/wrapper-manifest.json"], { cwd: f.dir, encoding: "utf8" });
-    assert.equal(viaWrapper.status, 0, viaWrapper.stderr); assert.ok(existsSync(path.join(f.dir, ".gemini-gate", "generated", "wrapper-manifest.json")));
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("generator surfaces UTF-8 forced splits for a single oversized line without adding a final newline", () => {
-  const f = fixture({ candidateSource: `export const payload = "${"é".repeat(80000)}";` });
-  try {
-    const { plan, result } = generatedPlan(f); assert.ok(result.forced_splits.length > 0); assert.ok(plan.generation.forced_splits.every(item => item.reason === "single_oversized_line_utf8_boundary")); assertGeneratedPartitions(f, plan);
-    for (const item of plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments)) { const bytes = componentForFragment(f, item); assert.notEqual(bytes[item.byte_end] & 0xc0, 0x80, "fragment must end on UTF-8 boundary"); }
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
-});
-test("first valid slice NO-GO is durable evidence and stops the direct CLI before later calls or aggregate", () => {
-  const f = fixture(), support = mkdtempSync(path.join(os.tmpdir(), "gemini-no-go-cli-")), marker = path.join(support, "fetch-order.log"), preload = path.join(support, "fetch-preload.mjs");
-  try {
-    plan(f); const value = JSON.parse(readFileSync(path.join(f.dir, "plan.json"), "utf8")), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    writeFileSync(preload, [
-      'import { appendFileSync } from "node:fs";',
-      'const marker = process.env.GEMINI_TEST_FETCH_MARKER;',
-      'globalThis.fetch = async (_url, request) => {',
-      '  const text = JSON.parse(request.body).contents[0].parts[0].text, scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
-      '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
-      '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
-      '  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: NO-GO\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
-      '};',
-    ].join("\n"));
-    const result = spawnSync(process.execPath, [runner, ...sliceArgs(f, "--run-slices")], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "test-key", GEMINI_TEST_FETCH_MARKER: marker, NODE_OPTIONS: `--import=${preload}` } });
-    assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["coverage"]);
-    const journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.equal((journal.match(/^## Gemini frozen gate attempt —/gm) || []).length, 1); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
-});
-test("source-only NO-GO is unresolved until a later diff NO-GO or attribution hold", () => {
-  const f = fixture(), support = mkdtempSync(path.join(os.tmpdir(), "gemini-attribution-cli-")), marker = path.join(support, "fetch-order.log"), preload = path.join(support, "fetch-preload.mjs");
-  try {
-    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
-    const writePlan = order => {
-      const coverage = {
-        "source-only": { name: "source-only", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, source.length)] },
-        "diff-bearing": { name: "diff-bearing", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "per_file_diff", 0, diff.length)] },
-      }, cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
-      const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...order.map(name => coverage[name]), cross]), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
-    };
-    writeFileSync(preload, [
-      'import { appendFileSync } from "node:fs";',
-      'const marker = process.env.GEMINI_TEST_FETCH_MARKER;',
-      'const verdicts = JSON.parse(process.env.GEMINI_TEST_VERDICTS); let index = 0;',
-      'globalThis.fetch = async (_url, request) => {',
-      '  const text = JSON.parse(request.body).contents[0].parts[0].text, scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
-      '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
-      '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
-      '  const verdict = verdicts[index++] || "GO"; return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: ${verdict}\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
-      '};',
-    ].join("\n"));
-    const runCli = verdicts => spawnSync(process.execPath, [runner, ...sliceArgs(f, "--run-slices")], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "test-key", GEMINI_TEST_FETCH_MARKER: marker, GEMINI_TEST_VERDICTS: JSON.stringify(verdicts), NODE_OPTIONS: `--import=${preload}` } });
-    writePlan(["source-only", "diff-bearing"]); let result = runCli(["NO-GO", "NO-GO"]); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["source-only", "diff-bearing"]);
-    let records = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8").split(/^## Gemini frozen gate attempt — /m).slice(1); assert.equal(records.length, 2); assert.match(records[0], /Status: `UNRESOLVED_ATTRIBUTION`[\s\S]*Release-Gate: `NO`[\s\S]*Provider-Verdict: `NO-GO`[\s\S]*Inspected-Scope:[\s\S]*Reply-UTF8-Base64[\s\S]*Complete-Record: `YES`/); assert.match(records[0], /Attempt-ID: `[^`]+`[\s\S]*Base: `[^`]+`[\s\S]*Candidate: `[^`]+`[\s\S]*Tree: `[^`]+`[\s\S]*Plan-ID: `[^`]+`/); assert.doesNotMatch(records[0], /Gate-Verdict|PASS_VERDICT|NO_GO|FAILED_|NONBLOCKING/); assert.match(records[1], /Status: `NO_GO`[\s\S]*Gate-Verdict: `NO-GO`/);
-    assert.doesNotMatch(records.join("\n"), /Record-Kind: `SLICE_SET`/);
-    writeFileSync(marker, ""); result = runCli(["NO-GO", "GO", "GO"]); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["source-only", "diff-bearing", "cross"]);
-    records = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8").split(/^## Gemini frozen gate attempt — /m).slice(1); assert.equal(records.length, 6); const hold = records.at(-1); assert.match(hold, /Status: `ATTRIBUTION_HOLD`[\s\S]*Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `NO`[\s\S]*Aggregate-Result-SHA256[\s\S]*Unresolved-Attribution-Attempts/); assert.doesNotMatch(hold, /Gate-Verdict|Release-Gate: `YES`|PASS_VERDICT|NO_GO|FAILED_TRANSPORT/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
-});
-test("public selftest and installed runner remain deterministic and network-free", () => {
-  const selftest = spawnSync("bash", [wrapper, "--selftest"], { cwd: root, encoding: "utf8" }); assert.equal(selftest.status, 0, selftest.stderr); assert.match(selftest.stdout, /no network/);
-  const tuple = [git(root, ["rev-parse", "HEAD~1"]), git(root, ["rev-parse", "HEAD"]), git(root, ["rev-parse", "HEAD^{tree}"])];
-  const mixed = spawnSync("bash", [wrapper, "--base", tuple[0], "--candidate", tuple[1], "--tree", tuple[2], "--rig-id", "selftest-rig", "--context", "core/GATES.md", "--selftest"], { cwd: root, encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: ["unread", "test", "key"].join("-") } }); assert.equal(mixed.status, 2); assert.match(mixed.stderr, /--selftest does not accept/);
-  const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-frozen-install-")); try {
-    git(dir, ["init", "-q"]); const installed = spawnSync(process.execPath, [path.join(root, "bin", "init.mjs"), "--target", dir, "--repo-name", "fixture", "--owner-name", "Fixture", "--with-gate-runners", "--skip-codex-prompt", "--skip-codex-lane"], { encoding: "utf8" });
-    assert.equal(installed.status, 0, installed.stderr); assert.ok(existsSync(path.join(dir, "scripts", "gemini-frozen-gate.mjs")));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

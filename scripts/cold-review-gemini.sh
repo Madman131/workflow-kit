@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cold-review-gemini.sh — CROSS-FAMILY cold review via Gemini (Antigravity CLI / `agy`).
+# cold-review-gemini.sh — public Gemini review entrypoint.
 #
 # Its value is DECORRELATED blind spots: a different weight family catches what same-family Opus reviewers miss alike.
 # Two modes — pick by what you're gating:
@@ -21,20 +21,21 @@
 # caught FIVE real issues the 3-person Opus panel missed (unbounded proposal growth; FTS rebuild inside the global
 # write lock; silent dedupe data-loss; validate-vs-stamp timing break; an §8↔§12 lock contradiction). Crystallized here.
 #
-# READ-ONLY w.r.t. caller code/git/Render. A real invocation first builds a private-index snapshot
+# Legacy working-tree review is READ-ONLY w.r.t. caller code/git/Render. A real legacy invocation first builds a private-index snapshot
 # commit and reviews only its detached worktree; the caller tree may change without changing the
 # artifact. Persistent side-effect: appends a typed attempt to docs/journal/gemini_review_log.md
 # (excluded from the diff payload) for the payload-tuning loop — suppress with --no-log. For a large
 # payload it also writes a short-lived temp file (mktemp -d, removed on exit) that agy reads via --add-dir.
-# Auth/model use your own Google AI Pro session cached by `agy`.
+# Legacy auth/model use your own Google AI Pro session cached by `agy`. Frozen exact-tuple review instead exports
+# strict manual subscription packets and imports the operator-saved replies; it never launches `agy` or reads settings/credentials.
 #
-#   --dry-run   print the assembled payload+prompt, don't call Gemini
-#   --no-log    don't append a durable attempt record (diagnostics only; not a release receipt)
-#   --slice-manifest <json> --slice <name>
-#               run one slice from a PM-approved, complete coverage plan
+#   --dry-run   legacy: print the assembled payload+prompt, don't call Gemini; frozen: local full-artifact inspection only
+#   --no-log    legacy diagnostics only; frozen handoff imports always append durable receipts
+#   --slice-manifest <json>
+#               frozen: fingerprint an approved plan or export/import a strict manual handoff
 #   --generate-slice-plan <.gemini-gate/plan.json> --context <contract>
 #               write a local DRAFT mechanical frozen-fragment plan; no provider, credential, or journal access
-#   --selftest  run the deterministic fake-agy reliability harness (no network/model call)
+#   --selftest  run the deterministic legacy fake-agy reliability harness (no network/model call)
 set -uo pipefail
 
 MODEL="Gemini 3.1 Pro (High)"
@@ -56,8 +57,8 @@ cd "$REPO_ROOT"
 # ---- args ----
 CONTEXT_FILE="${GEMINI_REVIEW_CONTEXT:-}"
 DESIGN_FILE=""; DESIGN_FILE_CANONICAL=""; FOLDED_SRC=""; FOLDED_SRC_CANONICAL=""; FOLDED_IS_FILE=0; CONTEXT_FILE_CANONICAL=""; SLICE_MANIFEST=""; SLICE_MANIFEST_CANONICAL=""; SLICE_NAME=""; FINALIZE_SLICES=0; DRY_RUN=0; DO_LOG=1; SELFTEST=0; HELP=0
-FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_TRANSPORT="subscription"; FROZEN_MODEL=""; FROZEN_AGY_BIN=""; FROZEN_TIMEOUT_SECONDS=""; RUN_SLICES=0
-FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0; GENERATE_SLICE_PLAN=""
+FROZEN_BASE=""; FROZEN_CANDIDATE=""; FROZEN_TREE=""; FROZEN_RIG_ID=""; FROZEN_MODEL=""
+FROZEN_FINGERPRINT=0; FROZEN_INTENT=0; FROZEN_DISPATCH=0; GENERATE_SLICE_PLAN=""; HANDOFF_EXPORT=""; HANDOFF_IMPORT=""
 require_option_value() {
   [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "cold-review-gemini: $1 requires a nonempty value." >&2; exit 2; }
   case "$2" in --*) echo "cold-review-gemini: $1 requires a value, not an option ($2)." >&2; exit 2 ;; esac
@@ -75,13 +76,13 @@ while [ $# -gt 0 ]; do
     --candidate) require_option_value "$@"; FROZEN_CANDIDATE="$2"; FROZEN_INTENT=1; shift 2 ;;
     --tree) require_option_value "$@"; FROZEN_TREE="$2"; FROZEN_INTENT=1; shift 2 ;;
     --rig-id) require_option_value "$@"; FROZEN_RIG_ID="$2"; FROZEN_INTENT=1; shift 2 ;;
-    --transport) require_option_value "$@"; FROZEN_TRANSPORT="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --transport) require_option_value "$@"; echo "cold-review-gemini: --transport is retired for frozen reviews; use strict manual handoff." >&2; exit 3 ;;
     --gemini-model) require_option_value "$@"; FROZEN_MODEL="$2"; FROZEN_INTENT=1; shift 2 ;;
-    --agy-bin) require_option_value "$@"; FROZEN_AGY_BIN="$2"; FROZEN_INTENT=1; shift 2 ;;
-    --timeout-seconds) require_option_value "$@"; FROZEN_TIMEOUT_SECONDS="$2"; FROZEN_INTENT=1; shift 2 ;;
-    --run-slices) RUN_SLICES=1; FROZEN_INTENT=1; shift ;;
+    --agy-bin|--timeout-seconds|--run-slices) echo "cold-review-gemini: $1 is retired for frozen reviews; use strict manual handoff." >&2; exit 3 ;;
     --fingerprint) FROZEN_FINGERPRINT=1; FROZEN_INTENT=1; shift ;;
     --generate-slice-plan) require_option_value "$@"; GENERATE_SLICE_PLAN="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --handoff-export) require_option_value "$@"; HANDOFF_EXPORT="$2"; FROZEN_INTENT=1; shift 2 ;;
+    --handoff-import) require_option_value "$@"; HANDOFF_IMPORT="$2"; FROZEN_INTENT=1; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-log)  DO_LOG=0; shift ;;
     --selftest) SELFTEST=1; shift ;;
@@ -92,7 +93,7 @@ done
 
 if [ "$HELP" = "1" ]; then
   [ "$ORIGINAL_ARGC" -eq 1 ] || { echo "cold-review-gemini: --help does not accept additional arguments." >&2; exit 2; }
-  printf '%s\n' "usage: bash scripts/cold-review-gemini.sh [--context <contract> | --design <doc>]" "       frozen DRAFT: --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> --context <contract> --generate-slice-plan .gemini-gate/<plan>.json" "       frozen preflight/run: --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> --slice-manifest <plan> --fingerprint|--run-slices" "       --generate-slice-plan is local-only and produces an unrunnable cross-boundary DRAFT."
+  printf '%s\n' "usage: bash scripts/cold-review-gemini.sh [--context <contract> | --design <doc>]" "       frozen DRAFT: --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> --context <contract> --generate-slice-plan .gemini-gate/<plan>.json" "       strict manual handoff: --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> --slice-manifest <plan> --handoff-export|--handoff-import .gemini-gate/<dir>" "       frozen automated transport and --run-slices are retired; DRAFT, fingerprint, and dry-run remain local-only."
   exit 0
 fi
 
@@ -103,19 +104,21 @@ if [ "$SELFTEST" = "1" ] && [ "$ORIGINAL_ARGC" -ne 1 ]; then
 fi
 
 # The frozen path is intentionally dispatched before the legacy working-tree runner establishes a
-# snapshot or discovers `agy`. It forwards the explicit frozen transport unchanged; the subscription
-# transport receives only an inline envelope in its own disposable workspace.
+# snapshot or discovers `agy`. It builds only local material until a strict handoff export or verified
+# handoff import; the operator, rather than this script, selects the attested subscription UI/model.
 frozen_count=0
 for frozen_value in "$FROZEN_BASE" "$FROZEN_CANDIDATE" "$FROZEN_TREE" "$FROZEN_RIG_ID"; do [ -n "$frozen_value" ] && frozen_count=$((frozen_count + 1)); done
 if [ "$FROZEN_INTENT" = "1" ]; then
   [ "$frozen_count" -eq 4 ] || { echo "cold-review-gemini: --base, --candidate, --tree, and --rig-id are required together for a frozen review." >&2; exit 2; }
   [ -z "$DESIGN_FILE$FOLDED_SRC$SLICE_NAME" ] && [ "$FINALIZE_SLICES" = 0 ] || { echo "cold-review-gemini: frozen review does not combine legacy design, --slice, or --finalize-slices modes." >&2; exit 2; }
   if [ -n "$GENERATE_SLICE_PLAN" ]; then
-    [ -z "$SLICE_MANIFEST" ] && [ -n "$CONTEXT_FILE" ] && [ "$RUN_SLICES" = 0 ] && [ "$FROZEN_FINGERPRINT" = 0 ] && [ "$DRY_RUN" = 0 ] && [ "$DO_LOG" = 1 ] || { echo "cold-review-gemini: --generate-slice-plan requires --context and forbids manifest, run, fingerprint, dry-run, and no-log flags." >&2; exit 2; }
+    [ -z "$SLICE_MANIFEST$HANDOFF_EXPORT$HANDOFF_IMPORT" ] && [ -n "$CONTEXT_FILE" ] && [ "$FROZEN_FINGERPRINT" = 0 ] && [ "$DRY_RUN" = 0 ] && [ "$DO_LOG" = 1 ] || { echo "cold-review-gemini: --generate-slice-plan requires --context and forbids manifest, handoff, fingerprint, dry-run, and no-log flags." >&2; exit 2; }
+  elif [ -n "$HANDOFF_EXPORT$HANDOFF_IMPORT" ]; then
+    [ -n "$SLICE_MANIFEST" ] && [ -z "$CONTEXT_FILE" ] && [ "$FROZEN_FINGERPRINT" = 0 ] && [ "$DRY_RUN" = 0 ] && [ "$DO_LOG" = 1 ] && { { [ -n "$HANDOFF_EXPORT" ] && [ -z "$HANDOFF_IMPORT" ]; } || { [ -z "$HANDOFF_EXPORT" ] && [ -n "$HANDOFF_IMPORT" ]; }; } || { echo "cold-review-gemini: strict manual handoff requires exactly one handoff directory and an approved --slice-manifest." >&2; exit 2; }
   elif [ -n "$SLICE_MANIFEST" ]; then
-    { [ "$RUN_SLICES" = 1 ] || [ "$FROZEN_FINGERPRINT" = 1 ]; } && [ -z "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen sliced review requires --slice-manifest with --run-slices (or --fingerprint) and no --context." >&2; exit 2; }
+    [ "$FROZEN_FINGERPRINT" = 1 ] && [ -z "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen sliced review is local-only; use --fingerprint or strict manual handoff." >&2; exit 2; }
   else
-    [ "$RUN_SLICES" = 0 ] && [ -n "$CONTEXT_FILE" ] || { echo "cold-review-gemini: frozen full review requires --context and forbids --run-slices." >&2; exit 2; }
+    [ -n "$CONTEXT_FILE" ] && [ "$DRY_RUN" = 1 ] || { echo "cold-review-gemini: frozen full review is local-only; use --context --dry-run." >&2; exit 2; }
   fi
   FROZEN_DISPATCH=1
 fi
@@ -353,9 +356,7 @@ acquire_single_flight() {
         echo "repo=$common"
         echo "script=$SCRIPT_DIR/cold-review-gemini.sh"
         echo "command=$self_command"
-        if [ "$FROZEN_DISPATCH" = "1" ]; then
-          [ "$FROZEN_TRANSPORT" = "api" ] && echo "kind=direct" || echo "kind=subscription"
-        fi
+        [ "$FROZEN_DISPATCH" = "1" ] && echo "kind=manual-handoff"
       } > "$owner_tmp" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot write single-flight owner record." >&2; exit 3; }
       mv "$owner_tmp" "$LOCK_DIR/owner" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot publish single-flight owner record." >&2; exit 3; }
       LOCK_HELD=1
@@ -587,15 +588,15 @@ trap cleanup EXIT
 trap 'on_signal INT 130' INT
 trap 'on_signal TERM 143' TERM
 
-if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && { [ "$FROZEN_FINGERPRINT" = "1" ] || [ -n "$GENERATE_SLICE_PLAN" ]; }; }; then acquire_single_flight; fi
+if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && { [ "$FROZEN_FINGERPRINT" = "1" ] || [ -n "$GENERATE_SLICE_PLAN$HANDOFF_EXPORT$HANDOFF_IMPORT" ]; }; }; then acquire_single_flight; fi
 if [ "$FROZEN_DISPATCH" = "1" ]; then
-  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID" --transport "$FROZEN_TRANSPORT")
+  frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID")
   [ -n "$FROZEN_MODEL" ] && frozen_args+=(--model "$FROZEN_MODEL")
-  [ -n "$FROZEN_AGY_BIN" ] && frozen_args+=(--agy-bin "$FROZEN_AGY_BIN")
-  [ -n "$FROZEN_TIMEOUT_SECONDS" ] && frozen_args+=(--timeout-seconds "$FROZEN_TIMEOUT_SECONDS")
   [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
-  [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST" --run-slices)
+  [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST")
   [ -n "$GENERATE_SLICE_PLAN" ] && frozen_args+=(--generate-slice-plan "$GENERATE_SLICE_PLAN")
+  [ -n "$HANDOFF_EXPORT" ] && frozen_args+=(--handoff-export "$HANDOFF_EXPORT")
+  [ -n "$HANDOFF_IMPORT" ] && frozen_args+=(--handoff-import "$HANDOFF_IMPORT")
   [ "$FROZEN_FINGERPRINT" = 1 ] && frozen_args+=(--fingerprint)
   [ "$DRY_RUN" = 1 ] && frozen_args+=(--dry-run)
   [ "$DO_LOG" = 0 ] && frozen_args+=(--no-log)

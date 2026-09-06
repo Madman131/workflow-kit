@@ -1,18 +1,16 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const LIMIT = 81920, ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models", JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.1-pro-high", SUBSCRIPTION_TIMEOUT_SECONDS = 600;
+const LIMIT = 81920, JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.1-pro-high", MANUAL_TRANSPORT = "operator-attested-manual-gemini-subscription-v1";
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 const FRAGMENT_KINDS = new Set(["frozen_source", "deleted_source", "per_file_diff"]);
 const GIT_LOCATION_OVERRIDES = ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
-const SUBSCRIPTION_STDOUT_LIMIT = 4 * 1024 * 1024, SUBSCRIPTION_STDERR_LIMIT = 1024 * 1024, OUTPUT_SENTINEL_BYTES = 1024;
 const CREDENTIAL_LIKE = /(?:AIza[\w-]{35}|-----BEGIN [A-Z ]+PRIVATE KEY-----|(?:api[_-]?key|secret|token|password|passphrase)\s*[:=]\s*(?!["']?(?:\$\{[^}\r\n]+\}|\$\([^\)\r\n]+\)|\$\d+|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))(?:["'][^"']{1,}|[A-Za-z0-9][^\s#]{7,})|\bauthorization\s*[:=]\s*(?!["']?[!#$%&'*+\-.^_`|~0-9A-Za-z]+\s+(?:\$\{[^}\r\n]+\}|\$\([^\)\r\n]+\)|\$\d+|<[^>\r\n]+>|(?:CHANGEME|REDACTED)(?:["']?(?:\s|$))))["']?[!#$%&'*+\-.^_`|~0-9A-Za-z]+\s+(?:["'][^"']{1,}|[^\s#"']+)|\bbearer\s+[A-Za-z0-9._~+/=-]{8,})/i;
 function lexical(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
 function die(message, exitCode = 2) { throw Object.assign(new Error(message), { exitCode }); }
@@ -69,11 +67,12 @@ function journalPath(repo) {
 }
 function parse(argv) {
   for (const key of GIT_LOCATION_OVERRIDES) if (process.env[key]) die(`ambient ${key} is not allowed for a frozen review`, 3);
-  const o = { repo: process.cwd(), transport: "subscription", model: undefined, timeoutSeconds: SUBSCRIPTION_TIMEOUT_SECONDS, dryRun: false, noLog: false, runSlices: false, fingerprint: false, generateSlicePlan: undefined };
-  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "transport", "model", "agyBin", "timeoutSeconds", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "generateSlicePlan", "sharedLockDir", "lockOwnerPid"]);
+  const o = { repo: process.cwd(), model: SUBSCRIPTION_MODEL, dryRun: false, noLog: false, fingerprint: false, generateSlicePlan: undefined, handoffExport: undefined, handoffImport: undefined };
+  const flags = new Set(["--dry-run", "--no-log", "--fingerprint"]), valueOptions = new Set(["repo", "model", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "generateSlicePlan", "handoffExport", "handoffImport", "sharedLockDir", "lockOwnerPid"]);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--run-slices": "runSlices", "--fingerprint": "fingerprint" }[key]] = true; continue; }
+    if (["--run-slices", "--transport", "--agy-bin", "--timeout-seconds"].includes(key)) die(`${key} is retired for frozen reviews; use --handoff-export then --handoff-import`, 3);
+    if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--fingerprint": "fingerprint" }[key]] = true; continue; }
     if (!key?.startsWith("--")) die(`invalid argument near ${key}`);
     const name = key.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (!valueOptions.has(name)) die(`unknown option ${key}`);
@@ -82,18 +81,17 @@ function parse(argv) {
   }
   for (const key of ["base", "candidate", "tree", "rigId"]) if (!o[key]) die(`missing --${key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
   if (![o.base, o.candidate, o.tree].every(value => HEX.test(value))) die("base, candidate, and tree must be exact lowercase 40-hex IDs");
-  if (!new Set(["subscription", "api"]).has(o.transport)) die("--transport must be subscription or api");
-  o.model ||= o.transport === "subscription" ? SUBSCRIPTION_MODEL : "gemini-2.5-pro";
   if (!RIG.test(o.rigId) || !MODEL.test(o.model)) die("invalid nonsecret rig ID or Gemini model ID");
-  if (o.transport === "subscription" && o.model !== SUBSCRIPTION_MODEL) die(`subscription transport requires --model ${SUBSCRIPTION_MODEL}`);
-  if (o.agyBin && (o.transport !== "subscription" || !path.isAbsolute(o.agyBin))) die("--agy-bin is an absolute subscription-only executable path");
-  if (!/^\d+$/.test(String(o.timeoutSeconds)) || Number(o.timeoutSeconds) < 1 || Number(o.timeoutSeconds) > SUBSCRIPTION_TIMEOUT_SECONDS || (o.transport !== "subscription" && o.timeoutSeconds !== SUBSCRIPTION_TIMEOUT_SECONDS)) die("--timeout-seconds is a subscription-only whole number from 1 through 600");
-  o.timeoutSeconds = Number(o.timeoutSeconds);
+  if (o.model !== SUBSCRIPTION_MODEL) die(`strict manual handoff requires --model ${SUBSCRIPTION_MODEL}`);
   if (o.generateSlicePlan) {
-    if (o.sliceManifest || o.runSlices || o.fingerprint || o.dryRun || o.noLog || !o.context) die("--generate-slice-plan requires --context and forbids review, fingerprint, and logging flags");
+    if (o.sliceManifest || o.handoffExport || o.handoffImport || o.fingerprint || o.dryRun || o.noLog || !o.context) die("--generate-slice-plan requires --context and forbids handoff, fingerprint, and logging flags");
     o.generateSlicePlan = relative(o.generateSlicePlan, "--generate-slice-plan");
     if (!o.generateSlicePlan.startsWith(".gemini-gate/")) die("--generate-slice-plan must name a repository-relative .gemini-gate/ manifest");
-  } else if (o.sliceManifest ? ((!o.runSlices && !o.fingerprint) || o.context) : (o.runSlices || o.fingerprint || !o.context)) die("use --context for one full review, or --slice-manifest with --run-slices/--fingerprint");
+  } else if (o.handoffExport || o.handoffImport) {
+    if (Boolean(o.handoffExport) === Boolean(o.handoffImport) || !o.sliceManifest || o.context || o.fingerprint || o.dryRun || o.noLog) die("a strict manual handoff requires exactly one of --handoff-export/--handoff-import with --slice-manifest only", 3);
+    const key = o.handoffExport ? "handoffExport" : "handoffImport", label = o.handoffExport ? "--handoff-export" : "--handoff-import";
+    o[key] = relative(o[key], label); if (!o[key].startsWith(".gemini-gate/")) die(`${label} must name a repository-relative .gemini-gate directory`, 3);
+  } else if (o.sliceManifest ? !o.fingerprint || o.context : (!o.dryRun || !o.context)) die("use --context --dry-run for local inspection, --slice-manifest --fingerprint, or strict manual handoff", 3);
   if (o.context) o.context = relative(o.context, "--context"); if (o.sliceManifest) o.sliceManifest = relative(o.sliceManifest, "--slice-manifest");
   if (o.noLog && !o.dryRun && !o.fingerprint) die("--no-log is only allowed with --dry-run or --fingerprint; live reviews require a durable receipt", 3);
   if (Boolean(o.sharedLockDir) !== Boolean(o.lockOwnerPid)) die("--shared-lock-dir and --lock-owner-pid must be supplied together", 3);
@@ -424,7 +422,7 @@ function writeGeneratedPlan(repo, o, generated) {
 }
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
 function recordBody(record) {
-  const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", record.transport], ["Transport-Identity", record.transportIdentity], ["Model", record.model], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
+  const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", record.transport], ["Transport-Identity", record.transportIdentity], ["Model", record.model], ["Handoff-ID", record.handoffId || "(none)"], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
   if (record.verdict) fields.push(["Gate-Verdict", record.verdict]);
   if (record.providerVerdict) fields.push(["Provider-Verdict", record.providerVerdict]);
   if (record.scope && (record.verdict || record.providerVerdict)) fields.push(["Inspected-Scope", record.scope]);
@@ -436,7 +434,7 @@ function recordBody(record) {
 }
 function append(repo, record) {
   const body = recordBody(record), complete = `${body}- Record-SHA256: \`${sha(body)}\`\n- Complete-Record: \`YES\`\n`, fd = fs.openSync(journalPath(repo), "a");
-  try { fs.writeSync(fd, complete); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  try { if (fs.writeSync(fd, complete) !== Buffer.byteLength(complete)) die("journal receipt write was partial", 3); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
 function preflightJournal(repo) { const file = journalPath(repo); fs.mkdirSync(path.dirname(file), { recursive: true }); const safe = journalPath(repo), fd = fs.openSync(safe, "a"); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); } }
 function sharedLock(repo, o) {
@@ -454,153 +452,87 @@ function sharedLock(repo, o) {
 }
 function complete(block) { const candidate = block.startsWith("## Gemini frozen gate attempt — ") ? `\n${block}` : block, match = candidate.match(/^([\s\S]*?)- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`\n?$/); return Boolean(match && sha(match[1]) === match[2]); }
 function rigKey(o, transport) { return sha(`${transport.name}|${transport.identity}|${o.model}|${o.rigId}`); }
-function cachedFailure(repo, key) {
-  let journal = ""; try { journal = fs.readFileSync(path.join(repo, JOURNAL), "utf8"); } catch { return null; }
-  for (const block of journal.split(/(?=^## Gemini frozen gate attempt — )/m).reverse()) {
-    if (!complete(block) || !block.includes(`- Rig-Key: \`${key}\``)) continue;
-    const status = block.match(/^- Status: `([^`]*)`$/m)?.[1], failure = block.match(/^- Failure-Class: `([^`]*)`$/m)?.[1];
-    if (status === "FAILED_TRANSPORT" && ["AUTH", "PROVIDER", "TRANSPORT", "TIMEOUT"].includes(failure)) return failure;
-  } return null;
-}
-function failureClass(error) { const message = String(error.message || ""); if (/HTTP 401|HTTP 403/.test(message)) return "AUTH"; if (/HTTP \d+/.test(message)) return "PROVIDER"; if (/timed out/.test(message)) return "TIMEOUT"; if (/response|ingestion|verdict|scope|text field/.test(message)) return "CANDIDATE_RESPONSE"; return "TRANSPORT"; }
 function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function onlyKeys(value, keys) { return Object.keys(value).every(key => keys.has(key)); }
-function toolLikeKey(key) { return /(?:tool|subagent|function|command|action|output)/i.test(key); }
-const USAGE_FIELDS = new Set(["input_tokens", "output_tokens", "thinking_tokens", "cache_read_tokens", "total_tokens"]);
-function nonnegativeNumber(value) { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
-function usage(value) { return plainObject(value) && Object.keys(value).length === USAGE_FIELDS.size && onlyKeys(value, USAGE_FIELDS) && [...USAGE_FIELDS].every(key => nonnegativeNumber(value[key])); }
-function conversationId(value) { return typeof value === "string" && value.length > 0 && value.length <= 240 && !/[\r\n\x00]/.test(value); }
-function boundedCapture(limit) {
-  let bytes = 0, overflow = false;
-  const chunks = [];
-  return {
-    append(chunk) {
-      if (overflow) return true;
-      const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk), remaining = limit + OUTPUT_SENTINEL_BYTES - bytes;
-      const kept = value.subarray(0, Math.max(0, remaining));
-      if (kept.length) { chunks.push(kept); bytes += kept.length; }
-      if (value.length > kept.length || bytes > limit) overflow = true;
-      return overflow;
-    },
-    get overflow() { return overflow; },
-    text() { return Buffer.concat(chunks).toString("utf8"); },
-  };
-}
-export function assertSubscriptionPlatform(platform = process.platform) {
-  if (platform === "win32") die("subscription transport is unavailable on Windows until owned process-group teardown is implemented", 3);
-}
-export function preflightSubscriptionSettings(settingsPath = path.join(os.homedir(), ".gemini", "antigravity-cli", "settings.json")) {
-  const stat = fs.lstatSync(settingsPath, { throwIfNoEntry: false });
-  if (!stat) return { identity: "settings-absent" };
-  if (!stat.isFile() || stat.isSymbolicLink()) die("Antigravity settings must be a regular non-symlink file", 3);
-  const bytes = fs.readFileSync(settingsPath);
-  let settings; try { settings = JSON.parse(bytes); } catch { die("Antigravity settings are malformed JSON", 3); }
-  if (!plainObject(settings)) die("Antigravity settings must be an object", 3);
-  if (settings.toolPermission !== undefined && settings.toolPermission !== "request-review") die("Antigravity toolPermission must be absent or request-review", 3);
-  if (settings.allowNonWorkspaceAccess !== undefined && settings.allowNonWorkspaceAccess !== false) die("Antigravity allowNonWorkspaceAccess must be absent or false", 3);
-  if (settings.permissions !== undefined) {
-    if (!plainObject(settings.permissions)) die("Antigravity permissions must be an object", 3);
-    if (settings.permissions.allow !== undefined && (!Array.isArray(settings.permissions.allow) || settings.permissions.allow.length)) die("Antigravity permissions.allow must be an empty array when present", 3);
+function handoffDirectory(repo, rel, create = false) {
+  rel = relative(rel, "handoff directory"); if (!rel.startsWith(".gemini-gate/")) die("handoff directory must be inside .gemini-gate", 3);
+  const parts = rel.split("/"), target = path.resolve(repo, rel); let current = repo;
+  for (const [index, part] of parts.entries()) {
+    current = path.join(current, part); const stat = fs.lstatSync(current, { throwIfNoEntry: false }), leaf = index === parts.length - 1;
+    if (stat?.isSymbolicLink() || (stat && !stat.isDirectory())) die("handoff path must contain only real directories", 3);
+    if (!stat) { if (!create) die("handoff directory does not exist", 3); fs.mkdirSync(current, { mode: 0o700 }); }
+    if (leaf && stat && create) die("handoff export directory already exists", 3);
   }
-  return { identity: `settings-sha256:${sha(bytes)}` };
+  if (path.relative(repo, target).startsWith("..")) die("handoff directory escapes repository", 3);
+  return target;
 }
-function resolveSubscriptionTransport(o) {
-  const fromPath = () => (process.env.PATH || "").split(path.delimiter).filter(Boolean).map(directory => path.join(directory, "agy")).find(candidate => {
-    const stat = fs.statSync(candidate, { throwIfNoEntry: false }); return Boolean(stat?.isFile() && (stat.mode & 0o111));
-  });
-  const requested = o.agyBin || fromPath() || path.join(os.homedir(), ".local", "bin", "agy"), stat = fs.statSync(requested, { throwIfNoEntry: false });
-  if (!stat || !stat.isFile() || !(stat.mode & 0o111)) die(`agy binary is not a regular executable: ${requested}`, 127);
-  const binary = fs.realpathSync(requested);
-  let version;
-  try { version = String(execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10000 })).trim(); }
-  catch (error) { die(`agy --version failed: ${String(error.stderr || error.message).trim()}`, 3); }
-  if (!version || version.length > 240 || /[\r\n\x00]/.test(version)) die("agy --version returned an invalid identity", 3);
-  const settings = preflightSubscriptionSettings();
-  return { name: "antigravity-agy-subscription-stream-v1", identity: `${version}|${settings.identity}`, binary };
+function handoffChild(root, name, directory = false) {
+  const file = path.join(root, name), stat = fs.lstatSync(file, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink() || (directory ? !stat.isDirectory() : !stat.isFile())) die(`handoff ${name} must be a regular non-symlink ${directory ? "directory" : "file"}`, 3);
+  return file;
 }
-function resolveTransport(o) { return o.transport === "api" ? { name: "direct-gemini-rest-v1", identity: `${ENDPOINT}|${o.model}` } : resolveSubscriptionTransport(o); }
-function parseSubscriptionStream(stdout, workspace, model, e) {
-  const lines = stdout.split(/\r?\n/); if (lines.at(-1) === "") lines.pop();
-  if (!lines.length || lines.some(line => !line)) die("agy stream-json output is empty or contains a blank event", 3);
-  let initCount = 0, resultCount = 0, result, expectedConversation;
-  for (const [index, line] of lines.entries()) {
-    let event; try { event = JSON.parse(line); } catch { die("agy stream-json output contains malformed JSON", 3); }
-    if (!plainObject(event) || typeof event.event !== "string") die("agy stream-json output contains an unrecognized event", 3);
-    if (event.event === "init") {
-      if (index !== 0 || ++initCount !== 1 || !onlyKeys(event, new Set(["event", "conversation_id", "init"])) || !conversationId(event.conversation_id) || !plainObject(event.init)) die("agy stream-json must begin with exactly one init event", 3);
-      expectedConversation = event.conversation_id;
-      const init = event.init;
-      if (!onlyKeys(init, new Set(["cwd", "tools", "permission_mode", "model"]))) die("agy init contains an unrecognized or execution-like field", 3);
-      let cwd; try { cwd = fs.realpathSync(init.cwd); } catch { die("agy init cwd is invalid", 3); }
-      if (cwd !== workspace || init.permission_mode !== "request-review" || init.model !== model || !Array.isArray(init.tools) || init.tools.some(tool => typeof tool !== "string")) die("agy init does not prove the required disposable request-review rig", 3);
-      continue;
-    }
-    if (event.event === "step_update") {
-      const step = event.step_update;
-      if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || Object.keys(step).some(toolLikeKey) || step.step_type === "tool" || step.step_type === "subagent") die("agy stream recorded a tool or subagent action", 3);
-      const base = new Set(["conversation_id", "step_index", "state", "step_type"]), responseFields = new Set([...base, "text_delta", "duration_seconds", "usage"]), fields = step.step_type === "user_input" ? base : responseFields;
-      if (!["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== expectedConversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0 || !onlyKeys(step, fields) || (Object.hasOwn(step, "text_delta") && typeof step.text_delta !== "string") || (Object.hasOwn(step, "duration_seconds") && !nonnegativeNumber(step.duration_seconds)) || (Object.hasOwn(step, "usage") && !usage(step.usage))) die("agy stream contains an unrecognized step", 3);
-      continue;
-    }
-    if (event.event === "result") {
-      const fields = new Set(["conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"]), terminal = event.result;
-      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, new Set(["event", "result"])) || !plainObject(terminal) || !onlyKeys(terminal, fields) || terminal.conversation_id !== expectedConversation || typeof terminal.status !== "string" || typeof terminal.response !== "string" || !nonnegativeNumber(terminal.duration_seconds) || !Number.isSafeInteger(terminal.num_turns) || terminal.num_turns < 0 || !usage(terminal.usage) || (Object.hasOwn(terminal, "error") && typeof terminal.error !== "string") || (Object.hasOwn(terminal, "denied_actions") && (!Array.isArray(terminal.denied_actions) || terminal.denied_actions.some(action => typeof action !== "string" || !action)))) die("agy stream must end with exactly one valid result event", 3);
-      result = terminal; continue;
-    }
-    die("agy stream-json output contains an unrecognized event", 3);
+function packetName(index) { return `${String(index + 1).padStart(4, "0")}.txt`; }
+function packetIdentity(item, index) {
+  return { ordinal: index + 1, filename: packetName(index), slice: item.name, kind: item.kind, prompt_bytes: Buffer.byteLength(item.prompt), prompt_sha256: sha(item.prompt), material_sha256: item.materialId, envelope_sha256: item.envelopeSha, inspected_scope_sha256: sha(item.scope), ingestion_markers: item.markers, completion_token: item.done };
+}
+function writeHandoff(repo, o, plan, prepared) {
+  const root = handoffDirectory(repo, o.handoffExport, true), packets = path.join(root, "packets"), replies = path.join(root, "replies");
+  fs.mkdirSync(packets, { mode: 0o700 }); fs.mkdirSync(replies, { mode: 0o700 });
+  const identities = prepared.map(packetIdentity), handoff = { version: 1, handoff_id: random("PIL-GEMINI-HANDOFF"), tuple: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan.planId, rig_id: o.rigId, manual_transport: { identity: MANUAL_TRANSPORT, model: SUBSCRIPTION_MODEL, attestation: "operator selects this subscription model in the manual UI; runner cannot cryptographically verify UI/provider identity" }, packets: identities };
+  for (const [index, item] of prepared.entries()) fs.writeFileSync(path.join(packets, packetName(index)), item.prompt, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  fs.writeFileSync(path.join(root, "handoff.json"), `${JSON.stringify(handoff, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  process.stdout.write(JSON.stringify({ handoff: o.handoffExport, handoff_id: handoff.handoff_id, packets: identities, next: "Submit packets manually with the attested Gemini subscription model, save exact UTF-8 replies as replies/0001.txt..., then run --handoff-import." }, null, 2) + "\n");
+}
+function equalObject(actual, expected) { return plainObject(actual) && Object.keys(actual).length === Object.keys(expected).length && Object.entries(expected).every(([key, value]) => JSON.stringify(actual[key]) === JSON.stringify(value)); }
+function readHandoff(repo, o, plan, prepared) {
+  const root = handoffDirectory(repo, o.handoffImport), rootEntries = fs.readdirSync(root).sort(lexical);
+  if (rootEntries.join("\0") !== ["handoff.json", "packets", "replies"].join("\0")) die("handoff directory must contain exactly handoff.json, packets, and replies", 3);
+  const json = handoffChild(root, "handoff.json"); let handoff;
+  try { handoff = JSON.parse(fs.readFileSync(json, "utf8")); } catch { die("handoff.json must be valid UTF-8 JSON", 3); }
+  const expectedPackets = prepared.map(packetIdentity), expectedTransport = { identity: MANUAL_TRANSPORT, model: SUBSCRIPTION_MODEL, attestation: "operator selects this subscription model in the manual UI; runner cannot cryptographically verify UI/provider identity" };
+  const handoffKeys = ["version", "handoff_id", "tuple", "plan_id", "rig_id", "manual_transport", "packets"];
+  if (!plainObject(handoff) || Object.keys(handoff).length !== handoffKeys.length || handoffKeys.some(key => !(key in handoff)) || handoff.version !== 1 || !/^PIL-GEMINI-HANDOFF-[0-9a-f]{24}$/.test(handoff.handoff_id || "") || !equalObject(handoff.tuple, { base: o.base, candidate: o.candidate, tree: o.tree }) || handoff.plan_id !== plan.planId || handoff.rig_id !== o.rigId || !equalObject(handoff.manual_transport, expectedTransport) || !Array.isArray(handoff.packets) || handoff.packets.length !== expectedPackets.length || handoff.packets.some((packet, index) => !equalObject(packet, expectedPackets[index]))) die("handoff.json does not exactly bind this frozen tuple, plan, rig, manual model, and packets", 3);
+  const packets = handoffChild(root, "packets", true), packetFiles = fs.readdirSync(packets).sort(lexical);
+  if (packetFiles.join("\0") !== expectedPackets.map(packet => packet.filename).join("\0")) die("handoff packets must be exactly ordered numeric files", 3);
+  for (const [index, item] of prepared.entries()) {
+    const file = handoffChild(packets, packetName(index)); let text;
+    try { text = new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(file)); } catch { die("handoff packet is not UTF-8", 3); }
+    if (text !== item.prompt) die("handoff packet bytes do not match the recomputed frozen prompt", 3);
   }
-  if (initCount !== 1 || resultCount !== 1 || result.status !== "SUCCESS" || !result.response.trim() || Object.hasOwn(result, "error") || Object.hasOwn(result, "denied_actions")) die("agy subscription response is not one clean successful nonempty result", 3);
-  return verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: result.response }] } }] }, e);
+  const replies = handoffChild(root, "replies", true), files = fs.readdirSync(replies).sort(lexical);
+  if (files.some(file => !/^\d{4}\.txt$/.test(file))) die("handoff replies may contain numeric .txt files only", 3);
+  const replyIndexes = files.map(file => Number(file.slice(0, 4)) - 1);
+  if (replyIndexes.some((index, position) => index !== position || index >= prepared.length)) die("handoff replies contain a gap, duplicate, or extra ordinal", 3);
+  const repliesText = files.map(file => { const value = handoffChild(replies, file); try { return new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(value)); } catch { die("handoff reply is not UTF-8", 3); } });
+  const results = repliesText.map((reply, index) => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: reply }] } }] }, prepared[index]));
+  const terminals = results.map((result, index) => result.verdict === "NO-GO" && !result.unresolvedAttribution ? index : -1).filter(index => index >= 0);
+  if (terminals.length > 1 || (terminals.length && terminals[0] !== results.length - 1)) die("a verified terminal NO-GO must be the final supplied reply", 3);
+  if (!terminals.length && results.length !== prepared.length) die("strict manual import requires every ordered reply unless its final supplied reply is a verified terminal NO-GO", 3);
+  return { handoff, results };
 }
-async function callSubscription(o, transport, e) {
-  assertSubscriptionPlatform();
-  const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gemini-subscription-")));
-  const stdout = boundedCapture(SUBSCRIPTION_STDOUT_LIMIT), stderr = boundedCapture(SUBSCRIPTION_STDERR_LIMIT);
-  let timedOut = false, interruptedSignal = null;
-  try {
-    if (fs.readdirSync(workspace).length) die("subscription workspace is not empty", 3);
-    const child = spawn(transport.binary, ["--model", o.model, "--sandbox", "--disable-slash-commands", "--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout", `${o.timeoutSeconds}s`], { cwd: workspace, stdio: ["pipe", "pipe", "pipe"], shell: false, detached: true });
-    let killTimer, terminated = false, teardownDone = false, closeOutcome, finish = () => {}, transportError;
-    const signalGroup = signal => {
-      try { process.kill(-child.pid, signal); } catch { try { child.kill(signal); } catch {} }
-    };
-    const terminate = () => {
-      if (terminated) return; terminated = true;
-      signalGroup("SIGTERM");
-      killTimer = setTimeout(() => { signalGroup("SIGKILL"); teardownDone = true; finish(); }, 2000);
-    };
-    const onInterrupt = signal => { interruptedSignal ||= signal; terminate(); };
-    process.on("SIGINT", onInterrupt); process.on("SIGTERM", onInterrupt);
-    let outcome;
-    try {
-      outcome = await new Promise((resolve, reject) => {
-      finish = () => { if (closeOutcome && (!terminated || teardownDone)) resolve(closeOutcome); };
-      const timer = setTimeout(() => { timedOut = true; terminate(); }, o.timeoutSeconds * 1000);
-      child.stdout.on("data", chunk => { if (stdout.append(chunk)) terminate(); });
-      child.stderr.on("data", chunk => { if (stderr.append(chunk)) terminate(); });
-      const fail = error => { transportError ||= error; terminate(); };
-      child.once("error", error => { clearTimeout(timer); transportError ||= error; teardownDone = true; closeOutcome ||= { code: null, signal: null }; finish(); });
-      child.stdin.once("error", fail);
-      child.once("close", (code, signal) => { clearTimeout(timer); closeOutcome = { code, signal }; finish(); });
-      try { child.stdin.end(`${JSON.stringify({ event: "user", message: { content: e.prompt } })}\n`); } catch (error) { fail(error); }
-      });
-    } finally { process.removeListener("SIGINT", onInterrupt); process.removeListener("SIGTERM", onInterrupt); }
-    if (interruptedSignal) die(`agy subscription transport interrupted by ${interruptedSignal}`, interruptedSignal === "SIGINT" ? 130 : 143);
-    if (transportError) die(`agy subscription transport input failed: ${transportError.message}`, 3);
-    if (timedOut) die("agy subscription transport timed out", 3);
-    if (stdout.overflow || stderr.overflow) die("agy subscription transport exceeded its bounded output limit", 3);
-    if (outcome.signal || outcome.code !== 0) die(`agy subscription transport exited ${outcome.signal || outcome.code}`, 3);
-    if (stderr.text().trim()) die("agy subscription transport emitted stderr diagnostics or a permission notice", 3);
-    if (fs.readdirSync(workspace).length) die("agy subscription transport mutated its disposable workspace", 3);
-    return parseSubscriptionStream(stdout.text(), workspace, o.model, e);
-  } finally { fs.rmSync(workspace, { recursive: true, force: true }); }
+function completeHandoffRecord(block) { return complete(block.replace(/\n$/, "")); }
+function replayedHandoff(repo, handoffId) {
+  let text = ""; try { text = fs.readFileSync(journalPath(repo), "utf8"); } catch { return false; }
+  return text.split(/(?=^## Gemini frozen gate attempt — )/m).some(block => completeHandoffRecord(block) && block.includes(`- Handoff-ID: \`${handoffId}\``));
 }
-async function call(o, transport, e) {
-  if (o.transport === "subscription") return callSubscription(o, transport, e);
-  const key = process.env.GEMINI_API_KEY; if (!key) die("GEMINI_API_KEY is required only for a live direct API invocation", 3);
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 600000);
-  try { const response = await fetch(`${ENDPOINT}/${o.model}:generateContent`, { method: "POST", redirect: "error", signal: controller.signal, headers: { "content-type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(e.request) }); if (!response.ok) die(`Gemini provider returned HTTP ${response.status}`, 3); return verifyResponse(await response.json(), e); }
-  catch (error) { if (error.name === "AbortError") die("Gemini provider timed out", 3); throw error; } finally { clearTimeout(timer); }
+function manualTransport() { return { name: MANUAL_TRANSPORT, identity: `${MANUAL_TRANSPORT}|${SUBSCRIPTION_MODEL}` }; }
+function writeImportedReceipts(repo, o, plan, prepared, imported) {
+  const transport = manualTransport(), key = rigKey(o, transport), contributors = [], results = [], unresolved = [];
+  endpoint(repo, o); if (replayedHandoff(repo, imported.handoff.handoff_id)) die("Handoff-ID already has a complete durable receipt", 3);
+  preflightJournal(repo); endpoint(repo, o);
+  for (const [index, result] of imported.results.entries()) {
+    const item = prepared[index], attemptId = `PIL-MANUAL-${imported.handoff.handoff_id.slice(-24)}-${String(index + 1).padStart(4, "0")}`;
+    const common = { transport: transport.name, transportIdentity: transport.identity, model: o.model, handoffId: imported.handoff.handoff_id, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes };
+    if (result.unresolvedAttribution) {
+      const observation = { attempt_id: attemptId, slice: item.name, provider_verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) };
+      append(repo, { ...common, status: "UNRESOLVED_ATTRIBUTION", kind: "SLICE_RESULT", release: "NO", providerVerdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply }); contributors.push(attemptId); results.push({ status: "UNRESOLVED_ATTRIBUTION", ...observation }); unresolved.push(observation); continue;
+    }
+    append(repo, { ...common, status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_RESULT", release: "NO", verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
+    contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) });
+    if (result.verdict === "NO-GO") { process.exitCode = 3; return; }
+  }
+  endpoint(repo, o); const materialId = sha(JSON.stringify({ plan_id: plan.planId, contributors: results, unresolved_attribution: unresolved })), scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: materialId, contributors: results, unresolved_attribution: unresolved }), resultSha = sha(JSON.stringify({ status: unresolved.length ? "ATTRIBUTION_HOLD" : "GO", scope }));
+  append(repo, { status: unresolved.length ? "ATTRIBUTION_HOLD" : "PASS_VERDICT", kind: "SLICE_SET", release: unresolved.length ? "NO" : "YES", transport: transport.name, transportIdentity: transport.identity, model: o.model, handoffId: imported.handoff.handoff_id, attemptId: `PIL-MANUAL-AGGREGATE-${imported.handoff.handoff_id.slice(-24)}`, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict: unresolved.length ? undefined : "GO", scope: unresolved.length ? undefined : scope, resultSha, aggregateResult: unresolved.length ? "assembled verified manual replies; unresolved source-only attribution requires PM adjudication" : undefined, unresolvedAttempts: unresolved.map(item => item.attempt_id) });
+  if (unresolved.length) process.exitCode = 3;
 }
 export async function run(argv = process.argv.slice(2)) {
   const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o);
@@ -616,45 +548,14 @@ export async function run(argv = process.argv.slice(2)) {
   }
   const units = plan ? plan.slices.map(item => ({ name: item.name, kind: item.kind, rows: rows.filter(row => item.files.includes(row.file)), contexts: item.contract_context, fragments: item.fragments })) : [{ name: "full", kind: "full", rows, contexts: [o.context] }];
   if (plan) validateCoveragePartitions(repo, o, rows, units);
-  const prepared = units.map(unit => envelope(repo, o, unit.rows, unit.contexts, unit.name, unit.fragments, unit.kind === "cross_boundary", coveredComponents, unit.kind));
+  const prepared = units.map(unit => ({ ...envelope(repo, o, unit.rows, unit.contexts, unit.name, unit.fragments, unit.kind === "cross_boundary", coveredComponents, unit.kind), kind: unit.kind }));
   for (const item of prepared) if (item.bytes >= LIMIT) die(`complete ${item.name} envelope is ${item.bytes} bytes; must be below ${LIMIT}`, 3);
   const identities = prepared.map(item => ({ slice: item.name, bytes: item.bytes, material_sha256: item.materialId, request_sha256: item.envelopeSha }));
   if (o.fingerprint) { process.stdout.write(JSON.stringify({ plan_id: plan.planId, envelopes: identities, next: "Set approval.status=APPROVED and approval.expected_plan_id to plan_id after PM review." }, null, 2) + "\n"); return; }
   if (o.dryRun) { process.stdout.write(JSON.stringify({ frozen: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan?.planId || null, envelopes: identities }, null, 2) + "\n"); return; }
-  preflightJournal(repo); const lock = sharedLock(repo, o);
-  try {
-    const transport = resolveTransport(o), key = rigKey(o, transport), contributors = [], results = [], unresolvedAttribution = []; let allGo = true;
-    for (const item of prepared) {
-      if (cachedFailure(repo, key)) die(`cached transport rig failure for --rig-id ${o.rigId}; change the nonsecret rig declaration after a real recovery`, 3);
-      const attemptId = random("PIL-FROZEN-ATTEMPT");
-      try {
-        endpoint(repo, o); const result = await call(o, transport, item); endpoint(repo, o);
-        if (result.unresolvedAttribution) {
-          const observation = { attempt_id: attemptId, slice: item.name, provider_verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) };
-          append(repo, { status: "UNRESOLVED_ATTRIBUTION", kind: "SLICE_RESULT", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, providerVerdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
-          contributors.push(attemptId); results.push({ status: "UNRESOLVED_ATTRIBUTION", ...observation }); unresolvedAttribution.push(observation); process.stdout.write(`${result.reply}\n`); continue;
-        }
-        append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
-        contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
-        // A valid NO-GO is delivered review evidence, not a transport failure. Stop at the
-        // first one so no later slice call or incomplete-set aggregate can change that fact.
-        if (result.verdict === "NO-GO") { process.exitCode = 3; return; }
-      } catch (error) { const failure = failureClass(error); append(repo, { status: failure === "CANDIDATE_RESPONSE" ? "FAILED_CANDIDATE_RESPONSE" : "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, failureClass: failure, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail: error.message }); throw error; }
-    }
-    if (plan) {
-      endpoint(repo, o);
-      const aggregateMaterialId = sha(JSON.stringify({ plan_id: plan.planId, envelopes: prepared.map(item => ({ slice: item.name, material_sha256: item.materialId, request_sha256: item.envelopeSha })), contributors: results, unresolved_attribution: unresolvedAttribution }));
-      const scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: aggregateMaterialId, contributors: results, unresolved_attribution: unresolvedAttribution });
-      if (unresolvedAttribution.length) {
-        const resultSha = sha(JSON.stringify({ status: "ATTRIBUTION_HOLD", scope }));
-        append(repo, { status: "ATTRIBUTION_HOLD", kind: "SLICE_SET", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, resultSha, aggregateResult: "assembled verified slice results; unresolved source-only attribution requires PM adjudication", unresolvedAttempts: unresolvedAttribution.map(item => item.attempt_id) });
-        process.exitCode = 3;
-      } else {
-        const verdict = allGo ? "GO" : "NO-GO", resultSha = sha(JSON.stringify({ verdict, scope }));
-        append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict, scope, resultSha });
-      }
-    }
-    if (!allGo) process.exitCode = 3;
-  } finally { fs.rmSync(lock, { recursive: true, force: true }); }
+  if (o.handoffExport) { writeHandoff(repo, o, plan, prepared); return; }
+  if (!o.handoffImport) die("automated frozen provider execution is retired; use --handoff-export then --handoff-import", 3);
+  const imported = readHandoff(repo, o, plan, prepared); const lock = sharedLock(repo, o);
+  try { writeImportedReceipts(repo, o, plan, prepared, imported); } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) run().catch(error => { process.stderr.write(`gemini-frozen-gate: ${error.message}\n`); process.exit(error.exitCode || 3); });
