@@ -1,4 +1,4 @@
-# workflow-kit — v2.29.0
+# workflow-kit — v2.30.0
 
 ## What's new in v2.29.0 — gate repair stays finite across successors
 
@@ -19,8 +19,10 @@ must change before rerun.
 **Upgrade: `init --force` is required for existing adopters.** This release changes installed `[P]`
 controller, guard, recorder, core-doctrine and orchestrate-skill files; a plain rerun keeps stale
 copies and reports the incomplete generation. `--force` is GLOBAL across the installed `[P]` class,
-backs up differing files as `.bak`, and rewrites `kit.config.json` from the flags supplied on that
-run, so repeat every local configuration flag and diff the backups. Re-grant Codex hook trust after
+backs up differing files as `.bak`, and rewrote `kit.config.json` from the flags supplied on that
+run, so repeat every local configuration flag and diff the backups. (That rewrite is the defect
+v2.30.0 replaced with a refusal — see the v2.30.0 section below; from v2.30.0 on, a partial flag set
+does not silently rewrite this file, it fails.) Re-grant Codex hook trust after
 the hook bytes change. The repository's `skills/orchestrate/` package is authoritative. After freeze,
 run `scripts/sync-user-orchestrate-skill.mjs --install` for `~/.agents/skills/orchestrate`
 and again with `--target ~/.claude/skills/orchestrate` for the Claude user copy. Provider names
@@ -33,13 +35,50 @@ subscription UI and import only matching UTF-8 replies. The frozen engine never 
 provider settings or credentials, or calls REST; the operator attests the UI/model selection while
 the runner verifies tuple, plan, fragments, scope, proof, completion, and receipts.
 
-## What's new in v2.29.0 — frozen Gemini receipts are provenance-bound
+## What's new in v2.30.0 — frozen Gemini receipts are provenance-bound
 
 The frozen direct Gemini path now binds every live request and durable record to the checked-out
 candidate endpoint, regular Git blobs, exact normalized scope, ordered full-material ingestion proof,
 and a complete fsynced reply record. `--no-log` is diagnostic-only for dry-run/fingerprint work;
 live direct reviews always retain a receipt. The following v2.28.0 adopter material and v2.27.0 sensor
 material remain included for adopters upgrading across both releases.
+
+It also closes the defect an adopter hit by following v2.28.0's own upgrade instruction:
+`init --force` with a partial set of family flags rebuilt `.claude/kit.config.json` from that run's
+flags alone and silently dropped every family it did not name — a widened write guard, shrunken
+doc-size governance, a lost memory default, all under exit 0. That rewrite is now REFUSED unless
+every family the existing file holds is named on the command line. And four surfaces describing the
+cross-repo guard's allowed write roots left out `/private/tmp`, which the guard has allowed all
+along; the guard's own denial message was one of them.
+
+**Upgrade: `init --force` is REQUIRED, and a plain re-run will FAIL.** Since v2.28.0 this release
+changes the bytes of installed `[P]` files in four classes — the hooks
+(`guard-cross-repo-writes.mjs`, `guard-gate-ladder.mjs`, `guard-brief-rung.mjs`,
+`repair-dispatch-state.mjs`), four `core/` method docs (`GATES.md`, `MULTI_AGENT.md`, `REVIEW.md`,
+`WORKFLOW.md`), `scripts/record-repair-event.mjs`, and the
+`skills/orchestrate/` package (`SKILL.md`, `PROTOCOLS.md`, `CHIP_BRIEF.md`) — plus, only if you
+adopted with `--with-gate-runners`, the frozen-Gemini runners (`gemini-frozen-gate.mjs`,
+`gemini-frozen-gate-selftest.mjs`, `gemini-gate-slices.mjs`, `cold-review-gemini.sh`,
+`cold-review-gemini-selftest.sh`). A plain re-run keeps the stale copies and exits 1 naming
+`--force`. `--force` replaces them, backing up every differing file first; re-grant Codex hook trust
+afterwards, as always. `templates/CLAUDE.md.tmpl` changed too, so the `[G]` entry stub is regenerated
+with placeholders and your completed `CLAUDE.md` is backed up beside it — port the corrected
+sentence by hand.
+
+**The config rule changed with it: name EVERY family, or the run refuses.** `--force` no longer
+rewrites `.claude/kit.config.json` from that run's flags alone. If the existing file holds a family
+your command line does not name, the overwrite is REFUSED, the file is left byte-for-byte unchanged,
+and the run exits nonzero naming each missing family and the flag that fills it
+(`executedPathDirs`→`--source-dirs`, `stateDocs`→`--state-docs`, `memoryDir`→`--memory-dir`,
+`worktreeRoots`→`--worktree-roots`). Read the values out of that file — it is untouched and sitting
+right there — and re-run naming all of them. The installer deliberately prints none of its values
+back at you, and a file it cannot read as a JSON object is refused rather than replaced.
+
+Two things that re-run cannot do for you. A value no flag can carry — a list entry holding a comma,
+or a shape the CLI does not take — will not survive being re-typed as a flag, so repair that file by
+hand or move it aside and start from flags; the refusal says so too. And a key `init` does not
+recognise is dropped by the rewrite that finally succeeds: it is named in a warning before it goes,
+and if you rely on it, re-add it by hand afterwards or take it from the `.bak`.
 
 ## What's new in v2.28.0 — what adopting v2.26.0 into a real repo found
 
