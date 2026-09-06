@@ -171,7 +171,8 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --worktree-roots a,b    ABSOLUTE roots where THIS repo's private worktrees live ⇒ kit.config.json
                           worktreeRoots, which guard-cross-repo-writes adds to its allowed write
-                          roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp)
+                          roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp,
+                          /private/tmp)
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
   --codex-prompts-dir <d> where the Codex prompts install — /thread-restart and the skill shims
                           (default: ~/.codex/prompts, USER-GLOBAL — outside the target repo;

@@ -47,7 +47,8 @@ Five defects, each found by installing the kit somewhere other than the repo it 
 the same shape: a claim that was true inside the kit's own tree and false in an adopter's.
 
 - **The private-worktree root is data, not `/tmp`.** `core/MULTI_AGENT.md` sent concurrent work to a
-  worktree under `/tmp` and `guard-cross-repo-writes` allowed only `/tmp`; an adopter whose worktrees
+  worktree under `/tmp` and `guard-cross-repo-writes` allowed no scratch root but `/tmp` and
+  `/private/tmp`; an adopter whose worktrees
   live elsewhere had a Claude session that could not write its own worktree with the file tools.
   `.claude/kit.config.json` gains `worktreeRoots` (absolute paths; `init --worktree-roots a,b`), the
   guard adds them to its allowed roots, and a malformed value DENIES rather than falls back.
@@ -72,9 +73,13 @@ the same shape: a claim that was true inside the kit's own tree and false in an 
 - **Each entry stub states its own lane's real registration.** The Codex stub called the gate-ladder
   sensor a guard and omitted `guard-brief-rung`; both stubs predated the v2.27.0 sensors. Derived from
   `templates/settings.json` and the `.codex/hooks.json` `init` writes.
-- **`PORTABILITY.md` is installed.** Ten installed surfaces cite it; no run of `init` put it anywhere.
-  It is `[P]`, at the adopter's root, mechanism like `core/` — and an adopter's own `PORTABILITY.md`
-  at that path is recognised by its header and never overwritten, `--force` included.
+- **Every `PORTABILITY.md` pointer says where that file is.** Installed surfaces cited it by bare
+  name; no run of `init` puts it anywhere, so an adopter following the citation looked for a file
+  that was not there. Nothing is installed at the adopter's root under that name — instead every
+  pointer now locates it in the workflow-kit repository, and the test that holds them there stops
+  listing the surfaces it checks: it adopts into a temp dir and walks every file `init` wrote,
+  which is how the last bare pointer (a comment inside a script copied into every Codex-lane
+  adopter) was found.
 
 **Upgrade: `init --force` is REQUIRED, and a plain re-run will FAIL.** This release changes the bytes of
 eight `[P]` files an adopter already carries — `hooks/guard-cross-repo-writes.mjs`, `hooks/guard-owner-comms.mjs`,
@@ -87,7 +92,7 @@ the kit ships points at it any more; delete it or keep it, but do not read it as
 entry-stub paragraphs are `[G]` and reach a completed `CLAUDE.md` / `AGENTS.md` only by hand: port the
 § Enforcement paragraph from the regenerated stub (or from `templates/`) into your completed one — `--force`
 regenerates the stubs with placeholders and backs your completed ones up beside them. Then pass
-`--worktree-roots` if your worktrees live outside `/tmp`. And if `init` exits 1 because git could not
+`--worktree-roots` if your worktrees live outside `/tmp` / `/private/tmp`. And if `init` exits 1 because git could not
 certify `.codex/hooks.json` or `.claude/metrics/` as ignored-and-untracked: **a gitignore rule never
 untracks an indexed path, and only git's answer counts** — run the exact `git rm --cached` command it
 printed (or fix the ignore rule it named), commit, and re-run; init makes neither change for you, and an
@@ -1119,7 +1124,10 @@ the `[G]` files do get a `.bak` — but only when their new content actually DIF
 is rewritten with the same bytes and gets none.) *(Historical note — superseded in v2.16.0:
 `--force` now backs up EVERY differing file it overwrites to `<file>.bak`, refuses any overwrite
 whose backup cannot be taken, and counts each refusal into a nonzero exit. The sentences above
-record v2.1.1 behavior; the `executedPathDirs` reset is unchanged and still bites.)* **Commit
+record v2.1.1 behavior. The `executedPathDirs` reset survived that release and bit a real adopter;
+**the installer no longer allows it** — `--force` REFUSES the `kit.config.json` rewrite unless every
+family the existing file already holds is named on that command line, leaving the file byte-for-byte
+unchanged and exiting nonzero with the missing families and the flag that fills each.)* **Commit
 before you run it.**
 
 **What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the

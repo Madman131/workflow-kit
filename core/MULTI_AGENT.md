@@ -33,8 +33,9 @@ Owner) do the committing.
    lanes in one file.
 3. **Substantial concurrent work → a private worktree under the roots this repo declares**
    (`.claude/kit.config.json` `worktreeRoots`; `/tmp` by default) — never inside the checkout. Those
-   are the roots `guard-cross-repo-writes` allows, so a root the repo has NOT declared is a worktree
-   the Claude lane cannot write with its file tools. When unsure whether the other lane is live, use
+   join the roots `guard-cross-repo-writes` allows without being declared — this checkout, `~/.claude`,
+   `/tmp` and `/private/tmp` — so a worktree outside ALL of them is one the Claude lane cannot write
+   with its file tools. When unsure whether the other lane is live, use
    the worktree — fail closed. Commit early and often there: a scratch root is purged on reboot, so
    only commits survive it (they land in the main object store).
 4. **Merge + test in the worktree, never in the shared checkout:** merge the shared branch INTO your

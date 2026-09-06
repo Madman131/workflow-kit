@@ -38,9 +38,9 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
 1. **Absolute paths only.** Never say or pass "the repo" — name it with its full path.
 2. **Write ONLY here.** A PreToolUse guard (`.claude/hooks/guard-cross-repo-writes.mjs`) blocks
    Write/Edit outside this repo, so a sibling is **physically unwritable** by the file tools.
-   (Sanctioned exception: the guard also allows `~/.claude`, `/tmp`, and every absolute path in
-   `.claude/kit.config.json` `worktreeRoots` — which is how this repo's private worktrees stay
-   writable. A root that is not declared there is one your file tools cannot reach.)
+   (Sanctioned exception: the guard also allows `~/.claude`, `/tmp`, `/private/tmp`, and every
+   absolute path in `.claude/kit.config.json` `worktreeRoots` — which is how this repo's private
+   worktrees stay writable. A root outside ALL of those is one your file tools cannot reach.)
 3. **Identity ritual before EVERY commit/push:** run
    `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
    and confirm the intended remote + branch. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}** — gate

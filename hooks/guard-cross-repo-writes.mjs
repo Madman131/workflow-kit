@@ -16,7 +16,7 @@
 //
 // WHY `worktreeRoots` EXISTS (2026-09-03, found by adopting v2.26.0 into a repo whose worktrees do
 // not live under /tmp). The method sends substantial concurrent work into a PRIVATE WORKTREE, and
-// this guard hard-coded `/tmp` as the only place one could sit. An adopter who keeps worktrees
+// this guard hard-coded the two scratch roots as the only places one could sit. An adopter who keeps worktrees
 // anywhere else got a session that could not write its OWN worktree with the file tools — so the
 // portable doctrine and the shipped control contradicted each other, and the entry stubs had to
 // carry the contradiction. The root set is now DATA the adopter declares, exactly the
@@ -169,7 +169,10 @@ process.stdin.on("end", () => {
   deny(
     `Cross-repo write blocked by ${SELF}: ` +
     `${outside.length === 1 ? `target ${outside[0]} is` : `${outside.length} of ${result.targets.length} targets are`} ` +
-    `outside this repo (allowed: project dir, ~/.claude, /tmp${config.worktreeRoots.length ? `, plus the ${config.worktreeRoots.length} declared worktreeRoots` : ""})${outside.length === 1 ? "" : ` — ${outside.join(", ")}`}. ` +
+    // This list reads as exhaustive and the remediation below is built on it, so it must name every
+    // entry of the `roots` array above. It omitted /private/tmp, which is where a macOS adopter's
+    // /tmp worktree actually resolves — sending them to relocate a worktree the guard already allows.
+    `outside this repo (allowed: project dir, ~/.claude, /tmp, /private/tmp${config.worktreeRoots.length ? `, plus the ${config.worktreeRoots.length} declared worktreeRoots` : ""})${outside.length === 1 ? "" : ` — ${outside.join(", ")}`}. ` +
     `This guard exists because a sibling-repo thread once overwrote files here (2026-06-11). ` +
     `A patch envelope is applied as a unit, so one out-of-repo target denies the whole call. ` +
     `If this write is genuinely intended, use a shell command (explicit user approval), declare the ` +
