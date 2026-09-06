@@ -96,6 +96,70 @@ const effectiveAggregatePolicyVersion = (state, incoming) =>
   Math.max(state?.policy_version ?? 1, aggregatePolicyVersion(incoming));
 const continuationReviewAllows = (review) =>
   ["successor", "owner_decision"].includes(review?.ruling);
+const PROCESS_REVIEW_PURPOSES = new Set(["dispatch", "child_continuation", "legacy_handoff"]);
+function processReviewAnchorShape(anchor) {
+  if (!plain(anchor)) return false;
+  if (anchor.kind === "aggregate_panel_close") return ID64.test(anchor.event_id || "") &&
+    GIT_SHA.test(anchor.frozen_commit || "") && GIT_SHA.test(anchor.frozen_tree || "");
+  if (anchor.kind === "aggregate_terminal") return ID64.test(anchor.event_id || "") &&
+    ID64.test(anchor.panel_open_event_id || "") && GIT_SHA.test(anchor.frozen_commit || "") &&
+    GIT_SHA.test(anchor.frozen_tree || "");
+  if (anchor.kind === "standard_disposition") return ID64.test(anchor.event_id || "") &&
+    ID64.test(anchor.candidate_sha || "");
+  return false;
+}
+function typedProcessReview(review) {
+  return plain(review?.anchor) && PROCESS_REVIEW_PURPOSES.has(review.purpose) &&
+    ID64.test(review.transition_sha256 || "");
+}
+
+function proposedTransitionProjection(purpose, input) {
+  if (!plain(input)) return null;
+  if (purpose === "dispatch") {
+    const paths = sortedPaths(input.authorized_paths);
+    if (!ID64.test(input.disposition_event_id || "") || !ID64.test(input.panel_close_event_id || "") ||
+        !Number.isSafeInteger(input.source_round) || !Number.isSafeInteger(input.next_round) ||
+        !nullableId(input.root_exit_event_id) || !paths) return null;
+    return { disposition_event_id: input.disposition_event_id, panel_close_event_id: input.panel_close_event_id,
+      source_round: input.source_round, next_round: input.next_round,
+      root_exit_event_id: input.root_exit_event_id ?? null, authorized_paths: paths };
+  }
+  if (purpose === "child_continuation") {
+    const children = Array.isArray(input.children) ? input.children.map((child) => {
+      const paths = sortedPaths(child?.authorized_paths);
+      return aggregateChildShape(child) && paths ? { task_id: child.task_id, changeset_id: child.changeset_id,
+        tier: child.tier, budget: child.budget, authorized_paths: paths } : null;
+    }) : null;
+    if (!children || children.some((child) => !child) ||
+        !((ID64.test(input.parent_disposition_event_id || "") && input.parent_panel_open_event_id === undefined) ||
+          (input.parent_disposition_event_id === null && ID64.test(input.parent_panel_open_event_id || ""))) ||
+        !Array.isArray(input.trigger_ids) || !input.trigger_ids.every((id) => text(id, 300)) ||
+        !["split", "new_changeset", "material_scope"].includes(input.continuation_kind)) return null;
+    return { parent_disposition_event_id: input.parent_disposition_event_id,
+      ...(input.parent_panel_open_event_id !== undefined
+        ? { parent_panel_open_event_id: input.parent_panel_open_event_id } : {}),
+      trigger_ids: [...input.trigger_ids].sort(), continuation_kind: input.continuation_kind,
+      children: children.sort((a, b) => `${a.task_id}\0${a.changeset_id}`.localeCompare(`${b.task_id}\0${b.changeset_id}`)) };
+  }
+  if (purpose === "legacy_handoff") {
+    const paths = sortedPaths(input.authorized_paths);
+    if (!text(input.parent_task_id, 120) || !text(input.parent_changeset_id, 120) ||
+        !ID64.test(input.parent_disposition_event_id || "") || !Number.isSafeInteger(input.parent_round) ||
+        !ID64.test(input.parent_candidate_sha || "") || !paths || !aggregateChildShape(input.child)) return null;
+    return { parent_task_id: input.parent_task_id, parent_changeset_id: input.parent_changeset_id,
+      parent_disposition_event_id: input.parent_disposition_event_id, parent_round: input.parent_round,
+      parent_candidate_sha: input.parent_candidate_sha, authorized_paths: paths,
+      child: { task_id: input.child.task_id, changeset_id: input.child.changeset_id,
+        tier: input.child.tier, budget: input.child.budget,
+        authorized_paths: sortedPaths(input.child.authorized_paths) } };
+  }
+  return null;
+}
+
+export function aggregateTransitionSha256(purpose, input) {
+  const projection = proposedTransitionProjection(purpose, input);
+  return projection ? eventId(projection) : null;
+}
 function validAggregateKindShape(event) {
   switch (event.kind) {
     case "panel_open":
@@ -127,12 +191,16 @@ function validAggregateKindShape(event) {
         strings(event.trigger_matrix, { itemMax: 700 }) &&
         (!liveAggregatePolicy(event) || text(event.closure_evidence, 1200));
     case "process_review":
-      return event.reviewer_role === "frontier" && ID64.test(event.panel_close_event_id || "") &&
-        GIT_SHA.test(event.frozen_commit || "") && GIT_SHA.test(event.frozen_tree || "") &&
-        Number.isSafeInteger(event.next_gate_ordinal) && event.next_gate_ordinal > 0 &&
+      return event.reviewer_role === "frontier" && Number.isSafeInteger(event.next_gate_ordinal) &&
+        event.next_gate_ordinal > 0 &&
         text(event.review_evidence, 1200) && text(event.zoom_out, 1200) &&
         ["finish_bounded_root", "successor", "owner_decision"].includes(event.ruling) &&
-        text(event.bounded_scope, 1200) && text(event.closure_evidence, 1200);
+        text(event.bounded_scope, 1200) && text(event.closure_evidence, 1200) &&
+        ((event.anchor === undefined && event.purpose === undefined && event.transition_sha256 === undefined &&
+            ID64.test(event.panel_close_event_id || "") && GIT_SHA.test(event.frozen_commit || "") &&
+            GIT_SHA.test(event.frozen_tree || "")) ||
+          (processReviewAnchorShape(event.anchor) && PROCESS_REVIEW_PURPOSES.has(event.purpose) &&
+            ID64.test(event.transition_sha256 || "")));
     case "dispatch":
       return ID64.test(event.disposition_event_id || "") && ID64.test(event.panel_close_event_id || "") &&
         Number.isSafeInteger(event.source_round) && Number.isSafeInteger(event.next_round) &&
@@ -178,7 +246,9 @@ function validAggregateKindShape(event) {
       return text(event.parent_task_id, 120) && text(event.parent_changeset_id, 120) &&
         ID64.test(event.parent_disposition_event_id || "") && Number.isSafeInteger(event.parent_round) &&
         ID64.test(event.parent_candidate_sha || "") && Boolean(sortedPaths(event.authorized_paths)) &&
-        aggregateChildShape(event.child) && text(event.owner_evidence, 1000);
+        aggregateChildShape(event.child) && text(event.owner_evidence, 1000) &&
+        (liveAggregatePolicy(event) ? nullableId(event.process_review_event_id)
+          : event.process_review_event_id === undefined || nullableId(event.process_review_event_id));
     case "close":
       return ((ID64.test(event.disposition_event_id || "") && event.panel_open_event_id === undefined) ||
         (event.disposition_event_id === null && ID64.test(event.panel_open_event_id || ""))) &&
@@ -609,10 +679,35 @@ function processReviewRequired(state, nextLocalRound = null) {
   return nextLocalRound === 4 || ordinal % 4 === 0;
 }
 
+function aggregatePanelCloseAnchor(state) {
+  const close = state?.panels_close?.at(-1);
+  const open = close && state.panels_open.find((candidate) => candidate.event_id === close.panel_open_event_id);
+  return close && open ? { kind: "aggregate_panel_close", event_id: close.event_id,
+    frozen_commit: open.frozen_commit, frozen_tree: open.frozen_tree } : null;
+}
+
+function aggregateTerminalAnchor(state) {
+  if (!state?.terminal) return null;
+  const open = state.panels_open.at(-1);
+  const terminal = state.terminal === "CLOSED" ? state.closes.at(-1) : state.latest;
+  return open && terminal ? { kind: "aggregate_terminal", event_id: terminal.event_id,
+    panel_open_event_id: open.event_id, frozen_commit: open.frozen_commit, frozen_tree: open.frozen_tree } : null;
+}
+
+function processReviewKey(row) {
+  return `${row.task_id}\0${row.changeset_id}\0${row.anchor.event_id}\0${row.purpose}\0${row.transition_sha256}\0${row.next_gate_ordinal}`;
+}
+
+function typedReviewMatches(review, purpose, anchor, transition) {
+  return typedProcessReview(review) && review.purpose === purpose && same(review.anchor, anchor) &&
+    review.transition_sha256 === aggregateTransitionSha256(purpose, transition);
+}
+
 function aggregateWorld(events, standardEvents = []) {
   if (!Array.isArray(events) || !events.every((row) => plain(row) && validAggregateEnvelope(row.event) &&
       row.event_id === eventId(row.event))) return null;
   const programs = new Map(), accepted = new Map(), continuations = new Map(), childLineage = new Map();
+  const processReviews = [], processReviewKeys = new Set();
   const standardIdentities = standardEvents.filter((row) => row?.event?.type === "round_disposition" &&
     row.event.round === 1).filter((row, index, all) => all.findIndex((candidate) =>
     candidate.event.task_id === row.event.task_id || candidate.event.changeset_id === row.event.changeset_id) === index);
@@ -1005,15 +1100,38 @@ function aggregateWorld(events, standardEvents = []) {
       if (disposition?.terminal_state === "CONTINUE" &&
           ["root_replacement", "simplification", "split"].includes(disposition.remediation_kind)) state.root_exits.push(accept(row));
     } else if (row.kind === "process_review") {
-      if (!state || !liveAggregatePolicy(row) || state.changeset_id !== row.changeset_id) continue;
-      const close = state.panels_close.at(-1);
-      const open = close && state.panels_open.find((candidate) => candidate.event_id === close.panel_open_event_id);
-      const ordinal = nextGateOrdinal(state);
-      if (!close || !open || row.panel_close_event_id !== close.event_id ||
-          row.frozen_commit !== open.frozen_commit || row.frozen_tree !== open.frozen_tree ||
-          row.next_gate_ordinal !== ordinal ||
-          state.process_reviews.some((candidate) => candidate.next_gate_ordinal === ordinal)) continue;
-      state.process_reviews.push(accept(row));
+      if (!liveAggregatePolicy(row)) continue;
+      if (typedProcessReview(row)) {
+        let anchor = null, ordinal = null;
+        if (row.purpose === "legacy_handoff") {
+          const standard = getStandard(row.task_id, rowSeq);
+          if (!standard?.ok || !standard.active || standard.changeset_id !== row.changeset_id || !standard.latest) continue;
+          anchor = { kind: "standard_disposition", event_id: standard.latest.event_id,
+            candidate_sha: standard.latest.candidate_sha };
+          ordinal = standard.latest.round + 1;
+        } else {
+          if (!state || state.changeset_id !== row.changeset_id) continue;
+          anchor = row.purpose === "dispatch" ? aggregatePanelCloseAnchor(state) : aggregateTerminalAnchor(state);
+          ordinal = nextGateOrdinal(state);
+        }
+        const key = processReviewKey(row);
+        if (!anchor || !same(row.anchor, anchor) || row.next_gate_ordinal !== ordinal || processReviewKeys.has(key)) continue;
+        processReviewKeys.add(key); processReviews.push(accept(row));
+        if (state) state.process_reviews.push(row);
+      } else {
+        // Historical untyped reviews keep their original replay semantics, including the one-row
+        // ordinal slot. Current recorders never mint this shape.
+        if (!state || state.changeset_id !== row.changeset_id) continue;
+        const close = state.panels_close.at(-1);
+        const open = close && state.panels_open.find((candidate) => candidate.event_id === close.panel_open_event_id);
+        const ordinal = nextGateOrdinal(state);
+        if (!close || !open || row.panel_close_event_id !== close.event_id ||
+            row.frozen_commit !== open.frozen_commit || row.frozen_tree !== open.frozen_tree ||
+            row.next_gate_ordinal !== ordinal ||
+            state.process_reviews.some((candidate) => !typedProcessReview(candidate) &&
+              candidate.next_gate_ordinal === ordinal)) continue;
+        processReviews.push(accept(row)); state.process_reviews.push(row);
+      }
     } else if (row.kind === "dispatch") {
       if (!state || state.changeset_id !== row.changeset_id || state.terminal || state.active_dispatch ||
           !ID64.test(row.disposition_event_id || "") || !ID64.test(row.panel_close_event_id || "") ||
@@ -1031,15 +1149,20 @@ function aggregateWorld(events, standardEvents = []) {
       } else if (row.root_exit_event_id !== null) continue;
       if (effectiveAggregatePolicyVersion(state, row) >= AGGREGATE_POLICY_VERSION) {
         const required = processReviewRequired(state, row.next_round);
-        const applicable = state.process_reviews.find((candidate) =>
-          candidate.next_gate_ordinal === nextGateOrdinal(state)) || null;
         const review = row.process_review_event_id === null ? null
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
-        if (((required || applicable) && (!review || review.event_id !== applicable?.event_id ||
-            review.next_gate_ordinal !== nextGateOrdinal(state) ||
-            review.ruling !== "finish_bounded_root")) ||
-            (!required && row.process_review_event_id !== null && (!review ||
-              review.next_gate_ordinal !== nextGateOrdinal(state) || review.ruling !== "finish_bounded_root"))) continue;
+        const typed = review && typedReviewMatches(review, "dispatch", aggregatePanelCloseAnchor(state), row) &&
+          review.next_gate_ordinal === nextGateOrdinal(state) && review.ruling === "finish_bounded_root";
+        const typedApplicable = state.process_reviews.find((candidate) =>
+          typedReviewMatches(candidate, "dispatch", aggregatePanelCloseAnchor(state), row) &&
+          candidate.next_gate_ordinal === nextGateOrdinal(state)) || null;
+        const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
+          candidate.next_gate_ordinal === nextGateOrdinal(state)) || null;
+        const historical = review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
+          review.ruling === "finish_bounded_root";
+        if (((required || typedApplicable) && !typed && !historical) ||
+            (row.process_review_event_id !== null && !typed && !historical) ||
+            (!typed && !historical && oldApplicable)) continue;
       }
       state.active_dispatch = accept(row); state.dispatches.push(row);
     } else if (row.kind === "worker") {
@@ -1075,11 +1198,20 @@ function aggregateWorld(events, standardEvents = []) {
       if (effectiveAggregatePolicyVersion(state, row) >= AGGREGATE_POLICY_VERSION) {
         const ordinal = nextGateOrdinal(state);
         const required = ordinal % 4 === 0;
-        const applicable = state.process_reviews.find((candidate) => candidate.next_gate_ordinal === ordinal) || null;
         const review = row.process_review_event_id === null ? null
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
-        if ((required || applicable) && (!review || review.event_id !== applicable?.event_id ||
-            review.next_gate_ordinal !== ordinal || !continuationReviewAllows(review))) continue;
+        const typed = review && typedReviewMatches(review, "child_continuation", aggregateTerminalAnchor(state), row) &&
+          review.next_gate_ordinal === ordinal && continuationReviewAllows(review);
+        const typedApplicable = state.process_reviews.find((candidate) =>
+          typedReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), row) &&
+          candidate.next_gate_ordinal === ordinal) || null;
+        const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
+          candidate.next_gate_ordinal === ordinal) || null;
+        const historical = review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
+          continuationReviewAllows(review);
+        if (((required || typedApplicable) && !typed && !historical) ||
+            (row.process_review_event_id !== null && !typed && !historical) ||
+            (!typed && !historical && oldApplicable)) continue;
       }
       const parentOpen = state.panels_open.at(-1);
       // ONE LIVE continuation per anchor — not one EVER. A standing continuation blocks a new
@@ -1220,13 +1352,24 @@ function aggregateWorld(events, standardEvents = []) {
           standard.latest.round !== row.parent_round || row.parent_candidate_sha !== standard.latest.candidate_sha ||
           !same(row.authorized_paths, standard.latest.authorized_paths) ||
           !same(row.child.authorized_paths, row.authorized_paths)) continue;
+      if (Object.hasOwn(row, "process_review_event_id")) {
+        const ordinal = row.parent_round + 1;
+        const required = ordinal % 4 === 0;
+        const review = row.process_review_event_id === null ? null
+          : processReviews.find((candidate) => candidate.event_id === row.process_review_event_id);
+        const anchor = { kind: "standard_disposition", event_id: standard.latest.event_id,
+          candidate_sha: standard.latest.candidate_sha };
+        const authorized = review && typedReviewMatches(review, "legacy_handoff", anchor, row) &&
+          review.next_gate_ordinal === ordinal && continuationReviewAllows(review);
+        if ((required && !authorized) || (row.process_review_event_id !== null && !authorized)) continue;
+      }
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
       childLineage.set(row.child.task_id, { ...row.child, event_id: row.event_id, parent_task_id: row.parent_task_id,
         policy_version: aggregatePolicyVersion(row), gate_base_ordinal: row.parent_round });
       continuations.set(row.event_id, handoff);
     }
   }
-  return poisoned ? null : { programs, accepted, continuations, childLineage, legacyHandedOff };
+  return poisoned ? null : { programs, accepted, continuations, childLineage, legacyHandedOff, processReviews };
 }
 
 export function deriveAggregateRepairState(events, taskId, { standardEvents = [] } = {}) {
@@ -1321,6 +1464,21 @@ function sameAggregateDispatch(a, b) {
     a.root_exit_event_id === b.root_exit_event_id &&
     a.process_review_event_id === b.process_review_event_id && a.target_kind === b.target_kind &&
     a.target === b.target && a.brief_sha256 === b.brief_sha256 && a.brief_size === b.brief_size;
+}
+
+function exactLegacyAggregateDispatchRetry(state, declaration, target, brief = null) {
+  const active = state?.active_dispatch;
+  const disposition = state?.latest;
+  if (!active || active.policy_version !== undefined || active.process_review_event_id !== undefined ||
+      declaration?.process_review_event_id != null || active.task_id !== declaration.task_id ||
+      active.changeset_id !== declaration.changeset_id || active.disposition_event_id !== declaration.disposition_event_id ||
+      active.panel_close_event_id !== declaration.panel_close_event_id || active.source_round !== disposition?.round ||
+      active.next_round !== declaration.next_round || declaration.next_round !== disposition.round + 1 ||
+      !same(active.authorized_paths, disposition.authorized_paths) ||
+      active.root_exit_event_id !== (declaration.root_exit_event_id ?? null) || active.target_kind !== "brief" ||
+      active.target !== target) return null;
+  if (brief && (active.brief_sha256 !== brief.sha256 || active.brief_size !== brief.size)) return null;
+  return active;
 }
 
 function addedExactPaths(previous, next) {
@@ -1562,6 +1720,22 @@ function controllerRows(file) {
     aggregate: all.filter((row) => row.event.type === AGGREGATE_EVENT_TYPE) };
 }
 
+function aggregateLogicalTwin(candidateEvent, event) {
+  if (candidateEvent.kind !== event.kind) return false;
+  const a = { ...candidateEvent, recorded_at: null };
+  const b = { ...event, recorded_at: null };
+  if (a.policy_version === undefined && b.policy_version === AGGREGATE_POLICY_VERSION) {
+    delete b.policy_version;
+    if (a.kind === "disposition" && a.same_mechanism_repeated === undefined &&
+        b.same_mechanism_repeated === false) delete b.same_mechanism_repeated;
+    if (["dispatch", "child_continuation", "legacy_handoff"].includes(a.kind) &&
+        a.process_review_event_id === undefined && b.process_review_event_id === null) {
+      delete b.process_review_event_id;
+    }
+  }
+  return same(a, b);
+}
+
 function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-transition-conflict") {
   // Normalized at the boundary: what is HASHED is exactly what is WRITTEN (see jsonNormalize).
   const event = jsonNormalize(rawEvent);
@@ -1585,10 +1759,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
   // re-recorded) is the SAME transition — return the standing winner idempotently rather than a
   // conflict no caller can interpret.
   const logicalTwin = (candidateRow) => {
-    if (candidateRow.event.kind !== event.kind) return false;
-    const a = { ...candidateRow.event, recorded_at: null };
-    const b = { ...event, recorded_at: null };
-    return same(a, b);
+    return aggregateLogicalTwin(candidateRow.event, event);
   };
   const priorWorld = aggregateWorld(before.aggregate, before.standard);
   const priorTwin = before.aggregate.find((candidateRow) => priorWorld?.accepted.has(candidateRow.event_id) && logicalTwin(candidateRow));
@@ -1689,16 +1860,24 @@ export function recordAggregateDisposition(input,
   const open = close && rows.aggregate.find((row) => row.event_id === close.panel_open_event_id)?.event;
   const candidate = open && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
-  if (!base || !close || !open || !candidate || !pmFindingsShape(input.pm_findings ?? []) ||
+  const event = base && { ...base, kind: "disposition", panel_close_event_id: input.panel_close_event_id,
+    pm_findings: input.pm_findings ?? [], finding_dispositions: input.finding_dispositions,
+    same_mechanism_repeated: input.same_mechanism_repeated,
+    terminal_state: input.terminal_state, remediation_kind: input.remediation_kind ?? null,
+    authorized_paths: Array.isArray(input.authorized_paths) ? [...input.authorized_paths] : input.authorized_paths };
+  if (event && input.same_mechanism_repeated === undefined && rows) {
+    const compatibility = { ...event, same_mechanism_repeated: false };
+    const world = aggregateWorld(rows.aggregate, rows.standard);
+    const prior = rows.aggregate.find((row) => world?.accepted.has(row.event_id) &&
+      row.event.policy_version === undefined && row.event.same_mechanism_repeated === undefined &&
+      aggregateLogicalTwin(row.event, compatibility));
+    if (prior) return { ok: true, event_id: prior.event_id, idempotent: true };
+  }
+  if (!base || !close || !open || !candidate || typeof input.same_mechanism_repeated !== "boolean" ||
+      !pmFindingsShape(input.pm_findings ?? []) ||
       !plain(input.finding_dispositions) || !Array.isArray(input.authorized_paths)) {
     return { ok: false, state: "aggregate-disposition-malformed" };
   }
-  const event = { ...base, kind: "disposition", panel_close_event_id: input.panel_close_event_id,
-    pm_findings: input.pm_findings ?? [],
-    finding_dispositions: input.finding_dispositions,
-    same_mechanism_repeated: input.same_mechanism_repeated ?? false,
-    terminal_state: input.terminal_state, remediation_kind: input.remediation_kind ?? null,
-    authorized_paths: [...input.authorized_paths] };
   return appendEligibleAggregate(file, event, "aggregate-disposition-conflict");
 }
 
@@ -1723,18 +1902,50 @@ export function recordAggregateProcessReview(input,
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
+  const purpose = input?.purpose;
+  const projection = proposedTransitionProjection(purpose, input?.proposed_transition);
   const state = deriveAggregateRepairState(rows.aggregate, input?.task_id, { standardEvents: rows.standard });
-  const close = state.ok ? state.panels_close.at(-1) : null;
-  const open = close && state.panels_open.find((candidate) => candidate.event_id === close.panel_open_event_id);
+  const standard = purpose === "legacy_handoff" ? deriveRepairState(rows.standard, input?.task_id) : null;
+  let anchor = null, ordinal = null, contextOk = false;
+  if (purpose === "dispatch" && state.ok && state.latest?.terminal_state === "CONTINUE") {
+    anchor = aggregatePanelCloseAnchor(state); ordinal = nextGateOrdinal(state);
+    const disposition = state.latest;
+    const root = state.root_exits.find((candidate) => candidate.disposition_event_id === disposition.event_id);
+    const expected = proposedTransitionProjection("dispatch", {
+      disposition_event_id: disposition.event_id, panel_close_event_id: disposition.panel_close_event_id,
+      source_round: disposition.round, next_round: disposition.round + 1,
+      root_exit_event_id: root?.event_id ?? null, authorized_paths: disposition.authorized_paths,
+    });
+    contextOk = same(projection, expected);
+  } else if (purpose === "child_continuation" && state.ok && state.terminal) {
+    anchor = aggregateTerminalAnchor(state); ordinal = nextGateOrdinal(state);
+    contextOk = projection &&
+      projection.parent_disposition_event_id === (state.latest?.event_id ?? null) &&
+      (state.latest || projection.parent_panel_open_event_id === state.panels_open.at(-1)?.event_id);
+  } else if (purpose === "legacy_handoff" && standard?.ok && standard.active && standard.latest) {
+    anchor = { kind: "standard_disposition", event_id: standard.latest.event_id,
+      candidate_sha: standard.latest.candidate_sha };
+    ordinal = standard.latest.round + 1;
+    contextOk = projection && projection.parent_task_id === standard.task_id &&
+      projection.parent_changeset_id === standard.changeset_id &&
+      projection.parent_disposition_event_id === standard.latest.event_id &&
+      projection.parent_round === standard.latest.round &&
+      projection.parent_candidate_sha === standard.latest.candidate_sha &&
+      same(projection.authorized_paths, standard.latest.authorized_paths) &&
+      same(projection.child.authorized_paths, projection.authorized_paths);
+  }
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
-  if (!base || !state.ok || state.changeset_id !== input.changeset_id || !close || !open ||
-      input.panel_close_event_id !== close.event_id || input.frozen_commit !== open.frozen_commit ||
-      input.frozen_tree !== open.frozen_tree) {
+  const expectedChangeset = purpose === "legacy_handoff" ? standard?.changeset_id : state?.changeset_id;
+  const transitionSha = projection && eventId(projection);
+  if (!base || !projection || !contextOk || input.changeset_id !== expectedChangeset ||
+      !anchor || !same(input.anchor, anchor) ||
+      (input.next_gate_ordinal !== undefined && input.next_gate_ordinal !== ordinal) ||
+      (input.transition_sha256 !== undefined && input.transition_sha256 !== transitionSha)) {
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
   const event = { ...base, kind: "process_review", reviewer_role: input.reviewer_role,
-    panel_close_event_id: close.event_id, frozen_commit: open.frozen_commit, frozen_tree: open.frozen_tree,
-    next_gate_ordinal: nextGateOrdinal(state), review_evidence: input.review_evidence,
+    anchor, purpose, transition_sha256: transitionSha, next_gate_ordinal: ordinal,
+    review_evidence: input.review_evidence,
     zoom_out: input.zoom_out, ruling: input.ruling, bounded_scope: input.bounded_scope,
     closure_evidence: input.closure_evidence };
   const result = appendEligibleAggregate(file, event, "aggregate-process-review-conflict");
@@ -1785,6 +1996,20 @@ export function recordAggregateChildContinuation(input,
     continuation_kind: input.continuation_kind, children: input.children,
     owner_evidence: input.owner_evidence, action_screen: input.action_screen,
     process_review_event_id: input.process_review_event_id ?? null };
+  if (state.ok && effectiveAggregatePolicyVersion(state, event) >= AGGREGATE_POLICY_VERSION) {
+    const ordinal = nextGateOrdinal(state);
+    const review = event.process_review_event_id === null ? null
+      : state.process_reviews.find((candidate) => candidate.event_id === event.process_review_event_id);
+    const authorized = review && typedReviewMatches(review, "child_continuation",
+      aggregateTerminalAnchor(state), event) && review.next_gate_ordinal === ordinal &&
+      continuationReviewAllows(review);
+    const applicable = state.process_reviews.find((candidate) =>
+      typedReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), event) &&
+      candidate.next_gate_ordinal === ordinal) || null;
+    if ((ordinal % 4 === 0 || applicable || event.process_review_event_id !== null) && !authorized) {
+      return { ok: false, state: "aggregate-continuation-conflict" };
+    }
+  }
   return appendEligibleAggregate(file, event, "aggregate-continuation-conflict");
 }
 
@@ -1828,7 +2053,7 @@ export function recordAggregateLegacyHandoff(input,
     parent_changeset_id: input.parent_changeset_id, parent_candidate_sha: input.parent_candidate_sha,
     parent_disposition_event_id: parent.latest.event_id, parent_round: parent.latest.round,
     authorized_paths: structuredClone(input.authorized_paths), child: structuredClone(input.child),
-    owner_evidence: input.owner_evidence };
+    owner_evidence: input.owner_evidence, process_review_event_id: input.process_review_event_id ?? null };
   return appendEligibleAggregate(file, event, "aggregate-legacy-handoff-conflict");
 }
 
@@ -2018,7 +2243,7 @@ export function recordRepairClose(input, { projectRoot, sessionId, now = new Dat
 }
 
 export function validateAggregateDispatch(declaration,
-  { aggregateEvents, standardEvents = [], taskId, targetKind, target }) {
+  { aggregateEvents, standardEvents = [], taskId, targetKind, target, allowLegacyRetry = true }) {
   if (!plain(declaration) || declaration.aggregate_controller !== AGGREGATE_EVENT_TYPE ||
       declaration.task_id !== taskId || !text(declaration.changeset_id, 120) ||
       !ID64.test(declaration.disposition_event_id || "") || !ID64.test(declaration.panel_close_event_id || "") ||
@@ -2041,21 +2266,33 @@ export function validateAggregateDispatch(declaration,
   } else if (declaration.root_exit_event_id !== undefined && declaration.root_exit_event_id !== null) {
     return { ok: false, state: "aggregate-root-exit-unexpected" };
   }
+  const legacyRetry = allowLegacyRetry
+    ? exactLegacyAggregateDispatchRetry(state, declaration, target) : null;
+  if (legacyRetry) return { ok: true, state, legacy_retry: legacyRetry,
+    repair: { ...declaration, source_round: disposition.round,
+      authorized_paths: [...disposition.authorized_paths],
+      root_exit_event_id: declaration.root_exit_event_id ?? null, process_review_event_id: null },
+    target_kind: targetKind, target };
   let processReview = null;
   // A brief confirmed by this implementation mints a live-policy dispatch even when the standing
   // parent is entirely historical. Validate the authority the prospective row will carry; replay
   // applies the same max(parent policy, incoming policy) rule.
   {
     const required = processReviewRequired(state, declaration.next_round);
-    const applicable = state.process_reviews.find((row) => row.next_gate_ordinal === nextGateOrdinal(state)) || null;
     processReview = declaration.process_review_event_id == null ? null
       : state.process_reviews.find((row) => row.event_id === declaration.process_review_event_id);
-    if (((required || applicable) && (!processReview || processReview.event_id !== applicable?.event_id ||
-        processReview.next_gate_ordinal !== nextGateOrdinal(state) ||
-        processReview.ruling !== "finish_bounded_root")) ||
-        (!required && declaration.process_review_event_id != null && (!processReview ||
-          processReview.next_gate_ordinal !== nextGateOrdinal(state) ||
-          processReview.ruling !== "finish_bounded_root"))) {
+    const transition = { disposition_event_id: disposition.event_id,
+      panel_close_event_id: disposition.panel_close_event_id, source_round: disposition.round,
+      next_round: declaration.next_round, root_exit_event_id: declaration.root_exit_event_id ?? null,
+      authorized_paths: disposition.authorized_paths };
+    const authorized = processReview && typedReviewMatches(processReview, "dispatch",
+      aggregatePanelCloseAnchor(state), transition) &&
+      processReview.next_gate_ordinal === nextGateOrdinal(state) &&
+      processReview.ruling === "finish_bounded_root";
+    const applicable = state.process_reviews.find((row) => typedReviewMatches(row, "dispatch",
+      aggregatePanelCloseAnchor(state), transition) && row.next_gate_ordinal === nextGateOrdinal(state)) || null;
+    if (((required || applicable) && !authorized) ||
+        (declaration.process_review_event_id != null && !authorized)) {
       return { ok: false, state: "aggregate-process-review-required" };
     }
   }
@@ -2092,13 +2329,22 @@ export function confirmRepairBrief({ declaration, brief_path: briefPath } = {},
   const rows = controllerRows(file);
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
   const current = rows.standard;
-  const validated = validateRepairDispatch(declaration, {
+  let validated = validateRepairDispatch(declaration, {
     events: current, aggregateEvents: rows.aggregate,
     taskId: declaration?.task_id, targetKind: "brief", target: briefPath,
   });
   if (!validated.ok) return validated;
   const brief = readRegularRepoFile(projectRoot, briefPath);
   if (!brief) return { ok: false, state: "repair-brief-unconfirmed" };
+  if (validated.legacy_retry) {
+    const exact = exactLegacyAggregateDispatchRetry(validated.state, declaration, briefPath, brief);
+    if (exact) return { ok: true, event_id: exact.event_id, idempotent: true };
+    validated = validateAggregateDispatch(declaration, {
+      aggregateEvents: rows.aggregate, standardEvents: rows.standard, taskId: declaration.task_id,
+      targetKind: "brief", target: briefPath, allowLegacyRetry: false,
+    });
+    if (!validated.ok) return validated;
+  }
   const r = validated.repair;
   if (declaration.aggregate_controller === AGGREGATE_EVENT_TYPE) {
     const base = baseEvent(AGGREGATE_EVENT_TYPE, declaration, sessionId, now);

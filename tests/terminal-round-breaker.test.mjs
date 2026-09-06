@@ -137,7 +137,7 @@ function decide(ctx, closed, { task = "task-1", changeset = "cs-1", accepted = [
     type: "aggregate_v2", kind: "disposition", task_id: task, changeset_id: changeset,
     panel_close_event_id: closed.event_id, pm_findings,
     finding_dispositions: { accepted, declined, note, followup }, terminal_state, remediation_kind,
-    authorized_paths,
+    authorized_paths, same_mechanism_repeated: false,
   }, options(ctx.dir));
 }
 
@@ -158,10 +158,16 @@ function dispatchBatch(ctx, dispositionId, closeId, nextRound, rootExitId = null
   return { dispatch: receipt.event_id, worker: worker.event_id };
 }
 function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") {
+  const state = derive(ctx);
+  const root = state.root_exits.find((row) => row.disposition_event_id === state.latest?.event_id);
   return recordAggregateProcessReview({
     type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
-    reviewer_role: "frontier", panel_close_event_id: closeId,
-    frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+    reviewer_role: "frontier", purpose: "dispatch",
+    anchor: { kind: "aggregate_panel_close", event_id: closeId,
+      frozen_commit: candidate.commit, frozen_tree: candidate.tree },
+    proposed_transition: { disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
+      source_round: state.latest.round, next_round: state.latest.round + 1,
+      root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths },
     review_evidence: "frontier review of the completed panel", zoom_out: "the repair remains finite",
     ruling, bounded_scope: "one consolidated root correction",
     closure_evidence: "the accepted trigger closes on the replacement",
@@ -765,6 +771,7 @@ test("H1: two concurrent appenders race conflicting-but-valid dispositions — f
       '  terminal_state: mode === "go" ? "GO" : "CONTINUE",',
       '  remediation_kind: mode === "go" ? null : "bounded",',
       '  authorized_paths: mode === "go" ? [] : ["src/x.mjs"],',
+      "  same_mechanism_repeated: false,",
       "}, { projectRoot, sessionId: `racer-${mode}` });",
       "process.stdout.write(JSON.stringify(result));",
     ].join("\n") + "\n");

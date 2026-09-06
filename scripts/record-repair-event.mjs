@@ -74,7 +74,7 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
           "aggregate-dispatch-unavailable": " — no accepted CONTINUE disposition currently authorizes a batch: the program is terminal, the round is already dispatched, or the cited disposition/panel-close ids do not bind the winning rows; derive the program state and re-read its latest disposition",
           "aggregate-root-exit-required": " — this dispatch cites a ROOT-KIND disposition (root_replacement, simplification or split, any round), so it must carry that disposition's exact root_exit event id",
           "aggregate-root-exit-unexpected": " — only a root-kind dispatch may carry a root_exit event id; drop the field or fix the disposition's remediation kind",
-          "aggregate-process-review-required": " — record a fresh aggregate_v2 process_review against the latest panel close and frozen candidate, then cite its exact event id; only finish_bounded_root authorizes this repair dispatch, while successor or owner_decision stops it",
+          "aggregate-process-review-required": " — record a fresh aggregate_v2 process_review with the transition's exact purpose, current typed anchor, and proposed_transition; then cite its event id. Only a dispatch-purpose finish_bounded_root authorizes repair dispatch",
           "aggregate-worker-superseded": " — this session's admission was REVOKED by an Owner-evidenced worker handoff; the replacement session holds the batch now",
           "repair-history-invalid": " — the ledger's derivation failed CLOSED (a corrupt row, a hash mismatch, or a standard identity that no longer derives); this needs row-level repair, not a retry — preserve the file and inspect it",
         }[result.state] ?? (

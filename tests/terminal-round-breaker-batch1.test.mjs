@@ -101,7 +101,8 @@ function decide(ctx, closed, over = {}) {
     type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "cs-1",
     panel_close_event_id: closed.event_id, pm_findings: [],
     finding_dispositions: { accepted: [], declined: [], note: [], followup: [] },
-    terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"], ...over,
+    terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"],
+    same_mechanism_repeated: false, ...over,
   }, options(ctx.dir));
 }
 function dispatchBatch(ctx, dispositionId, closeId, nextRound, rootExitId = null, processReviewId = null) {
@@ -120,10 +121,16 @@ function dispatchBatch(ctx, dispositionId, closeId, nextRound, rootExitId = null
   return { dispatch: receipt.event_id, worker: worker.event_id };
 }
 function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") {
+  const state = derive(ctx);
+  const root = state.root_exits.find((row) => row.disposition_event_id === state.latest?.event_id);
   return recordAggregateProcessReview({
     type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
-    reviewer_role: "frontier", panel_close_event_id: closeId,
-    frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+    reviewer_role: "frontier", purpose: "dispatch",
+    anchor: { kind: "aggregate_panel_close", event_id: closeId,
+      frozen_commit: candidate.commit, frozen_tree: candidate.tree },
+    proposed_transition: { disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
+      source_round: state.latest.round, next_round: state.latest.round + 1,
+      root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths },
     review_evidence: "frontier review of the completed panel", zoom_out: "the repair remains finite",
     ruling, bounded_scope: "one consolidated root correction",
     closure_evidence: "the accepted trigger closes on the replacement",
@@ -182,7 +189,7 @@ test("refreeze bounds: one supersede per round, never at the bookend, roster and
           panel_close_event_id: closed.event_id, pm_findings: [],
           finding_dispositions: { accepted: [`F${round}`], declined: [], note: [], followup: [] },
           terminal_state: "CONTINUE", remediation_kind: round === 1 ? "bounded" : "root_replacement",
-          authorized_paths: ["src/x.mjs"],
+          authorized_paths: ["src/x.mjs"], same_mechanism_repeated: false,
         }, options(ctx3.dir));
         assert.equal(decided.ok, true, decided.state);
         let rootExit = null;
@@ -354,6 +361,7 @@ test("serialization boundary: undefined-valued keys are normalized away, cycles 
       panel_close_event_id: closed.event_id, pm_findings: [],
       finding_dispositions: { accepted: ["F1"], declined: [], note: [], followup: [] },
       terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"],
+      same_mechanism_repeated: false,
     };
     const first = recordAggregateDisposition(dispositionInput, { ...options(ctx.dir), now: "2099-01-01T00:00:00.000Z" });
     assert.equal(first.ok, true, first.state);
@@ -500,7 +508,7 @@ test("the STOP reservation yields only to the reserving parent's own lineage", (
       panel_close_event_id: closedB.event_id, pm_findings: [],
       finding_dispositions: { accepted: [], declined: [], note: [],
         followup: [{ id: "ADJ", route: "successor:child-of-b" }] },
-      terminal_state: "GO", remediation_kind: null, authorized_paths: [],
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [], same_mechanism_repeated: false,
     }, options(ctx.dir));
     assert.equal(goB.ok, true, goB.state);
     const loadedB = loadRepairEventsForProject(ctx.dir);

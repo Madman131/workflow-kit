@@ -43,13 +43,25 @@ new-policy root exit also records `closure_evidence`, the exact proof that ends 
 A new `process_review` event records:
 
 - the portable `frontier` reviewer role;
-- the latest completed panel, its frozen commit and tree, and the derived next gate ordinal;
+- one purpose: `dispatch`, `child_continuation`, or `legacy_handoff`;
+- a typed anchor for the current aggregate panel close, aggregate terminal event plus winning panel
+  open, or active standard disposition;
+- a canonical hash of the proposed authority transition and the derived next gate ordinal;
 - review evidence and a zoomed-out proportionality judgment;
 - one ruling: `finish_bounded_root`, `successor`, or `owner_decision`;
 - the bounded scope and closing evidence.
 
-The controller derives the ordinal; callers cannot choose it. The review is fresh only for its exact
-panel and frozen candidate.
+The controller derives the ordinal and transition hash; callers cannot choose either. The canonical
+transition includes source references, rounds, root exit, paths, continuation kind and triggers,
+and child identities, budgets, tiers, and paths. It excludes event IDs, timestamps, the review ID,
+and narrative evidence. A review authorizes only the exact purpose, anchor, proposal, and ordinal it
+recorded. Exact retries return the standing review; a conflicting retry cannot replace it.
+
+An aggregate terminal anchor binds GO or STOP to the accepted disposition. An Owner `CLOSED` anchor
+binds the close event and the latest winning panel-open candidate, including an open abandoned before
+panel close. A standard anchor binds the latest accepted active disposition and its candidate
+fingerprint. Untyped historical reviews continue to replay with their already-recorded historical
+transitions, but cannot authorize new policy-2 transitions.
 
 ## Transition rules
 
@@ -57,7 +69,8 @@ Round 3 to Round 4 always requires the matching process review. `finish_bounded_
 single dispatch; Round 4 remains a mandatory terminal GO/STOP bookend with no outgoing dispatch.
 `successor` stops the current repair path and records future work only after the current program is
 terminal. `owner_decision` grants no current-chip dispatch and leaves the decision at the existing
-Owner boundary; after terminal close, the Owner-evidenced child continuation may cite it.
+Owner boundary. After terminal close, a fresh child-purpose review bound to the terminal anchor and
+exact proposal may authorize an Owner-evidenced child continuation with either ruling.
 
 Independently of local round number, any work-authorizing transition whose next cumulative gate
 ordinal is divisible by four requires a matching fresh process review. A child continuation is such

@@ -539,6 +539,7 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
       panel_close_event_id: closed.event_id, pm_findings: [],
       finding_dispositions: { accepted: ["F1"], declined: [], note: [], followup: [] },
       terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: paths,
+      same_mechanism_repeated: false,
     }, options);
     assert.equal(decided.ok, true, decided.state);
 

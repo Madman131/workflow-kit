@@ -5,9 +5,9 @@
 The aggregate-v2 controller now detects repeated mechanisms before another branch repair. New
 events carry a lineage-sticky policy version; harm-bearing Round 2 and a repeated mechanism in
 Round 1 require a root kind and closure evidence. Dispatch into Round 4 requires a fresh frontier
-process review tied to the latest panel and frozen candidate. Its ruling either permits the one
-bounded finish, records successor work after terminal close, or leaves the choice with the Owner
-without dispatch authority. Gate ordinals accumulate through descendants, so each fourth gate
+process review tied to a typed purpose, the current panel/terminal/standard anchor, and a hash of
+the proposed authority transition. Its ruling either permits the one bounded finish, records
+successor work after terminal close, or leaves the choice with the Owner without dispatch authority. Gate ordinals accumulate through descendants, so each fourth gate
 requires another fresh review without creating Round 5 or reopening a terminal parent. Stored
 standard and pre-policy aggregate history still replay under their original contract.
 

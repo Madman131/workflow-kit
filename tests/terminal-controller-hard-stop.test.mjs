@@ -43,6 +43,32 @@ function rewriteAggregateLedgerAsLegacy(dir) {
   const rows = loadRepairEventsForProject(dir).aggregate_events.map((row) => {
     const event = rewrite(row.event);
     delete event.policy_version;
+    if (event.kind === "dispatch") delete event.process_review_event_id;
+    if (event.kind === "disposition") delete event.same_mechanism_repeated;
+    const legacy = stamped(event);
+    remap.set(row.event_id, legacy.event_id);
+    return legacy;
+  });
+  writeFileSync(repairLedgerPath(dir), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+  return remap;
+}
+
+function rewriteAggregateLedgerWithHistoricalUntypedReview(dir) {
+  const remap = new Map();
+  const rewrite = (value) => Array.isArray(value) ? value.map(rewrite)
+    : value && typeof value === "object"
+      ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, rewrite(entry)]))
+      : typeof value === "string" ? (remap.get(value) ?? value) : value;
+  const rows = loadRepairEventsForProject(dir).aggregate_events.map((row) => {
+    const event = rewrite(row.event);
+    if (event.kind === "process_review") {
+      event.panel_close_event_id = event.anchor.event_id;
+      event.frozen_commit = event.anchor.frozen_commit;
+      event.frozen_tree = event.anchor.frozen_tree;
+      delete event.anchor;
+      delete event.purpose;
+      delete event.transition_sha256;
+    }
     const legacy = stamped(event);
     remap.set(row.event_id, legacy.event_id);
     return legacy;
@@ -156,24 +182,24 @@ function closePanel(ctx, opened, expected, candidate, findingId = null, task = {
 function disposition(ctx, closed, {
   task_id = "task-1", changeset_id = "changeset-1", accepted = [], declined = [], note = [],
   followup = [], pm_findings = [], terminal_state = "CONTINUE", remediation_kind = "bounded",
-  authorized_paths = ["src/x.mjs"],
+  authorized_paths = ["src/x.mjs"], same_mechanism_repeated = false,
 } = {}) {
   return recordAggregateDisposition({
     type: "aggregate_v2", kind: "disposition", task_id, changeset_id,
     panel_close_event_id: closed.event_id, pm_findings,
     finding_dispositions: { accepted, declined, note, followup }, terminal_state, remediation_kind,
-    authorized_paths,
+    authorized_paths, same_mechanism_repeated,
   }, options(ctx.dir));
 }
 
-function dispatch(ctx, dispositionId, panelId, nextRound, rootExitId = null) {
+function dispatch(ctx, dispositionId, panelId, nextRound, rootExitId = null, processReviewId = null) {
   mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
   const brief = `briefs/round-${nextRound}.md`;
   writeFileSync(path.join(ctx.dir, brief), `repair ${nextRound}\n`);
   const receipt = confirmRepairBrief({ declaration: {
     aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
     disposition_event_id: dispositionId, panel_close_event_id: panelId,
-    next_round: nextRound, root_exit_event_id: rootExitId,
+    next_round: nextRound, root_exit_event_id: rootExitId, process_review_event_id: processReviewId,
   }, brief_path: brief }, options(ctx.dir));
   assert.equal(receipt.ok, true, receipt.state);
   const worker = recordWorkerVerification({
@@ -184,11 +210,26 @@ function dispatch(ctx, dispositionId, panelId, nextRound, rootExitId = null) {
 }
 
 function processReview(ctx, panelCloseId, candidate, ruling = "finish_bounded_root",
-  task_id = "task-1", changeset_id = "changeset-1") {
+  task_id = "task-1", changeset_id = "changeset-1", purpose = "dispatch", proposed = null) {
+  const loaded = loadRepairEventsForProject(ctx.dir);
+  const state = deriveAggregateRepairState(loaded.aggregate_events, task_id, { standardEvents: loaded.events });
+  const root = state.root_exits.find((row) => row.disposition_event_id === state.latest?.event_id);
+  const proposed_transition = proposed ?? {
+    disposition_event_id: state.latest.event_id, panel_close_event_id: panelCloseId,
+    source_round: state.latest.round, next_round: state.latest.round + 1,
+    root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths,
+  };
   return recordAggregateProcessReview({
     type: "aggregate_v2", kind: "process_review", task_id, changeset_id,
-    reviewer_role: "frontier", panel_close_event_id: panelCloseId,
-    frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+    reviewer_role: "frontier", purpose, proposed_transition,
+    anchor: purpose === "dispatch"
+      ? { kind: "aggregate_panel_close", event_id: panelCloseId,
+        frozen_commit: candidate.commit, frozen_tree: candidate.tree }
+      : { kind: "aggregate_terminal", event_id: state.terminal === "CLOSED"
+          ? state.closes.at(-1).event_id : state.latest.event_id,
+        panel_open_event_id: state.panels_open.at(-1).event_id,
+        frozen_commit: state.panels_open.at(-1).frozen_commit,
+        frozen_tree: state.panels_open.at(-1).frozen_tree },
     review_evidence: "frontier review of the completed aggregate panel",
     zoom_out: "the correction stays tied to the requested outcome",
     ruling, bounded_scope: "one consolidated correction",
@@ -755,13 +796,22 @@ for (const ruling of ["successor", "owner_decision"]) {
           owner_evidence: "Owner closes current repair",
         }, options(ctx.dir, "owner"));
         assert.equal(closedProgram.ok, true, closedProgram.state);
-        const continuation = recordAggregateChildContinuation({
+        const continuationInput = {
           type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
           parent_disposition_event_id: decided.event_id, trigger_ids: ["F2"],
           continuation_kind: "new_changeset", owner_evidence: "Owner records future work",
-          process_review_event_id: review.event_id,
           children: [{ task_id: "successor", changeset_id: "successor-cs", tier: "T2",
             budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+        };
+        assert.equal(recordAggregateChildContinuation({
+          ...continuationInput, process_review_event_id: review.event_id,
+        }, options(ctx.dir)).state, "aggregate-continuation-conflict",
+        "a dispatch-purpose review cannot authorize a terminal continuation");
+        const childReview = processReview(ctx, closed.closed.event_id, candidate, "successor",
+          "task-1", "changeset-1", "child_continuation", continuationInput);
+        assert.equal(childReview.ok, true, childReview.state);
+        const continuation = recordAggregateChildContinuation({
+          ...continuationInput, process_review_event_id: childReview.event_id,
         }, options(ctx.dir));
         assert.equal(continuation.ok, true, continuation.state);
       }
@@ -929,7 +979,8 @@ test("a live successor cannot bypass the gate-4 review on a pre-policy three-gat
     let loaded = loadRepairEventsForProject(ctx.dir);
     assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events), [],
       "the unreviewed live successor is inert on replay");
-    const review = processReview(ctx, remap.get(parent.closed.event_id), parent.candidate, "successor");
+    const review = processReview(ctx, remap.get(parent.closed.event_id), parent.candidate, "successor",
+      "task-1", "changeset-1", "child_continuation", continuation);
     assert.equal(review.ok, true, review.state);
     const recorded = recordAggregateChildContinuation({
       ...continuation, process_review_event_id: review.event_id,
@@ -949,14 +1000,14 @@ test("owner_decision blocks current dispatch but permits an Owner-evidenced term
     const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
     const decided = disposition(ctx, closed.closed, { accepted: ["F1"] });
     assert.equal(decided.ok, true, decided.state);
-    const review = processReview(ctx, closed.closed.event_id, candidate, "owner_decision");
-    assert.equal(review.ok, true, review.state);
+    const dispatchReview = processReview(ctx, closed.closed.event_id, candidate, "owner_decision");
+    assert.equal(dispatchReview.ok, true, dispatchReview.state);
     mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
     writeFileSync(path.join(ctx.dir, "briefs/owner-decision.md"), "repair\n");
     assert.equal(confirmRepairBrief({ declaration: {
       aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
       disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id,
-      next_round: 2, root_exit_event_id: null, process_review_event_id: review.event_id,
+      next_round: 2, root_exit_event_id: null, process_review_event_id: dispatchReview.event_id,
     }, brief_path: "briefs/owner-decision.md" }, options(ctx.dir)).state,
     "aggregate-process-review-required");
     const closedProgram = recordAggregateClose({
@@ -965,15 +1016,306 @@ test("owner_decision blocks current dispatch but permits an Owner-evidenced term
       owner_evidence: "Owner decision receipt",
     }, options(ctx.dir, "owner"));
     assert.equal(closedProgram.ok, true, closedProgram.state);
-    const continuation = recordAggregateChildContinuation({
+    const continuationInput = {
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
-      parent_disposition_event_id: decided.event_id, process_review_event_id: review.event_id,
+      parent_disposition_event_id: decided.event_id,
       trigger_ids: ["F1"], continuation_kind: "new_changeset", owner_evidence: "Owner decision receipt",
       children: [{ task_id: "owner-child", changeset_id: "owner-child-cs", tier: "T2",
         budget: "one changeset", authorized_paths: candidate.paths }],
+    };
+    const childReview = processReview(ctx, closed.closed.event_id, candidate, "owner_decision",
+      "task-1", "changeset-1", "child_continuation", continuationInput);
+    assert.equal(childReview.ok, true, childReview.state);
+    const continuation = recordAggregateChildContinuation({
+      ...continuationInput, process_review_event_id: childReview.event_id,
     }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
   } finally { ctx.cleanup(); }
+});
+
+test("historical untyped process reviews replay but cannot grant new typed authority", () => {
+  const replay = repo();
+  const prospective = repo();
+  try {
+    const replayCandidate = commit(replay.dir, 1);
+    const replayPanel = openPanel(replay, 1, replayCandidate);
+    const replayClose = closePanel(replay, replayPanel.opened, replayPanel.expected, replayCandidate, "F1");
+    const replayDisposition = disposition(replay, replayClose.closed, { accepted: ["F1"] });
+    const replayReview = processReview(replay, replayClose.closed.event_id, replayCandidate);
+    const replayAuthority = dispatch(replay, replayDisposition.event_id, replayClose.closed.event_id, 2,
+      null, replayReview.event_id);
+    const remap = rewriteAggregateLedgerWithHistoricalUntypedReview(replay.dir);
+    const replayState = deriveAggregateRepairState(loadRepairEventsForProject(replay.dir).aggregate_events, "task-1");
+    assert.equal(replayState.active_dispatch?.event_id, remap.get(replayAuthority.dispatch),
+      "an already-recorded untyped review and dispatch retain historical replay authority");
+
+    const candidate = commit(prospective.dir, 1);
+    const panel = openPanel(prospective, 1, candidate);
+    const closed = closePanel(prospective, panel.opened, panel.expected, candidate, "F1");
+    const decided = disposition(prospective, closed.closed, { accepted: ["F1"] });
+    const review = processReview(prospective, closed.closed.event_id, candidate);
+    const prospectiveRemap = rewriteAggregateLedgerWithHistoricalUntypedReview(prospective.dir);
+    mkdirSync(path.join(prospective.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(prospective.dir, "briefs/round-2.md"), "repair 2\n");
+    assert.equal(confirmRepairBrief({ declaration: {
+      aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: prospectiveRemap.get(decided.event_id),
+      panel_close_event_id: prospectiveRemap.get(closed.closed.event_id), next_round: 2,
+      root_exit_event_id: null, process_review_event_id: prospectiveRemap.get(review.event_id),
+    }, brief_path: "briefs/round-2.md" }, options(prospective.dir)).state,
+    "aggregate-process-review-required");
+  } finally {
+    replay.cleanup();
+    prospective.cleanup();
+  }
+});
+
+test("a spent finish review cannot route an abandoned open; an exact terminal-purpose review can", () => {
+  const ctx = repo();
+  try {
+    const candidate1 = commit(ctx.dir, 1);
+    const panel1 = openPanel(ctx, 1, candidate1);
+    const closed1 = closePanel(ctx, panel1.opened, panel1.expected, candidate1, "F1");
+    const decided = disposition(ctx, closed1.closed, { accepted: ["F1"] });
+    const finish = processReview(ctx, closed1.closed.event_id, candidate1);
+    assert.equal(finish.ok, true, finish.state);
+    const authority = dispatch(ctx, decided.event_id, closed1.closed.event_id, 2, null, finish.event_id);
+    const candidate2 = commit(ctx.dir, 2);
+    const panel2 = openPanel(ctx, 2, candidate2, authority);
+    const ended = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: decided.event_id, reason: "Owner ended the open repair",
+      owner_evidence: "Owner terminal receipt",
+    }, options(ctx.dir, "owner"));
+    assert.equal(ended.ok, true, ended.state);
+    const proposed = {
+      parent_disposition_event_id: decided.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset",
+      children: [{ task_id: "terminal-child", changeset_id: "terminal-child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: candidate2.paths }],
+    };
+    assert.equal(recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      ...proposed, owner_evidence: "Owner terminal receipt", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      process_review_event_id: finish.event_id,
+    }, options(ctx.dir)).state, "aggregate-continuation-conflict");
+    const state = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "task-1");
+    const anchor = { kind: "aggregate_terminal", event_id: ended.event_id,
+      panel_open_event_id: panel2.opened.event_id, frozen_commit: candidate2.commit, frozen_tree: candidate2.tree };
+    const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "task-1",
+      changeset_id: "changeset-1", reviewer_role: "frontier", purpose: "child_continuation",
+      anchor, proposed_transition: proposed, review_evidence: "terminal review", zoom_out: "still bounded",
+      ruling: "successor", bounded_scope: "one child", closure_evidence: "current repair is closed" };
+    assert.equal(recordAggregateProcessReview({ ...reviewInput,
+      anchor: { ...anchor, frozen_tree: "f".repeat(40) } }, options(ctx.dir)).state,
+    "aggregate-process-review-malformed");
+    assert.equal(recordAggregateProcessReview({ ...reviewInput,
+      anchor: { ...anchor, event_id: closed1.closed.event_id } }, options(ctx.dir)).state,
+    "aggregate-process-review-malformed");
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, purpose: "dispatch" }, options(ctx.dir)).state,
+      "aggregate-process-review-malformed");
+    const terminalReview = recordAggregateProcessReview(reviewInput, options(ctx.dir));
+    assert.equal(terminalReview.ok, true, terminalReview.state);
+    const exactReviewRetry = recordAggregateProcessReview(reviewInput, options(ctx.dir));
+    assert.equal(exactReviewRetry.ok, true, exactReviewRetry.state);
+    assert.equal(exactReviewRetry.idempotent, true);
+    assert.equal(exactReviewRetry.event_id, terminalReview.event_id);
+    assert.equal(recordAggregateProcessReview({ ...reviewInput,
+      review_evidence: "a conflicting judgment for the same transition" }, options(ctx.dir)).state,
+    "aggregate-process-review-conflict");
+    assert.equal(recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      ...proposed, children: [{ ...proposed.children[0], budget: "altered budget" }],
+      owner_evidence: "Owner terminal receipt", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      process_review_event_id: terminalReview.event_id,
+    }, options(ctx.dir)).state, "aggregate-continuation-conflict");
+    const child = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      ...proposed, owner_evidence: "Owner terminal receipt", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      process_review_event_id: terminalReview.event_id,
+    }, options(ctx.dir));
+    assert.equal(child.ok, true, child.state);
+    assert.equal(state.next_gate_ordinal, 2);
+  } finally { ctx.cleanup(); }
+});
+
+test("an abandoned R4 needs a fresh terminal-purpose review after its spent finish review", () => {
+  const ctx = repo();
+  try {
+    const parent = threeGateParent(ctx);
+    const finish = processReview(ctx, parent.closed.event_id, parent.candidate);
+    const authority = dispatch(ctx, parent.decided.event_id, parent.closed.event_id, 4,
+      parent.exit.event_id, finish.event_id);
+    const candidate4 = commit(ctx.dir, 4);
+    const panel4 = openPanel(ctx, 4, candidate4, authority);
+    const ended = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: parent.decided.event_id, reason: "Owner ended the final open",
+      owner_evidence: "Owner terminal receipt",
+    }, options(ctx.dir, "owner"));
+    assert.equal(ended.ok, true, ended.state);
+    const proposed = { parent_disposition_event_id: parent.decided.event_id, trigger_ids: ["F3"],
+      continuation_kind: "new_changeset",
+      children: [{ task_id: "r4-child", changeset_id: "r4-child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: candidate4.paths }] };
+    const base = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
+      changeset_id: "changeset-1", ...proposed, owner_evidence: "Owner terminal receipt",
+      action_screen: _DEFAULT_CONTINUATION_SCREEN };
+    assert.equal(recordAggregateChildContinuation({ ...base, process_review_event_id: finish.event_id },
+      options(ctx.dir)).state, "aggregate-continuation-conflict");
+    const terminalReview = processReview(ctx, parent.closed.event_id, candidate4, "successor",
+      "task-1", "changeset-1", "child_continuation", proposed);
+    assert.equal(terminalReview.ok, true, terminalReview.state);
+    assert.equal(recordAggregateChildContinuation({ ...base, process_review_event_id: terminalReview.event_id },
+      options(ctx.dir)).ok, true);
+    assert.equal(panel4.opened.ok, true);
+  } finally { ctx.cleanup(); }
+});
+
+test("a round-3 standard handoff requires an exact standard-purpose process review", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const manifest = fingerprintCandidate(ctx.dir, ["src/x.mjs"]);
+    const round = (number, finding, dispatchId, at) => stamped({
+      type: "round_disposition", task_id: "legacy", changeset_id: "legacy-cs", round: number,
+      candidate_sha: manifest.digest, candidate_manifest: manifest.records, verdict: "NO-GO",
+      disposition: "REMEDIATE", finding_ids: [finding], finding_class: `class-${number}`,
+      ownership_area: "controller", original_trigger: `trigger-${number}`,
+      authorized_paths: ["src/x.mjs"], introduced_by_prior_repair: false, new_scope: false,
+      repair_dispatch_event_id: dispatchId, root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null, recorded_at: at, session_id: "legacy",
+    });
+    const dispatchRow = (source, finding, at) => stamped({
+      type: "repair_dispatch", task_id: "legacy", changeset_id: "legacy-cs",
+      source_round: source, next_round: source + 1, candidate_sha: manifest.digest,
+      finding_ids: [finding], authorized_paths: ["src/x.mjs"], target_kind: "brief",
+      target: `briefs/legacy-${source + 1}.md`, brief_sha256: String(source).repeat(64), brief_size: 7,
+      root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null, recorded_at: at, session_id: "legacy",
+    });
+    const r1 = round(1, "L1", null, "2099-01-01T00:00:00.000Z");
+    const d2 = dispatchRow(1, "L1", "2099-01-01T00:00:01.000Z");
+    const r2 = round(2, "L2", d2.event_id, "2099-01-01T00:00:02.000Z");
+    const d3 = dispatchRow(2, "L2", "2099-01-01T00:00:03.000Z");
+    const r3 = round(3, "L3", d3.event_id, "2099-01-01T00:00:04.000Z");
+    mkdirSync(path.dirname(repairLedgerPath(ctx.dir)), { recursive: true });
+    writeFileSync(repairLedgerPath(ctx.dir), [r1, d2, r2, d3, r3].map(JSON.stringify).join("\n") + "\n");
+    const proposed = { parent_task_id: "legacy", parent_changeset_id: "legacy-cs",
+      parent_disposition_event_id: r3.event_id, parent_round: 3, parent_candidate_sha: manifest.digest,
+      authorized_paths: ["src/x.mjs"], child: { task_id: "legacy-child", changeset_id: "legacy-child-cs",
+        tier: "T2", budget: "one changeset", authorized_paths: ["src/x.mjs"] } };
+    const handoffInput = { type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy",
+      changeset_id: "legacy-cs", ...proposed, owner_evidence: "Owner handoff" };
+    assert.equal(recordAggregateLegacyHandoff(handoffInput, options(ctx.dir)).state,
+      "aggregate-legacy-handoff-conflict");
+    const anchor = { kind: "standard_disposition", event_id: r3.event_id, candidate_sha: manifest.digest };
+    const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "legacy",
+      changeset_id: "legacy-cs", reviewer_role: "frontier", purpose: "legacy_handoff",
+      anchor, proposed_transition: proposed, review_evidence: "handoff review", zoom_out: "bounded successor",
+      ruling: "successor", bounded_scope: "one child", closure_evidence: "standard parent hands off",
+      next_gate_ordinal: 4 };
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, next_gate_ordinal: 5 }, options(ctx.dir)).state,
+      "aggregate-process-review-malformed");
+    assert.equal(recordAggregateProcessReview({ ...reviewInput,
+      anchor: { ...anchor, event_id: r2.event_id } }, options(ctx.dir)).state,
+    "aggregate-process-review-malformed");
+    assert.equal(recordAggregateProcessReview({ ...reviewInput,
+      anchor: { ...anchor, candidate_sha: "f".repeat(64) } }, options(ctx.dir)).state,
+    "aggregate-process-review-malformed");
+    const review = recordAggregateProcessReview(reviewInput, options(ctx.dir));
+    assert.equal(review.ok, true, review.state);
+    const handoff = recordAggregateLegacyHandoff({
+      ...handoffInput, process_review_event_id: review.event_id,
+    }, options(ctx.dir));
+    assert.equal(handoff.ok, true, handoff.state);
+    const opened = openPanel(ctx, 1, candidate, {}, false, {
+      task_id: "legacy-child", changeset_id: "legacy-child-cs", legacy_handoff_event_id: handoff.event_id,
+    });
+    assert.equal(opened.opened.ok, true, opened.opened.state);
+  } finally { ctx.cleanup(); }
+});
+
+test("an exact active legacy brief retry is idempotent while changed requests take the live path", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const decided = disposition(ctx, closed.closed, { accepted: ["F1"] });
+    const authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 2);
+    const liveDispatch = loadRepairEventsForProject(ctx.dir).aggregate_events
+      .find((row) => row.event_id === authority.dispatch);
+    assert.equal(liveDispatch.event.policy_version, AGGREGATE_POLICY_VERSION,
+      "genuine new authority remains policy 2");
+    const remap = rewriteAggregateLedgerAsLegacy(ctx.dir);
+    const declaration = { aggregate_controller: "aggregate_v2", task_id: "task-1",
+      changeset_id: "changeset-1", disposition_event_id: remap.get(decided.event_id),
+      panel_close_event_id: remap.get(closed.closed.event_id), next_round: 2, root_exit_event_id: null };
+    const ledger = repairLedgerPath(ctx.dir);
+    const before = readFileSync(ledger, "utf8").split("\n").filter(Boolean).length;
+    const exact = confirmRepairBrief({ declaration, brief_path: "briefs/round-2.md" }, options(ctx.dir));
+    assert.equal(exact.ok, true, exact.state);
+    assert.equal(exact.idempotent, true);
+    assert.equal(exact.event_id, remap.get(authority.dispatch));
+    assert.equal(readFileSync(ledger, "utf8").split("\n").filter(Boolean).length, before,
+      "the compatibility retry appends nothing");
+    writeFileSync(path.join(ctx.dir, "briefs/alternate-round-2.md"), "repair 2\n");
+    assert.equal(confirmRepairBrief({ declaration,
+      brief_path: "briefs/alternate-round-2.md" }, options(ctx.dir)).state,
+    "aggregate-dispatch-conflict");
+    writeFileSync(path.join(ctx.dir, "briefs/round-2.md"), "changed bytes\n");
+    assert.equal(confirmRepairBrief({ declaration, brief_path: "briefs/round-2.md" }, options(ctx.dir)).state,
+      "aggregate-dispatch-conflict");
+    assert.equal(confirmRepairBrief({ declaration: { ...declaration,
+      panel_close_event_id: "f".repeat(64) }, brief_path: "briefs/round-2.md" }, options(ctx.dir)).state,
+    "aggregate-dispatch-unavailable");
+    assert.equal(confirmRepairBrief({ declaration: { ...declaration,
+      process_review_event_id: "e".repeat(64) }, brief_path: "briefs/round-2.md" }, options(ctx.dir)).state,
+    "aggregate-process-review-required");
+  } finally { ctx.cleanup(); }
+});
+
+test("live dispositions require an explicit boolean, while an exact old omitted-field retry survives", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const input = { type: "aggregate_v2", kind: "disposition", task_id: "task-1",
+      changeset_id: "changeset-1", panel_close_event_id: closed.closed.event_id, pm_findings: [],
+      finding_dispositions: { accepted: ["F1"], declined: [], note: [], followup: [] },
+      terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"] };
+    for (const malformed of [undefined, null, "false", 0]) {
+      const attempt = { ...input };
+      if (malformed !== undefined) attempt.same_mechanism_repeated = malformed;
+      assert.equal(recordAggregateDisposition(attempt, options(ctx.dir)).state,
+        "aggregate-disposition-malformed");
+    }
+    const accepted = recordAggregateDisposition({ ...input, same_mechanism_repeated: false }, options(ctx.dir));
+    assert.equal(accepted.ok, true, accepted.state);
+    const remap = rewriteAggregateLedgerAsLegacy(ctx.dir);
+    const retried = recordAggregateDisposition({
+      ...input, panel_close_event_id: remap.get(closed.closed.event_id),
+    }, options(ctx.dir));
+    assert.equal(retried.ok, true, retried.state);
+    assert.equal(retried.idempotent, true);
+    assert.equal(retried.event_id, remap.get(accepted.event_id));
+  } finally { ctx.cleanup(); }
+  const ctxTrue = repo();
+  try {
+    const candidate = commit(ctxTrue.dir, 1);
+    const panel = openPanel(ctxTrue, 1, candidate);
+    const closed = closePanel(ctxTrue, panel.opened, panel.expected, candidate, "F1");
+    const repeated = disposition(ctxTrue, closed.closed, {
+      accepted: ["F1"], same_mechanism_repeated: true,
+      remediation_kind: "root_replacement",
+    });
+    assert.equal(repeated.ok, true, repeated.state);
+    const stored = loadRepairEventsForProject(ctxTrue.dir).aggregate_events
+      .find((row) => row.event_id === repeated.event_id);
+    assert.equal(stored.event.same_mechanism_repeated, true);
+  } finally { ctxTrue.cleanup(); }
 });
 
 test("legacy rows replay and close or atomically hand off, but new standard minting is retired", () => {
