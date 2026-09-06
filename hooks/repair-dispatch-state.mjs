@@ -92,6 +92,10 @@ const nullableId = (value) => value === null || ID64.test(value || "");
 const aggregatePolicyVersion = (event) => event?.policy_version === AGGREGATE_POLICY_VERSION
   ? AGGREGATE_POLICY_VERSION : 1;
 const liveAggregatePolicy = (event) => aggregatePolicyVersion(event) === AGGREGATE_POLICY_VERSION;
+const effectiveAggregatePolicyVersion = (state, incoming) =>
+  Math.max(state?.policy_version ?? 1, aggregatePolicyVersion(incoming));
+const continuationReviewAllows = (review) =>
+  ["successor", "owner_decision"].includes(review?.ruling);
 function validAggregateKindShape(event) {
   switch (event.kind) {
     case "panel_open":
@@ -1025,7 +1029,7 @@ function aggregateWorld(events, standardEvents = []) {
         const exit = state.root_exits.find((candidate) => candidate.event_id === row.root_exit_event_id);
         if (!exit || exit.disposition_event_id !== disposition.event_id) continue;
       } else if (row.root_exit_event_id !== null) continue;
-      if (state.policy_version >= AGGREGATE_POLICY_VERSION) {
+      if (effectiveAggregatePolicyVersion(state, row) >= AGGREGATE_POLICY_VERSION) {
         const required = processReviewRequired(state, row.next_round);
         const applicable = state.process_reviews.find((candidate) =>
           candidate.next_gate_ordinal === nextGateOrdinal(state)) || null;
@@ -1068,14 +1072,14 @@ function aggregateWorld(events, standardEvents = []) {
       if (!state || state.changeset_id !== row.changeset_id || !state.terminal ||
           !["split", "new_changeset", "material_scope"].includes(row.continuation_kind) ||
           !text(row.owner_evidence, 1000) || !Array.isArray(row.children)) continue;
-      if (state.policy_version >= AGGREGATE_POLICY_VERSION) {
+      if (effectiveAggregatePolicyVersion(state, row) >= AGGREGATE_POLICY_VERSION) {
         const ordinal = nextGateOrdinal(state);
         const required = ordinal % 4 === 0;
         const applicable = state.process_reviews.find((candidate) => candidate.next_gate_ordinal === ordinal) || null;
         const review = row.process_review_event_id === null ? null
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
         if ((required || applicable) && (!review || review.event_id !== applicable?.event_id ||
-            review.next_gate_ordinal !== ordinal || review.ruling !== "successor")) continue;
+            review.next_gate_ordinal !== ordinal || !continuationReviewAllows(review))) continue;
       }
       const parentOpen = state.panels_open.at(-1);
       // ONE LIVE continuation per anchor — not one EVER. A standing continuation blocks a new
@@ -2038,7 +2042,10 @@ export function validateAggregateDispatch(declaration,
     return { ok: false, state: "aggregate-root-exit-unexpected" };
   }
   let processReview = null;
-  if (state.policy_version >= AGGREGATE_POLICY_VERSION) {
+  // A brief confirmed by this implementation mints a live-policy dispatch even when the standing
+  // parent is entirely historical. Validate the authority the prospective row will carry; replay
+  // applies the same max(parent policy, incoming policy) rule.
+  {
     const required = processReviewRequired(state, declaration.next_round);
     const applicable = state.process_reviews.find((row) => row.next_gate_ordinal === nextGateOrdinal(state)) || null;
     processReview = declaration.process_review_event_id == null ? null

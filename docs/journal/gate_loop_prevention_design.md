@@ -23,7 +23,8 @@ recorded as a successor. Proof is an executed controller walk showing:
 3. work leading into local Round 4 has a fresh frontier process review tied to the latest completed
    panel and frozen candidate;
 4. a process-review ruling of `finish_bounded_root` authorizes the one bounded finish before the
-   terminal Round 4 bookend, while `successor` and `owner_decision` authorize no repair dispatch;
+   terminal Round 4 bookend; `successor` and `owner_decision` authorize no current-chip dispatch,
+   but after terminal close an Owner-evidenced child continuation may cite either ruling;
 5. descendants inherit the cumulative gate ordinal, refreezes do not increment it, and ordinals
    4, 8, 12, and so on require a fresh process review without granting an extra round; and
 6. old aggregate and standard fixtures still replay unchanged.
@@ -55,7 +56,8 @@ panel and frozen candidate.
 Round 3 to Round 4 always requires the matching process review. `finish_bounded_root` permits that
 single dispatch; Round 4 remains a mandatory terminal GO/STOP bookend with no outgoing dispatch.
 `successor` stops the current repair path and records future work only after the current program is
-terminal. `owner_decision` grants no dispatch and leaves the decision at the existing Owner boundary.
+terminal. `owner_decision` grants no current-chip dispatch and leaves the decision at the existing
+Owner boundary; after terminal close, the Owner-evidenced child continuation may cite it.
 
 Independently of local round number, any work-authorizing transition whose next cumulative gate
 ordinal is divisible by four requires a matching fresh process review. A child continuation is such

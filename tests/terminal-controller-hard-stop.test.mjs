@@ -8,12 +8,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, fingerprintCandidate,
+  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState,
+  derivePendingLineageBudgets, fingerprintCandidate,
   loadRepairEventsForProject, readRepairEvents, recordAggregateChildContinuation as _rawChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff, recordAggregatePanelClose,
   recordAggregatePanelOpen, recordAggregateProcessReview, recordAggregateRootExit, recordAggregateWorkerHandoff,
   recordOwnerExtension, recordRepairClose, recordRoundDisposition, recordWorkerVerification,
-  repairLedgerPath, verifyRepairWorkerWrite,
+  repairLedgerPath, validateAggregateDispatch, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
 
 // A minted successor now REQUIRES a structured action_screen (screen-at-emission enforcement,
@@ -32,6 +33,23 @@ const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")
 const eventId = (event) => createHash("sha256").update(stable(event)).digest("hex");
 const stamped = (event) => ({ event_id: eventId(event), event });
 const options = (dir, sessionId = "orchestrator") => ({ projectRoot: dir, sessionId });
+
+function rewriteAggregateLedgerAsLegacy(dir) {
+  const remap = new Map();
+  const rewrite = (value) => Array.isArray(value) ? value.map(rewrite)
+    : value && typeof value === "object"
+      ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, rewrite(entry)]))
+      : typeof value === "string" ? (remap.get(value) ?? value) : value;
+  const rows = loadRepairEventsForProject(dir).aggregate_events.map((row) => {
+    const event = rewrite(row.event);
+    delete event.policy_version;
+    const legacy = stamped(event);
+    remap.set(row.event_id, legacy.event_id);
+    return legacy;
+  });
+  writeFileSync(repairLedgerPath(dir), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+  return remap;
+}
 
 async function importMutant(dir, replacements) {
   let source = readFileSync(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url), "utf8");
@@ -176,6 +194,41 @@ function processReview(ctx, panelCloseId, candidate, ruling = "finish_bounded_ro
     ruling, bounded_scope: "one consolidated correction",
     closure_evidence: "the original accepted triggers no longer fire",
   }, options(ctx.dir));
+}
+
+function rootExit(ctx, dispositionId) {
+  return recordAggregateRootExit({
+    type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
+    disposition_event_id: dispositionId, shared_mechanism: "one shared controller defect",
+    symptom_explanation: "prior repairs treated symptoms", owner_state_yield_seams: ["owner/state seam"],
+    replacement: "one bounded correction", removed_workarounds: ["repeat patch"],
+    trigger_matrix: ["the original trigger closes"], closure_evidence: "candidate evidence closes the trigger",
+  }, options(ctx.dir));
+}
+
+function threeGateParent(ctx, { terminal = false } = {}) {
+  let candidate = commit(ctx.dir, 1);
+  let panel = openPanel(ctx, 1, candidate);
+  let closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+  let decided = disposition(ctx, closed.closed, { accepted: ["F1"] });
+  let authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 2);
+  candidate = commit(ctx.dir, 2);
+  panel = openPanel(ctx, 2, candidate, authority);
+  closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F2");
+  decided = disposition(ctx, closed.closed, { accepted: ["F2"], remediation_kind: "root_replacement" });
+  const roundTwoExit = rootExit(ctx, decided.event_id);
+  assert.equal(roundTwoExit.ok, true, roundTwoExit.state);
+  authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 3, roundTwoExit.event_id);
+  candidate = commit(ctx.dir, 3);
+  panel = openPanel(ctx, 3, candidate, authority);
+  closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F3");
+  decided = disposition(ctx, closed.closed, terminal ? {
+    accepted: ["F3"], terminal_state: "STOP", remediation_kind: null, authorized_paths: [],
+  } : { accepted: ["F3"], remediation_kind: "root_replacement" });
+  assert.equal(decided.ok, true, decided.state);
+  const exit = terminal ? null : rootExit(ctx, decided.event_id);
+  if (exit) assert.equal(exit.ok, true, exit.state);
+  return { candidate, closed: closed.closed, decided, exit };
 }
 
 test("aggregate controller enforces PM authority, three batches, final STOP, handoff, and split lineage", () => {
@@ -801,6 +854,125 @@ test("the fourth cumulative gate in a descendant needs a fresh process review", 
     assert.equal(review.next_gate_ordinal, 4);
     assert.equal(confirmRepairBrief({ declaration: { ...declaration, process_review_event_id: review.event_id },
       brief_path: "briefs/child-2.md" }, options(ctx.dir)).ok, true);
+  } finally { ctx.cleanup(); }
+});
+
+test("a live dispatch cannot bypass the gate-4 review on a pre-policy three-gate parent", () => {
+  const ctx = repo();
+  try {
+    const parent = threeGateParent(ctx);
+    const remap = rewriteAggregateLedgerAsLegacy(ctx.dir);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    const brief = "briefs/legacy-round-4.md";
+    writeFileSync(path.join(ctx.dir, brief), "legacy parent repair 4\n");
+    const declaration = {
+      aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: remap.get(parent.decided.event_id),
+      panel_close_event_id: remap.get(parent.closed.event_id), next_round: 4,
+      root_exit_event_id: remap.get(parent.exit.event_id),
+    };
+    let loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(deriveAggregateRepairState(loaded.aggregate_events, "task-1").policy_version, 1);
+    assert.equal(validateAggregateDispatch(declaration, {
+      aggregateEvents: loaded.aggregate_events, standardEvents: loaded.events,
+      taskId: "task-1", targetKind: "brief", target: brief,
+    }).state, "aggregate-process-review-required");
+    assert.equal(confirmRepairBrief({ declaration, brief_path: brief }, options(ctx.dir)).state,
+      "aggregate-process-review-required");
+
+    const bytes = readFileSync(path.join(ctx.dir, brief));
+    const planted = {
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "dispatch",
+      task_id: "task-1", changeset_id: "changeset-1", recorded_at: "2099-01-01T00:00:00.000Z",
+      session_id: "planted", disposition_event_id: declaration.disposition_event_id,
+      panel_close_event_id: declaration.panel_close_event_id, source_round: 3, next_round: 4,
+      authorized_paths: parent.candidate.paths, root_exit_event_id: declaration.root_exit_event_id,
+      process_review_event_id: null, target_kind: "brief", target: brief,
+      brief_sha256: createHash("sha256").update(bytes).digest("hex"), brief_size: bytes.length,
+    };
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(stamped(planted))}\n`, { flag: "a" });
+    loaded = loadRepairEventsForProject(ctx.dir);
+    const replay = deriveAggregateRepairState(loaded.aggregate_events, "task-1");
+    assert.equal(replay.active_dispatch, null, "the live row is inert when replayed against the old parent");
+    assert.equal(replay.dispatches.length, 2, "only the two historical dispatches survive replay");
+
+    const review = processReview(ctx, declaration.panel_close_event_id, parent.candidate);
+    assert.equal(review.ok, true, review.state);
+    const confirmed = confirmRepairBrief({ declaration: {
+      ...declaration, process_review_event_id: review.event_id,
+    }, brief_path: brief }, options(ctx.dir));
+    assert.equal(confirmed.ok, true, confirmed.state);
+  } finally { ctx.cleanup(); }
+});
+
+test("a live successor cannot bypass the gate-4 review on a pre-policy three-gate parent", () => {
+  const ctx = repo();
+  try {
+    const parent = threeGateParent(ctx, { terminal: true });
+    const remap = rewriteAggregateLedgerAsLegacy(ctx.dir);
+    const continuation = {
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: remap.get(parent.decided.event_id), trigger_ids: ["F3"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner chose the bounded successor",
+      children: [{ task_id: "legacy-child", changeset_id: "legacy-child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: parent.candidate.paths }],
+    };
+    assert.equal(recordAggregateChildContinuation(continuation, options(ctx.dir)).state,
+      "aggregate-continuation-conflict");
+    const planted = {
+      ...continuation, policy_version: AGGREGATE_POLICY_VERSION,
+      parent_frozen_commit: parent.candidate.commit, parent_frozen_tree: parent.candidate.tree,
+      process_review_event_id: null, action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "planted",
+    };
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(stamped(planted))}\n`, { flag: "a" });
+    let loaded = loadRepairEventsForProject(ctx.dir);
+    assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events), [],
+      "the unreviewed live successor is inert on replay");
+    const review = processReview(ctx, remap.get(parent.closed.event_id), parent.candidate, "successor");
+    assert.equal(review.ok, true, review.state);
+    const recorded = recordAggregateChildContinuation({
+      ...continuation, process_review_event_id: review.event_id,
+    }, options(ctx.dir));
+    assert.equal(recorded.ok, true, recorded.state);
+    loaded = loadRepairEventsForProject(ctx.dir);
+    assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events).map((row) => row.task_id),
+      ["legacy-child"]);
+  } finally { ctx.cleanup(); }
+});
+
+test("owner_decision blocks current dispatch but permits an Owner-evidenced terminal continuation", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const decided = disposition(ctx, closed.closed, { accepted: ["F1"] });
+    assert.equal(decided.ok, true, decided.state);
+    const review = processReview(ctx, closed.closed.event_id, candidate, "owner_decision");
+    assert.equal(review.ok, true, review.state);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/owner-decision.md"), "repair\n");
+    assert.equal(confirmRepairBrief({ declaration: {
+      aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id,
+      next_round: 2, root_exit_event_id: null, process_review_event_id: review.event_id,
+    }, brief_path: "briefs/owner-decision.md" }, options(ctx.dir)).state,
+    "aggregate-process-review-required");
+    const closedProgram = recordAggregateClose({
+      type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: decided.event_id, reason: "Owner chose a successor instead of current repair",
+      owner_evidence: "Owner decision receipt",
+    }, options(ctx.dir, "owner"));
+    assert.equal(closedProgram.ok, true, closedProgram.state);
+    const continuation = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: decided.event_id, process_review_event_id: review.event_id,
+      trigger_ids: ["F1"], continuation_kind: "new_changeset", owner_evidence: "Owner decision receipt",
+      children: [{ task_id: "owner-child", changeset_id: "owner-child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: candidate.paths }],
+    }, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
   } finally { ctx.cleanup(); }
 });
 

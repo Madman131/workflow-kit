@@ -32,7 +32,8 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **R1 permits one bounded batch unless the mechanism repeated; harm-bearing R2 and repeated R1
   require one shared-cause root kind and closure proof.** R3 tests that consolidated correction.
   Before R4 dispatch, a fresh frontier process review bound to the latest frozen panel
-  rules: finish once, successor after terminal close, or Owner decision with no dispatch. Gate count
+  rules: finish once; successor, or Owner decision with no current-chip dispatch, may be cited by
+  the Owner-evidenced child continuation after terminal close. Gate count
   continues through children; each fourth gate repeats the review but grants no extra round. R4 is
   the final bookend; no R5.
 - **When ONE mechanism repeats, diagnose PLUMBING or CONCEPT before re-fixing.** Bespoke logic beside
