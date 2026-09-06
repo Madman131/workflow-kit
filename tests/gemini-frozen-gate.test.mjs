@@ -64,9 +64,10 @@ test("exact tuple, clean endpoint, regular manifest, and symlink inputs fail clo
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("current and deleted Basic or Token credential-like material refuses before envelope output", () => {
+  const authorization = (scheme, state) => ["Authorization:", scheme, `${state}-${["secret", "value"].join("-")}`].join(" ") + "\n";
   const cases = [
-    fixture({ candidateSource: "Authorization: Basic current-secret-value\n" }), fixture({ candidateSource: "Authorization: Token current-secret-value\n" }),
-    fixture({ baseSource: "Authorization: Basic deleted-secret-value\n", candidateSource: "export const removed = true;\n" }), fixture({ baseSource: "Authorization: Token deleted-secret-value\n", candidateSource: "export const removed = true;\n" })
+    fixture({ candidateSource: authorization("Basic", "current") }), fixture({ candidateSource: authorization("Token", "current") }),
+    fixture({ baseSource: authorization("Basic", "deleted"), candidateSource: "export const removed = true;\n" }), fixture({ baseSource: authorization("Token", "deleted"), candidateSource: "export const removed = true;\n" })
   ];
   try { for (const f of cases) assert.notEqual(dry(f).status, 0, `credential accepted in ${f.dir}`); } finally { for (const f of cases) rmSync(f.dir, { recursive: true, force: true }); }
 });
