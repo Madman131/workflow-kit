@@ -545,7 +545,7 @@ attempt record, so ordinary Git garbage collection cannot erase the bytes behind
 - Diagnostic only: add `--no-log`. A receipt-verified `--no-log` run is not a release-gate receipt.
 - Bounded slice: `bash scripts/cold-review-gemini.sh --slice-manifest <plan.json> --slice <name>`
 - Finalize a fully successful slice set: `bash scripts/cold-review-gemini.sh --slice-manifest <plan.json> --finalize-slices`
-- Deterministic harness: `bash scripts/cold-review-gemini-selftest.sh` (fake `agy`; no network or model quota).
+- Deterministic harness: `bash scripts/cold-review-gemini.sh --selftest` (the shipped direct-API response firewall; no network, key lookup, or model quota).
 - Compatibility selftest entrypoint: `bash scripts/cold-review-gemini.sh --selftest` delegates to the same deterministic harness.
 
 At a design gate, use `--design`; a diff review of a docs-only changeset is the wrong artifact. Code mode reviews the uncommitted diff, full changed code files up to 120 KB each, untracked code files below 300 KB, invariants, and optional contract context.
@@ -579,7 +579,8 @@ These are random-token checks, not a natural-language truncation regex. Do not a
 
 ### Transport tiers
 
-The runner never uses stdin.
+The legacy INLINE and FILE runner paths never use stdin. The frozen subscription transport uses exactly
+one NDJSON standard-input user event in its disposable workspace; it does not inherit legacy routing.
 
 ### INLINE
 
@@ -612,7 +613,7 @@ Do not raise the 3 MB gate-valid envelope without a new contiguous-read experime
 > lock and a second live invocation **exits 4** — including from a sibling worktree of the same repo.
 > Two lanes cannot both hold a Gemini gate; the second must wait. This is a mechanism, not a norm.
 
-The runner owns a per-repository lock under the canonical Git common directory, so sibling worktrees cannot run duplicate reviews against one repository. The owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
+The runner owns one per-repository lock under the canonical Git common directory, shared by legacy `agy` and frozen subscription/direct dispatches, so sibling worktrees cannot run duplicate reviews against one repository. The legacy owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity; a live frozen subscription or direct owner is refused by PID and common-directory identity before command comparison. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused legacy ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
 
 ### Durable attempt records
 
@@ -630,6 +631,11 @@ Each record includes attempt ID, record kind, release-gate eligibility, transpor
 A documented release gate requires all three machine fields: `Status: PASS_VERDICT`, `Release-Gate: YES`, and `Record-Kind: FULL_REVIEW` or `SLICE_SET`. A `SLICE_RESULT` is never a release receipt even though it is a valid verdict on that slice. `--no-log` is retained for diagnostics and live interruption tests only, including abrupt parent loss.
 
 ### Bounded slicing
+
+This is the legacy working-tree `agy` workflow. Its `scripts/gemini-gate-slices.mjs` fingerprints
+and snapshots legacy slices only; do not use it to fingerprint or execute an exact committed frozen
+candidate, including a fragmented one. The frozen direct workflow below has its own tuple-bound plan
+identity and commands.
 
 Slicing is a coverage strategy, not an automatic remediation loop. The pinned frontier PM approves the plan before model calls.
 
@@ -671,15 +677,198 @@ The validator compares `scope.files` with the exact tracked/untracked surface (e
 
 Every slice record contains the entire normalized plan, exact diff ranges plus diff hashes, full-file hashes, canonical context paths plus byte hashes, current HEAD, pinned base commit, and the PM-approved SHA-256 plan ID. During one validator run, each selected full file and contract context is read once into a byte buffer; that same buffer is hashed and written to a private snapshot, while each computed diff is likewise cached and snapshotted. The runner consumes only those approved full-file, diff, and context snapshots—never a later live reread—so mutation after validation cannot alter the reviewed bytes under an old plan ID. An individual successful slice is `Record-Kind: SLICE_RESULT`, `Release-Gate: NO`. After every named coverage slice and a later final cross-boundary slice has a durable pass under the same plan ID, `--finalize-slices` emits the sole `SLICE_SET` release receipt with all contributing attempt IDs. Missing, failed, out-of-order, stale-HEAD, mutated-context, or differently hashed slices make finalization fail before any release verdict.
 
+### Frozen Gemini exact-candidate gate
+
+> **2026-09-06 supersession — strict manual subscription handoff.** The automated frozen
+> subscription and direct-REST procedures below are historical transport evidence, not live commands.
+> `--run-slices`, `--transport`, `--agy-bin`, `--timeout-seconds`, and every frozen full live call now
+> refuse before provider/settings/credential access. Keep their measured receipts unchanged. The active
+> procedure is: generate and inspect the local DRAFT; fingerprint and approve the exact manifest; run
+> `--handoff-export .gemini-gate/<dir>`; submit each numbered packet manually in the operator-attested
+> Gemini subscription UI using `gemini-3.1-pro-high`; save exact UTF-8 replies as `replies/0001.txt`;
+> then run `--handoff-import .gemini-gate/<dir>`. Export/import recheck the exact tuple, plan,
+> fragments, packets, scopes, replies, and endpoint. A source-only NO-GO remains nonterminal
+> `UNRESOLVED_ATTRIBUTION`; only a diff-bearing/full terminal NO-GO permits a prefix, and all other
+> complete reply sets aggregate GO or `ATTRIBUTION_HOLD`. Manual UI/model identity is operator-attested,
+> not cryptographically verified by the runner. A retry reuses only an exact complete durable prefix
+> for its Handoff-ID and appends the expected suffix; a completed terminal/aggregate ID, or a mismatched,
+> extra, out-of-order, or incomplete prefix, refuses.
+
+> **Historical automated-transport record begins.** The following transport commands and controls
+> explain preserved receipts from the superseded procedure. They are not supported current commands.
+
+For an exact committed code candidate, the ordinary non-API path was the explicit subscription
+transport. Direct Gemini REST remains available only when explicitly selected; neither path falls back
+to the other.
+
+```sh
+bash scripts/cold-review-gemini.sh \
+  --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
+  --rig-id <nonsecret-provider-configuration-id> --transport subscription --context docs/contract.md
+```
+
+The subscription runner resolves `agy` from an explicit absolute `--agy-bin`, then `PATH`, then the
+current user's `.local/bin`; receipts bind the stable subscription transport name, its `--version`,
+model, settings fingerprint, and nonsecret rig ID, never an operator home path. It requires
+`gemini-3.1-pro-high`, an empty disposable system-temp workspace, and exactly one NDJSON standard-input
+user event containing the complete prompt, so private review material is never an `agy` command-line
+argument. It passes `--input-format stream-json`, `--sandbox`, `--disable-slash-commands`,
+`--output-format stream-json`, and `--print-timeout <N>s`; it never passes
+a repository cwd, `--add-dir`, `--new-project`, `--mode plan`, permission bypass, or a broad permission
+configuration. `--new-project` is forbidden because it creates durable global project records.
+`--timeout-seconds` may lower the bounded 600-second default but cannot raise it. Subscription execution
+fails closed on Windows until the runner has an owned process-group teardown there.
+
+Before launch it parses `~/.gemini/antigravity-cli/settings.json` and refuses a malformed file,
+`toolPermission` other than absent or `request-review`, `allowNonWorkspaceAccess` other than absent or
+false, or a nonempty/malformed `permissions.allow`. The NDJSON stream must contain exactly one initial
+`init` and final `result`, identify that real disposable cwd, model, and `request-review` mode, and use
+only documented user-input, agent-response, or checkpoint step events. Any tool event, tool output,
+subagent information, denied action, stderr diagnostic, workspace mutation, signal, nonzero exit,
+timeout, malformed/unknown event, non-success result, empty response, or receipt mismatch is a
+non-verdict failure. The runner accepts only allowlisted fields in those event shapes (except that a
+nonempty advertised `init.tools` list is expected) and rejects unknown or execution-like output fields.
+It owns the detached `agy` process group and escalates TERM to KILL on a timeout, bounded-output
+overflow, or runner interrupt, waiting through teardown before it releases the single-flight lock. It
+does not infer no tool activity from an omitted
+`denied_actions` field: the event stream is the authoritative local execution record.
+
+The deterministic fake-`agy` suite proves this runner behavior only. No live subscription review,
+current-account eligibility, or review quality was exercised here. **Activation remains HOLD** until an
+Owner separately authorizes live use and retains the resulting current-rig preflight and review receipt;
+do not change permissions or retry by widening them to obtain that receipt.
+
+For separately authorized direct REST, select `--transport api`; it retains the text-only endpoint and
+requires `GEMINI_API_KEY` only at that live invocation:
+
+```sh
+bash scripts/cold-review-gemini.sh \
+  --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
+  --rig-id <nonsecret-provider-configuration-id> --transport api --context docs/contract.md
+```
+
+The runner disables Git replacement-object processing for every read, verifies that the base is an
+ancestor, the checked-out HEAD and tree equal the supplied candidate tuple, and rechecks that clean
+endpoint before every provider call and final release record. The checkout is clean apart from the
+durable journal/sanctioned artifacts. It accepts only regular-blob additions, modifications, and
+deletions; symlinks, gitlinks, type changes, renames, copies, escaping/nonregular manifests, and
+malformed slice boundaries refuse before any provider request. It assembles full text from
+Git blobs only: current changed files, old deleted files, the diff, the candidate's invariants, and
+candidate-relative contract context. Binary, non-UTF-8, renamed/type-changed, escaping, dirty, or
+secret-looking input refuses before any provider request. It never creates a snapshot, stages the
+caller tree, supplies a directory, or lets Gemini execute a tool.
+
+The direct REST request is one fixed-host HTTPS `generateContent` call with text-only contents and one
+candidate requested. Every response part must contain exactly one `text` field; there are no
+tools/function declarations and no function-call executor. Its
+complete serialized request is strictly below **81,920 bytes**; no setting can raise that cap. A
+larger complete candidate requires a v2 manifest augmented with `scope.candidate_commit` and
+`scope.candidate_tree`. A changed source, deleted source, or per-file diff that cannot fit whole is
+represented by ordered `fragments` on its coverage slices. Every fragment binds the same tuple and
+has this shape:
+
+```json
+{
+  "base_commit": "<base>", "candidate_commit": "<candidate>", "candidate_tree": "<tree>",
+  "path": "exact/changed/file", "component_kind": "frozen_source",
+  "component_byte_length": 123, "component_sha256": "<64-lowercase-hex>",
+  "byte_start": 0, "byte_end": 123, "fragment_sha256": "<64-lowercase-hex>"
+}
+```
+
+`component_kind` is `frozen_source`, `deleted_source`, or `per_file_diff`. Starts and ends are
+UTF-8 boundaries. Across coverage slices, fragments for every required source and diff component
+must be ordered, gap-free, non-overlapping, and reconstruct the component hash exactly. The final
+cross-boundary slice may select only raw ranges already covered by that complete set. This direct
+manifest is preflighted only with the frozen command below; `gemini-gate-slices.mjs` does not create
+or validate frozen fragment plans. Every fragment packet explicitly labels its verified whole/partial
+half-open range and repeats its descriptors in the exact copied inspected scope; that scope identifies
+the packet as a `base..candidate_change` gate and, for fragments, binds whether exact
+`per_file_diff` transition evidence is present. Range cuts alone are not a NO-GO basis. A valid NO-GO
+names concrete reachable harm introduced or worsened by changed diff evidence, newly exposed or relied
+upon by the candidate, or a false candidate mitigation/public claim. An unchanged inherited limitation
+is `PREEXISTING/NONBLOCKING`, not a NO-GO by itself; age never excuses harm the candidate exposes,
+worsens, relies upon, or falsely claims to fix. A source-only fragment without exact transition
+evidence may report the limitation but cannot establish that attribution alone; later diff or final
+slices can still block. After exact scope and receipt verification, a source-only provider `NO-GO`
+is a durable `UNRESOLVED_ATTRIBUTION` non-release slice receipt carrying its exact reply and provider
+verdict; it fsyncs and collection continues. A full or diff-bearing valid `NO-GO` remains durable
+`NO_GO` and stops immediately. If the remaining slices are GO, the runner emits one
+`ATTRIBUTION_HOLD` aggregate with `Release-Gate: NO`, ordered contributors, and unresolved attempt
+references; it never emits aggregate GO. PM adjudicates the exact finding against the collected
+source and transition evidence, then follows the current parent-linked successor procedure; the
+runner never discharges the observation automatically.
+
+For a local mechanical DRAFT, use the native runner (no credential lookup, provider call, journal
+append, or approval action):
+
+```sh
+bash scripts/cold-review-gemini.sh --base <base> --candidate <candidate> --tree <tree> \
+  --rig-id <rig> --context docs/contract.md \
+  --generate-slice-plan .gemini-gate/GEMINI_SLICE_PLAN.json
+```
+
+It uses actual serialized-envelope measurements: whole components and fitting diff hunks start a
+fresh slice instead of being cut for residual space; oversized sources/hunks split at newlines, with
+UTF-8 forced splits explicitly surfaced. It writes complete mechanical coverage plus an unrunnable
+`cross-boundary-DRAFT`. A human must select that final fragment evidence, write all five semantic
+boundary rationales, and remove its draft marker. Then fingerprint every envelope and copy the emitted
+plan ID into the PM approval; execute the resulting approved set:
+
+```sh
+bash scripts/cold-review-gemini.sh --base <base> --candidate <candidate> --tree <tree> \
+  --rig-id <rig> --slice-manifest .gemini-gate/GEMINI_SLICE_PLAN.json --fingerprint
+```
+
+```sh
+bash scripts/cold-review-gemini.sh \
+  --base <base> --candidate <candidate> --tree <tree> --rig-id <rig> \
+  --slice-manifest .gemini-gate/GEMINI_SLICE_PLAN.json --run-slices
+```
+
+Every coverage slice and the final cross-boundary slice is preflighted against the same byte bound,
+then run in manifest order. A slice is non-release; the sole aggregate is eligible only when every
+tuple/plan-bound receipt is valid and GO. Each request carries stable, independently derived ordered
+material markers, including an EOF-only receipt, plus a distinct final `PIL-DONE` completion token.
+The reply must print the markers in their exact order, copy the exact normalized scope (tuple, files,
+contexts, invariants, material identity, and slice), and end with that completion token. A valid
+`NO-GO` is delivered evidence but exits nonzero, stops before any later provider call or incomplete
+aggregate, and cannot create a release receipt. A verified reply
+is printed and stored as a checksummed complete fsynced record with its reply SHA and attempt ID;
+aggregate records retain ordered contributors and a deterministic aggregate result identity. The
+journal stores nonsecret rig/transport, tuple, envelope and verdict metadata plus the verified reply
+as UTF-8 base64 with its SHA (and never request headers or credentials). Auth/provider/transport/
+timeout failures are cached by effective rig identity only from complete records; change the
+nonsecret rig ID only after an actual provider configuration or availability recovery.
+
+`--dry-run` and `--fingerprint` validate and print stable material/request identities without reading
+credentials, resolving `agy`, or contacting a provider. Frozen handoff import always retains durable
+receipts. `--selftest` is a shipped
+no-network response-firewall smoke; it does not prove live API credentials, subscription eligibility,
+model availability, or review quality. The legacy `--design` and
+working-tree `agy` modes remain available for their documented routing roles; they do not inherit
+this no-tools guarantee, and this explicit tuple invocation does not silently reroute them.
+
+The direct runner rejects ambient `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE`; each invariant
+and selected context must be a committed regular blob. It also rejects a journal file or parent that is a symlink before
+the provider call. Its bounded final-material scan refuses credential-like API-key, password, passphrase, authorization,
+and bearer values, including deleted diff lines, while allowing explicit placeholders such as `${NAME}`; it is not a
+universal secret detector. Gemini text
+parts may carry an opaque `thoughtSignature`, but no other non-text part field is accepted.
+
 ### Exit codes and traps
 
-- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. For a delivered review, exit 0 means it was delivered; read the log's `Gate-Verdict` field for GO vs NO-GO (the exit code does not encode the verdict). Git discovery failure is never “no changes.”
+- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. A frozen strict-manual import returns `0` only for a verified aggregate `GO`; Git discovery failure is never “no changes.”
 - `2`: bad arguments or invalid environment value.
-- `3`: not a verdict—artifact-freeze failure, delivery/ingestion failure, timeout, tool failure, empty response, missing/malformed verdict contract, advisory, or refusal.
+- `3`: a frozen strict-manual terminal `NO-GO`, `UNRESOLVED_ATTRIBUTION`/`ATTRIBUTION_HOLD`, or refusal is non-release. The durable record distinguishes terminal evidence from a refusal. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
-- `130` / `143`: direct `INT` / `TERM` paths may preserve the signal code; always non-verdict.
+- `130` / `143`: legacy runner handled `INT` / `TERM` exits; always non-verdict.
 
-Never re-add stdin; never treat OS argv acceptance as ingestion; never omit EOF, ordered distributed tokens, or response completion; never broaden process cleanup beyond the owned group/verified lock; never let rejected output appear unqualified; never present `--no-log` or individual/incomplete slices as the release gate.
+Never re-add stdin to legacy INLINE or FILE routing; preserve the frozen subscription transport's one
+NDJSON standard-input user event. Never treat OS argv acceptance as ingestion; never omit EOF, ordered
+distributed tokens, or response completion; never broaden process cleanup beyond the owned group/verified
+lock; never let rejected output appear unqualified; never present `--no-log` or individual/incomplete
+slices as the release gate.
 
 History: `docs/journal/gemini_gate_inline_only_fix.md`, `docs/journal/gemini_gate_filemode.md`, and `docs/journal/gemini_gate_reliability_remediation_design.md` (which records the held upstream ingestion-canary evidence reconciled here).

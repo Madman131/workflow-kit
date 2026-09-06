@@ -28,6 +28,8 @@ function fail(message) {
   process.exit(2);
 }
 
+function lexical(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+
 function git(repo, args, { throwOnError = false } = {}) {
   try {
     return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -52,7 +54,7 @@ function sortedUnique(values, label) {
   for (const value of values) {
     if (typeof value !== "string" || !value || /[\n\r\t]/.test(value)) fail(`${label} contains an invalid path/value`);
   }
-  return [...new Set(values)].sort();
+  return [...new Set(values)].sort(lexical);
 }
 
 function sameArray(a, b) {
@@ -354,13 +356,27 @@ if (!Array.isArray(plan.uncovered) || plan.uncovered.length !== 0) fail("a full 
 if (!plan.scope || typeof plan.scope.base_commit !== "string" || !/^[0-9a-f]{40}$/.test(plan.scope.base_commit)) fail("manifest requires scope.base_commit as an exact lowercase 40-hex commit");
 const baseCommit = git(repo, ["rev-parse", "--verify", `${plan.scope.base_commit}^{commit}`]).trim();
 if (baseCommit !== plan.scope.base_commit) fail("scope.base_commit did not resolve to itself");
+// Frozen direct-API callers augment the established v2 shape with an exact committed candidate/tree.
+// Legacy callers omit all three flags and retain their existing HEAD-bound behaviour.
+const frozenTuple = [opts.base, opts.candidate, opts.tree].filter(value => value !== undefined);
+if (frozenTuple.length && frozenTuple.length !== 3) fail("frozen validation requires --base, --candidate, and --tree together");
+let frozenCandidate = null;
+let frozenTree = null;
+if (frozenTuple.length) {
+  if (opts.base !== baseCommit || !/^[0-9a-f]{40}$/.test(opts.candidate) || !/^[0-9a-f]{40}$/.test(opts.tree)) fail("frozen tuple must use exact lowercase 40-hex IDs matching scope.base_commit");
+  if (plan.scope.candidate_commit !== opts.candidate || plan.scope.candidate_tree !== opts.tree) fail("manifest frozen candidate/tree do not match invocation");
+  frozenCandidate = git(repo, ["rev-parse", "--verify", `${opts.candidate}^{commit}`]).trim();
+  frozenTree = git(repo, ["rev-parse", `${frozenCandidate}^{tree}`]).trim();
+  if (frozenCandidate !== opts.candidate || frozenTree !== opts.tree) fail("frozen candidate/tree do not resolve to themselves");
+  try { execFileSync("git", ["-C", repo, "merge-base", "--is-ancestor", baseCommit, frozenCandidate], { stdio: "ignore" }); } catch { fail("frozen base is not an ancestor of candidate"); }
+}
 const liveHead = git(repo, ["rev-parse", "HEAD"]).trim();
 // A frozen gate checks out a synthetic snapshot commit so its worktree cannot change while the
 // reviewer runs. The PM approved this plan against the snapshot's immutable parent (the caller's
 // HEAD), not the synthetic wrapper SHA. The runner alone supplies this internal value and it must
 // exactly equal the declared base; any other value would make the plan's identity dishonest.
 const artifactParent = process.env.GEMINI_GATE_ARTIFACT_PARENT;
-const head = artifactParent ? git(repo, ["rev-parse", "--verify", `${artifactParent}^{commit}`]).trim() : liveHead;
+const head = frozenCandidate || (artifactParent ? git(repo, ["rev-parse", "--verify", `${artifactParent}^{commit}`]).trim() : liveHead);
 if (artifactParent && head !== baseCommit) fail("frozen artifact parent must equal scope.base_commit");
 
 const declaredScope = sortedUnique(plan.scope.files, "scope.files");
@@ -376,7 +392,7 @@ if (manifestRel) excluded.add(manifestRel);
 // fails closed; that fail-closed distinction is load-bearing and must not regress to untracked-ness.
 const actualScope = [...new Set([...tracked, ...untrackedList])]
   .filter((file) => !excluded.has(file) && !isGateArtifactChild(file))
-  .sort();
+  .sort(lexical);
 if (!sameArray(declaredScope, actualScope)) {
   journalScopeMismatch(opts.log, { command, baseCommit, declared: declaredScope, actual: actualScope });
   fail(`scope.files does not equal the actual changed surface; declared=${JSON.stringify(declaredScope)} actual=${JSON.stringify(actualScope)}`);
@@ -409,6 +425,7 @@ if (!crossBoundary || plan.slices.at(-1) !== crossBoundary) fail("the final mani
 const covered = sortedUnique(coverageSlices.flatMap((slice) => slice.files), "coverage union");
 if (!sameArray(covered, declaredScope)) fail(`coverage slices are incomplete or overlapping-only; covered=${JSON.stringify(covered)} scope=${JSON.stringify(declaredScope)}`);
 for (const slice of coverageSlices) {
+  if (slice.fragments !== undefined) continue;
   const otherFiles = new Set(coverageSlices.filter((other) => other !== slice).flatMap((other) => other.files));
   if (coverageSlices.length > 1 && !slice.files.some((file) => !otherFiles.has(file))) fail(`coverage slice ${slice.name} contributes no unique surface (overlapping-only)`);
 }
@@ -435,13 +452,14 @@ const normalizedSlices = plan.slices.map((slice) => ({
   kind: slice.kind,
   files: slice.files.map((file) => fileEvidence(repo, baseCommit, file, untracked, fileCache)),
   contract_context: slice.contract_context.map((context) => contextEvidence(repo, context, contextCache)),
+  ...(slice.fragments !== undefined ? { fragments: slice.fragments } : {}),
   ...(slice.kind === "cross_boundary" ? { boundaries: normalizedBoundaries } : {}),
 }));
 const planCore = {
   version: 2,
   approval: { status: plan.approval.status, by: plan.approval.by.trim(), expected_plan_id: plan.approval.expected_plan_id || "" },
   head,
-  scope: { base_commit: baseCommit, files: declaredScope },
+  scope: { base_commit: baseCommit, ...(frozenCandidate ? { candidate_commit: frozenCandidate, candidate_tree: frozenTree } : {}), files: declaredScope },
   uncovered: [],
   slices: normalizedSlices,
 };

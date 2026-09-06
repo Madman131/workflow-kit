@@ -26,6 +26,21 @@ run `scripts/sync-user-orchestrate-skill.mjs --install` for `~/.agents/skills/or
 and again with `--target ~/.claude/skills/orchestrate` for the Claude user copy. Provider names
 belong in adopter bindings, while the portable source names capability roles.
 
+## Frozen Gemini strict manual subscription handoff
+
+Exact committed Gemini gates now export hash-bound packets for a manually selected Gemini
+subscription UI and import only matching UTF-8 replies. The frozen engine never invokes `agy`, reads
+provider settings or credentials, or calls REST; the operator attests the UI/model selection while
+the runner verifies tuple, plan, fragments, scope, proof, completion, and receipts.
+
+## What's new in v2.29.0 — frozen Gemini receipts are provenance-bound
+
+The frozen direct Gemini path now binds every live request and durable record to the checked-out
+candidate endpoint, regular Git blobs, exact normalized scope, ordered full-material ingestion proof,
+and a complete fsynced reply record. `--no-log` is diagnostic-only for dry-run/fingerprint work;
+live direct reviews always retain a receipt. The following v2.28.0 adopter material and v2.27.0 sensor
+material remain included for adopters upgrading across both releases.
+
 ## What's new in v2.28.0 — what adopting v2.26.0 into a real repo found
 
 Five defects, each found by installing the kit somewhere other than the repo it came from, and each
@@ -78,7 +93,7 @@ untracks an indexed path, and only git's answer counts** — run the exact `git 
 printed (or fix the ignore rule it named), commit, and re-run; init makes neither change for you, and an
 already-tracked `tokens.jsonl` keeps receiving rows until you do.
 
-## What's new in v2.27.0 — the kit starts measuring itself
+## v2.27.0 — the kit starts measuring itself
 
 Four mechanisms and one checklist, taken from a survey of `affaan-m/ECC` (pinned `22e8cf0`, MIT) and
 rewritten in this kit's idiom. None touches a gate, a tier or a `core/` document; every one is a
