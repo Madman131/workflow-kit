@@ -177,6 +177,129 @@ test("--worktree-roots reaches kit.config.json, and a RELATIVE root is refused b
   } finally { rmSync(rel, { recursive: true, force: true }); }
 });
 
+test("--force REFUSES to rewrite a kit.config.json holding families this run did not name", () => {
+  // `init --force --worktree-roots <abs>` — the command this kit's own upgrade paragraph prescribes
+  // — rebuilt this file from THIS run's flags ALONE and dropped the adopter's other three families:
+  // a widened write guard, shrunken doc-size governance, a lost memory default, all under exit 0.
+  // The cure is a REFUSAL, never a merge: an installer that reads-modifies-writes adopter data owns
+  // every property of that data. The refusal names the missing families and the flag that fills
+  // each, and reads out NONE of the file's values — rendering those into a line the adopter pastes
+  // would make init answerable for that data all over again, one layer out.
+  const { dir, codexDir, cleanup } = adopt(["--skip-codex-lane", "--source-dirs", "app,lib"]);
+  try {
+    const cfg = path.join(dir, ".claude", "kit.config.json");
+    // Distinctive values, so "no value is rendered" is checkable rather than asserted. An
+    // unrecognized key rides along too: the answer for one is neither "carry it" nor "block".
+    const SENTINEL_DOC = "docs/SENTINEL-VALUE.md", SENTINEL_MEM = "sentinel-memory";
+    // A key name is adopter-authored text headed for a terminal. This one carries an ESC and a
+    // newline, so a bare join would let a config forge lines around init's own warning.
+    const HOSTILE_KEY = "evil\u001b[2K\nkey";
+    writeFileSync(cfg, JSON.stringify({ executedPathDirs: ["app", "lib"], stateDocs: [SENTINEL_DOC],
+      memoryDir: SENTINEL_MEM, laneRiskTokens: ["legacy"], [HOSTILE_KEY]: 1 }, null, 2));
+    const before = readFileSync(cfg);
+    const roots = path.join(dir, "wt");
+    // EVERY spawn below names the scratch --codex-prompts-dir. A run left pointing at the real
+    // ~/.codex can exit 1 on an unrelated stale shim, which would satisfy the exit-code assertions
+    // for the wrong reason and hide exactly the false-success this test exists to pin.
+    const initArgs = (...extra) => [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name",
+      "adopter", "--codex-prompts-dir", codexDir, "--skip-codex-lane", "--force", ...extra];
+    const partial = spawnSync("node", initArgs("--worktree-roots", roots), { encoding: "utf8" });
+    const out = partial.stdout + partial.stderr;
+    // Assert on the MESSAGE first: the exit code alone cannot say WHICH condition produced it.
+    assert.match(out, /REFUSED to overwrite[^\n]*kit\.config\.json: it holds executedPathDirs, stateDocs, memoryDir/,
+      `the refusal must name the families this run would have dropped: ${out}`);
+    assert.equal(partial.status, 1, `…and a refusal must FAIL the run, not warn under exit 0: ${out}`);
+    assert.deepEqual(readFileSync(cfg), before, "…and the existing file is left byte-for-byte unchanged");
+    assert.equal(existsSync(`${cfg}.bak`), false, "…with no .bak, because no overwrite was attempted");
+    // A family named without its flag is a name the adopter has to go look up; the flag is the
+    // whole remediation. One line per missing family, and the flag has to be ON it.
+    for (const [key, flag] of [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
+      ["memoryDir", "--memory-dir"]]) {
+      assert.match(out, new RegExp(`${flag}\\s+<the ${key} value in kit\\.config\\.json>`),
+        `the refusal must name ${flag} as the flag that fills ${key}: ${out}`);
+    }
+    assert.doesNotMatch(out, /--worktree-roots\s+<the/,
+      "…and must NOT name the family this run DID pass a flag for — that one is not missing");
+    // The point of the narrowed form: init reads this file to LIST what it holds, never to reprint
+    // what is IN it. A value it re-renders is a value it can quietly change (comma-split, trimmed,
+    // rejected by the flag's own validation, or not expressible as an OS argument at all).
+    for (const value of [SENTINEL_DOC, SENTINEL_MEM]) {
+      assert.doesNotMatch(out, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `no VALUE out of the config may be rendered into the message — ${value} leaked: ${out}`);
+    }
+    assert.match(out, /laneRiskTokens[^\n]*does not recognise/,
+      "an unrecognized key is NAMED as droppable — not carried forward, and not blocked on");
+    // …and named SAFELY. The key's bytes are the adopter's; the terminal they land on is not, so a
+    // key carrying an ESC or a newline must arrive escaped rather than able to draw its own lines
+    // around init's warning.
+    assert.doesNotMatch(out, /\u001b\[2K/,
+      "a control sequence in a key name must not reach the terminal raw");
+    assert.match(out, /evil\\u001b\[2K\\nkey/,
+      `…it must appear escaped instead, still readable as the key it is: ${out}`);
+
+    // The control: name every family and the same run exits 0 and lands all four. Without it the
+    // exit 1 above is attributable to the refusal only by inspection.
+    const full = spawnSync("node", initArgs("--source-dirs", "app,lib", "--state-docs", SENTINEL_DOC,
+      "--memory-dir", SENTINEL_MEM, "--worktree-roots", roots), { encoding: "utf8" });
+    const fullOut = full.stdout + full.stderr;
+    assert.equal(full.status, 0, `a run naming every family has nothing to refuse and exits 0: ${fullOut}`);
+    assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")),
+      { executedPathDirs: ["app", "lib"], stateDocs: [SENTINEL_DOC], memoryDir: SENTINEL_MEM, worktreeRoots: [roots] },
+      "…and lands all four families, fully specified by flags");
+    assert.match(fullOut, /laneRiskTokens[^\n]*does not recognise/,
+      "…and the run that DOES rewrite still says the unrecognized key is being dropped — silence there is how adopter data disappears");
+  } finally { cleanup(); }
+});
+
+test("a kit.config.json init cannot read as a JSON object is never overwritten, even under --force", () => {
+  // The other half of the refusal: init reads this file only to LIST the families it holds, so a
+  // file it cannot list is a file it must not replace. Fail CLOSED, like every other refusal here.
+  const { dir, codexDir, cleanup } = adopt(["--skip-codex-lane", "--source-dirs", "app"]);
+  try {
+    const cfg = path.join(dir, ".claude", "kit.config.json");
+    // Every family named on every spawn, so the ONLY thing left to refuse on is the file itself —
+    // and the scratch --codex-prompts-dir on each, so no exit 1 can come from the real ~/.codex.
+    const forceEveryFamily = () => spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target",
+      dir, "--repo-name", "adopter", "--codex-prompts-dir", codexDir, "--skip-codex-lane", "--force",
+      "--source-dirs", "app", "--state-docs", "docs/x.md", "--memory-dir", "memory",
+      "--worktree-roots", dir], { encoding: "utf8" });
+    // The first content carries a sentinel because a JSON parse error QUOTES the offending file
+    // back inside its own message ("Unexpected token 'N', \"NOT JSON{\" is not valid JSON"). Passing
+    // that message through would print the contents of the very file this branch refuses to read.
+    // Short and leading, because V8 quotes only the first few bytes and elides the rest: a sentinel
+    // buried later in the file would make this assertion pass without proving anything.
+    const MALFORMED_SENTINEL = "LEAKME";
+    for (const raw of [`${MALFORMED_SENTINEL}{`, "NOT JSON{", "[]", '"a string"', "42", "null"]) {
+      writeFileSync(cfg, raw);
+      const before = readFileSync(cfg);
+      const r = forceEveryFamily();
+      const out = r.stdout + r.stderr;
+      assert.match(out, /REFUSED to overwrite[^\n]*kit\.config\.json: it (?:parses as JSON but is not a JSON object|could not be read or parsed as JSON)/,
+        `${JSON.stringify(raw)} must be refused, by name: ${out}`);
+      assert.doesNotMatch(out, new RegExp(MALFORMED_SENTINEL),
+        `…without quoting the file's own bytes back: ${JSON.stringify(raw)} leaked into the message: ${out}`);
+      assert.match(out, /Repair it \(or move it aside\) and re-run/,
+        `…and must say what to DO about ${JSON.stringify(raw)}, since there is no flag that fixes it: ${out}`);
+      assert.equal(r.status, 1, `…and that refusal must fail the run: ${out}`);
+      assert.deepEqual(readFileSync(cfg), before, `…and ${JSON.stringify(raw)} is left byte-for-byte unchanged`);
+      assert.equal(existsSync(`${cfg}.bak`), false,
+        `…with no .bak for ${JSON.stringify(raw)} either — a backup here would mean an overwrite was attempted`);
+    }
+    // Unreadable, not merely unparseable: a directory in this file's place is an EISDIR on the read
+    // itself. The parse branch cannot cover this one, and a crash here would take down a whole run
+    // over a file init was only ever going to LIST.
+    rmSync(cfg, { force: true });
+    mkdirSync(cfg);
+    const asDir = forceEveryFamily();
+    const asDirOut = asDir.stdout + asDir.stderr;
+    assert.match(asDirOut, /REFUSED to overwrite[^\n]*kit\.config\.json: it could not be read or parsed as JSON/,
+      `a config that cannot be READ is refused by name, not crashed on: ${asDirOut}`);
+    assert.equal(asDir.status, 1, `…and that refusal fails the run too: ${asDirOut}`);
+    assert.deepEqual(readdirSync(cfg), [], "…and the directory in its place is untouched");
+    assert.equal(existsSync(`${cfg}.bak`), false, "…with no .bak, because no overwrite was attempted");
+  } finally { cleanup(); }
+});
+
 test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, not grandfathered", () => {
   // `exempt` was the one route carrying no tier, so a reason set entirely about review-SEAT
   // availability selected the mode that skipped tier declaration. Both layers, both directions.
@@ -985,7 +1108,7 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     const cfg = path.join(dir, ".claude", "kit.config.json");
     // Complete the contract the way an adopter must, then take the upgrade path init itself
     // recommends for a stale hook ("re-run with --force"). --force is GLOBAL, so without a backup it
-    // silently destroys the hand-written Owner doc AND resets the source-dir family to defaults.
+    // silently destroys the hand-written Owner doc.
     writeFileSync(doc, readFileSync(doc, "utf8").replace("{{OWNER_PROFILE}}", "They read fast and hate preamble."));
     // No --owner-name and no family flags this time. Exit 1 since v2.16.0 (hermetic armed-check);
     // the subject is the backups, which land regardless.
@@ -994,9 +1117,13 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     assert.ok(existsSync(`${doc}.bak`), "--force leaves a .bak of the previous OWNER_COMMS");
     assert.match(readFileSync(`${doc}.bak`, "utf8"), /They read fast and hate preamble\./,
       "the hand-written Owner profile is recoverable, not lost");
-    assert.ok(existsSync(`${cfg}.bak`), "--force leaves a .bak of the previous kit.config.json");
-    assert.match(readFileSync(`${cfg}.bak`, "utf8"), /app/,
-      "the configured executedPathDirs family is recoverable — a silent reset to {} WIDENS the write guard");
+    // The config family is a DIFFERENT class and no longer relies on a .bak to survive: a --force
+    // run naming no --source-dirs now REFUSES to rewrite this file rather than resetting it to {}
+    // and leaving the adopter a backup to notice. Nothing was overwritten, so there is nothing to
+    // recover FROM — the widening it used to cause is prevented, not merely reversible.
+    assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs, ["app"],
+      "the configured executedPathDirs family SURVIVES a forced rerun that did not name it");
+    assert.equal(existsSync(`${cfg}.bak`), false, "…and no .bak exists, because no overwrite was attempted");
 
     // If the backup CANNOT be written, the overwrite must not happen either. Warning about a failed
     // backup and then destroying the file anyway is worse than not offering backups at all, because
@@ -1004,8 +1131,11 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     writeFileSync(doc, readFileSync(doc, "utf8").replace("{{IRREVERSIBLE_ASSET}}", "the customer corpus"));
     rmSync(`${doc}.bak`, { force: true });
     mkdirSync(`${doc}.bak`);          // a directory here makes the backup write fail
+    // --source-dirs app FULLY specifies the config this adopter holds, so step 6 has nothing to
+    // refuse. Without it the config refusal would ALSO produce exit 1 and the assertion below
+    // would no longer be attributable to the failed backup it is about.
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
-      "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--repo-name", "adopter", "--skip-codex-prompt", "--force", "--source-dirs", "app"], { encoding: "utf8" });
     // Since v2.16.0 a refused backup is COUNTED into a nonzero exit — a mixed-version tree must
     // not read as a clean adopt (the rest of the run still completes; the exit names the state).
     assert.equal(r.status, 1, "a run containing a refused backup exits 1, never 0");

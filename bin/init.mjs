@@ -171,7 +171,8 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --worktree-roots a,b    ABSOLUTE roots where THIS repo's private worktrees live ⇒ kit.config.json
                           worktreeRoots, which guard-cross-repo-writes adds to its allowed write
-                          roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp)
+                          roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp,
+                          /private/tmp)
   --with-gate-runners     also copy the Codex/Gemini gate runner scripts (need codex/agy at runtime)
   --codex-prompts-dir <d> where the Codex prompts install — /thread-restart and the skill shims
                           (default: ~/.codex/prompts, USER-GLOBAL — outside the target repo;
@@ -183,11 +184,15 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --skip-codex-lane       do not write <repo>/.codex/ at all (config.toml + the cold-review seat).
                           These are Codex-lane CONVENIENCES — they carry NO enforcement (see
                           the kit's PORTABILITY.md § The enforcement asymmetry)
-  --force                 overwrite existing generated files (settings.json is always merged)
+  --force                 overwrite existing generated files (settings.json is always merged; an
+                          existing .claude/kit.config.json is REFUSED, not overwritten, unless every
+                          family it already holds is named on this command line)
   --print-package-scripts print the npm scripts to add to your package.json, then exit
   -h, --help              this help
 
-Every family is OPTIONAL — omitted ⇒ the kit's portable defaults. See the kit's PORTABILITY.md for the
+Every family is OPTIONAL — omitted ⇒ the kit's portable defaults. That is for a FIRST install: once
+.claude/kit.config.json exists, a --force run that omits a family the file already holds is REFUSED
+rather than reset to the default. See the kit's PORTABILITY.md for the
 enforcement asymmetry (the PreToolUse hooks bind only the Claude Code lane; the pre-commit hook and
 AGENTS.md prose are what bind every lane).`;
 
@@ -478,7 +483,10 @@ function staleCheckSkipped(src, dst, remedy) {
 // --force is GLOBAL and it is also the remedy init itself recommends for a stale hook ("re-run with
 // --force to update"). That combination silently destroys hand-authored content in the `[G]` files —
 // most painfully core/OWNER_COMMS.md, whose whole value is the paragraphs a human wrote about a
-// person, and .claude/kit.config.json, whose loss quietly WIDENS the write guard back to defaults.
+// person. (.claude/kit.config.json used to be the other one — a rewrite from a partial flag set
+// quietly WIDENED the write guard, and this .bak was all that stood behind it. Step 6 no longer
+// relies on that: it REFUSES the overwrite unless every family the file holds was named on the
+// command line, so the guard is prevented from widening rather than merely recoverable.)
 // Before overwriting a file whose content differs from what we are about to write, keep a .bak beside
 // it and say so. Cheap, reversible, and it makes the documented upgrade path non-destructive.
 // Returns "not-needed" (no existing file, or identical content) | "backed-up" | "FAILED".
@@ -1501,19 +1509,91 @@ function main() {
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  let cfgKept = false;
+  // The four families this file is ALLOWED to hold, each with the flag that fills it. Names and
+  // flags only: the refusal below reads this file to LIST what it holds and never to reprint what
+  // is IN it (see there).
+  const CFG_FAMILIES = [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
+    ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"]];
+  let cfgKept = false, cfgRefused = false, cfgUnreadable = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else {
-    // No eager ensureDir: writeWithBackup creates the parent itself, AFTER its containment check.
-    // A mkdir taken first is the same escape copyGuarded refuses — a directory built inside a
-    // linked-out `.claude` by a write that then refuses.
-    const cfgText = JSON.stringify(config, null, 2) + "\n";
-    // A --force re-run with no family flags rewrites this to `{}`, silently WIDENING the write guard
-    // (an executedPathDirs family the adopter configured simply disappears). Keep the previous
-    // version, and refuse the overwrite outright if it cannot be kept.
-    if (!writeWithBackup(cfgPath, cfgText)) cfgKept = true;
+    // --force rewrites this file from THIS RUN'S FLAGS ALONE, so a run naming a PARTIAL set of
+    // families silently DROPS every family it did not name: a dropped executedPathDirs WIDENS the
+    // write guard, a dropped stateDocs shrinks doc-size governance, a dropped memoryDir loses the
+    // memory advisory's default — all under a green "written" line, and all reachable by following
+    // this kit's own upgrade instruction (FM-2026-09-05-23).
+    // The cure is a REFUSAL, not a merge. init never reads-modifies-writes adopter data: the moment
+    // it re-serialises a file it did not receive as flags, every property of that data — whether it
+    // parses, its shape, number precision, nesting depth, keys it does not recognise — becomes the
+    // installer's problem, and each one is a new way to corrupt the file it promised to preserve.
+    // So: either every family the existing file holds is NAMED on this command line, or the file is
+    // left exactly as it is and the run FAILS, naming the families it was missing and their flags.
+    if (force && existsSync(cfgPath)) {
+      let existing = null, unreadable = null;
+      try {
+        const parsed = JSON.parse(readFileSync(cfgPath, "utf8"));
+        if (isPlainObject(parsed)) existing = parsed;
+        else unreadable = "it parses as JSON but is not a JSON object";
+        // The fs error CODE, never the thrown message: V8 quotes a snippet of the offending file
+        // back inside a JSON parse error (Unexpected token 'N', "NOT JSON{" is not valid JSON),
+        // which puts this file's own contents on the terminal — the one thing this branch is for.
+      } catch (e) { unreadable = `it could not be read or parsed as JSON (${(e && e.code) || "invalid JSON"})`; }
+      if (unreadable) {
+        // Counted, not merely warned: every other REFUSED write in this file fails the run, and a
+        // refusal that exits 0 lets automation record an install that did not happen.
+        cfgRefused = true;
+        cfgUnreadable = true;
+        backupRefused.push(cfgPath);
+        warn(`REFUSED to overwrite ${cfgPath}: ${unreadable}, so init cannot tell which repo-specific families it holds — and --force would rewrite it from THIS run's flags alone. The existing file is UNCHANGED. Repair it (or move it aside) and re-run.`);
+      } else {
+        const dropped = CFG_FAMILIES.filter(([key]) => Object.prototype.hasOwnProperty.call(existing, key) && !(key in config));
+        // A key init does not recognise is adopter data too, and the rewrite drops it. Say so
+        // WHENEVER the rewrite is going to happen — not only inside the refusal below, or a run
+        // that names every family takes the key away in silence.
+        const unknown = Object.keys(existing).filter((k) => !CFG_FAMILIES.some(([key]) => key === k));
+        const unknownNote = unknown.length
+          // JSON.stringify per key, not a bare join: a key name is adopter-authored text going
+          // straight to a terminal, and one carrying an ESC or a newline could forge lines around
+          // this warning. Quoting also makes an empty or space-padded key visible as itself.
+          ? `${unknown.map((k) => JSON.stringify(k)).join(", ")} in ${cfgPath} ${unknown.length > 1 ? "are keys" : "is a key"} init does not recognise, and a --force rewrite DROPS ${unknown.length > 1 ? "them" : "it"}. Re-add by hand afterwards if you rely on ${unknown.length > 1 ? "them" : "it"}.`
+          : "";
+        if (dropped.length) {
+          cfgRefused = true;
+          backupRefused.push(cfgPath);
+          // NAMES AND FLAGS ONLY — no value out of this file is ever rendered here. The obvious
+          // kindness is to print a ready-to-paste re-run command with each family filled in from
+          // the file, and that is the merge's own mistake one layer out: rendering adopter data
+          // into shell argv makes the installer answerable for every property of that data all
+          // over again (does it survive the list flags' comma-split and trim, does the flag's own
+          // validation take it, can it be an OS argument at all), and every value the CLI cannot
+          // express then needs a placeholder the parser is guaranteed to reject. The file is
+          // UNCHANGED and sitting right there, so the adopter reads the values out of it. init
+          // says WHICH families are missing and WHICH flag fills each, and stops.
+          const width = Math.max(...dropped.map(([, flag]) => flag.length));
+          warn(`REFUSED to overwrite ${cfgPath}: it holds ${dropped.map(([key]) => key).join(", ")}, which this run named no flag for. --force rewrites this file from THIS run's flags alone, so writing it now would DROP ${dropped.length > 1 ? "those families" : "that family"} (a dropped executedPathDirs WIDENS the write guard; a dropped stateDocs shrinks doc-size governance; a dropped memoryDir loses the memory advisory's default). The existing file is UNCHANGED, so every value it holds is still there to read. Open it and re-run this same command with ${dropped.length > 1 ? "these flags" : "this flag"} added, each filled from what that file holds:\n`
+            + dropped.map(([key, flag]) => `\n    ${flag.padEnd(width)}  <the ${key} value in ${path.basename(cfgPath)}>`).join("")
+            + `\n\n  init prints none of that file's values on purpose: a value re-rendered into a command line for you to paste back is a value it could have changed on the way. If a value in there is one no flag can carry (a list entry holding a comma, a shape this CLI does not take), no re-run will reproduce it — repair that file by hand, or move it aside and start from flags.\n`
+            + (unknownNote ? `\n  ! …and ${unknownNote}` : ""));
+        } else if (unknownNote) {
+          // Not a refusal: this run named every family, so the rewrite proceeds (with a .bak) —
+          // but it must not take the unrecognised keys away without saying so.
+          warn(unknownNote);
+        }
+      }
+    }
+    if (!cfgRefused) {
+      // No eager ensureDir: writeWithBackup creates the parent itself, AFTER its containment check.
+      // A mkdir taken first is the same escape copyGuarded refuses — a directory built inside a
+      // linked-out `.claude` by a write that then refuses.
+      const cfgText = JSON.stringify(config, null, 2) + "\n";
+      if (!writeWithBackup(cfgPath, cfgText)) cfgKept = true;
+    }
   }
-  log(cfgKept
+  log(cfgRefused
+    ? (cfgUnreadable
+      ? `  .claude/kit.config.json: REFUSED — on-disk file unchanged; init could not read it as a JSON object, so repair or move that file aside (see the warning above), then re-run`
+      : `  .claude/kit.config.json: REFUSED — on-disk file unchanged; re-run with every family it holds named on the command line (the warning above names the missing families and the flag that fills each)`)
+    : cfgKept
     ? `  .claude/kit.config.json: EXISTING kept — on-disk file unchanged; the flags you passed were NOT applied`
     : `  .claude/kit.config.json: ${Object.keys(config).length ? Object.keys(config).join(", ") : "empty (portable defaults)"}`);
 
@@ -1787,14 +1867,15 @@ function main() {
   // content (or its link), so the run did not deliver the install it printed — and the refusal
   // warnings scrolled past hundreds of lines ago. Repeat them where the exit code is decided.
   if (backupRefused.length) {
-    console.error(`\ninit: ${backupRefused.length} overwrite(s) were REFUSED (a symlinked target, an escaping directory, or a backup that could not be taken — see each warning above):`);
+    console.error(`\ninit: ${backupRefused.length} overwrite(s) were REFUSED (a symlinked target, an escaping directory, a backup that could not be taken, or a kit.config.json init could not read as a JSON object or that holds families this run did not name — see each warning above):`);
     for (const f of backupRefused) console.error(`  · ${f}`);
     console.error(
       `Nothing above was written by this run. Every entry naming a kit FILE is UNCHANGED on disk — ` +
       `still its OLD content, not kit v${KIT_VERSION}; every entry naming something else (a \`.git\` whose ` +
       `core.hooksPath write was refused) never carried kit content at all, and that repository is ` +
       `untouched too. Resolve the cause each warning names (replace the symlink or linked directory, ` +
-      `move the blocking .bak aside, clear the Git location overrides), then re-run.`);
+      `move the blocking .bak aside, clear the Git location overrides, repair or fully specify the ` +
+      `kit.config.json its warning names), then re-run.`);
     process.exitCode = 1;
   }
   // A path init just ignored that git still indexes is the same failing shape: the run printed an

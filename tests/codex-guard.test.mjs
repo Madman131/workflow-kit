@@ -673,16 +673,31 @@ test("CHARACTERIZATION — `/tmp` and `/private/tmp` are ALLOWED write roots, so
       "/tmp likewise");
     // …while a target outside every allowed root is DENIED, which is what makes the two lines above
     // a statement about the ALLOWLIST rather than about a guard that permits everything.
-    assert.equal(denies(R.run("guard-cross-repo-writes.mjs",
-      patchCall(envelope("*** Add File: /kit-test-definitely-outside/stolen.mjs", "+1"))).stdout), true,
-      "…and anywhere else is still blocked");
+    const denial = R.run("guard-cross-repo-writes.mjs",
+      patchCall(envelope("*** Add File: /kit-test-definitely-outside/stolen.mjs", "+1"))).stdout;
+    assert.equal(denies(denial), true, "…and anywhere else is still blocked");
+    // The denial NAMES its allowed roots, and that list reads as exhaustive — the remediation right
+    // after it says to DECLARE a worktreeRoot, so a root left off the list sends an adopter to
+    // relocate a worktree the guard already allows, or to declare a root they already have.
+    // /private/tmp was missing from it: the very root a macOS adopter's /tmp worktree resolves to,
+    // and allowed by the behaviour two assertions above this one the whole time.
+    assert.match(denial, /allowed: project dir, ~\/\.claude, \/tmp, \/private\/tmp/,
+      `the denial's allowed-root list must name every root the guard actually allows: ${denial}`);
+    // The SECOND place this list is spoken to an adopter, and it drifted the same way: init's
+    // --worktree-roots help says what you get by omitting the flag. Two renderings of one claim
+    // rot independently, so both are pinned here, beside the behaviour they describe.
+    // kit-guard:no-install — --help prints and exits before any install path runs.
+    const help = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--help"], { encoding: "utf8" });
+    assert.match(help.stdout + help.stderr,
+      /the shipped roots only \(project dir, ~\/\.claude, \/tmp,\s+\/private\/tmp\)/,
+      `init --help must name the same shipped roots the guard allows: ${help.stdout}${help.stderr}`);
   } finally { R.cleanup(); }
 });
 
 test("worktreeRoots WIDENS the cross-repo guard to the roots THIS repo declares — and fails CLOSED on a bad one", () => {
   // THE DEFECT (found adopting v2.26.0): `core/MULTI_AGENT.md` sends substantial concurrent work into
-  // a private worktree, and this guard shipped `/tmp` as the only root one could live under. An
-  // adopter whose worktrees sit anywhere else had a session that could not write its OWN worktree
+  // a private worktree, and this guard shipped the two scratch roots as the only places one could
+  // sit. An adopter whose worktrees sit anywhere else had a session that could not write its OWN worktree
   // with the file tools — doctrine and control contradicting each other. The root set is now data.
   //
   // Three polarities, because two of them are the ones that can silently rot: the declared root must

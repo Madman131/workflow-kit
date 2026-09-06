@@ -1,4 +1,4 @@
-# workflow-kit — v2.29.0
+# workflow-kit — v2.30.0
 
 ## What's new in v2.29.0 — gate repair stays finite across successors
 
@@ -19,8 +19,10 @@ must change before rerun.
 **Upgrade: `init --force` is required for existing adopters.** This release changes installed `[P]`
 controller, guard, recorder, core-doctrine and orchestrate-skill files; a plain rerun keeps stale
 copies and reports the incomplete generation. `--force` is GLOBAL across the installed `[P]` class,
-backs up differing files as `.bak`, and rewrites `kit.config.json` from the flags supplied on that
-run, so repeat every local configuration flag and diff the backups. Re-grant Codex hook trust after
+backs up differing files as `.bak`, and rewrote `kit.config.json` from the flags supplied on that
+run, so repeat every local configuration flag and diff the backups. (That rewrite is the defect
+v2.30.0 replaced with a refusal — see the v2.30.0 section below; from v2.30.0 on, a partial flag set
+does not silently rewrite this file, it fails.) Re-grant Codex hook trust after
 the hook bytes change. The repository's `skills/orchestrate/` package is authoritative. After freeze,
 run `scripts/sync-user-orchestrate-skill.mjs --install` for `~/.agents/skills/orchestrate`
 and again with `--target ~/.claude/skills/orchestrate` for the Claude user copy. Provider names
@@ -33,7 +35,7 @@ subscription UI and import only matching UTF-8 replies. The frozen engine never 
 provider settings or credentials, or calls REST; the operator attests the UI/model selection while
 the runner verifies tuple, plan, fragments, scope, proof, completion, and receipts.
 
-## What's new in v2.29.0 — frozen Gemini receipts are provenance-bound
+## What's new in v2.30.0 — frozen Gemini receipts are provenance-bound
 
 The frozen direct Gemini path now binds every live request and durable record to the checked-out
 candidate endpoint, regular Git blobs, exact normalized scope, ordered full-material ingestion proof,
@@ -41,13 +43,51 @@ and a complete fsynced reply record. `--no-log` is diagnostic-only for dry-run/f
 live direct reviews always retain a receipt. The following v2.28.0 adopter material and v2.27.0 sensor
 material remain included for adopters upgrading across both releases.
 
+It also closes the defect an adopter hit by following v2.28.0's own upgrade instruction:
+`init --force` with a partial set of family flags rebuilt `.claude/kit.config.json` from that run's
+flags alone and silently dropped every family it did not name — a widened write guard, shrunken
+doc-size governance, a lost memory default, all under exit 0. That rewrite is now REFUSED unless
+every family the existing file holds is named on the command line. And four surfaces describing the
+cross-repo guard's allowed write roots left out `/private/tmp`, which the guard has allowed all
+along; the guard's own denial message was one of them.
+
+**Upgrade: `init --force` is REQUIRED, and a plain re-run will FAIL.** Since v2.28.0 this release
+changes the bytes of installed `[P]` files in four classes — the hooks
+(`guard-cross-repo-writes.mjs`, `guard-gate-ladder.mjs`, `guard-brief-rung.mjs`,
+`repair-dispatch-state.mjs`), four `core/` method docs (`GATES.md`, `MULTI_AGENT.md`, `REVIEW.md`,
+`WORKFLOW.md`), `scripts/record-repair-event.mjs`, and the
+`skills/orchestrate/` package (`SKILL.md`, `PROTOCOLS.md`, `CHIP_BRIEF.md`) — plus, only if you
+adopted with `--with-gate-runners`, the frozen-Gemini runners (`gemini-frozen-gate.mjs`,
+`gemini-frozen-gate-selftest.mjs`, `gemini-gate-slices.mjs`, `cold-review-gemini.sh`,
+`cold-review-gemini-selftest.sh`). A plain re-run keeps the stale copies and exits 1 naming
+`--force`. `--force` replaces them, backing up every differing file first; re-grant Codex hook trust
+afterwards, as always. `templates/CLAUDE.md.tmpl` changed too, so the `[G]` entry stub is regenerated
+with placeholders and your completed `CLAUDE.md` is backed up beside it — port the corrected
+sentence by hand.
+
+**The config rule changed with it: name EVERY family, or the run refuses.** `--force` no longer
+rewrites `.claude/kit.config.json` from that run's flags alone. If the existing file holds a family
+your command line does not name, the overwrite is REFUSED, the file is left byte-for-byte unchanged,
+and the run exits nonzero naming each missing family and the flag that fills it
+(`executedPathDirs`→`--source-dirs`, `stateDocs`→`--state-docs`, `memoryDir`→`--memory-dir`,
+`worktreeRoots`→`--worktree-roots`). Read the values out of that file — it is untouched and sitting
+right there — and re-run naming all of them. The installer deliberately prints none of its values
+back at you, and a file it cannot read as a JSON object is refused rather than replaced.
+
+Two things that re-run cannot do for you. A value no flag can carry — a list entry holding a comma,
+or a shape the CLI does not take — will not survive being re-typed as a flag, so repair that file by
+hand or move it aside and start from flags; the refusal says so too. And a key `init` does not
+recognise is dropped by the rewrite that finally succeeds: it is named in a warning before it goes,
+and if you rely on it, re-add it by hand afterwards or take it from the `.bak`.
+
 ## What's new in v2.28.0 — what adopting v2.26.0 into a real repo found
 
 Five defects, each found by installing the kit somewhere other than the repo it came from, and each
 the same shape: a claim that was true inside the kit's own tree and false in an adopter's.
 
 - **The private-worktree root is data, not `/tmp`.** `core/MULTI_AGENT.md` sent concurrent work to a
-  worktree under `/tmp` and `guard-cross-repo-writes` allowed only `/tmp`; an adopter whose worktrees
+  worktree under `/tmp` and `guard-cross-repo-writes` allowed no scratch root but `/tmp` and
+  `/private/tmp`; an adopter whose worktrees
   live elsewhere had a Claude session that could not write its own worktree with the file tools.
   `.claude/kit.config.json` gains `worktreeRoots` (absolute paths; `init --worktree-roots a,b`), the
   guard adds them to its allowed roots, and a malformed value DENIES rather than falls back.
@@ -72,9 +112,13 @@ the same shape: a claim that was true inside the kit's own tree and false in an 
 - **Each entry stub states its own lane's real registration.** The Codex stub called the gate-ladder
   sensor a guard and omitted `guard-brief-rung`; both stubs predated the v2.27.0 sensors. Derived from
   `templates/settings.json` and the `.codex/hooks.json` `init` writes.
-- **`PORTABILITY.md` is installed.** Ten installed surfaces cite it; no run of `init` put it anywhere.
-  It is `[P]`, at the adopter's root, mechanism like `core/` — and an adopter's own `PORTABILITY.md`
-  at that path is recognised by its header and never overwritten, `--force` included.
+- **Every `PORTABILITY.md` pointer says where that file is.** Installed surfaces cited it by bare
+  name; no run of `init` puts it anywhere, so an adopter following the citation looked for a file
+  that was not there. Nothing is installed at the adopter's root under that name — instead every
+  pointer now locates it in the workflow-kit repository, and the test that holds them there stops
+  listing the surfaces it checks: it adopts into a temp dir and walks every file `init` wrote,
+  which is how the last bare pointer (a comment inside a script copied into every Codex-lane
+  adopter) was found.
 
 **Upgrade: `init --force` is REQUIRED, and a plain re-run will FAIL.** This release changes the bytes of
 eight `[P]` files an adopter already carries — `hooks/guard-cross-repo-writes.mjs`, `hooks/guard-owner-comms.mjs`,
@@ -87,7 +131,7 @@ the kit ships points at it any more; delete it or keep it, but do not read it as
 entry-stub paragraphs are `[G]` and reach a completed `CLAUDE.md` / `AGENTS.md` only by hand: port the
 § Enforcement paragraph from the regenerated stub (or from `templates/`) into your completed one — `--force`
 regenerates the stubs with placeholders and backs your completed ones up beside them. Then pass
-`--worktree-roots` if your worktrees live outside `/tmp`. And if `init` exits 1 because git could not
+`--worktree-roots` if your worktrees live outside `/tmp` / `/private/tmp`. And if `init` exits 1 because git could not
 certify `.codex/hooks.json` or `.claude/metrics/` as ignored-and-untracked: **a gitignore rule never
 untracks an indexed path, and only git's answer counts** — run the exact `git rm --cached` command it
 printed (or fix the ignore rule it named), commit, and re-run; init makes neither change for you, and an
@@ -1119,7 +1163,10 @@ the `[G]` files do get a `.bak` — but only when their new content actually DIF
 is rewritten with the same bytes and gets none.) *(Historical note — superseded in v2.16.0:
 `--force` now backs up EVERY differing file it overwrites to `<file>.bak`, refuses any overwrite
 whose backup cannot be taken, and counts each refusal into a nonzero exit. The sentences above
-record v2.1.1 behavior; the `executedPathDirs` reset is unchanged and still bites.)* **Commit
+record v2.1.1 behavior. The `executedPathDirs` reset survived that release and bit a real adopter;
+**the installer no longer allows it** — `--force` REFUSES the `kit.config.json` rewrite unless every
+family the existing file already holds is named on that command line, leaving the file byte-for-byte
+unchanged and exiting nonzero with the missing families and the flag that fills each.)* **Commit
 before you run it.**
 
 **What it costs for this release's own two files.** `core/OWNER_COMMS.md` is regenerated from the

@@ -541,8 +541,10 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
   // Same derivation as v1.7's, one release later and across BOTH classes: rule 8 lands in the [G]
   // core/OWNER_COMMS.md and the buried-ask miss in the [P] /humanize body. The classes differ in
   // what --force COSTS, which is the half a bare "--force is required" note leaves out: the [G] doc
-  // is regenerated (hand-written Owner content replaced, recoverable from .bak) while the [P] body
-  // is overwritten with no backup at all. Both halves executed; the note itself pinned.
+  // is REGENERATED from the template (hand-written Owner content replaced) while the [P] body is
+  // overwritten wholesale with the kit's — each recoverable only from the .bak that v2.16.0 started
+  // leaving behind, which is why the note has to say to diff it. Both halves executed below, and
+  // the note pinned. (A third class, the config, no longer pays at all — see the refusal there.)
   const { dir, run, cleanup } = adopt(["--owner-name", "Alex", "--skip-codex-prompt", "--source-dirs", "app"]);
   try {
     const doc = path.join(dir, "core", "OWNER_COMMS.md");
@@ -560,7 +562,7 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
         `the local edit to ${path.basename(b)} actually landed — without it the post-force check proves nothing`);
     }
     assert.equal(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs?.[0], "app",
-      "the adopter starts with a NARROWED write guard, which is what --force is about to widen");
+      "the adopter starts with a NARROWED write guard — the family whose loss --force used to cause silently");
 
     // Roll the adopter back to the v2.1.0 state: no rule 8, no buried-ask miss, the OLD version
     // stamp, and an Owner doc they have since filled in by hand — the only shape where the upgrade
@@ -599,7 +601,7 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
         `${path.basename(b)} still carries its local edit going INTO the forced run (the plain re-run left it alone)`);
     }
     assert.equal(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs?.[0], "app",
-      "…and the write guard is still narrowed going in, so a widening after this is --force's doing");
+      "…and the write guard is still narrowed going in, so any change to it after this is --force's doing");
 
     const forced = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
       "--repo-name", "adopter", "--owner-name", "Alex", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
@@ -632,17 +634,21 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
 
     // The blast radius itself, now mechanical rather than reported: --force is not scoped to the
     // files a release edits. Two UNRELATED [P] files from two other classes lose their local edits
-    // in the same run, with no backup, and the config that BOUNDS the write guard is reset because
-    // this run omitted --source-dirs. That reset widens the guard, so it is the dangerous direction.
+    // from the LIVE file in the same run — each one's pre-force content preserved in its .bak.
     for (const b of bystanders) {
       assert.doesNotMatch(readFileSync(b, "utf8"), new RegExp(MINE),
         `--force also replaced the local edit in ${path.basename(b)} — the radius is the whole [P] class`);
       assert.match(readFileSync(`${b}.bak`, "utf8"), new RegExp(MINE),
         `…but since v2.16.0 the differing MECHANISM file is backed up first (${path.basename(b)}.bak holds the edit)`);
     }
-    assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")), {},
-      "--force rewrote kit.config.json from THIS run's flags: the narrowed executedPathDirs is gone (guard widened)");
-    assert.match(readFileSync(`${cfg}.bak`, "utf8"), /app/, "…recoverable, but only if the adopter knows to look");
+    // The config that BOUNDS the write guard is a THIRD class, and the one place the radius now
+    // STOPS: this run omitted --source-dirs, so instead of rewriting the file from its own flags
+    // (which reset the narrowed executedPathDirs and WIDENED the guard), init REFUSES the overwrite
+    // and leaves the file alone. Prevention, not a recoverable .bak.
+    assert.deepEqual(JSON.parse(readFileSync(cfg, "utf8")).executedPathDirs, ["app"],
+      "kit.config.json's narrowed executedPathDirs SURVIVES: a --force run that names no --source-dirs refuses rather than resetting it");
+    assert.equal(existsSync(`${cfg}.bak`), false,
+      "…and no .bak was written, because there was no overwrite to back up");
 
     // The note carries the instruction AND the recovery step. Scoped to the v2.1.1 section: the
     // neighbouring v2.1 section also says --force, and would satisfy an unscoped match on its own.
@@ -655,14 +661,16 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     assert.match(section, /\.bak/, "…and must name the .bak, because --force is what puts the Owner's own words there");
     // The blast radius, not just the requirement. A note that says "--force is required" and stops
     // reads as if the operation were scoped to this release's two files; it is global (since
-    // v2.16.0 every differing overwrite is backed up first), and it rewrites the config that
-    // bounds the write guard. A reader who learns that only by losing something learned it too late.
+    // v2.16.0 every differing overwrite is backed up first), and it reaches the config that bounds
+    // the write guard — which is why the note has to name that file at all. (What --force DOES to
+    // that file changed: it once rewrote it from the run's own flags, and now refuses unless every
+    // family is named. The pin here is that the note names the file, not what it says about it.)
     // Scoped to the SENTENCE, not the word: a bare /global/ here was satisfied by the unrelated
     // "user-global Codex prompts" three lines down, and survived a mutation that struck the claim.
     assert.match(section, /`--force` is GLOBAL/,
       "…and must say --force is GLOBAL, not scoped to the files this release edits");
     assert.match(section, /kit\.config\.json/,
-      "…and must name the config it rewrites — omitted family flags WIDEN the write guard");
+      "…and must name the config --force touches — omitted family flags used to WIDEN the write guard, and are now refused");
     // Class-scoped on purpose. An alternation that also accepted the per-file sentence ("the [P]
     // /humanize body is overwritten with no .bak") passed a mutation that struck the CLASS claim —
     // the narrow statement stood in for the broad one, which is the whole omission being pinned.
