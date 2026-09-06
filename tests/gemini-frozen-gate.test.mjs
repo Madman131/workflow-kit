@@ -7,18 +7,20 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh"), journal = "docs/journal/gemini_review_log.md";
 const sha = value => crypto.createHash("sha256").update(value).digest("hex");
 function git(dir, args, encoding = "utf8") { return execFileSync("git", ["-C", dir, ...args], { encoding }).trim(); }
-function fixture(installed = false) {
+function fixture(options = false) {
+  const { installed = false, baseSource = "export const before = 1;\n", candidateSource = "export const after = 2;\n" } = typeof options === "boolean" ? { installed: options } : options;
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-manual-handoff-"));
   git(dir, ["init", "-q"]); git(dir, ["config", "user.email", "test@example.invalid"]); git(dir, ["config", "user.name", "Test"]);
   mkdirSync(path.join(dir, "core"), { recursive: true }); mkdirSync(path.join(dir, "docs"), { recursive: true });
-  writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n"); writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n"); writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); writeFileSync(path.join(dir, "src.mjs"), "export const before = 1;\n");
+  writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n"); writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n"); writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); writeFileSync(path.join(dir, "src.mjs"), baseSource);
   if (installed) { mkdirSync(path.join(dir, "scripts")); for (const name of ["cold-review-gemini.sh", "gemini-frozen-gate.mjs"]) writeFileSync(path.join(dir, "scripts", name), readFileSync(path.join(root, "scripts", name))); chmodSync(path.join(dir, "scripts/cold-review-gemini.sh"), 0o755); }
   git(dir, ["add", "."]); git(dir, ["commit", "-qm", "base"]); const base = git(dir, ["rev-parse", "HEAD"]);
-  writeFileSync(path.join(dir, "src.mjs"), "export const after = 2;\n"); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
+  writeFileSync(path.join(dir, "src.mjs"), candidateSource); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
   return { dir, base, candidate: git(dir, ["rev-parse", "HEAD"]), tree: git(dir, ["rev-parse", "HEAD^{tree}"]) };
 }
 function component(f, kind) {
@@ -45,6 +47,42 @@ function reply(packet, verdict) {
 function packets(f) { const root = path.join(f.dir, ".gemini-gate", "handoff"); return JSON.parse(readFileSync(path.join(root, "handoff.json"), "utf8")).packets.map(item => readFileSync(path.join(root, "packets", item.filename), "utf8")); }
 function replies(f, verdicts) { const dir = path.join(f.dir, ".gemini-gate", "handoff", "replies"); for (const [index, verdict] of verdicts.entries()) writeFileSync(path.join(dir, `${String(index + 1).padStart(4, "0")}.txt`), reply(packets(f)[index], verdict)); }
 function importHandoff(f) { return invoke(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]); }
+function dry(f, extra = []) { return invoke(f, ["--context", "docs/contract.md", "--dry-run", ...extra]); }
+function generated(f, output = ".gemini-gate/generated/manifest.json") { const result = invoke(f, ["--context", "docs/contract.md", "--generate-slice-plan", output]); assert.equal(result.status, 0, result.stderr); return { result: JSON.parse(result.stdout), output, plan: JSON.parse(readFileSync(path.join(f.dir, output), "utf8")) }; }
+function componentBytes(f, fragment) { return fragment.component_kind === "per_file_diff" ? execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", fragment.path]) : execFileSync("git", ["-C", f.dir, "show", `${fragment.component_kind === "deleted_source" ? f.base : f.candidate}:${fragment.path}`]); }
+function assertPartitions(f, plan) {
+  const fragments = plan.slices.filter(slice => slice.kind === "coverage").flatMap(slice => slice.fragments);
+  for (const key of new Set(fragments.map(item => `${item.path}\0${item.component_kind}`))) { const group = fragments.filter(item => `${item.path}\0${item.component_kind}` === key), bytes = componentBytes(f, group[0]); let offset = 0; for (const item of group) { assert.equal(item.byte_start, offset, `${key} ordered`); if (item.byte_start) assert.notEqual(bytes[item.byte_start] & 0xc0, 0x80); if (item.byte_end < bytes.length) assert.notEqual(bytes[item.byte_end] & 0xc0, 0x80); offset = item.byte_end; } assert.equal(offset, bytes.length, `${key} complete`); }
+}
+
+test("exact tuple, clean endpoint, regular manifest, and symlink inputs fail closed", () => {
+  const f = fixture(); try {
+    assert.notEqual(dry(f, ["--tree", "0".repeat(40)]).status, 0);
+    writeFileSync(path.join(f.dir, "outside.txt"), "dirty\n"); assert.notEqual(dry(f).status, 0); rmSync(path.join(f.dir, "outside.txt"));
+    writeFileSync(path.join(f.dir, "plan.json"), "{}"); assert.notEqual(invoke(f, ["--slice-manifest", "plan.json", "--fingerprint"]).status, 0); rmSync(path.join(f.dir, "plan.json"));
+    symlinkSync("docs/contract.md", path.join(f.dir, "plan.json")); assert.notEqual(invoke(f, ["--slice-manifest", "plan.json", "--fingerprint"]).status, 0);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("current and deleted Basic or Token credential-like material refuses before envelope output", () => {
+  const cases = [
+    fixture({ candidateSource: "Authorization: Basic current-secret-value\n" }), fixture({ candidateSource: "Authorization: Token current-secret-value\n" }),
+    fixture({ baseSource: "Authorization: Basic deleted-secret-value\n", candidateSource: "export const removed = true;\n" }), fixture({ baseSource: "Authorization: Token deleted-secret-value\n", candidateSource: "export const removed = true;\n" })
+  ];
+  try { for (const f of cases) assert.notEqual(dry(f).status, 0, `credential accepted in ${f.dir}`); } finally { for (const f of cases) rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("response proof firewall rejects altered scope, markers, completion, and mixed output", () => {
+  const e = { scope: "{\"slice\":\"proof\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"], done: "PIL-DONE-proof" }, text = `VERDICT: GO\nINSPECTED SCOPE: ${e.scope}\nINGESTION PROOF: ${e.markers.join(" | ")}\n${e.done}`;
+  assert.equal(verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text }] } }] }, e).verdict, "GO");
+  for (const altered of [text.replace(e.scope, "{}"), text.replace(e.markers[2], "missing"), text.replace(e.done, ""), `${text}\nVERDICT: NO-GO`]) assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: altered }] } }] }, e));
+  assert.throws(() => verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text, functionCall: { name: "forbidden" } }] } }] }, e));
+});
+test("generator stays cap-measured, UTF-8 safe, ordered, deterministic, and blocks DRAFT fingerprinting", () => {
+  const baseLines = Array.from({ length: 2400 }, (_, index) => `export const value_${index} = \"${"é".repeat(12)}\";\n`), candidateLines = [...baseLines]; for (const index of [100, 400, 700, 1000, 1300, 1600, 1900, 2200]) candidateLines[index] = candidateLines[index].replace("é", "a");
+  const f = fixture({ baseSource: baseLines.join(""), candidateSource: candidateLines.join("") }); try {
+    const first = generated(f), again = generated(f); assert.deepEqual(again.plan, first.plan); assert.ok(first.result.envelopes.every(item => item.envelope_bytes < 81920)); assert.ok(first.result.coverage_call_count > 1); assert.equal(first.plan.slices.at(-1).draft.state, "NEEDS_HUMAN_CROSS_BOUNDARY"); assertPartitions(f, first.plan); assert.equal(existsSync(path.join(f.dir, journal)), false);
+    const fingerprint = invoke(f, ["--slice-manifest", first.output, "--fingerprint"]); assert.notEqual(fingerprint.status, 0); assert.match(fingerprint.stderr, /DRAFT cross-boundary placeholder/);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
 
 test("export is local-only and binds deterministic packets to the exact approved plan", () => {
   const f = fixture(); try {
@@ -60,6 +98,14 @@ test("all verified manual GO replies append ordered receipts and aggregate GO, t
     const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((text.match(/Status: `PASS_VERDICT`/g) || []).length, 4); assert.match(text, /Release-Gate: `YES`/); assert.match(text, /Slice: `aggregate`/); assert.match(text, /Handoff-ID: `PIL-GEMINI-HANDOFF-/); const replay = importHandoff(f); assert.equal(replay.status, 3); assert.match(replay.stderr, /already has a complete durable receipt/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
+test("an exact durable prefix is reused and only missing handoff receipts are appended", () => {
+  const f = fixture(); try {
+    exportHandoff(f); replies(f, ["GO", "GO", "GO"]); assert.equal(importHandoff(f).status, 0);
+    const blocks = readFileSync(path.join(f.dir, journal), "utf8").split(/(?=^## Gemini frozen gate attempt — )/m).filter(block => block.startsWith("## Gemini frozen gate attempt — "));
+    writeFileSync(path.join(f.dir, journal), blocks[0]); const retry = importHandoff(f); assert.equal(retry.status, 0, retry.stderr);
+    const recovered = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((recovered.match(/Handoff-ID: `PIL-GEMINI-HANDOFF-/g) || []).length, 4); assert.equal((recovered.match(/Status: `PASS_VERDICT`/g) || []).length, 4);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
 test("source-only NO-GO is retained as attribution hold after later GO replies", () => {
   const f = fixture(); try {
     exportHandoff(f); replies(f, ["NO-GO", "GO", "GO"]); const result = importHandoff(f); assert.equal(result.status, 3, result.stderr);
@@ -69,7 +115,7 @@ test("source-only NO-GO is retained as attribution hold after later GO replies",
 test("a final supplied diff NO-GO is terminal and permits no aggregate", () => {
   const f = fixture(); try {
     exportHandoff(f); replies(f, ["GO", "NO-GO"]); const result = importHandoff(f); assert.equal(result.status, 3, result.stderr);
-    const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(text, /Slice: `coverage-diff`[\s\S]*Status: `NO_GO`|Status: `NO_GO`[\s\S]*Slice: `coverage-diff`/); assert.doesNotMatch(text, /Record-Kind: `SLICE_SET`/);
+    const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(text, /Slice: `coverage-diff`[\s\S]*Status: `NO_GO`|Status: `NO_GO`[\s\S]*Slice: `coverage-diff`/); assert.doesNotMatch(text, /Record-Kind: `SLICE_SET`/); const replay = importHandoff(f); assert.equal(replay.status, 3); assert.match(replay.stderr, /already has a complete durable receipt/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("tampered packets and incomplete, nonterminal replies fail before journal mutation", () => {
@@ -92,6 +138,8 @@ test("tampered state, tuple, plan, endpoint, and reply enumeration fail before j
 test("retired automated flags refuse before access and the installed wrapper forwards manual handoff", () => {
   const f = fixture(true); try {
     for (const flag of [["--transport", "api"], ["--run-slices"], ["--agy-bin", "ignored"], ["--timeout-seconds", "1"]]) { const result = invoke(f, flag); assert.equal(result.status, 3, result.stderr); }
-    manifest(f); const result = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json", "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env: { ...process.env, GEMINI_REVIEW_CONTEXT: "" } }); assert.equal(result.status, 0, result.stderr); assert.ok(existsSync(path.join(f.dir, ".gemini-gate/wrapper-handoff/handoff.json")));
+    manifest(f); const common = ["--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json"], env = { ...process.env, GEMINI_REVIEW_CONTEXT: "" }, exported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(exported.status, 0, exported.stderr);
+    const handoff = path.join(f.dir, ".gemini-gate/wrapper-handoff"), state = JSON.parse(readFileSync(path.join(handoff, "handoff.json"), "utf8")); for (const item of state.packets) writeFileSync(path.join(handoff, "replies", item.filename), reply(readFileSync(path.join(handoff, "packets", item.filename), "utf8"), "GO"));
+    const imported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-import", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(imported.status, 0, imported.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Slice: `aggregate`/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });

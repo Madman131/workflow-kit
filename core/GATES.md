@@ -689,7 +689,9 @@ Every slice record contains the entire normalized plan, exact diff ranges plus d
 > fragments, packets, scopes, replies, and endpoint. A source-only NO-GO remains nonterminal
 > `UNRESOLVED_ATTRIBUTION`; only a diff-bearing/full terminal NO-GO permits a prefix, and all other
 > complete reply sets aggregate GO or `ATTRIBUTION_HOLD`. Manual UI/model identity is operator-attested,
-> not cryptographically verified by the runner.
+> not cryptographically verified by the runner. A retry reuses only an exact complete durable prefix
+> for its Handoff-ID and appends the expected suffix; a completed terminal/aggregate ID, or a mismatched,
+> extra, out-of-order, or incomplete prefix, refuses.
 
 > **Historical automated-transport record begins.** The following transport commands and controls
 > explain preserved receipts from the superseded procedure. They are not supported current commands.

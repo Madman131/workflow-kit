@@ -421,7 +421,7 @@ function writeGeneratedPlan(repo, o, generated) {
   return { manifest: o.generateSlicePlan, coverage_call_count: generated.summary.length, coverage_bytes: generated.summary.reduce((sum, entry) => sum + entry.envelope_bytes, 0), envelopes: generated.summary, forced_splits: generated.plan.generation.forced_splits, next: "Inspect the DRAFT, select cross-boundary fragments and all five semantic rationales, remove its draft marker, fingerprint, approve the exact plan ID, then run." };
 }
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
-function recordBody(record) {
+function recordFields(record) {
   const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", record.transport], ["Transport-Identity", record.transportIdentity], ["Model", record.model], ["Handoff-ID", record.handoffId || "(none)"], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
   if (record.verdict) fields.push(["Gate-Verdict", record.verdict]);
   if (record.providerVerdict) fields.push(["Provider-Verdict", record.providerVerdict]);
@@ -430,7 +430,11 @@ function recordBody(record) {
   else if (record.resultSha) fields.push(["Aggregate-Result-SHA256", record.resultSha], ["Aggregate-Result", record.aggregateResult || "assembled verified slice results; no model reply"]);
   if (record.unresolvedAttempts?.length) fields.push(["Unresolved-Attribution-Attempts", record.unresolvedAttempts.join(",")]);
   if (record.detail) fields.push(["Diagnostic", record.detail]);
-  return `\n## Gemini frozen gate attempt — ${clean(record.status)} — ${new Date().toISOString()}\n\n${fields.map(([key, value]) => `- ${key}: \`${clean(value)}\``).join("\n")}\n`;
+  return fields;
+}
+function canonicalRecordFields(record) { return recordFields(record).map(([key, value]) => [key, clean(value)]); }
+function recordBody(record) {
+  return `\n## Gemini frozen gate attempt — ${clean(record.status)} — ${new Date().toISOString()}\n\n${canonicalRecordFields(record).map(([key, value]) => `- ${key}: \`${value}\``).join("\n")}\n`;
 }
 function append(repo, record) {
   const body = recordBody(record), complete = `${body}- Record-SHA256: \`${sha(body)}\`\n- Complete-Record: \`YES\`\n`, fd = fs.openSync(journalPath(repo), "a");
@@ -510,29 +514,46 @@ function readHandoff(repo, o, plan, prepared) {
   return { handoff, results };
 }
 function completeHandoffRecord(block) { return complete(block.replace(/\n$/, "")); }
-function replayedHandoff(repo, handoffId) {
-  let text = ""; try { text = fs.readFileSync(journalPath(repo), "utf8"); } catch { return false; }
-  return text.split(/(?=^## Gemini frozen gate attempt — )/m).some(block => completeHandoffRecord(block) && block.includes(`- Handoff-ID: \`${handoffId}\``));
+function receiptFields(block) {
+  return [...block.matchAll(/^- ([^:\n]+): `([^\n`]*)`$/gm)].filter(([, key]) => key !== "Record-SHA256" && key !== "Complete-Record").map(([, key, value]) => [key, value]);
+}
+function durableHandoffPrefix(repo, handoffId) {
+  let text = ""; try { text = fs.readFileSync(journalPath(repo), "utf8"); } catch { return []; }
+  const marker = `- Handoff-ID: \`${handoffId}\``;
+  const blocks = text.split(/(?=^## Gemini frozen gate attempt — )/m);
+  for (const block of blocks) if (block.startsWith("## Gemini frozen gate attempt — ") && !completeHandoffRecord(block)) die("journal has an incomplete receipt; refusing unsafe replay", 3);
+  return blocks.filter(block => block.includes(marker)).map(block => {
+    if (!completeHandoffRecord(block)) die("Handoff-ID has an incomplete durable receipt; refusing unsafe replay", 3);
+    return receiptFields(block);
+  });
 }
 function manualTransport() { return { name: MANUAL_TRANSPORT, identity: `${MANUAL_TRANSPORT}|${SUBSCRIPTION_MODEL}` }; }
-function writeImportedReceipts(repo, o, plan, prepared, imported) {
+function importedReceiptSet(o, plan, prepared, imported) {
   const transport = manualTransport(), key = rigKey(o, transport), contributors = [], results = [], unresolved = [];
-  endpoint(repo, o); if (replayedHandoff(repo, imported.handoff.handoff_id)) die("Handoff-ID already has a complete durable receipt", 3);
-  preflightJournal(repo); endpoint(repo, o);
+  const records = [];
   for (const [index, result] of imported.results.entries()) {
     const item = prepared[index], attemptId = `PIL-MANUAL-${imported.handoff.handoff_id.slice(-24)}-${String(index + 1).padStart(4, "0")}`;
     const common = { transport: transport.name, transportIdentity: transport.identity, model: o.model, handoffId: imported.handoff.handoff_id, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes };
     if (result.unresolvedAttribution) {
       const observation = { attempt_id: attemptId, slice: item.name, provider_verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) };
-      append(repo, { ...common, status: "UNRESOLVED_ATTRIBUTION", kind: "SLICE_RESULT", release: "NO", providerVerdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply }); contributors.push(attemptId); results.push({ status: "UNRESOLVED_ATTRIBUTION", ...observation }); unresolved.push(observation); continue;
+      records.push({ ...common, status: "UNRESOLVED_ATTRIBUTION", kind: "SLICE_RESULT", release: "NO", providerVerdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply }); contributors.push(attemptId); results.push({ status: "UNRESOLVED_ATTRIBUTION", ...observation }); unresolved.push(observation); continue;
     }
-    append(repo, { ...common, status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_RESULT", release: "NO", verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
+    records.push({ ...common, status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_RESULT", release: "NO", verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
     contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) });
-    if (result.verdict === "NO-GO") { process.exitCode = 3; return; }
+    if (result.verdict === "NO-GO") return { records, exitCode: 3 };
   }
-  endpoint(repo, o); const materialId = sha(JSON.stringify({ plan_id: plan.planId, contributors: results, unresolved_attribution: unresolved })), scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: materialId, contributors: results, unresolved_attribution: unresolved }), resultSha = sha(JSON.stringify({ status: unresolved.length ? "ATTRIBUTION_HOLD" : "GO", scope }));
-  append(repo, { status: unresolved.length ? "ATTRIBUTION_HOLD" : "PASS_VERDICT", kind: "SLICE_SET", release: unresolved.length ? "NO" : "YES", transport: transport.name, transportIdentity: transport.identity, model: o.model, handoffId: imported.handoff.handoff_id, attemptId: `PIL-MANUAL-AGGREGATE-${imported.handoff.handoff_id.slice(-24)}`, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict: unresolved.length ? undefined : "GO", scope: unresolved.length ? undefined : scope, resultSha, aggregateResult: unresolved.length ? "assembled verified manual replies; unresolved source-only attribution requires PM adjudication" : undefined, unresolvedAttempts: unresolved.map(item => item.attempt_id) });
-  if (unresolved.length) process.exitCode = 3;
+  const materialId = sha(JSON.stringify({ plan_id: plan.planId, contributors: results, unresolved_attribution: unresolved })), scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: materialId, contributors: results, unresolved_attribution: unresolved }), resultSha = sha(JSON.stringify({ status: unresolved.length ? "ATTRIBUTION_HOLD" : "GO", scope }));
+  records.push({ status: unresolved.length ? "ATTRIBUTION_HOLD" : "PASS_VERDICT", kind: "SLICE_SET", release: unresolved.length ? "NO" : "YES", transport: transport.name, transportIdentity: transport.identity, model: o.model, handoffId: imported.handoff.handoff_id, attemptId: `PIL-MANUAL-AGGREGATE-${imported.handoff.handoff_id.slice(-24)}`, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict: unresolved.length ? undefined : "GO", scope: unresolved.length ? undefined : scope, resultSha, aggregateResult: unresolved.length ? "assembled verified manual replies; unresolved source-only attribution requires PM adjudication" : undefined, unresolvedAttempts: unresolved.map(item => item.attempt_id) });
+  return { records, exitCode: unresolved.length ? 3 : 0 };
+}
+function writeImportedReceipts(repo, o, plan, prepared, imported) {
+  const expected = importedReceiptSet(o, plan, prepared, imported), prefix = durableHandoffPrefix(repo, imported.handoff.handoff_id);
+  if (prefix.length > expected.records.length) die("Handoff-ID has extra durable receipts; refusing unsafe replay", 3);
+  for (const [index, actual] of prefix.entries()) if (JSON.stringify(actual) !== JSON.stringify(canonicalRecordFields(expected.records[index]))) die("Handoff-ID durable prefix is mismatched or out of order; refusing unsafe replay", 3);
+  if (prefix.length === expected.records.length) die("Handoff-ID already has a complete durable receipt", 3);
+  endpoint(repo, o); preflightJournal(repo); endpoint(repo, o);
+  for (const record of expected.records.slice(prefix.length)) append(repo, record);
+  if (expected.exitCode) process.exitCode = expected.exitCode;
 }
 export async function run(argv = process.argv.slice(2)) {
   const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o);

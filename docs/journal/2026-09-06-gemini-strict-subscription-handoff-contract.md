@@ -24,3 +24,8 @@ without an aggregate. All replies with unresolved observations end in
 Handoff-ID, altered packets, tuple, plan, endpoint, or reply set refuses before
 journal mutation. This is a strict handoff procedure, not a new skill, service,
 controller, ledger, or automatic provider path.
+
+If a process stops after complete slice receipts but before its terminal record,
+the same Handoff-ID may retry only after those records exactly match the ordered
+expected prefix; import appends the remaining expected records. A mismatched,
+extra, out-of-order, or incomplete prefix still refuses.
