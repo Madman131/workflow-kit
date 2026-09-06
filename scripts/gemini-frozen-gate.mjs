@@ -303,7 +303,7 @@ function envelope(repo, o, rows, contexts, name, rawFragments, complete, covered
   const fragmentInstruction = fragments ? ` This unit is one complete approved fragment slice. Every VERIFIED FRAGMENT block declares an intentional, hash-verified half-open byte range of a larger frozen source or diff component. Missing bytes outside declared ranges are expected and covered by other ordered slices. Do not issue NO-GO solely because a range boundary cuts a file, line, word, or diff hunk. Still report substantive findings and apply the change-attribution rule. ${scopePayload.exact_per_file_diff_transition_evidence ? "This scope includes exact per_file_diff transition evidence." : "This source-only scope has no exact per_file_diff transition evidence and cannot by itself establish change attribution; later diff or final slices may still produce a valid NO-GO."}` : "";
   const prompt = `Review this exact frozen committed artifact using only supplied material.${attributionInstruction}${fragmentInstruction} Return findings, exactly one \`VERDICT: GO\` or \`VERDICT: NO-GO\` line, exactly one \`INSPECTED SCOPE:\` line copied exactly from supplied material, and exactly one \`INGESTION PROOF:\` line that contains the three supplied ingestion markers in encountered order, separated by \` | \`. End the reply with the supplied response-completion token as its final nonblank line.`;
   const request = { contents: [{ role: "user", parts: [{ text: `${prompt}\n\n${supplied}` }] }], generationConfig: { candidateCount: 1 } }, serialized = JSON.stringify(request);
-  return { request, prompt: `${prompt}\n\n${supplied}`, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name };
+  return { request, prompt: `${prompt}\n\n${supplied}`, bytes: Buffer.byteLength(serialized), materialId, envelopeSha: sha(serialized), markers, done, scope, name, exactPerFileDiffTransitionEvidence: scopePayload.exact_per_file_diff_transition_evidence };
 }
 export function verifyResponse(body, e) {
   if (!body || !Array.isArray(body.candidates) || body.candidates.length !== 1) die("provider response must contain exactly one candidate", 3);
@@ -315,6 +315,7 @@ export function verifyResponse(body, e) {
   if (scopes.length !== 1 || scopes[0] !== e.scope) die("response inspected scope does not exactly bind this frozen unit", 3);
   if (proofs.length !== 1 || proofs[0] !== e.markers.join(" | ")) die("response did not prove ordered ingestion through the EOF receipt", 3);
   if (reply.trimEnd().split(/\r?\n/).at(-1) !== e.done) die("response completion token is missing, misplaced, or not final", 3);
+  if (verdicts[0] === "NO-GO" && e.exactPerFileDiffTransitionEvidence === false) die("candidate response NO-GO lacks exact per_file_diff transition evidence", 3);
   return { reply, verdict: verdicts[0], replySha: sha(reply), completionSha: sha(e.done) };
 }
 function rawFragment(o, item, byte_start, byte_end) {

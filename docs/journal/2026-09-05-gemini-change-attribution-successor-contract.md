@@ -23,4 +23,6 @@ worsened by changed diff evidence, newly exposed or relied upon by the candidate
 mitigation/public claim. Unchanged inherited limits are `PREEXISTING/NONBLOCKING` only. A source-only
 fragment with no exact transition evidence cannot establish attribution by itself; a later diff or
 final slice still may. Candidate exposure, worsening, reliance, or a false claim remains blocking
-regardless of the underlying limitation's age.
+regardless of the underlying limitation's age. This is deterministic: after exact scope and receipt
+verification, a source-only `NO-GO` becomes `FAILED_CANDIDATE_RESPONSE` before a durable verdict;
+full and diff-bearing packets retain ordinary valid-NO-GO handling.

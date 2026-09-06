@@ -771,7 +771,9 @@ upon by the candidate, or a false candidate mitigation/public claim. An unchange
 is `PREEXISTING/NONBLOCKING`, not a NO-GO by itself; age never excuses harm the candidate exposes,
 worsens, relies upon, or falsely claims to fix. A source-only fragment without exact transition
 evidence may report the limitation but cannot establish that attribution alone; later diff or final
-slices can still block.
+slices can still block. This is enforced after exact scope and receipt verification: a source-only
+`NO-GO` is recorded as `FAILED_CANDIDATE_RESPONSE`, never durable `NO_GO`; full and diff-bearing
+packets retain ordinary valid-NO-GO handling.
 
 For a local mechanical DRAFT, use the native runner (no credential lookup, provider call, journal
 append, or approval action):

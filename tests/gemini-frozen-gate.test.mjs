@@ -670,6 +670,34 @@ test("first valid slice NO-GO is durable evidence and stops the direct CLI befor
     const journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.equal((journal.match(/^## Gemini frozen gate attempt —/gm) || []).length, 1); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
 });
+test("source-only NO-GO is a candidate response while diff-bearing NO-GO remains terminal", () => {
+  const f = fixture(), support = mkdtempSync(path.join(os.tmpdir(), "gemini-attribution-cli-")), marker = path.join(support, "fetch-order.log"), preload = path.join(support, "fetch-preload.mjs");
+  try {
+    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
+    const writePlan = order => {
+      const coverage = {
+        "source-only": { name: "source-only", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, source.length)] },
+        "diff-bearing": { name: "diff-bearing", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "per_file_diff", 0, diff.length)] },
+      }, cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+      const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...order.map(name => coverage[name]), cross]), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    };
+    writeFileSync(preload, [
+      'import { appendFileSync } from "node:fs";',
+      'const marker = process.env.GEMINI_TEST_FETCH_MARKER;',
+      'globalThis.fetch = async (_url, request) => {',
+      '  const text = JSON.parse(request.body).contents[0].parts[0].text, scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
+      '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
+      '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
+      '  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: NO-GO\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
+      '};',
+    ].join("\n"));
+    const runCli = () => spawnSync(process.execPath, [runner, ...sliceArgs(f, "--run-slices")], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "test-key", GEMINI_TEST_FETCH_MARKER: marker, NODE_OPTIONS: `--import=${preload}` } });
+    writePlan(["source-only", "diff-bearing"]); let result = runCli(); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["source-only"]);
+    let journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(journal, /Status: `FAILED_CANDIDATE_RESPONSE`/); assert.match(journal, /Failure-Class: `CANDIDATE_RESPONSE`/); assert.doesNotMatch(journal, /Status: `NO_GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
+    writeFileSync(marker, ""); writePlan(["diff-bearing", "source-only"]); result = runCli(); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["diff-bearing"]);
+    journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.equal((journal.match(/^## Gemini frozen gate attempt —/gm) || []).length, 2); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
+});
 test("public selftest and installed runner remain deterministic and network-free", () => {
   const selftest = spawnSync("bash", [wrapper, "--selftest"], { cwd: root, encoding: "utf8" }); assert.equal(selftest.status, 0, selftest.stderr); assert.match(selftest.stdout, /no network/);
   const tuple = [git(root, ["rev-parse", "HEAD~1"]), git(root, ["rev-parse", "HEAD"]), git(root, ["rev-parse", "HEAD^{tree}"])];
