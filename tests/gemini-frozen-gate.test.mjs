@@ -7,7 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
+import { run, verifyResponse } from "../scripts/gemini-frozen-gate.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), runner = path.join(root, "scripts", "gemini-frozen-gate.mjs"), wrapper = path.join(root, "scripts", "cold-review-gemini.sh"), journal = "docs/journal/gemini_review_log.md";
 const sha = value => crypto.createHash("sha256").update(value).digest("hex");
@@ -104,6 +104,13 @@ test("an exact durable prefix is reused and only missing handoff receipts are ap
     const blocks = readFileSync(path.join(f.dir, journal), "utf8").split(/(?=^## Gemini frozen gate attempt — )/m).filter(block => block.startsWith("## Gemini frozen gate attempt — "));
     writeFileSync(path.join(f.dir, journal), blocks[0]); const retry = importHandoff(f); assert.equal(retry.status, 0, retry.stderr);
     const recovered = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((recovered.match(/Handoff-ID: `PIL-GEMINI-HANDOFF-/g) || []).length, 4); assert.equal((recovered.match(/Status: `PASS_VERDICT`/g) || []).length, 4);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("endpoint changes after slice receipts prevent the final release aggregate", async () => {
+  const f = fixture(); try {
+    exportHandoff(f); replies(f, ["GO", "GO", "GO"]);
+    await assert.rejects(run(args(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]), { afterSliceReceipts: () => writeFileSync(path.join(f.dir, "outside.txt"), "dirty\n") }), /source checkout is dirty outside sanctioned artifacts/);
+    const text = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((text.match(/Handoff-ID: `PIL-GEMINI-HANDOFF-/g) || []).length, 3); assert.doesNotMatch(text, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(text, /Release-Gate: `YES`/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("source-only NO-GO is retained as attribution hold after later GO replies", () => {

@@ -546,16 +546,18 @@ function importedReceiptSet(o, plan, prepared, imported) {
   records.push({ status: unresolved.length ? "ATTRIBUTION_HOLD" : "PASS_VERDICT", kind: "SLICE_SET", release: unresolved.length ? "NO" : "YES", transport: transport.name, transportIdentity: transport.identity, model: o.model, handoffId: imported.handoff.handoff_id, attemptId: `PIL-MANUAL-AGGREGATE-${imported.handoff.handoff_id.slice(-24)}`, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict: unresolved.length ? undefined : "GO", scope: unresolved.length ? undefined : scope, resultSha, aggregateResult: unresolved.length ? "assembled verified manual replies; unresolved source-only attribution requires PM adjudication" : undefined, unresolvedAttempts: unresolved.map(item => item.attempt_id) });
   return { records, exitCode: unresolved.length ? 3 : 0 };
 }
-function writeImportedReceipts(repo, o, plan, prepared, imported) {
+function writeImportedReceipts(repo, o, plan, prepared, imported, afterSliceReceipts) {
   const expected = importedReceiptSet(o, plan, prepared, imported), prefix = durableHandoffPrefix(repo, imported.handoff.handoff_id);
   if (prefix.length > expected.records.length) die("Handoff-ID has extra durable receipts; refusing unsafe replay", 3);
   for (const [index, actual] of prefix.entries()) if (JSON.stringify(actual) !== JSON.stringify(canonicalRecordFields(expected.records[index]))) die("Handoff-ID durable prefix is mismatched or out of order; refusing unsafe replay", 3);
   if (prefix.length === expected.records.length) die("Handoff-ID already has a complete durable receipt", 3);
+  const remaining = expected.records.slice(prefix.length), aggregate = remaining.at(-1)?.kind === "SLICE_SET" ? remaining.pop() : undefined;
   endpoint(repo, o); preflightJournal(repo); endpoint(repo, o);
-  for (const record of expected.records.slice(prefix.length)) append(repo, record);
+  for (const record of remaining) append(repo, record);
+  if (aggregate) { afterSliceReceipts?.(); endpoint(repo, o); append(repo, aggregate); }
   if (expected.exitCode) process.exitCode = expected.exitCode;
 }
-export async function run(argv = process.argv.slice(2)) {
+export async function run(argv = process.argv.slice(2), hooks = {}) {
   const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o);
   if (o.generateSlicePlan) {
     const generated = generateSlicePlan(repo, o, rows);
@@ -577,6 +579,6 @@ export async function run(argv = process.argv.slice(2)) {
   if (o.handoffExport) { writeHandoff(repo, o, plan, prepared); return; }
   if (!o.handoffImport) die("automated frozen provider execution is retired; use --handoff-export then --handoff-import", 3);
   const imported = readHandoff(repo, o, plan, prepared); const lock = sharedLock(repo, o);
-  try { writeImportedReceipts(repo, o, plan, prepared, imported); } finally { fs.rmSync(lock, { recursive: true, force: true }); }
+  try { writeImportedReceipts(repo, o, plan, prepared, imported, hooks.afterSliceReceipts); } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) run().catch(error => { process.stderr.write(`gemini-frozen-gate: ${error.message}\n`); process.exit(error.exitCode || 3); });
