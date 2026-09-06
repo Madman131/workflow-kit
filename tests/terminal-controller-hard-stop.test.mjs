@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState,
+  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, aggregateTransitionSha256, confirmRepairBrief, deriveAggregateRepairState,
   derivePendingLineageBudgets, fingerprintCandidate,
   loadRepairEventsForProject, readRepairEvents, recordAggregateChildContinuation as _rawChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff, recordAggregatePanelClose,
@@ -1070,6 +1070,62 @@ test("historical untyped process reviews replay but cannot grant new typed autho
   }
 });
 
+test("invalid typed child rulings stay inert and leave the exact proposal available to successor", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const stopped = disposition(ctx, closed.closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    const proposal = { parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", children: [{ task_id: "valid-child",
+        changeset_id: "valid-child-cs", tier: "T2", budget: "one changeset",
+        authorized_paths: candidate.paths }] };
+    const anchor = { kind: "aggregate_terminal", event_id: stopped.event_id,
+      panel_open_event_id: panel.opened.event_id, frozen_commit: candidate.commit, frozen_tree: candidate.tree };
+    const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "task-1",
+      changeset_id: "changeset-1", reviewer_role: "frontier", purpose: "child_continuation",
+      anchor, proposed_transition: proposal, review_evidence: "terminal proposal review",
+      zoom_out: "one bounded successor", bounded_scope: "one child",
+      closure_evidence: "the parent remains terminal" };
+    const ledger = repairLedgerPath(ctx.dir);
+    const before = readFileSync(ledger, "utf8").split("\n").filter(Boolean).length;
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, ruling: "finish_bounded_root" },
+      options(ctx.dir)).state, "aggregate-process-review-malformed");
+    assert.equal(readFileSync(ledger, "utf8").split("\n").filter(Boolean).length, before,
+      "a new invalid purpose/ruling pair appends nothing");
+
+    const historical = stamped({ type: "aggregate_v2", kind: "process_review",
+      policy_version: AGGREGATE_POLICY_VERSION, task_id: "task-1", changeset_id: "changeset-1",
+      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "historical-writer",
+      reviewer_role: "frontier", purpose: "child_continuation", anchor,
+      transition_sha256: aggregateTransitionSha256("child_continuation", proposal),
+      next_gate_ordinal: 2, review_evidence: "historical invalid pair", zoom_out: "historical",
+      ruling: "finish_bounded_root", bounded_scope: "one child", closure_evidence: "historical" });
+    writeFileSync(ledger, `${JSON.stringify(historical)}\n`, { flag: "a" });
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(loaded.ok, true, "the hash-valid historical invalid pair remains structurally readable");
+    const state = deriveAggregateRepairState(loaded.aggregate_events, "task-1", { standardEvents: loaded.events });
+    assert.equal(state.ok, true);
+    assert.equal(state.process_reviews.some((review) => review.event_id === historical.event_id), false,
+      "the invalid pair is inert in derived authority");
+    assert.equal(recordAggregateChildContinuation({ type: "aggregate_v2", kind: "child_continuation",
+      task_id: "task-1", changeset_id: "changeset-1", ...proposal,
+      owner_evidence: "Owner terminal evidence", process_review_event_id: historical.event_id,
+    }, options(ctx.dir)).state, "aggregate-continuation-conflict");
+
+    const successor = recordAggregateProcessReview({ ...reviewInput, ruling: "successor" }, options(ctx.dir));
+    assert.equal(successor.ok, true, successor.state);
+    const child = recordAggregateChildContinuation({ type: "aggregate_v2", kind: "child_continuation",
+      task_id: "task-1", changeset_id: "changeset-1", ...proposal,
+      owner_evidence: "Owner terminal evidence", process_review_event_id: successor.event_id,
+    }, options(ctx.dir));
+    assert.equal(child.ok, true, child.state);
+  } finally { ctx.cleanup(); }
+});
+
 test("a spent finish review cannot route an abandoned open; an exact terminal-purpose review can", () => {
   const ctx = repo();
   try {
@@ -1215,6 +1271,27 @@ test("a round-3 standard handoff requires an exact standard-purpose process revi
       anchor, proposed_transition: proposed, review_evidence: "handoff review", zoom_out: "bounded successor",
       ruling: "successor", bounded_scope: "one child", closure_evidence: "standard parent hands off",
       next_gate_ordinal: 4 };
+    const beforeReview = readFileSync(repairLedgerPath(ctx.dir), "utf8").split("\n").filter(Boolean).length;
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, ruling: "finish_bounded_root" },
+      options(ctx.dir)).state, "aggregate-process-review-malformed");
+    assert.equal(readFileSync(repairLedgerPath(ctx.dir), "utf8").split("\n").filter(Boolean).length,
+      beforeReview, "a new invalid legacy-handoff ruling appends nothing");
+    const historicalInvalid = stamped({ type: "aggregate_v2", kind: "process_review",
+      policy_version: AGGREGATE_POLICY_VERSION, task_id: "legacy", changeset_id: "legacy-cs",
+      recorded_at: "2099-01-01T00:00:05.000Z", session_id: "historical-writer",
+      reviewer_role: "frontier", purpose: "legacy_handoff", anchor,
+      transition_sha256: aggregateTransitionSha256("legacy_handoff", proposed), next_gate_ordinal: 4,
+      review_evidence: "historical invalid pair", zoom_out: "historical",
+      ruling: "finish_bounded_root", bounded_scope: "one child", closure_evidence: "historical" });
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(historicalInvalid)}\n`, { flag: "a" });
+    assert.equal(loadRepairEventsForProject(ctx.dir).ok, true,
+      "the historical invalid boundary review stays structurally readable");
+    assert.equal(recordAggregateLegacyHandoff({ ...handoffInput,
+      process_review_event_id: historicalInvalid.event_id }, options(ctx.dir)).state,
+    "aggregate-legacy-handoff-conflict");
+    assert.equal(recordAggregateLegacyHandoff({ ...handoffInput,
+      process_review_event_id: "e".repeat(64) }, options(ctx.dir)).state,
+    "aggregate-legacy-handoff-conflict");
     assert.equal(recordAggregateProcessReview({ ...reviewInput, next_gate_ordinal: 5 }, options(ctx.dir)).state,
       "aggregate-process-review-malformed");
     assert.equal(recordAggregateProcessReview({ ...reviewInput,

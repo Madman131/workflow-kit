@@ -271,9 +271,9 @@ more of the leaned-on family than it did; the verdict records the active binding
 - **`max` and `ultra` are NOT standing defaults for any dev gate.** They are **Owner-invoked only**.
   Same-class recurrence or a repair-introduced harm enters `core/WORKFLOW.md`'s root-cause queue; it
   does **not by itself** mint a frontier firing or fresh authority. The PM declares semantic sameness
-  and diagnoses the shared cause. When the R2 correction needs a design/product tradeoff or more than
-  one additional repair round, the controller requires a focused frontier process consult; it is a
-  checkpoint outside the discretionary cap below and grants no repair authority by itself.
+  and diagnoses the shared cause. After Round 2, the PM must consult the frontier reviewer when the
+  correction requires a design change, a product tradeoff, or more than one additional repair round.
+  It is a checkpoint outside the discretionary cap below and grants no repair authority by itself.
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
   costs less.)*

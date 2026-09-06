@@ -97,6 +97,12 @@ const effectiveAggregatePolicyVersion = (state, incoming) =>
 const continuationReviewAllows = (review) =>
   ["successor", "owner_decision"].includes(review?.ruling);
 const PROCESS_REVIEW_PURPOSES = new Set(["dispatch", "child_continuation", "legacy_handoff"]);
+function processReviewRulingAllowed(purpose, ruling) {
+  return purpose === "dispatch"
+    ? ["finish_bounded_root", "successor", "owner_decision"].includes(ruling)
+    : ["child_continuation", "legacy_handoff"].includes(purpose) &&
+      ["successor", "owner_decision"].includes(ruling);
+}
 function processReviewAnchorShape(anchor) {
   if (!plain(anchor)) return false;
   if (anchor.kind === "aggregate_panel_close") return ID64.test(anchor.event_id || "") &&
@@ -699,7 +705,8 @@ function processReviewKey(row) {
 }
 
 function typedReviewMatches(review, purpose, anchor, transition) {
-  return typedProcessReview(review) && review.purpose === purpose && same(review.anchor, anchor) &&
+  return typedProcessReview(review) && processReviewRulingAllowed(review.purpose, review.ruling) &&
+    review.purpose === purpose && same(review.anchor, anchor) &&
     review.transition_sha256 === aggregateTransitionSha256(purpose, transition);
 }
 
@@ -1102,6 +1109,7 @@ function aggregateWorld(events, standardEvents = []) {
     } else if (row.kind === "process_review") {
       if (!liveAggregatePolicy(row)) continue;
       if (typedProcessReview(row)) {
+        if (!processReviewRulingAllowed(row.purpose, row.ruling)) continue;
         let anchor = null, ordinal = null;
         if (row.purpose === "legacy_handoff") {
           const standard = getStandard(row.task_id, rowSeq);
@@ -1937,7 +1945,8 @@ export function recordAggregateProcessReview(input,
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
   const expectedChangeset = purpose === "legacy_handoff" ? standard?.changeset_id : state?.changeset_id;
   const transitionSha = projection && eventId(projection);
-  if (!base || !projection || !contextOk || input.changeset_id !== expectedChangeset ||
+  if (!base || !projection || !contextOk || !processReviewRulingAllowed(purpose, input.ruling) ||
+      input.changeset_id !== expectedChangeset ||
       !anchor || !same(input.anchor, anchor) ||
       (input.next_gate_ordinal !== undefined && input.next_gate_ordinal !== ordinal) ||
       (input.transition_sha256 !== undefined && input.transition_sha256 !== transitionSha)) {

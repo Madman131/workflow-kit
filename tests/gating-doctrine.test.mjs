@@ -124,7 +124,7 @@ test("same-class recurrence enters root cause; material R2 process consults stay
   const f = read("skills/frontier-review/SKILL.md");
   assert.match(g, /Same-class recurrence or a repair-introduced harm enters `core\/WORKFLOW\.md`'s root-cause queue/);
   assert.match(g, /does \*\*not by itself\*\* mint a frontier firing or fresh authority/);
-  assert.match(g, /controller requires a focused frontier process consult/);
+  assert.match(g, /After Round 2, the PM must consult the frontier reviewer when the correction requires a design change, a product tradeoff, or more than one additional repair round/);
   assert.match(g, /checkpoint outside the discretionary cap below and grants no repair authority/);
   assert.doesNotMatch(g, /same-class-recurrence firing per changeset/);
   assert.match(f, /Same-class recurrence enters the root-cause queue; it never mints a firing/);
