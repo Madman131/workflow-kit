@@ -670,7 +670,7 @@ test("first valid slice NO-GO is durable evidence and stops the direct CLI befor
     const journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.equal((journal.match(/^## Gemini frozen gate attempt —/gm) || []).length, 1); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
 });
-test("source-only NO-GO is a candidate response while diff-bearing NO-GO remains terminal", () => {
+test("source-only NO-GO is unresolved until a later diff NO-GO or attribution hold", () => {
   const f = fixture(), support = mkdtempSync(path.join(os.tmpdir(), "gemini-attribution-cli-")), marker = path.join(support, "fetch-order.log"), preload = path.join(support, "fetch-preload.mjs");
   try {
     const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`])), diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
@@ -684,18 +684,20 @@ test("source-only NO-GO is a candidate response while diff-bearing NO-GO remains
     writeFileSync(preload, [
       'import { appendFileSync } from "node:fs";',
       'const marker = process.env.GEMINI_TEST_FETCH_MARKER;',
+      'const verdicts = JSON.parse(process.env.GEMINI_TEST_VERDICTS); let index = 0;',
       'globalThis.fetch = async (_url, request) => {',
       '  const text = JSON.parse(request.body).contents[0].parts[0].text, scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1];',
       '  appendFileSync(marker, `${JSON.parse(scope).slice}\\n`);',
       '  const markers = [...text.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = text.match(/PIL-DONE-[0-9a-f]+/)[0];',
-      '  return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: NO-GO\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
+      '  const verdict = verdicts[index++] || "GO"; return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: `findings\\nVERDICT: ${verdict}\\nINSPECTED SCOPE: ${scope}\\nINGESTION PROOF: ${markers.join(" | ")}\\n${done}` }] } }] }) };',
       '};',
     ].join("\n"));
-    const runCli = () => spawnSync(process.execPath, [runner, ...sliceArgs(f, "--run-slices")], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "test-key", GEMINI_TEST_FETCH_MARKER: marker, NODE_OPTIONS: `--import=${preload}` } });
-    writePlan(["source-only", "diff-bearing"]); let result = runCli(); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["source-only"]);
-    let journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.match(journal, /Status: `FAILED_CANDIDATE_RESPONSE`/); assert.match(journal, /Failure-Class: `CANDIDATE_RESPONSE`/); assert.doesNotMatch(journal, /Status: `NO_GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
-    writeFileSync(marker, ""); writePlan(["diff-bearing", "source-only"]); result = runCli(); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["diff-bearing"]);
-    journal = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8"); assert.equal((journal.match(/^## Gemini frozen gate attempt —/gm) || []).length, 2); assert.match(journal, /Status: `NO_GO`/); assert.match(journal, /Gate-Verdict: `NO-GO`/); assert.doesNotMatch(journal, /Record-Kind: `SLICE_SET`/); assert.doesNotMatch(journal, /FAILED_TRANSPORT/);
+    const runCli = verdicts => spawnSync(process.execPath, [runner, ...sliceArgs(f, "--run-slices")], { encoding: "utf8", env: { ...process.env, [syntheticEnvKey]: "test-key", GEMINI_TEST_FETCH_MARKER: marker, GEMINI_TEST_VERDICTS: JSON.stringify(verdicts), NODE_OPTIONS: `--import=${preload}` } });
+    writePlan(["source-only", "diff-bearing"]); let result = runCli(["NO-GO", "NO-GO"]); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["source-only", "diff-bearing"]);
+    let records = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8").split(/^## Gemini frozen gate attempt — /m).slice(1); assert.equal(records.length, 2); assert.match(records[0], /Status: `UNRESOLVED_ATTRIBUTION`[\s\S]*Release-Gate: `NO`[\s\S]*Provider-Verdict: `NO-GO`[\s\S]*Inspected-Scope:[\s\S]*Reply-UTF8-Base64[\s\S]*Complete-Record: `YES`/); assert.match(records[0], /Attempt-ID: `[^`]+`[\s\S]*Base: `[^`]+`[\s\S]*Candidate: `[^`]+`[\s\S]*Tree: `[^`]+`[\s\S]*Plan-ID: `[^`]+`/); assert.doesNotMatch(records[0], /Gate-Verdict|PASS_VERDICT|NO_GO|FAILED_|NONBLOCKING/); assert.match(records[1], /Status: `NO_GO`[\s\S]*Gate-Verdict: `NO-GO`/);
+    assert.doesNotMatch(records.join("\n"), /Record-Kind: `SLICE_SET`/);
+    writeFileSync(marker, ""); result = runCli(["NO-GO", "GO", "GO"]); assert.equal(result.status, 3, result.stderr); assert.deepEqual(readFileSync(marker, "utf8").trim().split("\n"), ["source-only", "diff-bearing", "cross"]);
+    records = readFileSync(path.join(f.dir, "docs", "journal", "gemini_review_log.md"), "utf8").split(/^## Gemini frozen gate attempt — /m).slice(1); assert.equal(records.length, 6); const hold = records.at(-1); assert.match(hold, /Status: `ATTRIBUTION_HOLD`[\s\S]*Record-Kind: `SLICE_SET`[\s\S]*Release-Gate: `NO`[\s\S]*Aggregate-Result-SHA256[\s\S]*Unresolved-Attribution-Attempts/); assert.doesNotMatch(hold, /Gate-Verdict|Release-Gate: `YES`|PASS_VERDICT|NO_GO|FAILED_TRANSPORT/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); rmSync(support, { recursive: true, force: true }); }
 });
 test("public selftest and installed runner remain deterministic and network-free", () => {

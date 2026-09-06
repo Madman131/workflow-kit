@@ -24,5 +24,8 @@ mitigation/public claim. Unchanged inherited limits are `PREEXISTING/NONBLOCKING
 fragment with no exact transition evidence cannot establish attribution by itself; a later diff or
 final slice still may. Candidate exposure, worsening, reliance, or a false claim remains blocking
 regardless of the underlying limitation's age. This is deterministic: after exact scope and receipt
-verification, a source-only `NO-GO` becomes `FAILED_CANDIDATE_RESPONSE` before a durable verdict;
-full and diff-bearing packets retain ordinary valid-NO-GO handling.
+verification, a source-only provider `NO-GO` becomes a durable `UNRESOLVED_ATTRIBUTION` non-release
+slice receipt and collection continues. A later full or diff-bearing `NO-GO` remains terminal. If
+only GO replies remain, `ATTRIBUTION_HOLD` denies release instead of publishing aggregate GO. PM must
+adjudicate the exact finding with collected source and transition evidence; any action follows the
+current parent-linked successor procedure, never an automatic runner discharge.

@@ -315,8 +315,7 @@ export function verifyResponse(body, e) {
   if (scopes.length !== 1 || scopes[0] !== e.scope) die("response inspected scope does not exactly bind this frozen unit", 3);
   if (proofs.length !== 1 || proofs[0] !== e.markers.join(" | ")) die("response did not prove ordered ingestion through the EOF receipt", 3);
   if (reply.trimEnd().split(/\r?\n/).at(-1) !== e.done) die("response completion token is missing, misplaced, or not final", 3);
-  if (verdicts[0] === "NO-GO" && e.exactPerFileDiffTransitionEvidence === false) die("candidate response NO-GO lacks exact per_file_diff transition evidence", 3);
-  return { reply, verdict: verdicts[0], replySha: sha(reply), completionSha: sha(e.done) };
+  return { reply, verdict: verdicts[0], replySha: sha(reply), completionSha: sha(e.done), unresolvedAttribution: verdicts[0] === "NO-GO" && e.exactPerFileDiffTransitionEvidence === false };
 }
 function rawFragment(o, item, byte_start, byte_end) {
   const bytes = item.bytes.subarray(byte_start, byte_end);
@@ -426,11 +425,12 @@ function writeGeneratedPlan(repo, o, generated) {
 function clean(value) { return String(value ?? "").replace(/[\r\n`]/g, " "); }
 function recordBody(record) {
   const fields = [["Status", record.status], ["Record-Kind", record.kind], ["Release-Gate", record.release], ["Transport", record.transport], ["Transport-Identity", record.transportIdentity], ["Model", record.model], ["Attempt-ID", record.attemptId], ["Rig-ID", record.rigId], ["Rig-Key", record.rigKey], ["Failure-Class", record.failureClass || "(none)"], ["Base", record.base], ["Candidate", record.candidate], ["Tree", record.tree], ["Plan-ID", record.planId || "(none)"], ["Slice", record.slice], ["Material-SHA256", record.materialId || "(aggregate)"], ["Envelope-SHA256", record.envelopeSha], ["Envelope-Bytes", record.bytes], ["Ordered-Contributors", (record.contributors || []).join(",") || "(none)"]];
-  if (record.verdict) {
-    fields.push(["Gate-Verdict", record.verdict], ["Inspected-Scope", record.scope]);
-    if (typeof record.reply === "string") fields.push(["Reply-SHA256", record.replySha], ["Completion-Token-SHA256", record.completionSha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
-    else fields.push(["Aggregate-Result-SHA256", record.resultSha], ["Aggregate-Result", "assembled verified slice results; no model reply"]);
-  }
+  if (record.verdict) fields.push(["Gate-Verdict", record.verdict]);
+  if (record.providerVerdict) fields.push(["Provider-Verdict", record.providerVerdict]);
+  if (record.scope && (record.verdict || record.providerVerdict)) fields.push(["Inspected-Scope", record.scope]);
+  if (typeof record.reply === "string") fields.push(["Reply-SHA256", record.replySha], ["Completion-Token-SHA256", record.completionSha], ["Reply-UTF8-Base64", Buffer.from(record.reply, "utf8").toString("base64")]);
+  else if (record.resultSha) fields.push(["Aggregate-Result-SHA256", record.resultSha], ["Aggregate-Result", record.aggregateResult || "assembled verified slice results; no model reply"]);
+  if (record.unresolvedAttempts?.length) fields.push(["Unresolved-Attribution-Attempts", record.unresolvedAttempts.join(",")]);
   if (record.detail) fields.push(["Diagnostic", record.detail]);
   return `\n## Gemini frozen gate attempt — ${clean(record.status)} — ${new Date().toISOString()}\n\n${fields.map(([key, value]) => `- ${key}: \`${clean(value)}\``).join("\n")}\n`;
 }
@@ -623,12 +623,17 @@ export async function run(argv = process.argv.slice(2)) {
   if (o.dryRun) { process.stdout.write(JSON.stringify({ frozen: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan?.planId || null, envelopes: identities }, null, 2) + "\n"); return; }
   preflightJournal(repo); const lock = sharedLock(repo, o);
   try {
-    const transport = resolveTransport(o), key = rigKey(o, transport), contributors = [], results = []; let allGo = true;
+    const transport = resolveTransport(o), key = rigKey(o, transport), contributors = [], results = [], unresolvedAttribution = []; let allGo = true;
     for (const item of prepared) {
       if (cachedFailure(repo, key)) die(`cached transport rig failure for --rig-id ${o.rigId}; change the nonsecret rig declaration after a real recovery`, 3);
       const attemptId = random("PIL-FROZEN-ATTEMPT");
       try {
         endpoint(repo, o); const result = await call(o, transport, item); endpoint(repo, o);
+        if (result.unresolvedAttribution) {
+          const observation = { attempt_id: attemptId, slice: item.name, provider_verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) };
+          append(repo, { status: "UNRESOLVED_ATTRIBUTION", kind: "SLICE_RESULT", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, providerVerdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
+          contributors.push(attemptId); results.push({ status: "UNRESOLVED_ATTRIBUTION", ...observation }); unresolvedAttribution.push(observation); process.stdout.write(`${result.reply}\n`); continue;
+        }
         append(repo, { status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
         contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); allGo &&= result.verdict === "GO"; process.stdout.write(`${result.reply}\n`);
         // A valid NO-GO is delivered review evidence, not a transport failure. Stop at the
@@ -638,10 +643,16 @@ export async function run(argv = process.argv.slice(2)) {
     }
     if (plan) {
       endpoint(repo, o);
-      const aggregateMaterialId = sha(JSON.stringify({ plan_id: plan.planId, envelopes: prepared.map(item => ({ slice: item.name, material_sha256: item.materialId, request_sha256: item.envelopeSha })), contributors: results }));
-      const scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: aggregateMaterialId, contributors: results });
-      const verdict = allGo ? "GO" : "NO-GO", resultSha = sha(JSON.stringify({ verdict, scope }));
-      append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict, scope, resultSha });
+      const aggregateMaterialId = sha(JSON.stringify({ plan_id: plan.planId, envelopes: prepared.map(item => ({ slice: item.name, material_sha256: item.materialId, request_sha256: item.envelopeSha })), contributors: results, unresolved_attribution: unresolvedAttribution }));
+      const scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: aggregateMaterialId, contributors: results, unresolved_attribution: unresolvedAttribution });
+      if (unresolvedAttribution.length) {
+        const resultSha = sha(JSON.stringify({ status: "ATTRIBUTION_HOLD", scope }));
+        append(repo, { status: "ATTRIBUTION_HOLD", kind: "SLICE_SET", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, resultSha, aggregateResult: "assembled verified slice results; unresolved source-only attribution requires PM adjudication", unresolvedAttempts: unresolvedAttribution.map(item => item.attempt_id) });
+        process.exitCode = 3;
+      } else {
+        const verdict = allGo ? "GO" : "NO-GO", resultSha = sha(JSON.stringify({ verdict, scope }));
+        append(repo, { status: allGo ? "PASS_VERDICT" : "NO_GO", kind: "SLICE_SET", release: allGo ? "YES" : "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId: aggregateMaterialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict, scope, resultSha });
+      }
     }
     if (!allGo) process.exitCode = 3;
   } finally { fs.rmSync(lock, { recursive: true, force: true }); }

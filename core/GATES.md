@@ -771,9 +771,14 @@ upon by the candidate, or a false candidate mitigation/public claim. An unchange
 is `PREEXISTING/NONBLOCKING`, not a NO-GO by itself; age never excuses harm the candidate exposes,
 worsens, relies upon, or falsely claims to fix. A source-only fragment without exact transition
 evidence may report the limitation but cannot establish that attribution alone; later diff or final
-slices can still block. This is enforced after exact scope and receipt verification: a source-only
-`NO-GO` is recorded as `FAILED_CANDIDATE_RESPONSE`, never durable `NO_GO`; full and diff-bearing
-packets retain ordinary valid-NO-GO handling.
+slices can still block. After exact scope and receipt verification, a source-only provider `NO-GO`
+is a durable `UNRESOLVED_ATTRIBUTION` non-release slice receipt carrying its exact reply and provider
+verdict; it fsyncs and collection continues. A full or diff-bearing valid `NO-GO` remains durable
+`NO_GO` and stops immediately. If the remaining slices are GO, the runner emits one
+`ATTRIBUTION_HOLD` aggregate with `Release-Gate: NO`, ordered contributors, and unresolved attempt
+references; it never emits aggregate GO. PM adjudicates the exact finding against the collected
+source and transition evidence, then follows the current parent-linked successor procedure; the
+runner never discharges the observation automatically.
 
 For a local mechanical DRAFT, use the native runner (no credential lookup, provider call, journal
 append, or approval action):
@@ -836,7 +841,7 @@ parts may carry an opaque `thoughtSignature`, but no other non-text part field i
 
 - `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. The frozen subscription or API path returns `0` only for a verified `GO`; Git discovery failure is never “no changes.”
 - `2`: bad arguments or invalid environment value.
-- `3`: a frozen subscription/API `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
+- `3`: a frozen subscription/API `NO-GO` is delivered evidence but non-release, and deliberately shares this code with a non-verdict failure. The durable record distinguishes them: `Status: NO_GO` plus `Gate-Verdict: NO-GO` is delivered evidence; `UNRESOLVED_ATTRIBUTION` is a provider observation and `ATTRIBUTION_HOLD` is its non-release aggregate, while `FAILED_TRANSPORT` or `FAILED_CANDIDATE_RESPONSE` is not a verdict. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
 - `130` / `143`: the frozen subscription runner's handled `INT` / `TERM` exits after owned-group
