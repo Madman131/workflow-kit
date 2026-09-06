@@ -68,7 +68,7 @@ into a private worktree.
    gating, into separately-gated COMMITS by default and separate CHIPS only by a named exception**
    (§ 0.2) · a control needing a JUDGMENT is a declaration or a sensor, never a predicate · the
    target repo's mandated rungs enumerated BY CITATION · the packet dry-run and the neighbourhood
-   sweep. **Use T1: it is the honest tier for most instruction work.**
+   sweep. Define user-visible done and its proof. **Use T1: it is the honest tier for most instruction work.**
 1. **Startup gate** — the sole-writer check, the version confirmed against the repo's real head,
    the DECLARED tier verified against the artifact, scope acknowledged back.
 2. **Budget-free rungs first.** Every deterministic check runs and is fixed BEFORE any seat is
@@ -78,20 +78,20 @@ into a private worktree.
    receipt proves a reply COMPLETED, not that it judged** — demand a verdict and its inspected scope.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
-5. **One frontier firing per changeset**; default consumer is the orchestrator's remediation-delta
-   fold-check (`/frontier-review`). Precommit one panel, collect it, then PM-disposition it once.
-   R1/R2 permit one bounded batch each — a root kind may be declared EARLY on same-class or
-   repair-generated recurrence; R3 accepted harm requires root replacement,
-   simplification, or split plus root exit and one batch 3; R4 is the final GO/STOP bookend and
-   has no dispatch. Non-blocking adjacents route as follow-ups inside the disposition. No R5,
-   cycle, reset, or process-audit continuation. An Owner child links to a terminal parent (tier ≥ parent's) without
-   resetting it. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): **both lenses on every
-   scope/disposition/root call; on disagreement zoomed-out CONTROLS; KISS; carve-outs screen
-   first, then RULE #1** (`core/FOUNDATIONS.md` § Principles; cite document+section). Round events:
+5. **One discretionary frontier firing per changeset**; default consumer is the orchestrator's
+   remediation-delta fold-check (`/frontier-review`). Required planning/process consults are
+   controller checkpoints outside it, never review loops. Precommit, collect, disposition one panel.
+   Verdicts are evidence, never repair authority: require concrete supported-use harm; route green
+   non-blockers to parent-linked successors. R1 permits one bounded batch unless the mechanism
+   repeated; harm-bearing R2 and repeated R1 require one root kind plus a root exit with closure
+   proof. R3 tests that consolidated correction. Dispatch into R4 requires a fresh frontier process
+   review: finish once, successor after terminal close, or Owner decision with no dispatch. Every
+   fourth gate repeats it without granting a round. R4 is the
+   final GO/STOP bookend; no R5. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
+   lenses; zoom-out controls disagreement; KISS; carve-outs before RULE #1. Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
    (`confirm-repair-brief.mjs --confirm`); worker `--verify` first. The write guard
-   rechecks session, candidate, bytes, paths. Status sends carry no repair authority; shell
-   writes escape this guard.
+   rechecks session, candidate, bytes and paths.
 6. **PR, then independent diligence.** The orchestrator re-runs the evidence on the final head, not
    the summary.
 7. **GO ask → merge → verify on merged main BY EXECUTION** → **fast-forward the primary clone ONLY

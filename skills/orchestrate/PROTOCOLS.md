@@ -29,15 +29,16 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Vary the installed LAYOUT too.** A sensor was inert in every adopted repo — it resolved a sibling
   path existing only in the source tree. Four rounds missed it: every observer stood in the one tree
   where the bug is invisible.
-- **R1/R2 each permit one bounded batch; R3 permits only one root-replacement/simplification/split
-  batch; R4 is the final GO/STOP bookend — no R5.** New material after GO or STOP is NEW SCOPE
-  owing its own review: an explicit Owner parent-linked child changeset — never a round of the
-  closed ladder, never silence, and never a reset of the terminal parent.
-- **When ONE class survives repeated rounds, diagnose PLUMBING or CONCEPT before re-fixing.** If the
-  recurrence is bespoke logic sitting beside the real grammar, relocating it INTO that one shared
-  grammar may resolve the duplicate-logic objection — then RE-EVALUATE the original objection, since
-  the shared grammar can carry the same defect; if the concept is wrong, no relocation saves it.
-  Two NO-GO rounds on one class is the trigger to ask, and the adjudication is the orchestrator's.
+- **R1 permits one bounded batch unless the mechanism repeated; harm-bearing R2 and repeated R1
+  require one shared-cause root kind and closure proof.** R3 tests that consolidated correction.
+  Before R4 dispatch, a fresh frontier process review bound to the latest frozen panel
+  rules: finish once, successor after terminal close, or Owner decision with no dispatch. Gate count
+  continues through children; each fourth gate repeats the review but grants no extra round. R4 is
+  the final bookend; no R5.
+- **When ONE mechanism repeats, diagnose PLUMBING or CONCEPT before re-fixing.** Bespoke logic beside
+  the real grammar may belong in that grammar; then re-test the original trigger because relocation
+  does not cure a wrong concept. Once acceptance proof is green, desirable extensions become
+  parent-linked successors, not blockers.
 
 ## Seats and runners
 - **Pass the model and effort EXPLICITLY; never inherit a runner's default.** A gate runner shipped a

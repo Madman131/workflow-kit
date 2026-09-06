@@ -1,4 +1,30 @@
-# workflow-kit — v2.28.0
+# workflow-kit — v2.29.0
+
+## What's new in v2.29.0 — gate repair stays finite across successors
+
+The aggregate-v2 controller now detects repeated mechanisms before another branch repair. New
+events carry a lineage-sticky policy version; harm-bearing Round 2 and a repeated mechanism in
+Round 1 require a root kind and closure evidence. Dispatch into Round 4 requires a fresh frontier
+process review tied to the latest panel and frozen candidate. Its ruling either permits the one
+bounded finish, records successor work after terminal close, or leaves the choice with the Owner
+without dispatch authority. Gate ordinals accumulate through descendants, so each fourth gate
+requires another fresh review without creating Round 5 or reopening a terminal parent. Stored
+standard and pre-policy aggregate history still replay under their original contract.
+
+The portable method now starts from user-visible done and its proof, screens findings for concrete
+supported-use harm, moves green non-blockers to parent-linked successors, and treats design,
+implementation, deployment, activation and live proof as separate gates whose own material input
+must change before rerun.
+
+**Upgrade: `init --force` is required for existing adopters.** This release changes installed `[P]`
+controller, guard, recorder, core-doctrine and orchestrate-skill files; a plain rerun keeps stale
+copies and reports the incomplete generation. `--force` is GLOBAL across the installed `[P]` class,
+backs up differing files as `.bak`, and rewrites `kit.config.json` from the flags supplied on that
+run, so repeat every local configuration flag and diff the backups. Re-grant Codex hook trust after
+the hook bytes change. The repository's `skills/orchestrate/` package is authoritative. After freeze,
+run `scripts/sync-user-orchestrate-skill.mjs --install` for `~/.agents/skills/orchestrate`
+and again with `--target ~/.claude/skills/orchestrate` for the Claude user copy. Provider names
+belong in adopter bindings, while the portable source names capability roles.
 
 ## What's new in v2.28.0 — what adopting v2.26.0 into a real repo found
 

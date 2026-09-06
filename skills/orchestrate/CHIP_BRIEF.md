@@ -23,14 +23,14 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    scope as the worker understood it. **An unacknowledged brief is unconfirmed, not undelivered** —
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
    delivery failure that did not happen.
-4. **Scope** — what ships and what does NOT. Name artifacts.
+4. **Scope** — what ships, user-visible done, its proof, and what does NOT. Name artifacts.
 5. **Process** — ordered rungs and pre-decided skips. Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
-   event IDs, next round, and the root-exit ID for any root-kind dispatch. Stored standard programs are
+   event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
+   frontier process-review ID. Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
-   standard round. Post-write, the orchestrator confirms bytes (`confirm-repair-brief
-   --confirm`), sending only the receipt/path. The worker puts `session_id` in `--verify`; the write guard binds
-   each authorized path.
+   standard round. The orchestrator confirms bytes (`confirm-repair-brief --confirm`), sending only
+   the receipt/path. The worker puts `session_id` in `--verify`; the guard binds each authorized path.
 6. **Standing rules** — binding every chip: surgical staging, the identity ritual,
    generalization rules (no Owner name, no model names, no absolute paths), read-only sources.
 7. **Consult protocol** — route questions to the orchestrator with stage, question, options with

@@ -106,7 +106,7 @@ test("GATES routes Gemini to DESIGNS and states the coverage REDUCTION instead o
 
 test("the one-frontier-firing cap names its default consumer, its carve-outs, and its own weak point", () => {
   const g = read("core/GATES.md");
-  assert.match(g, /THE FRONTIER TIER IS CAPPED AT ONE FIRING PER CHANGESET/);
+  assert.match(g, /THE FRONTIER TIER IS CAPPED AT ONE DISCRETIONARY FIRING PER CHANGESET/);
   // "Changeset" must be pinned to the TASK, or re-freezing after a fix mints a fresh allowance.
   assert.match(g, /the task, not the file version/);
   assert.match(g, /Default consumer: the fold-check on a remediation delta/);
@@ -119,12 +119,13 @@ test("the one-frontier-firing cap names its default consumer, its carve-outs, an
   assert.match(g, /A cap with no recorded count is not a control/);
 });
 
-test("same-class recurrence enters root cause and does not mint a frontier firing", () => {
+test("same-class recurrence enters root cause; material R2 process consults stay bounded", () => {
   const g = read("core/GATES.md");
   const f = read("skills/frontier-review/SKILL.md");
   assert.match(g, /Same-class recurrence or a repair-introduced harm enters `core\/WORKFLOW\.md`'s root-cause queue/);
-  assert.match(g, /does \*\*not\*\* mint a frontier firing or fresh authority/);
-  assert.match(g, /A frontier consult still consumes the cap below unless the Owner explicitly invokes it/);
+  assert.match(g, /does \*\*not by itself\*\* mint a frontier firing or fresh authority/);
+  assert.match(g, /controller requires a focused frontier process consult/);
+  assert.match(g, /checkpoint outside the discretionary cap below and grants no repair authority/);
   assert.doesNotMatch(g, /same-class-recurrence firing per changeset/);
   assert.match(f, /Same-class recurrence enters the root-cause queue; it never mints a firing/);
   assert.doesNotMatch(f, /same-class-recurrence escalation/);
@@ -321,8 +322,8 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   // strict as-shipped trigger-fires test: GO iff zero survive, STOP iff any survive. A firing trigger
   // SURVIVES and is never routed to GO (no harm-axis re-litigation of an exhibited blocker — that
   // would be a forbidden audit window); a STOP carries a per-defect narrow-continuation-or-abandon rec.
-  assert.match(w, /the bookend re-screens EVERY accepted blocker against the candidate \*as-shipped\*/);
-  assert.match(w, /GO only if ZERO survive/);
+  assert.match(w, /Once before closing, it re-screens every accepted blocker against the candidate \*as-shipped\*/);
+  assert.match(w, /Zero survivors closes `GO`/);
   assert.match(f, /At the terminal bookend the same screen is the bookend's SINGLE final disposition/);
   assert.match(f, /a blocker whose trigger FIRES SURVIVES and closes STOP — it is never routed to GO/);
   assert.match(f, /GO iff zero survive, STOP iff any survive/);
@@ -342,11 +343,12 @@ test("the retired chase machinery is gone and the finite aggregate controller re
     "the open-referent WORTH IT? is retired: it let the process answer about itself");
   // …and the replacement is present, or the assertions above pass on a gutted file.
   assert.match(w, /Rounds continue only while each new one is warranted by NEW HARM-passing findings/);
-  assert.match(w, /`panel_open` binds the clean frozen commit\/tree/);
-  assert.match(w, /Accepted harm in R1 or R2 permits one bounded batch/);
-  assert.match(w, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
-  assert.match(w, /R4, the final bookend/);
-  assert.match(w, /no R5, cycle, scope reset, or audit window; root batches exist only where root-kind dispositions do/);
+  assert.match(w, /`panel_open` binds the frozen commit\/tree/);
+  assert.match(w, /R1 permits one bounded batch unless repeated/);
+  assert.match(w, /Harm-bearing R2 and repeated R1 require one shared-cause/);
+  assert.match(w, /R3 tests the consolidated correction/);
+  assert.match(w, /R4 is the final bookend and has no outgoing dispatch/);
+  assert.match(w, /No R5, cycle, reset, or audit window/);
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
@@ -707,17 +709,18 @@ test("the finite aggregate cadence agrees between every live surface", () => {
   // Derive the controller ¶ from the doc rather than re-listing it here — a hand-listed copy would
   // be the third mirror this file exists to delete. `[\s\S]*?` stops at the first sentence end so
   // the capture is the cadence body, not the zoom-out/KISS tail that follows it.
-  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?dominant defect source\*\*\)\./.exec(w)?.[0] ?? "";
+  const ctrl = /\*\*Round\/root-cause controller[\s\S]*?dominant defect source\.\*\*/.exec(w)?.[0] ?? "";
   assert.ok(ctrl, "the controller ¶ must be findable in core/WORKFLOW.md — re-point this test");
   // The circular cadence as CONCEPTS, hand-maintained for the SAME reason the sibling one-shape
   // lists are (a tree-derived list goes vacuous the moment a surface drops the rule). Each must
   // appear in the doc AND in what the hook prints, or the two hand the agent divergent cadences.
   const FINITE_CADENCE = [
-    /R1(?: or |\/| and )R2 (?:each )?(?:permits?|may dispatch) one bounded batch(?: each)?/i,
-    /R3 (?:accepted harm )?(?:requires|permits only) (?:one )?root[- ]replacement[,\/](?: simplification,)? ?(?:simplification\/)?(?:or )?(?:genuine )?split/i,
+    /R1 (?:permits|may dispatch) one bounded batch unless (?:(?:it|its mechanism|the mechanism) )?repeated/i,
+    /harm-bearing R2 and repeated R1 require/i,
+    /R3 tests (?:that|the) consolidated correction/i,
     /R4(?:,| is| closes)? the final (?:aggregate )?(?:GO\/STOP )?bookend/i,
     /no R5/i,
-    /refr(?:ee|o)ze[^.]{0,80}(?:grants nothing|never grants a batch)/i,
+    /refr(?:ee|o)ze[^.]{0,80}(?:grants nothing|grants no batch|never grants a batch)/i,
   ];
   // PROTOCOLS.md restates the cadence in the reference layer, so it is a STATING surface and is
   // pinned with the rest — a co-edit of one surface and its own literal pin must not pass while
@@ -731,7 +734,7 @@ test("the finite aggregate cadence agrees between every live surface", () => {
     assert.match(ctrl, tok, `core/WORKFLOW.md § Gate must state the finite cadence token ${tok}`);
     assert.match(hook, tok, `the hook must PRINT the same finite cadence token ${tok}`);
   }
-  for (const tok of FINITE_CADENCE.slice(0, 4)) {
+  for (const tok of FINITE_CADENCE.slice(0, 5)) {
     assert.match(protocols, tok, `PROTOCOLS.md restates the cadence, so it must carry the token ${tok}`);
     assert.match(skill, tok, `SKILL.md restates the cadence, so it must carry the token ${tok}`);
   }
@@ -750,14 +753,14 @@ test("the finite aggregate cadence agrees between every live surface", () => {
   // R1 panel read "R4 always runs" with no license to close GO, chasing redundant panels or
   // wedging the ladder. WORKFLOW and the decision-time hook state both; the early-root trigger
   // set carries BOTH its triggers on every surface that names it.
-  assert.match(ctrl, /at ANY round Critical\/fail-open STOPS and zero accepted closes/,
-    "WORKFLOW states both any-round terminal rules in the accepted-definition parenthetical");
+  assert.match(ctrl, /Critical\/fail-open harm may STOP at any round; zero accepted harm may GO/,
+    "WORKFLOW states both any-round terminal rules");
   assert.match(hook, /closes GO at ANY round/, "the hook prints GO-at-any-round");
   assert.match(hook, /Critical\/fail-open harm STOPS at any round/i, "the hook prints the STOP carve-out");
   for (const [rel, t] of [["core/WORKFLOW.md", ctrl], ["hooks/guard-gate-ladder.mjs", hook],
     ["skills/orchestrate/SKILL.md", skill]]) {
-    assert.match(t, /same-class or\s+repair-generated recurrence/,
-      `${rel} names BOTH early-root triggers — dropping repair-generated forfeits the early root on the commonest recurrence`);
+    assert.match(t, /(?:mechanism repeated|repeated mechanism)/,
+      `${rel} keeps the declared repeated-mechanism trigger for an early root`);
   }
   // The <n> definition survived only on the hook after WORKFLOW's parenthetical retired; it now
   // defines the aggregate ROUND, and the retired verdict-count meaning must be GONE — a PM

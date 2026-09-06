@@ -270,11 +270,10 @@ more of the leaned-on family than it did; the verdict records the active binding
 
 - **`max` and `ultra` are NOT standing defaults for any dev gate.** They are **Owner-invoked only**.
   Same-class recurrence or a repair-introduced harm enters `core/WORKFLOW.md`'s root-cause queue; it
-  does **not** mint a frontier firing or fresh authority. The typed round ledger makes the declared
-  trigger and count spot-checkable while leaving semantic sameness to the PM. Never silently grind at
-  the floor: exit the queue only through its structured mechanism packet, then use the standing gate
-  seats for the authorized rounds. A frontier consult still consumes the cap below unless the Owner
-  explicitly invokes it.
+  does **not by itself** mint a frontier firing or fresh authority. The PM declares semantic sameness
+  and diagnoses the shared cause. When the R2 correction needs a design/product tradeoff or more than
+  one additional repair round, the controller requires a focused frontier process consult; it is a
+  checkpoint outside the discretionary cap below and grants no repair authority by itself.
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
   costs less.)*
@@ -285,7 +284,7 @@ more of the leaned-on family than it did; the verdict records the active binding
 - **This policy sets the CROSS-FAMILY GATE seat's model·effort, not the same-family cold panel.** The
   blind cold panel (`core/BINDINGS.md` § Roles) is the same-family spine, a distinct seat; whether *it*
   also drops to the workhorse to conserve budget is a separate Owner call, not folded in here.
-- **THE FRONTIER TIER IS CAPPED AT ONE FIRING PER CHANGESET.** The frontier seat is reserved on
+- **THE FRONTIER TIER IS CAPPED AT ONE DISCRETIONARY FIRING PER CHANGESET.** The frontier seat is reserved on
   **cost**, and a cap is what makes the reservation operational rather than aspirational: one firing
   per changeset is not "regularly". **"Changeset" is as `core/WORKFLOW.md` § Gate defines it — the
   task, not the file version**, so re-freezing after a fix, splitting findings, or swapping reviewers
@@ -294,7 +293,9 @@ more of the leaned-on family than it did; the verdict records the active binding
   one with a reason — requesting is not authorizing.** Discretionary consumers **compete for that one
   budget and are never additive**: a design gate spends the allowance *instead of* the fold-check; on an
   irreversible/money/auth change the rare-cell gate seat **is** the firing. **Outside the cap:** the
-  an Owner-initiated frontier review (`/frontier-review`), and **the pinned DECIDER seat — the cap
+  controller-required focused planning/process consult after the R2 design/tradeoff trigger and
+  before cumulative gates 4, 8, 12…; these checkpoints record one ruling and grant no review loop.
+  Also outside are an Owner-initiated frontier review (`/frontier-review`) and **the pinned DECIDER seat — the cap
   governs REVIEW and CONSULT firings, and a decider is neither**
   (`core/FOUNDATIONS.md` § Principles P3 pins the decider). **The verdict record stamps each firing**,
   which is what makes the cap a spot-checkable number rather than a claim. ⚠ **A cap with no recorded

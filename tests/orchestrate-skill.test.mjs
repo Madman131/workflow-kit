@@ -142,13 +142,12 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
 
 test("the round controller pins the finite aggregate boundary", () => {
   const body = readFileSync(BODY, "utf8");
-  pin(body, "R1/R2 permit one bounded batch each", "two bounded repair rounds");
-  pin(body, "R3 accepted harm requires root replacement,", "terminal root batch");
-  pin(body, "simplification, or split plus root exit", "terminal root batch kinds");
-  pin(body, "R4 is the final GO/STOP bookend and has no dispatch", "terminal bookend");
-  pin(body, "No R5, cycle, reset, or process-audit continuation", "no controller escape");
-  pin(body, "a root kind may be declared EARLY on same-class or", "the early-root declaration");
-  pin(body, "terminal parent (tier ≥ parent's)", "Owner-continuation tier floor");
+  pin(body, "R1 permits one bounded batch unless the mechanism", "first bounded repair");
+  pin(body, "harm-bearing R2 and repeated R1 require one root kind", "early shared-cause checkpoint");
+  pin(body, "R3 tests that consolidated correction", "consolidated root batch");
+  pin(body, "finish once, successor after terminal close, or Owner decision with no dispatch", "process rulings");
+  pin(body, "R4 is the final GO/STOP bookend; no R5", "terminal bookend");
+  pin(body, "fourth gate repeats it without granting a round", "cumulative process review");
 
   // GRADUATE FM-2026-08-27-16: the pre-terminal CIRCULAR-cadence vocabulary must never creep back
   // into the skill. An LPB port found the installed orchestrate skill still circular because nothing
@@ -168,17 +167,18 @@ test("the round controller pins the finite aggregate boundary", () => {
     "repair dispatch declaration fields");
   pin(brief, "the exact PM disposition and panel-close",
     "typed evidence is procedure-recorded and candidate-bound");
-  pin(brief, "The worker puts `session_id` in `--verify`; the write guard binds",
+  pin(brief, "The worker puts `session_id` in `--verify`; the guard binds",
     "worker verifies the persisted brief receipt");
   pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
 
   const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");
-  assert.match(workflow, /Accepted harm in R1 or R2 permits one bounded batch/);
-  assert.match(workflow, /Accepted harm in R3 requires one root replacement, simplification, or split, a root-exit record/);
-  assert.match(workflow, /R4, the final bookend/);
-  assert.match(workflow, /no R5, cycle, scope reset, or audit window/);
-  assert.match(workflow, /automation checks shape and surfaces candidates, never semantic sameness/,
-    "semantic finding classes remain declarations; automation is only a shape check and sensor");
+  assert.match(workflow, /R1 permits one bounded batch unless repeated/);
+  assert.match(workflow, /Harm-bearing R2 and repeated R1 require one shared-cause/);
+  assert.match(workflow, /R3 tests the consolidated correction/);
+  assert.match(workflow, /R4 is the final bookend and has no outgoing dispatch/);
+  assert.match(workflow, /No R5, cycle, reset, or audit window/);
+  assert.match(workflow, /declares repeated mechanism/,
+    "semantic mechanism recurrence remains a PM declaration");
 });
 
 test("a receipt is not a verdict — the rule lives in the body, not only in the bank", () => {

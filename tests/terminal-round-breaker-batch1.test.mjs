@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import {
   activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, gitSubjectPresent,
   loadRepairEventsForProject, recordAggregateChildContinuation as _rawChildContinuation, recordAggregateClose,
-  recordAggregateDisposition, recordAggregatePanelClose, recordAggregatePanelOpen,
+  recordAggregateDisposition, recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateProcessReview,
   recordAggregateRootExit, recordWorkerVerification,
 } from "../hooks/repair-dispatch-state.mjs";
 
@@ -104,20 +104,30 @@ function decide(ctx, closed, over = {}) {
     terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"], ...over,
   }, options(ctx.dir));
 }
-function dispatchBatch(ctx, dispositionId, closeId, nextRound, rootExitId = null) {
+function dispatchBatch(ctx, dispositionId, closeId, nextRound, rootExitId = null, processReviewId = null) {
   mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
   const brief = `briefs/round-${nextRound}.md`;
   writeFileSync(path.join(ctx.dir, brief), `repair ${nextRound}\n`);
   const receipt = confirmRepairBrief({ declaration: {
     aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "cs-1",
     disposition_event_id: dispositionId, panel_close_event_id: closeId,
-    next_round: nextRound, root_exit_event_id: rootExitId,
+    next_round: nextRound, root_exit_event_id: rootExitId, process_review_event_id: processReviewId,
   }, brief_path: brief }, options(ctx.dir));
   assert.equal(receipt.ok, true, receipt.state);
   const worker = recordWorkerVerification({ task_id: "task-1", repair_dispatch_event_id: receipt.event_id },
     options(ctx.dir, `worker-${nextRound}`));
   assert.equal(worker.ok, true, worker.state);
   return { dispatch: receipt.event_id, worker: worker.event_id };
+}
+function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") {
+  return recordAggregateProcessReview({
+    type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
+    reviewer_role: "frontier", panel_close_event_id: closeId,
+    frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+    review_evidence: "frontier review of the completed panel", zoom_out: "the repair remains finite",
+    ruling, bounded_scope: "one consolidated root correction",
+    closure_evidence: "the accepted trigger closes on the replacement",
+  }, options(ctx.dir));
 }
 function derive(ctx, task = "task-1") {
   const loaded = loadRepairEventsForProject(ctx.dir);
@@ -171,17 +181,18 @@ test("refreeze bounds: one supersede per round, never at the bookend, roster and
           type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "cs-1",
           panel_close_event_id: closed.event_id, pm_findings: [],
           finding_dispositions: { accepted: [`F${round}`], declined: [], note: [], followup: [] },
-          terminal_state: "CONTINUE", remediation_kind: round === 3 ? "root_replacement" : "bounded",
+          terminal_state: "CONTINUE", remediation_kind: round === 1 ? "bounded" : "root_replacement",
           authorized_paths: ["src/x.mjs"],
         }, options(ctx3.dir));
         assert.equal(decided.ok, true, decided.state);
         let rootExit = null;
-        if (round === 3) {
+        if (round >= 2) {
           const exit = recordAggregateRootExit({
             type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "cs-1",
             disposition_event_id: decided.event_id, shared_mechanism: "root",
             symptom_explanation: "symptoms", owner_state_yield_seams: ["seam"],
             replacement: "replacement", removed_workarounds: ["loop"], trigger_matrix: ["bookend"],
+            closure_evidence: "the root replacement closes the accepted trigger",
           }, options(ctx3.dir));
           assert.equal(exit.ok, true, exit.state);
           rootExit = exit.event_id;
@@ -189,10 +200,17 @@ test("refreeze bounds: one supersede per round, never at the bookend, roster and
         mkdirSync(path.join(ctx3.dir, "briefs"), { recursive: true });
         const brief = `briefs/round-${round + 1}.md`;
         writeFileSync(path.join(ctx3.dir, brief), `repair ${round + 1}\n`);
+        let processReviewId = null;
+        if (round === 3) {
+          const review = processReview(ctx3, closed.event_id, candidate);
+          assert.equal(review.ok, true, review.state);
+          processReviewId = review.event_id;
+        }
         const receipt = confirmRepairBrief({ declaration: {
           aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "cs-1",
           disposition_event_id: decided.event_id, panel_close_event_id: closed.event_id,
           next_round: round + 1, root_exit_event_id: rootExit,
+          process_review_event_id: processReviewId,
         }, brief_path: brief }, options(ctx3.dir));
         assert.equal(receipt.ok, true, receipt.state);
         const worker = recordWorkerVerification({ task_id: "task-1", repair_dispatch_event_id: receipt.event_id },
@@ -233,6 +251,7 @@ test("abandon path: admitted-set eligibility, pre-disposition close, and the clo
     assert.equal(open2.ok, true, open2.state);
     const closed2 = close(ctx, open2, seats(cand2.paths), cand2, ["F2"]);
     const decided2 = decide(ctx, closed2, {
+      remediation_kind: "root_replacement",
       finding_dispositions: { accepted: ["F2"], declined: [], note: [], followup: [] } });
     assert.equal(decided2.ok, true, decided2.state);
     const selfClose = recordAggregateClose({
@@ -395,6 +414,7 @@ test("early root kinds: the PM may declare root_replacement at R1, and its dispa
       disposition_event_id: decided.event_id, shared_mechanism: "shared root",
       symptom_explanation: "the two prior fixes were symptoms", owner_state_yield_seams: ["seam"],
       replacement: "one replacement", removed_workarounds: ["workaround"], trigger_matrix: ["matrix"],
+      closure_evidence: "the root exit closes the accepted trigger",
     }, options(ctx.dir));
     assert.equal(exit.ok, true, exit.state);
     const receipt = confirmRepairBrief({ declaration: {

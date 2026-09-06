@@ -226,12 +226,13 @@ export const CONTRACT =
   `never on reviewer silence — an adversarial reviewer never runs out of findings, so "no findings\n` +
   `left" is not reachable. Rounds continue only while each new one is warranted by NEW harm-passing\n` +
   `findings — the R4 bookend excepted: it ALWAYS runs. One frozen candidate plus its precommitted\n` +
-  `complete panel is one round. R1 and R2 may\n` +
-  `dispatch one bounded batch each; a root kind is declarable EARLY on same-class or\n` +
-  `repair-generated recurrence. A clean panel — zero accepted blockers — closes GO at ANY round,\n` +
+  `complete panel is one round. R1 may dispatch one bounded batch unless its mechanism repeated.\n` +
+  `Harm-bearing R2 and repeated R1 require root replacement, simplification, or split plus a\n` +
+  `root-exit with closure evidence. Consult the frontier at R2 for design/product tradeoffs or more\n` +
+  `than one additional repair round; R3 tests the consolidated correction. A clean panel — zero accepted blockers — closes GO at ANY round,\n` +
   `and an accepted Critical/fail-open harm STOPS at any round: declared, never inferred.\n` +
-  `R3 accepted harm requires root replacement, simplification, or split, a root-exit\n` +
-  `record, and exactly one batch 3. R4 is the final aggregate bookend: zero accepted blockers is GO;\n` +
+  `Dispatch into R4 requires a fresh frontier process review bound to the latest frozen panel; only\n` +
+  `finish_bounded_root permits the bounded finish. R4 is the final aggregate bookend: zero accepted blockers is GO;\n` +
   `any accepted blocker is STOP. ⚠ A STOP — and an Owner close after a collected panel — RESERVES\n` +
   `every path the changeset reviewed, permanently and repo-wide, in the shared ledger: no unrelated\n` +
   `program may open those paths again. The ONLY way to rework a reserved surface is a typed Owner\n` +

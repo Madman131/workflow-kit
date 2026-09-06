@@ -16,11 +16,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState,
+  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState,
   derivePendingLineageBudgets, deriveRepairState, fingerprintCandidate,
   gitSubjectPresent, loadRepairEventsForProject, recordAggregateChildContinuation as _rawChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff,
-  recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateRootExit,
+  recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateProcessReview, recordAggregateRootExit,
   recordAggregateWorkerHandoff, recordOwnerExtension, recordRepairClose,
   recordWorkerVerification, repairLedgerPath, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
@@ -142,20 +142,30 @@ function decide(ctx, closed, { task = "task-1", changeset = "cs-1", accepted = [
 }
 
 function dispatchBatch(ctx, dispositionId, closeId, nextRound, rootExitId = null,
-  { task = "task-1", changeset = "cs-1" } = {}) {
+  { task = "task-1", changeset = "cs-1", processReviewId = null } = {}) {
   mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
   const brief = `briefs/round-${nextRound}.md`;
   writeFileSync(path.join(ctx.dir, brief), `repair ${nextRound}\n`);
   const receipt = confirmRepairBrief({ declaration: {
     aggregate_controller: "aggregate_v2", task_id: task, changeset_id: changeset,
     disposition_event_id: dispositionId, panel_close_event_id: closeId,
-    next_round: nextRound, root_exit_event_id: rootExitId,
+    next_round: nextRound, root_exit_event_id: rootExitId, process_review_event_id: processReviewId,
   }, brief_path: brief }, options(ctx.dir));
   assert.equal(receipt.ok, true, receipt.state);
   const worker = recordWorkerVerification({ task_id: task, repair_dispatch_event_id: receipt.event_id },
     options(ctx.dir, `worker-${nextRound}`));
   assert.equal(worker.ok, true, worker.state);
   return { dispatch: receipt.event_id, worker: worker.event_id };
+}
+function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") {
+  return recordAggregateProcessReview({
+    type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
+    reviewer_role: "frontier", panel_close_event_id: closeId,
+    frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+    review_evidence: "frontier review of the completed panel", zoom_out: "the repair remains finite",
+    ruling, bounded_scope: "one consolidated root correction",
+    closure_evidence: "the accepted trigger closes on the replacement",
+  }, options(ctx.dir));
 }
 
 function derive(ctx, task = "task-1") {
@@ -289,17 +299,18 @@ test("LE3 + M23: terminality dominates delayed events, and a refreeze supersedes
     const late = closePanel(ctx, p2, cand2, ["F2"]);
     assert.equal(late.ok, false, "a pre-terminal panel cannot close after the program ended");
     const lateClose = stamped({
-      type: "aggregate_v2", kind: "panel_close", task_id: "task-1", changeset_id: "cs-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "panel_close", task_id: "task-1", changeset_id: "cs-1",
       recorded_at: "2099-01-01T00:00:02.000Z", session_id: "late",
       panel_open_event_id: p2.opened.event_id,
       received_seats: receivedSeats(p2.expected, cand2, ["F2"]),
     });
     const lateDecide = stamped({
-      type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "cs-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "disposition", task_id: "task-1", changeset_id: "cs-1",
       recorded_at: "2099-01-01T00:00:03.000Z", session_id: "late",
       panel_close_event_id: lateClose.event_id, pm_findings: [],
       finding_dispositions: { accepted: ["F2"], declined: [], note: [], followup: [] },
-      terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"],
+      same_mechanism_repeated: false,
+      terminal_state: "CONTINUE", remediation_kind: "root_replacement", authorized_paths: ["src/x.mjs"],
     });
     const world = deriveAggregateRepairState(
       [...loaded.aggregate_events, lateClose, lateDecide], "task-1", { standardEvents: loaded.events });
@@ -569,21 +580,29 @@ for (const rounds of [12, 20]) {
         closed = closePanel(ctx, panel, candidate, [`F${round}`]);
         assert.equal(closed.ok, true, closed.state);
         decided = decide(ctx, closed, { accepted: [`F${round}`],
-          remediation_kind: round === 3 ? "root_replacement" : "bounded" });
+          remediation_kind: round === 1 ? "bounded" : "root_replacement" });
         assert.equal(decided.ok, true, decided.state);
         let rootExit = null;
-        if (round === 3) {
+        if (round >= 2) {
           const exit = recordAggregateRootExit({
             type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "cs-1",
             disposition_event_id: decided.event_id, shared_mechanism: "one shared root",
             symptom_explanation: "earlier fixes were symptoms", owner_state_yield_seams: ["state seam"],
             replacement: "one replacement", removed_workarounds: ["the cycle"],
             trigger_matrix: ["terminal bookend"],
+            closure_evidence: "the root replacement closes the accepted trigger",
           }, options(ctx.dir));
           assert.equal(exit.ok, true, exit.state);
           rootExit = exit.event_id;
         }
-        authority = dispatchBatch(ctx, decided.event_id, closed.event_id, round + 1, rootExit);
+        let processReviewId = null;
+        if (round === 3) {
+          const review = processReview(ctx, closed.event_id, candidate);
+          assert.equal(review.ok, true, review.state);
+          processReviewId = review.event_id;
+        }
+        authority = dispatchBatch(ctx, decided.event_id, closed.event_id, round + 1, rootExit,
+          { processReviewId });
         candidate = commit(ctx.dir, round + 1);
       }
       const bookend = openPanel(ctx, 4, candidate, { incoming: authority });
@@ -819,11 +838,13 @@ test("H2: close eligibility against the FULL admitted set — verification, hand
     const dispatchRow = loaded.aggregate_events.find((row) => row.event.kind === "dispatch").event;
     const sneakClose = stamped({
       type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:00:10.000Z", session_id: "sneak",
       disposition_event_id: decided.event_id, reason: "pre-mint escape", owner_evidence: "claimed",
     });
     const sneakAdmission = stamped({
       type: "aggregate_v2", kind: "worker", task_id: "task-1", changeset_id: "cs-1",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:00:11.000Z", session_id: "sneak",
       dispatch_event_id: authority.dispatch, worker_session_id: "sneak",
       authorized_paths: [...dispatchRow.authorized_paths], brief_path: dispatchRow.target,
@@ -1415,15 +1436,18 @@ test("M36: the CLOSED trigger floor — the accepted set must be CARRIED, and on
     const parentOpenRow = window.aggregate_events.find((row) => row.event.kind === "panel_open").event;
     const plantedShed = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:01:00.000Z", session_id: "planter",
       parent_disposition_event_id: decided.event_id,
       parent_frozen_commit: parentOpenRow.frozen_commit, parent_frozen_tree: parentOpenRow.frozen_tree,
       trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "shed the harms",
+      process_review_event_id: null,
       children: [{ task_id: "m36-shed", changeset_id: "m36-shed-cs", tier: "T2",
         budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
     });
     const plantedChildOpen = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "m36-shed", changeset_id: "m36-shed-cs",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:01:01.000Z", session_id: "planter", round: 1,
       phase: "repair_round", tier: "T2",
       frozen_commit: parentOpenRow.frozen_commit, frozen_tree: parentOpenRow.frozen_tree,
@@ -1957,10 +1981,12 @@ test("M44: pending-vs-active refuses AT DECLARATION — continuation and legacy 
     const p44Open = derive(ctx, "p44").panels_open.at(-1);
     const plantedWedge = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "p44", changeset_id: "cs-p44",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:06:00.000Z", session_id: "planter",
       parent_disposition_event_id: pGo.event_id,
       parent_frozen_commit: p44Open.frozen_commit, parent_frozen_tree: p44Open.frozen_tree,
       trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "wedge",
+      process_review_event_id: null,
       children: [{ task_id: "c44x", changeset_id: "c44x-cs", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/x.mjs"] }],
     });
@@ -2063,15 +2089,18 @@ test("M45: the CLOSED floor carries the UNDISPOSED GROUND — collected-but-unad
     const r2Open = derive(ctx).panels_open.at(-1);
     const plantedShed = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:07:00.000Z", session_id: "planter",
       parent_disposition_event_id: d1.event_id,
       parent_frozen_commit: r2Open.frozen_commit, parent_frozen_tree: r2Open.frozen_tree,
       trigger_ids: ["H1"], continuation_kind: "new_changeset", owner_evidence: "shed the ground",
+      process_review_event_id: null,
       children: [{ task_id: "c45-shed", changeset_id: "c45-shed-cs", tier: "T2",
         budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
     });
     const plantedChildOpen = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "c45-shed", changeset_id: "c45-shed-cs",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:07:01.000Z", session_id: "planter", round: 1,
       phase: "repair_round", tier: "T2",
       frozen_commit: r2Open.frozen_commit, frozen_tree: r2Open.frozen_tree,
@@ -2291,6 +2320,7 @@ test("M48: THE CROSS-ROUND BASE PIN — every later round re-derives from ROUND 
     const window = loadRepairEventsForProject(ctx.dir);
     const plantedDelta = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "task-1", changeset_id: "cs-1",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:07:00.000Z", session_id: "orchestrator", round: 2,
       phase: "repair_round", tier: "T2", frozen_commit: r2.commit, frozen_tree: r2.tree,
       base_ref: "origin/r1line", base_commit: r1.commit, changed_paths: ["src/y.mjs"],
@@ -2498,10 +2528,12 @@ test("M50: DECLARATION-TIME STOPPED REFUSAL — a GO ends its lineage's claim, s
     const bOpenRow = derive(ctx, "b50").panels_open.at(-1);
     const plantedHop = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "b50", changeset_id: "b50-cs",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:08:00.000Z", session_id: "planter",
       parent_disposition_event_id: world.bGo.event_id,
       parent_frozen_commit: bOpenRow.frozen_commit, parent_frozen_tree: bOpenRow.frozen_tree,
       trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "springboard",
+      process_review_event_id: null,
       children: [{ task_id: "d50", changeset_id: "d50-cs", tier: "T2", budget: "the y half",
         authorized_paths: ["src/y.mjs"] }],
     });
@@ -2774,10 +2806,12 @@ test("M54: THE REMAINDER-INTERSECT GATE — reopening on remainder must TARGET t
     const aOpen = derive(ctx, "a50").panels_open.at(-1);
     const plantedGrind = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
+      policy_version: 2,
       recorded_at: "2099-01-01T00:10:00.000Z", session_id: "planter",
       parent_disposition_event_id: world.aStop.event_id,
       parent_frozen_commit: aOpen.frozen_commit, parent_frozen_tree: aOpen.frozen_tree,
       trigger_ids: ["A1"], continuation_kind: "new_changeset", owner_evidence: "grind",
+      process_review_event_id: null,
       children: [{ task_id: "u54", changeset_id: "u54-cs", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/unrelated.mjs"] }],
     });

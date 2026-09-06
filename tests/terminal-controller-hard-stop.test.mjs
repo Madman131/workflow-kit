@@ -8,10 +8,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, fingerprintCandidate,
+  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, fingerprintCandidate,
   loadRepairEventsForProject, readRepairEvents, recordAggregateChildContinuation as _rawChildContinuation,
   recordAggregateClose, recordAggregateDisposition, recordAggregateLegacyHandoff, recordAggregatePanelClose,
-  recordAggregatePanelOpen, recordAggregateRootExit, recordAggregateWorkerHandoff,
+  recordAggregatePanelOpen, recordAggregateProcessReview, recordAggregateRootExit, recordAggregateWorkerHandoff,
   recordOwnerExtension, recordRepairClose, recordRoundDisposition, recordWorkerVerification,
   repairLedgerPath, verifyRepairWorkerWrite,
 } from "../hooks/repair-dispatch-state.mjs";
@@ -165,6 +165,19 @@ function dispatch(ctx, dispositionId, panelId, nextRound, rootExitId = null) {
   return { dispatch: receipt.event_id, worker: worker.event_id };
 }
 
+function processReview(ctx, panelCloseId, candidate, ruling = "finish_bounded_root",
+  task_id = "task-1", changeset_id = "changeset-1") {
+  return recordAggregateProcessReview({
+    type: "aggregate_v2", kind: "process_review", task_id, changeset_id,
+    reviewer_role: "frontier", panel_close_event_id: panelCloseId,
+    frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+    review_evidence: "frontier review of the completed aggregate panel",
+    zoom_out: "the correction stays tied to the requested outcome",
+    ruling, bounded_scope: "one consolidated correction",
+    closure_evidence: "the original accepted triggers no longer fire",
+  }, options(ctx.dir));
+}
+
 test("aggregate controller enforces PM authority, three batches, final STOP, handoff, and split lineage", () => {
   const ctx = repo();
   try {
@@ -238,21 +251,39 @@ test("aggregate controller enforces PM authority, three batches, final STOP, han
       panel = openPanel(ctx, round, candidate, authority);
       closed = closePanel(ctx, panel.opened, panel.expected, candidate, `F${round}`);
       decided = disposition(ctx, closed.closed, {
-        accepted: [`F${round}`], remediation_kind: round === 3 ? "root_replacement" : "bounded",
+        accepted: [`F${round}`], remediation_kind: "root_replacement",
       });
       assert.equal(decided.ok, true, decided.state);
       let root = null;
-      if (round === 3) {
+      if (round >= 2) {
         const exit = recordAggregateRootExit({
           type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
           disposition_event_id: decided.event_id, shared_mechanism: "one shared controller defect",
           symptom_explanation: "prior fixes patched symptoms", owner_state_yield_seams: ["owner/state seam"],
           replacement: "one finite state machine", removed_workarounds: ["circular cadence"],
           trigger_matrix: ["R4 has no outgoing dispatch"],
+          closure_evidence: "the original trigger matrix closes on the replacement candidate",
         }, options(ctx.dir));
         assert.equal(exit.ok, true, exit.state); root = exit.event_id;
       }
-      authority = dispatch(ctx, decided.event_id, closed.closed.event_id, round + 1, root);
+      let review = null;
+      if (round === 3) {
+        const recorded = processReview(ctx, closed.closed.event_id, candidate);
+        assert.equal(recorded.ok, true, recorded.state); review = recorded.event_id;
+      }
+      mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+      const brief = `briefs/round-${round + 1}.md`;
+      writeFileSync(path.join(ctx.dir, brief), `repair ${round + 1}\n`);
+      const receipt = confirmRepairBrief({ declaration: {
+        aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
+        disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id,
+        next_round: round + 1, root_exit_event_id: root, process_review_event_id: review,
+      }, brief_path: brief }, options(ctx.dir));
+      assert.equal(receipt.ok, true, receipt.state);
+      const worker = recordWorkerVerification({ task_id: "task-1", repair_dispatch_event_id: receipt.event_id },
+        options(ctx.dir, `worker-${round + 1}`));
+      assert.equal(worker.ok, true, worker.state);
+      authority = { dispatch: receipt.event_id, worker: worker.event_id };
     }
 
     candidate = commit(ctx.dir, 4);
@@ -426,7 +457,7 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
       ...seat, reviewed_commit: candidate.commit, reviewed_tree: candidate.tree,
     }));
     const incompleteClose = stamped({
-      type: "aggregate_v2", kind: "panel_close", task_id: "task-1", changeset_id: "changeset-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "panel_close", task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: "2099-01-01T00:00:00.000Z", session_id: "mutant",
       panel_open_event_id: panel.opened.event_id, received_seats: seats.slice(0, 4),
     });
@@ -444,10 +475,11 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
 
     let closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
     const omittedPartition = stamped({
-      type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "changeset-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "disposition", task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: "2099-01-01T00:00:01.000Z", session_id: "mutant",
       panel_close_event_id: closed.closed.event_id, pm_findings: [],
       finding_dispositions: { accepted: [], declined: [], note: [], followup: [] },
+      same_mechanism_repeated: false,
       terminal_state: "GO", remediation_kind: null, authorized_paths: [],
     });
     loaded = loadRepairEventsForProject(ctx.dir);
@@ -467,16 +499,25 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
     candidate = commit(ctx.dir, 2);
     panel = openPanel(ctx, 2, candidate, authority);
     closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F2");
-    decided = disposition(ctx, closed.closed, { accepted: ["F2"] });
-    authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 3);
+    decided = disposition(ctx, closed.closed, { accepted: ["F2"], remediation_kind: "root_replacement" });
+    let exit = recordAggregateRootExit({
+      type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: decided.event_id, shared_mechanism: "one root",
+      symptom_explanation: "symptoms only", owner_state_yield_seams: ["one seam"],
+      replacement: "one replacement", removed_workarounds: ["patch loop"], trigger_matrix: ["final stop"],
+      closure_evidence: "the replacement closes the repeated trigger",
+    }, options(ctx.dir));
+    assert.equal(exit.ok, true, exit.state);
+    authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 3, exit.event_id);
     candidate = commit(ctx.dir, 3);
     panel = openPanel(ctx, 3, candidate, authority);
     closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F3");
     const boundedR3 = stamped({
-      type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "changeset-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "disposition", task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: "2099-01-01T00:00:02.000Z", session_id: "mutant",
       panel_close_event_id: closed.closed.event_id, pm_findings: [],
       finding_dispositions: { accepted: ["F3"], declined: [], note: [], followup: [] },
+      same_mechanism_repeated: false,
       terminal_state: "CONTINUE", remediation_kind: "bounded", authorized_paths: ["src/x.mjs"],
     });
     loaded = loadRepairEventsForProject(ctx.dir);
@@ -484,22 +525,36 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
       standardEvents: loaded.events,
     }).dispositions.length, 2);
     mutant = await importMutant(mutantDir, [[
-      '["root_replacement", "simplification", "split"].includes(row.remediation_kind)',
-      '["root_replacement", "simplification", "split", "bounded"].includes(row.remediation_kind)',
+      'open.round === 3) {\n        valid = row.terminal_state === "CONTINUE" &&\n          ["root_replacement", "simplification", "split"].includes(row.remediation_kind)',
+      'open.round === 3) {\n        valid = row.terminal_state === "CONTINUE" &&\n          ["root_replacement", "simplification", "split", "bounded"].includes(row.remediation_kind)',
     ]]);
     assert.equal(mutant.deriveAggregateRepairState([...loaded.aggregate_events, boundedR3], "task-1", {
       standardEvents: loaded.events,
     }).dispositions.length, 3, "weakening the third-batch kind admits a bounded batch 3");
 
     decided = disposition(ctx, closed.closed, { accepted: ["F3"], remediation_kind: "root_replacement" });
-    const exit = recordAggregateRootExit({
+    exit = recordAggregateRootExit({
       type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
       disposition_event_id: decided.event_id, shared_mechanism: "one root",
       symptom_explanation: "symptoms only", owner_state_yield_seams: ["one seam"],
       replacement: "one replacement", removed_workarounds: ["patch loop"], trigger_matrix: ["final stop"],
+      closure_evidence: "the replacement closes the final repair trigger",
     }, options(ctx.dir));
     assert.equal(exit.ok, true, exit.state);
-    authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 4, exit.event_id);
+    const review = processReview(ctx, closed.closed.event_id, candidate);
+    assert.equal(review.ok, true, review.state);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/round-4.md"), "repair 4\n");
+    const round4 = confirmRepairBrief({ declaration: {
+      aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id,
+      next_round: 4, root_exit_event_id: exit.event_id, process_review_event_id: review.event_id,
+    }, brief_path: "briefs/round-4.md" }, options(ctx.dir));
+    assert.equal(round4.ok, true, round4.state);
+    const round4Worker = recordWorkerVerification({ task_id: "task-1", repair_dispatch_event_id: round4.event_id },
+      options(ctx.dir, "worker-4"));
+    assert.equal(round4Worker.ok, true, round4Worker.state);
+    authority = { dispatch: round4.event_id, worker: round4Worker.event_id };
     candidate = commit(ctx.dir, 4);
     panel = openPanel(ctx, 4, candidate, authority);
     closed = closePanel(ctx, panel.opened, panel.expected, candidate, "FINAL");
@@ -507,10 +562,11 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
       accepted: ["FINAL"], terminal_state: "STOP", remediation_kind: null, authorized_paths: [],
     });
     const finalDispatch = stamped({
-      type: "aggregate_v2", kind: "dispatch", task_id: "task-1", changeset_id: "changeset-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "dispatch", task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: "2099-01-01T00:00:03.000Z", session_id: "mutant",
       disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id,
       source_round: 4, next_round: 5, authorized_paths: [], root_exit_event_id: null,
+      process_review_event_id: null,
       target_kind: "brief", target: "briefs/round-5.md", brief_sha256: "a".repeat(64), brief_size: 1,
     });
     loaded = loadRepairEventsForProject(ctx.dir);
@@ -526,16 +582,17 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
     }).dispatches.length, 4, "removing final dispatch denial creates a fourth repair dispatch");
 
     const continuation = (trigger, child, at) => stamped({
-      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: at, session_id: "mutant", parent_disposition_event_id: decided.event_id,
       parent_frozen_commit: candidate.commit, parent_frozen_tree: candidate.tree,
       trigger_ids: [trigger], continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
+      process_review_event_id: null,
       children: [{ task_id: child, changeset_id: `${child}-change`, tier: "T2", budget: "one changeset", authorized_paths: candidate.paths }],
     });
     const wrong = continuation("WRONG", "wrong-child", "2099-01-01T00:00:04.000Z");
     const correct = continuation("FINAL", "correct-child", "2099-01-01T00:00:05.000Z");
     const childOpen = (task_id, continuationId, at) => stamped({
-      type: "aggregate_v2", kind: "panel_open", task_id, changeset_id: `${task_id}-change`,
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "panel_open", task_id, changeset_id: `${task_id}-change`,
       recorded_at: at, session_id: "mutant", round: 1, phase: "repair_round", tier: "T2",
       frozen_commit: candidate.commit, frozen_tree: candidate.tree,
       base_ref: "origin/main", base_commit: ctx.base, changed_paths: candidate.paths,
@@ -562,6 +619,189 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
     ctx.cleanup();
     rmSync(mutantDir, { recursive: true, force: true });
   }
+});
+
+test("live policy rejects downgrade, repeated R1 bounded repair, and root exit without closure proof", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const oldDisposition = stamped({
+      type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "changeset-1",
+      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "old-writer",
+      panel_close_event_id: closed.closed.event_id, pm_findings: [],
+      finding_dispositions: { accepted: ["F1"], declined: [], note: [], followup: [] },
+      terminal_state: "CONTINUE", remediation_kind: "root_replacement", authorized_paths: ["src/x.mjs"],
+    });
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(deriveAggregateRepairState([...loaded.aggregate_events, oldDisposition], "task-1", {
+      standardEvents: loaded.events,
+    }).dispositions.length, 0, "an absent-version row cannot downgrade a live lineage");
+    assert.equal(recordAggregateDisposition({
+      type: "aggregate_v2", kind: "disposition", task_id: "task-1", changeset_id: "changeset-1",
+      panel_close_event_id: closed.closed.event_id, pm_findings: [],
+      finding_dispositions: { accepted: ["F1"], declined: [], note: [], followup: [] },
+      same_mechanism_repeated: true, terminal_state: "CONTINUE", remediation_kind: "bounded",
+      authorized_paths: ["src/x.mjs"],
+    }, options(ctx.dir)).ok, false, "declared recurrence at R1 requires a root kind");
+    const rootDisposition = disposition(ctx, closed.closed, {
+      accepted: ["F1"], remediation_kind: "root_replacement",
+    });
+    assert.equal(rootDisposition.ok, true, rootDisposition.state);
+    const missingClosure = recordAggregateRootExit({
+      type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: rootDisposition.event_id, shared_mechanism: "one root",
+      symptom_explanation: "the earlier branch was symptomatic", owner_state_yield_seams: ["one seam"],
+      replacement: "one replacement", removed_workarounds: ["branch patch"], trigger_matrix: ["original trigger"],
+    }, options(ctx.dir));
+    assert.equal(missingClosure.state, "aggregate-root-exit-malformed");
+  } finally { ctx.cleanup(); }
+});
+
+for (const ruling of ["successor", "owner_decision"]) {
+  test(`an R2 ${ruling} process ruling binds and cannot be bypassed by an omitted receipt`, () => {
+    const ctx = repo();
+    try {
+      let candidate = commit(ctx.dir, 1);
+      let panel = openPanel(ctx, 1, candidate);
+      let closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+      let decided = disposition(ctx, closed.closed, { accepted: ["F1"] });
+      const authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 2);
+      candidate = commit(ctx.dir, 2);
+      panel = openPanel(ctx, 2, candidate, authority);
+      closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F2");
+      assert.equal(disposition(ctx, closed.closed, { accepted: ["F2"] }).ok, false,
+        "a harm-bearing R2 cannot remain a bounded branch repair");
+      decided = disposition(ctx, closed.closed, { accepted: ["F2"], remediation_kind: "root_replacement" });
+      assert.equal(decided.ok, true, decided.state);
+      const exit = recordAggregateRootExit({
+        type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
+        disposition_event_id: decided.event_id, shared_mechanism: "one repeated root",
+        symptom_explanation: "two rounds exposed the shared mechanism", owner_state_yield_seams: ["one seam"],
+        replacement: "one bounded replacement", removed_workarounds: ["branch repairs"],
+        trigger_matrix: ["original harm"], closure_evidence: "the replacement closes the original harm",
+      }, options(ctx.dir));
+      assert.equal(exit.ok, true, exit.state);
+      const review = processReview(ctx, closed.closed.event_id, candidate, ruling);
+      assert.equal(review.ok, true, review.state);
+      mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+      writeFileSync(path.join(ctx.dir, "briefs/held.md"), "held repair\n");
+      for (const processId of [null, review.event_id]) {
+        const receipt = confirmRepairBrief({ declaration: {
+          aggregate_controller: "aggregate_v2", task_id: "task-1", changeset_id: "changeset-1",
+          disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id,
+          next_round: 3, root_exit_event_id: exit.event_id, process_review_event_id: processId,
+        }, brief_path: "briefs/held.md" }, options(ctx.dir));
+        assert.equal(receipt.state, "aggregate-process-review-required");
+      }
+      if (ruling === "successor") {
+        const closedProgram = recordAggregateClose({
+          type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "changeset-1",
+          disposition_event_id: decided.event_id, reason: "frontier ruled successor",
+          owner_evidence: "Owner closes current repair",
+        }, options(ctx.dir, "owner"));
+        assert.equal(closedProgram.ok, true, closedProgram.state);
+        const continuation = recordAggregateChildContinuation({
+          type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+          parent_disposition_event_id: decided.event_id, trigger_ids: ["F2"],
+          continuation_kind: "new_changeset", owner_evidence: "Owner records future work",
+          process_review_event_id: review.event_id,
+          children: [{ task_id: "successor", changeset_id: "successor-cs", tier: "T2",
+            budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
+        }, options(ctx.dir));
+        assert.equal(continuation.ok, true, continuation.state);
+      }
+    } finally { ctx.cleanup(); }
+  });
+}
+
+test("legacy aggregate replay accepts a root exit that predates closure evidence", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const decided = disposition(ctx, closed.closed, { accepted: ["F1"], remediation_kind: "root_replacement" });
+    const exit = recordAggregateRootExit({
+      type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "changeset-1",
+      disposition_event_id: decided.event_id, shared_mechanism: "one root", symptom_explanation: "symptoms",
+      owner_state_yield_seams: ["seam"], replacement: "replacement", removed_workarounds: ["patch"],
+      trigger_matrix: ["trigger"], closure_evidence: "proof",
+    }, options(ctx.dir));
+    assert.equal(exit.ok, true, exit.state);
+    const live = loadRepairEventsForProject(ctx.dir).aggregate_events.map((row) => row.event);
+    const oldRows = [];
+    const remap = new Map();
+    for (const event of live) {
+      const old = structuredClone(event);
+      delete old.policy_version;
+      if (old.panel_open_event_id) old.panel_open_event_id = remap.get(old.panel_open_event_id) ?? old.panel_open_event_id;
+      if (old.panel_close_event_id) old.panel_close_event_id = remap.get(old.panel_close_event_id) ?? old.panel_close_event_id;
+      if (old.disposition_event_id) old.disposition_event_id = remap.get(old.disposition_event_id) ?? old.disposition_event_id;
+      if (old.kind === "root_exit") delete old.closure_evidence;
+      const row = stamped(old);
+      remap.set(eventId(event), row.event_id);
+      oldRows.push(row);
+    }
+    const replay = deriveAggregateRepairState(oldRows, "task-1");
+    assert.equal(replay.root_exits.length, 1, "old replay keeps the pre-field root exit valid");
+    assert.equal(replay.policy_version, 1);
+  } finally { ctx.cleanup(); }
+});
+
+test("the fourth cumulative gate in a descendant needs a fresh process review", () => {
+  const ctx = repo();
+  try {
+    let candidate = commit(ctx.dir, 1);
+    let panel = openPanel(ctx, 1, candidate);
+    let closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    let decided = disposition(ctx, closed.closed, { accepted: ["F1"] });
+    const authority = dispatch(ctx, decided.event_id, closed.closed.event_id, 2);
+    candidate = commit(ctx.dir, 2);
+    panel = openPanel(ctx, 2, candidate, authority);
+    closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F2");
+    decided = disposition(ctx, closed.closed, {
+      accepted: ["F2"], terminal_state: "STOP", remediation_kind: null, authorized_paths: [],
+    });
+    assert.equal(decided.ok, true, decided.state);
+    const continuation = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: decided.event_id, trigger_ids: ["F2"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      children: [{ task_id: "child", changeset_id: "child-cs", tier: "T2",
+        budget: "one changeset", authorized_paths: candidate.paths }],
+    }, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
+    candidate = commit(ctx.dir, 3);
+    panel = openPanel(ctx, 1, candidate, {}, false, {
+      task_id: "child", changeset_id: "child-cs", child_continuation_event_id: continuation.event_id,
+    });
+    closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F3", {
+      task_id: "child", changeset_id: "child-cs",
+    });
+    decided = disposition(ctx, closed.closed, {
+      task_id: "child", changeset_id: "child-cs", accepted: ["F3"],
+    });
+    assert.equal(decided.ok, true, decided.state);
+    let state = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "child");
+    assert.equal(state.current_gate_ordinal, 3);
+    assert.equal(state.next_gate_ordinal, 4);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/child-2.md"), "child repair\n");
+    const declaration = {
+      aggregate_controller: "aggregate_v2", task_id: "child", changeset_id: "child-cs",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id, next_round: 2,
+      root_exit_event_id: null,
+    };
+    assert.equal(confirmRepairBrief({ declaration, brief_path: "briefs/child-2.md" },
+      options(ctx.dir)).state, "aggregate-process-review-required");
+    const review = processReview(ctx, closed.closed.event_id, candidate, "finish_bounded_root", "child", "child-cs");
+    assert.equal(review.ok, true, review.state);
+    assert.equal(review.next_gate_ordinal, 4);
+    assert.equal(confirmRepairBrief({ declaration: { ...declaration, process_review_event_id: review.event_id },
+      brief_path: "briefs/child-2.md" }, options(ctx.dir)).ok, true);
+  } finally { ctx.cleanup(); }
 });
 
 test("legacy rows replay and close or atomically hand off, but new standard minting is retired", () => {

@@ -442,6 +442,7 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "aggregate-dispatch-malformed": `the aggregate repair declaration is incomplete. Supply the exact aggregate controller, task, changeset, disposition, panel-close, next-round and root-exit fields carried by the recorded transition.`,
     "aggregate-dispatch-unavailable": `the named aggregate disposition cannot dispatch this brief: it is absent, stale, terminal, already dispatched, or does not lead to the declared next round. Use the current accepted disposition and its exact panel-close receipt.`,
     "aggregate-root-exit-required": `a root-kind dispatch (root_replacement, simplification or split, any round) requires its exact root_exit receipt before its repair brief can be confirmed.`,
+    "aggregate-process-review-required": `this transition requires the exact fresh frontier process_review receipt for the next cumulative gate; only finish_bounded_root authorizes a repair brief. Record it with scripts/record-repair-event.mjs, or follow its successor/owner_decision ruling.`,
     "aggregate-root-exit-unexpected": `only a root-kind dispatch may carry a root_exit receipt.`,
     "aggregate-dispatch-conflict": `this aggregate transition already has a different repair brief. The first eligible dispatch wins; use its exact receipt rather than creating another batch.`,
     "aggregate-worker-conflict": `this aggregate dispatch already has a different verified worker. Use the admitted worker or record the explicit aggregate worker_handoff.`,
