@@ -763,8 +763,15 @@ must be ordered, gap-free, non-overlapping, and reconstruct the component hash e
 cross-boundary slice may select only raw ranges already covered by that complete set. This direct
 manifest is preflighted only with the frozen command below; `gemini-gate-slices.mjs` does not create
 or validate frozen fragment plans. Every fragment packet explicitly labels its verified whole/partial
-half-open range and repeats its descriptors in the exact copied inspected scope; range cuts alone are
-not a NO-GO basis, while visible defects and insufficient boundary evidence remain reviewable.
+half-open range and repeats its descriptors in the exact copied inspected scope; that scope identifies
+the packet as a `base..candidate_change` gate and, for fragments, binds whether exact
+`per_file_diff` transition evidence is present. Range cuts alone are not a NO-GO basis. A valid NO-GO
+names concrete reachable harm introduced or worsened by changed diff evidence, newly exposed or relied
+upon by the candidate, or a false candidate mitigation/public claim. An unchanged inherited limitation
+is `PREEXISTING/NONBLOCKING`, not a NO-GO by itself; age never excuses harm the candidate exposes,
+worsens, relies upon, or falsely claims to fix. A source-only fragment without exact transition
+evidence may report the limitation but cannot establish that attribution alone; later diff or final
+slices can still block.
 
 For a local mechanical DRAFT, use the native runner (no credential lookup, provider call, journal
 append, or approval action):

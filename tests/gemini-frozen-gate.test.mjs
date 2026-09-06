@@ -594,12 +594,34 @@ test("fragment envelopes declare verified ranges and reject an altered copied sc
         calls++;
         const text = JSON.parse(request.body).contents[0].parts[0].text;
         assert.match(text, /VERIFIED WHOLE FRAGMENT/); assert.match(text, /VERIFIED PARTIAL FRAGMENT/); assert.match(text, /Verified half-open byte range/);
-        const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1]; assert.match(scope, /"slice_kind":"coverage"/); assert.match(scope, /"material_mode":"verified_fragments"/);
+        const scope = text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1]; assert.match(scope, /"gate_kind":"base\.\.candidate_change"/); assert.match(scope, /"slice_kind":"coverage"/); assert.match(scope, /"material_mode":"verified_fragments"/); assert.match(scope, /"exact_per_file_diff_transition_evidence":true/);
+        assert.match(text, /base\.\.candidate change gate/); assert.doesNotMatch(text, /defects visible/i);
         const response = await responseFrom(request).json(), reply = response.candidates[0].content.parts[0].text;
         response.candidates[0].content.parts[0].text = reply.replace(/"byte_end":(\d+)/, (_match, value) => `"byte_end":${Number(value) + 1}`);
         return { ok: true, json: async () => response };
       };
       await assert.rejects(run(sliceArgs(f, "--run-slices")), /inspected scope/); assert.equal(calls, 1);
+    });
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("fragment prompts bind source-only versus diff-bearing change attribution", async () => {
+  const f = fixture(); try {
+    const source = Buffer.from(execFileSync("git", ["-C", f.dir, "show", `${f.candidate}:src.mjs`]));
+    const diff = Buffer.from(execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", "src.mjs"]));
+    const coverage = [
+      { name: "source-only", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, source.length)] },
+      { name: "diff-bearing", kind: "coverage", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "per_file_diff", 0, diff.length)] },
+    ];
+    const cross = { name: "cross", kind: "cross_boundary", files: ["src.mjs"], contract_context: ["docs/contract.md"], fragments: [fragment(f, "frozen_source", 0, 1), fragment(f, "per_file_diff", 0, 1)], boundaries: Object.fromEntries(["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"].map(name => [name, { status: "covered", scope_files: ["src.mjs"], contract_context: [], rationale: "reviewed" }])) };
+    const value = slicedPlan({ ...f, files: ["src.mjs"] }, [...coverage, cross]), planId = fingerprint(f); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: planId }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
+    await withFetch(async () => {
+      const packets = [];
+      globalThis.fetch = async (_url, request) => { const text = JSON.parse(request.body).contents[0].parts[0].text, scope = JSON.parse(text.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1]); packets.push({ text, scope }); return responseFrom(request); };
+      await run(sliceArgs(f, "--run-slices"));
+      const sourceOnly = packets.find(packet => packet.scope.slice === "source-only"), diffBearing = packets.find(packet => packet.scope.slice === "diff-bearing");
+      assert.equal(sourceOnly.scope.gate_kind, "base..candidate_change"); assert.equal(sourceOnly.scope.exact_per_file_diff_transition_evidence, false); assert.match(sourceOnly.text, /cannot by itself establish change attribution/);
+      assert.equal(diffBearing.scope.exact_per_file_diff_transition_evidence, true); assert.match(diffBearing.text, /includes exact per_file_diff transition evidence/);
+      for (const packet of packets) { assert.match(packet.text, /A valid NO-GO requires concrete reachable harm introduced or worsened by changed diff evidence/); assert.match(packet.text, /Age alone never excuses a harm/); assert.doesNotMatch(packet.text, /defects visible/i); }
     });
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
