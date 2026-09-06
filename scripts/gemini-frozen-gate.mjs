@@ -476,7 +476,7 @@ function handoffChild(root, name, directory = false) {
 }
 function packetName(index) { return `${String(index + 1).padStart(4, "0")}.txt`; }
 function packetIdentity(item, index) {
-  return { ordinal: index + 1, filename: packetName(index), slice: item.name, kind: item.kind, prompt_bytes: Buffer.byteLength(item.prompt), prompt_sha256: sha(item.prompt), material_sha256: item.materialId, envelope_sha256: item.envelopeSha, inspected_scope_sha256: sha(item.scope), ingestion_markers: item.markers, completion_token: item.done };
+  return { ordinal: index + 1, filename: packetName(index), slice: item.name, kind: item.kind, prompt_bytes: Buffer.byteLength(item.prompt), prompt_sha256: sha(item.prompt), material_sha256: item.materialId, envelope_sha256: item.envelopeSha, inspected_scope_sha256: sha(item.scope), ingestion_markers: item.markers, completion_marker: item.done };
 }
 function writeHandoff(repo, o, plan, prepared) {
   const root = handoffDirectory(repo, o.handoffExport, true), packets = path.join(root, "packets"), replies = path.join(root, "replies");
