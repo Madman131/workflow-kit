@@ -12,8 +12,8 @@ Doctrine:
 formatting).
 
 ## When
-For a multi-thread program whose parts need separate gates. One chip = one changeset = one version,
-in stated order; each verifies its predecessor landed. Never use two chips to write one repo at once.
+For a multi-thread program with separate gates. One chip = one changeset = one version,
+ordered; each verifies its predecessor landed. Never let two chips write one repo.
 
 ## The three roles
 | Role | Owns | Never |
@@ -78,15 +78,16 @@ into a private worktree.
    receipt proves a reply COMPLETED, not that it judged** — demand a verdict and its inspected scope.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
-5. **One discretionary frontier firing per changeset**; default consumer is the orchestrator's
-   remediation-delta fold-check (`/frontier-review`). Required planning/process consults are
-   controller checkpoints outside it, never review loops. Precommit, collect, disposition one panel.
+5. **One discretionary frontier firing per changeset**; default is the orchestrator's fold-check
+   (`/frontier-review`). Required planning/process consults are outside it, never review loops.
+   Precommit, collect, disposition one panel.
    Verdicts are evidence, never repair authority: require concrete supported-use harm; route green
    non-blockers to parent-linked successors. R1 permits one bounded batch unless the mechanism
    repeated; harm-bearing R2 and repeated R1 require one root kind plus a root exit with closure
    proof. R3 tests that consolidated correction. Dispatch into R4 requires a fresh frontier process
-   review: finish once, successor after terminal close, or Owner decision with no dispatch. Every
-   fourth gate repeats it without granting a round. R4 is the
+   review: finish once, successor after terminal close, or Owner decision with no dispatch. It
+   resolves via an Owner-evidenced terminal child, never current-chip dispatch. Every fourth gate
+   repeats it without granting a round. R4 is the
    final GO/STOP bookend; no R5. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
    lenses; zoom-out controls disagreement; KISS; carve-outs before RULE #1. Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
