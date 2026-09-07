@@ -9,6 +9,7 @@
     "workflow-kit-init": "bin/init.mjs"
   },
   "scripts": {
+    "prepare": "node scripts/arm-commit-floor.mjs",
     "check:skill-budgets": "node scripts/check-skill-budgets.mjs",
     "confirm:repair-brief": "node scripts/confirm-repair-brief.mjs",
     "record:repair-event": "node scripts/record-repair-event.mjs",

@@ -6,5 +6,26 @@ node_modules
 # harness worktrees, local settings. The shipped-docs test walk skips it for the same reason.
 .claude/
 
+# What `bin/init.mjs` appends to an ADOPTER's .gitignore, named here too. The blanket rule above
+# already covers the .claude/ ones, so these four add nothing to git's behaviour in this checkout —
+# and that redundancy is the point. What the kit's own layout hides, no check run inside the kit can
+# see: a sensor whose output file no adopter ignored shipped in a release because here it was
+# trivially ignored by `.claude/` and nobody looked at an adopter's file. Naming the families makes
+# the next such divergence a line missing from a diff instead of a discovery in someone's repo.
+# `tests/kit-adopter-ignores.test.mjs` runs the installer into a scratch adopter, reads the file it
+# produced there, and reddens when this list falls behind it.
+#
+# lane declaration, ledger and pre-send rung sidecar — per-session working state
+.claude/task-lane.json
+.claude/lane-ledger.jsonl
+.claude/brief-rung.json
+# the token ledger's metrics dir — per-turn rows carrying session and task ids
+.claude/metrics/
+# .codex/hooks.json is PER-CHECKOUT: it bakes this checkout's absolute path into every hook command.
+# Committed, it registers hooks at a path other clones do not have, and a hook that fails to start
+# blocks nothing, silently. The rest of .codex/ stays tracked. This one is NOT redundant here —
+# nothing else in this file covers it.
+.codex/hooks.json
+
 # Thread-restart digests — transient handoffs, stale within hours; commit one only on purpose.
 thread-restarts/
