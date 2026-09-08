@@ -1,4 +1,4 @@
-# workflow-kit — v2.30.0
+# workflow-kit — v2.30.1
 
 ## What's new in v2.29.0 — gate repair stays finite across successors
 
@@ -34,6 +34,21 @@ Exact committed Gemini gates now export hash-bound packets for a manually select
 subscription UI and import only matching UTF-8 replies. The frozen engine never invokes `agy`, reads
 provider settings or credentials, or calls REST; the operator attests the UI/model selection while
 the runner verifies tuple, plan, fragments, scope, proof, completion, and receipts.
+
+## What's new in v2.30.1 — the Gemini seat says it is outside the matrix
+
+Three comments, no behaviour change. `core/GATES.md` § Model · effort matrix binds the Codex and
+Claude gate columns; the Gemini cross-family seat is pinned separately to the operator's
+subscription model by § Gemini cross-family gate, and nothing in the runners said so. An adopter
+that ships a seat-binding checker therefore read `scripts/gemini-frozen-gate.mjs` and
+`scripts/cold-review-gemini.sh` as binding an unrecognised model and failed closed — correctly, on
+the text it was given. The three sites now carry `gate-binding-ok: out-of-matrix` and the reason,
+the marker such a checker reads. The kit ships no such checker; this is written for the repositories
+that do. `scripts/gemini-gate-slices.mjs` needed nothing — it names no model.
+
+**Upgrade: nothing is required.** No installed `[P]` file changes behaviour, so a plain `init`
+re-run is enough for an adopter that wants the comments, and skipping the release entirely costs
+nothing unless your repository checks seat bindings.
 
 ## What's new in v2.30.0 — frozen Gemini receipts are provenance-bound
 
