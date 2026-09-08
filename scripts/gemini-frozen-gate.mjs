@@ -82,7 +82,7 @@ function parse(argv) {
   for (const key of ["base", "candidate", "tree", "rigId"]) if (!o[key]) die(`missing --${key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
   if (![o.base, o.candidate, o.tree].every(value => HEX.test(value))) die("base, candidate, and tree must be exact lowercase 40-hex IDs");
   if (!RIG.test(o.rigId) || !MODEL.test(o.model)) die("invalid nonsecret rig ID or Gemini model ID");
-  if (o.model !== SUBSCRIPTION_MODEL) die(`strict manual handoff requires --model ${SUBSCRIPTION_MODEL}`);
+  if (o.model !== SUBSCRIPTION_MODEL) die(`strict manual handoff requires --model ${SUBSCRIPTION_MODEL}`);  // gate-binding-ok: out-of-matrix — the Gemini cross-family seat, pinned to the operator's subscription model by core/GATES.md § Gemini cross-family gate; § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
   if (o.generateSlicePlan) {
     if (o.sliceManifest || o.handoffExport || o.handoffImport || o.fingerprint || o.dryRun || o.noLog || !o.context) die("--generate-slice-plan requires --context and forbids handoff, fingerprint, and logging flags");
     o.generateSlicePlan = relative(o.generateSlicePlan, "--generate-slice-plan");

@@ -38,7 +38,7 @@
 #   --selftest  run the deterministic legacy fake-agy reliability harness (no network/model call)
 set -uo pipefail
 
-MODEL="Gemini 3.1 Pro (High)"
+MODEL="Gemini 3.1 Pro (High)"  # gate-binding-ok: out-of-matrix — the Gemini cross-family seat; core/GATES.md § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
 MAX_FILE_BYTES=120000
 CANARY_SPAN=32768
 CANARY_MIN=2
@@ -591,7 +591,7 @@ trap 'on_signal TERM 143' TERM
 if [ "$DRY_RUN" = "0" ] && ! { [ "$FROZEN_DISPATCH" = "1" ] && { [ "$FROZEN_FINGERPRINT" = "1" ] || [ -n "$GENERATE_SLICE_PLAN$HANDOFF_EXPORT$HANDOFF_IMPORT" ]; }; }; then acquire_single_flight; fi
 if [ "$FROZEN_DISPATCH" = "1" ]; then
   frozen_args=(--repo "$SOURCE_REPO_ROOT" --base "$FROZEN_BASE" --candidate "$FROZEN_CANDIDATE" --tree "$FROZEN_TREE" --rig-id "$FROZEN_RIG_ID")
-  [ -n "$FROZEN_MODEL" ] && frozen_args+=(--model "$FROZEN_MODEL")
+  [ -n "$FROZEN_MODEL" ] && frozen_args+=(--model "$FROZEN_MODEL")  # gate-binding-ok: out-of-matrix — the same Gemini seat, handed to the frozen-gate runner; its assignment carries no literal to chain through.
   [ -n "$CONTEXT_FILE" ] && frozen_args+=(--context "$CONTEXT_FILE")
   [ -n "$SLICE_MANIFEST" ] && frozen_args+=(--slice-manifest "$SLICE_MANIFEST")
   [ -n "$GENERATE_SLICE_PLAN" ] && frozen_args+=(--generate-slice-plan "$GENERATE_SLICE_PLAN")
