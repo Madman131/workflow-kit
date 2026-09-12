@@ -409,9 +409,13 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
       input: JSON.stringify({ session_id: "finish-worker", tool_name: "Write", cwd: ctx.dir,
         tool_input: { file_path: path.join(ctx.dir, target) } }), encoding: "utf8",
     });
-    assert.doesNotMatch(invokeInstalledGuard("src/x.mjs").stdout, /"permissionDecision":"deny"/,
+    const installedAllow = invokeInstalledGuard("src/x.mjs");
+    const installedDeny = invokeInstalledGuard("src/outside.mjs");
+    assert.equal(installedAllow.status, 0, `installed guard allow execution failed: ${installedAllow.stderr}`);
+    assert.equal(installedDeny.status, 0, `installed guard deny execution failed: ${installedDeny.stderr}`);
+    assert.doesNotMatch(installedAllow.stdout, /"permissionDecision":"deny"/,
       "the installed guard admits the verified exception worker before its first child panel");
-    assert.match(invokeInstalledGuard("src/outside.mjs").stdout, /outside the exact authorized-path set/,
+    assert.match(installedDeny.stdout, /outside the exact authorized-path set/,
       "the installed guard denies the completion batch's expanded path before its first child panel");
     const repaired = commitSelected(ctx.dir, 5, ["briefs/completion.md"]);
     const wrongPanel = openPanelInput(ctx, repaired, {
@@ -432,6 +436,27 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     });
     assert.equal(child.current_gate_ordinal, 5, "the child continuation itself did not consume an ordinal");
     assert.equal(child.terminal, "STOP", "the one real final child review may STOP but cannot mint a second batch");
+    assert.equal(child.active_dispatch, null, "the stopped child retains no dispatch route for another batch");
+    assert.equal(recordWorkerVerification({ task_id: "finish-child", repair_dispatch_event_id: continuation.event_id },
+      options(ctx.dir, "second-finish-worker")).state, "repair-worker-verification-missing",
+    "a second worker session cannot consume the one completion batch");
+    const refreezeCandidate = commitSelected(ctx.dir, 6, []);
+    const refreezePanel = { ...finalPanel, frozen_commit: refreezeCandidate.commit, frozen_tree: refreezeCandidate.tree };
+    assert.equal(recordAggregatePanelOpen(refreezePanel, options(ctx.dir)).state, "aggregate-terminal",
+      "a terminal child cannot refreeze or open an extra final panel");
+    const restarted = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "finish-child", {
+      standardEvents: loadRepairEventsForProject(ctx.dir).events,
+    });
+    assert.equal(restarted.terminal, "STOP", "a fresh controller read preserves the terminal child state");
+    const sibling = path.join(os.tmpdir(), `completion-sibling-${process.pid}-${Date.now()}`);
+    execFileSync("git", ["worktree", "add", "--detach", sibling, "HEAD"], { cwd: ctx.dir, stdio: "pipe" });
+    try {
+      assert.equal(recordAggregateChildContinuation({ ...exception, children: [{ ...exception.children[0],
+        task_id: "finish-sibling", changeset_id: "finish-sibling-cs" }], process_review_event_id: review.event_id }, options(sibling)).state,
+      "aggregate-continuation-conflict", "a sibling worktree sees the consumed completion anchor");
+    } finally {
+      execFileSync("git", ["worktree", "remove", "--force", sibling], { cwd: ctx.dir, stdio: "pipe" });
+    }
     assert.equal(recordAggregateChildContinuation({ ...exception, children: [{ ...exception.children[0],
       task_id: "finish-sibling", changeset_id: "finish-sibling-cs" }], process_review_event_id: review.event_id }, options(ctx.dir)).state,
     "aggregate-continuation-conflict", "the parent cannot mint a sibling after its completion exception");
