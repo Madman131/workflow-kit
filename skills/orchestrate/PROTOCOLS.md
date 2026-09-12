@@ -13,7 +13,7 @@ Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writin
 omits any of these hands the worker the incident again.
 
 ⚠ **Read these as anonymised illustrative lessons, not as receipts.** Each came from a real program,
-but anonymising strips what § Evidence discipline demands of an observation — a named artifact — so
+but anonymising strips what § Evidence discipline demands of an observation — named artifact — so
 these are shapes to recognise, not evidence you can check. **A rule here is load-bearing once your
 own repo gives it an artifact.** The same standard, applied to itself.
 
@@ -34,8 +34,11 @@ own repo gives it an artifact.** The same standard, applied to itself.
   Before R4 dispatch, a fresh frontier process review bound to the latest frozen panel
   rules: finish once; successor, or Owner decision with no current-chip dispatch, may be cited by
   the Owner-evidenced child continuation after terminal close. Gate count
-  continues through children; each fourth gate repeats the review but grants no extra round. R4 is
-  the final bookend; no R5.
+  continues through children; each fourth gate repeats the review but grants no extra round. After
+  terminal R4 STOP, one Owner-approved completion child fixes only its recorded paths/proof: one
+  verified batch and one real final full review. Parent terminal and inherited checkpoints remain;
+  final STOP, second batch, scope growth, repeat/reset/relabel STOP. A genuinely new Owner-approved
+  successor remains. R4 is the final bookend; no R5.
 - **When ONE mechanism repeats, diagnose PLUMBING or CONCEPT before re-fixing.** Bespoke logic beside
   the real grammar may belong in that grammar; then re-test the original trigger because relocation
   does not cure a wrong concept. Once acceptance proof is green, desirable extensions become
@@ -97,7 +100,7 @@ own repo gives it an artifact.** The same standard, applied to itself.
   `pipefail` an early-exiting consumer can poison a producer's status. Three misreads in one chip.
 - **"Byte-identical" is a claim about INSTALLATION, not execution.** Two copies proven identical can
   still fail in one location and not the other; only running each where it installs settles it.
-- **A fix DESCRIBED as "mechanical" invites execution without re-verification.** One banked
+- **A fix DESCRIBED as "mechanical" invites execution without re-verification.** Banked
   "mechanical" substitution would have cured a single false version stamp by rewriting two TRUE
   historical claims into false ones. Re-derive the fix from the artifact before believing the word.
 

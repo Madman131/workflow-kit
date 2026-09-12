@@ -31,15 +31,16 @@ path-pinned — a pinned path reports the MAIN checkout's branch from inside a w
 - **Pre-push sweep:** `git log <target-ref>..HEAD` — a push ships EVERY lane's unpushed
   commits; any ungated foreign commit STOPS.
 
-## 3. Remote boundary, then verify
-Report the fresh push/deploy GO needed after the local checkpoint. Only after it is explicit, push
-and confirm the ref actually landed: `git fetch origin && git log origin/<branch> -1 --oneline`.
+## 3. Remote boundary — stop here absent a fresh GO
+Report the fresh push/deploy GO needed after the local checkpoint. **Do not push, open/update a PR,
+merge, or verify remote state until that GO is explicit.** Only then push and confirm the ref
+actually landed: `git fetch origin && git log origin/<branch> -1 --oneline`.
 
-## 4. Open or update the PR, then LAND it
+## 4. After explicit GO: open or update the PR, then LAND it
 Where the repo works that way. Merge only with the step-0 authorization — never over a failed
 check, an unresolved conflict, or a branch protection.
 
-## 5. Verify the TARGET
+## 5. After explicit GO: verify the TARGET
 Confirm the merge is on the target branch on the remote, that required checks passed THERE,
 and — if the push has a deploy effect — that the deploy reached the state your stub names.
 

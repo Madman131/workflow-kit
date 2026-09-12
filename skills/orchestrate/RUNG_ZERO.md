@@ -17,6 +17,8 @@ gives it an artifact.**
 reshaped first — those rounds are not too careful, they are aimed at the wrong thing, finding real
 defects in work that should never have reached them. Rung zero is those checks.
 
+**Before seats: record expected/observed exact model+effort; mismatch reports and blocks substitution.**
+
 **Precedence (`core/WORKFLOW.md` § Gate — the FULL set, not this line) and the carve-outs**
 (irreversible · prod write · gate-ran-lighter-than-mandate) **screen FIRST — a FINDING in those
 classes never exits as a NOTE; then RULE #1** (`core/FOUNDATIONS.md` § Principles): harm
@@ -28,12 +30,8 @@ work.**
 
 ## 0.1 THE TIER IS SET, NOT DERIVED
 
-**The tier is SET IN THE BRIEF, at spawn** — by whoever writes the brief, and **ratified by the Owner
-before any T2/T3 gate** (`core/WORKFLOW.md` § Steer: *"Builder proposes the tier; Owner ratifies
-before any T2/T3 gate"*). The worker VERIFIES the artifact matches the declared tier and **never
-re-derives it**. A chip that argues its own tier spends rounds on a question that costs one sentence
-at spawn time. *Do not read "set at spawn" as "set by the Owner" — the ratification is the Owner's,
-the proposal is not.*
+**The tier is set in the brief at spawn and Owner-ratified before any T2/T3 gate.** The worker
+verifies the artifact matches and never re-derives it; the proposal is not the ratification.
 
 **One escalation path, and only one:** if the artifact stops matching its declared tier — a prose chip
 that grows control code, **or one that stays the same class while gaining a gate, emit or stop

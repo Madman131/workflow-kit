@@ -308,6 +308,12 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     };
     assert.doesNotThrow(() => assert.equal(recordAggregateChildContinuation({ ...exception, children: [] }, options(ctx.dir)).state,
       "aggregate-continuation-malformed"), "an empty completion child list is a typed refusal, not a throw");
+    assert.equal(recordAggregateChildContinuation({ ...exception, owner_evidence: "" }, options(ctx.dir)).state,
+      "aggregate-continuation-conflict", "Owner evidence is mandatory for the exception");
+    writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "changed after the proposal\n");
+    assert.equal(recordAggregateChildContinuation(exception, options(ctx.dir)).state, "aggregate-continuation-conflict",
+      "a changed brief cannot reuse the proposed exception authority");
+    writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "rerun FINAL after the narrow correction\n");
     assert.equal(recordAggregateChildContinuation(exception, options(ctx.dir)).state,
       "aggregate-continuation-conflict", "fresh Astra review is required before exception work authority");
     const review = processReview(ctx, null, parent.candidate, "owner_decision", "task-1", "changeset-1",
@@ -315,6 +321,9 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     assert.equal(review.ok, true, review.state);
     const continuation = recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
+    assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
+      completion_exception: { ...exception.completion_exception, smallest_correction: "changed proposal" } }, options(ctx.dir)).state,
+    "aggregate-continuation-conflict", "the Astra review is hash-bound to the exact completion proposal");
     assert.equal(recordWorkerVerification({ task_id: "finish-child", repair_dispatch_event_id: continuation.event_id },
       options(ctx.dir, "wrong-worker")).state, "repair-worker-verification-missing");
     const worker = recordWorkerVerification({ task_id: "finish-child", repair_dispatch_event_id: continuation.event_id },

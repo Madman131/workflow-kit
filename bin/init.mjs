@@ -45,6 +45,8 @@ const KNOWN_FLAGS = new Set([
   "--help", "-h", "--target", "--repo-name", "--owner-name", "--remote-url", "--deploy-branch",
   "--source-dirs", "--state-docs", "--memory-dir", "--worktree-roots", "--with-gate-runners",
   "--codex-prompts-dir", "--skip-codex-prompt", "--codex-cold-model", "--skip-codex-lane",
+  "--pm-model", "--pm-effort", "--builder-model", "--builder-effort", "--gather-model", "--gather-effort",
+  "--astra-consult-model", "--astra-consult-effort",
   "--force", "--print-package-scripts",
 ]);
 
@@ -139,6 +141,22 @@ function parseArgs(argv) {
       }
       out.codexColdModel = v;
     }
+    else if (["--pm-model", "--builder-model", "--gather-model", "--astra-consult-model"].includes(a)) {
+      const v = next();
+      if (!/^[A-Za-z0-9._:\/-]+$/.test(v) || v.includes("{{")) {
+        console.error(`init: ${a} must be an exact plain model id matching [A-Za-z0-9._:/-]+ (got ${JSON.stringify(v)}); aliases and placeholders are not bindings.`);
+        process.exit(2);
+      }
+      out[{ "--pm-model": "pmModel", "--builder-model": "builderModel", "--gather-model": "gatherModel", "--astra-consult-model": "astraConsultModel" }[a]] = v;
+    }
+    else if (["--pm-effort", "--builder-effort", "--gather-effort", "--astra-consult-effort"].includes(a)) {
+      const v = next();
+      if (!/^(?:none|minimal|low|medium|high|xhigh|max|ultra)$/.test(v)) {
+        console.error(`init: ${a} must be an explicit supported effort (none|minimal|low|medium|high|xhigh|max|ultra), not ${JSON.stringify(v)}.`);
+        process.exit(2);
+      }
+      out[{ "--pm-effort": "pmEffort", "--builder-effort": "builderEffort", "--gather-effort": "gatherEffort", "--astra-consult-effort": "astraConsultEffort" }[a]] = v;
+    }
     else if (a === "--skip-codex-lane") out.skipCodexLane = true;
     else if (a === "--force") out.force = true;
     else if (a === "--print-package-scripts") out.printPackageScripts = true;
@@ -181,6 +199,14 @@ Usage: node bin/init.mjs [--target <dir>] [options]
                           shims, the shared skill bodies and the AGENTS.md pointer still install)
   --codex-cold-model <m>  fills the Codex cold-review seat's {{CODEX_COLD_MODEL}}. Omitted ⇒ the
                           placeholder stays and that seat is UNUSABLE until you fill it by hand
+  --pm-model/--pm-effort <v>
+                          bind the PM's exact model and effort in generated BINDINGS.md
+  --builder-model/--builder-effort <v>
+                          bind the Builder's exact model and effort in generated BINDINGS.md
+  --gather-model/--gather-effort <v>
+                          bind the Gather seat's exact model and effort in generated BINDINGS.md
+  --astra-consult-model/--astra-consult-effort <v>
+                          bind the Astra consult seat's exact model and effort in generated BINDINGS.md
   --skip-codex-lane       do not write <repo>/.codex/ at all (config.toml + the cold-review seat).
                           These are Codex-lane CONVENIENCES — they carry NO enforcement (see
                           the kit's PORTABILITY.md § The enforcement asymmetry)
@@ -1612,6 +1638,10 @@ function main() {
     // unfilled-placeholder scan below reports it and the post-run checklist names it — the seat is
     // visibly incomplete rather than silently mis-modelled.
     CODEX_COLD_MODEL: args.codexColdModel || "{{CODEX_COLD_MODEL}}",
+    PM_MODEL_ID: args.pmModel || "{{PM_MODEL_ID}}", PM_EFFORT: args.pmEffort || "{{PM_EFFORT}}",
+    BUILDER_MODEL_ID: args.builderModel || "{{BUILDER_MODEL_ID}}", BUILDER_EFFORT: args.builderEffort || "{{BUILDER_EFFORT}}",
+    GATHER_MODEL_ID: args.gatherModel || "{{GATHER_MODEL_ID}}", GATHER_EFFORT: args.gatherEffort || "{{GATHER_EFFORT}}",
+    ASTRA_CONSULT_MODEL_ID: args.astraConsultModel || "{{ASTRA_CONSULT_MODEL_ID}}", ASTRA_CONSULT_EFFORT: args.astraConsultEffort || "{{ASTRA_CONSULT_EFFORT}}",
     // The non-Claude lane the asymmetry table names. It shipped as an UNFILLED placeholder in every
     // generated core/BINDINGS.md — no flag, no fill logic, so the "canonical statement of the
     // PM-portability caveat" had a literal `{{OTHER_LANE}}` in its column header. It is not a

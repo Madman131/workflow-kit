@@ -1622,6 +1622,31 @@ test("v2.0 Codex lane: the assets install, the model is [G], and --skip-codex-la
   } finally { for (const d of [filled, unfilled, skipped]) rmSync(d, { recursive: true, force: true }); }
 });
 
+test("generated BINDINGS binds every execution role by exact model and effort", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-bindings-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const args = [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "demo",
+      "--skip-codex-prompt", "--skip-codex-lane",
+      "--pm-model", "gpt-5.6-sol", "--pm-effort", "high",
+      "--builder-model", "gpt-5.6-terra", "--builder-effort", "high",
+      "--gather-model", "gpt-5.6-luna", "--gather-effort", "medium",
+      "--astra-consult-model", "gpt-6-astra", "--astra-consult-effort", "xhigh"];
+    const result = spawnSync("node", args, { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const bindings = readFileSync(path.join(dir, "core", "BINDINGS.md"), "utf8");
+    for (const token of ["PM_MODEL_ID", "PM_EFFORT", "BUILDER_MODEL_ID", "BUILDER_EFFORT",
+      "GATHER_MODEL_ID", "GATHER_EFFORT", "ASTRA_CONSULT_MODEL_ID", "ASTRA_CONSULT_EFFORT"]) {
+      assert.doesNotMatch(bindings, new RegExp(`\\{\\{${token}\\}\\}`), `{{${token}}} is filled in a configured adopter`);
+    }
+    assert.match(bindings, /PM = \*\*gpt-5\.6-sol\*\* at \*\*high\*\*/);
+    assert.match(bindings, /Builder =\s*\*\*gpt-5\.6-terra\*\* at\s*\*\*high\*\*/);
+    assert.match(bindings, /Gather =\s*\*\*gpt-5\.6-luna\*\* at\s*\*\*medium\*\*/);
+    assert.match(bindings, /Astra consult =\s*\*\*gpt-6-astra\*\* at\s*\*\*xhigh\*\*/);
+    assert.match(bindings, /runtime model and effort; friendly role\s+names are not evidence, and unavailable configured seats are reported, never silently substituted/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("--codex-cold-model is validated: it lands inside a TOML string, so it cannot be allowed to escape one", () => {
   // The value is interpolated as `model = "<value>"` into a file that ALSO carries
   // `sandbox_mode = "read-only"`. An unvalidated value containing a quote and a newline closes the

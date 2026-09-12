@@ -27,12 +27,13 @@ memory of the program**. Everything needed on its first turn is in the brief or 
 5. **Process** — ordered rungs and pre-decided skips. Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
    event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
-   frontier process-review ID. Stored standard programs are
+   frontier process-review ID; expected **and observed** model+effort, reporting any mismatch rather
+   than silently substituting. Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
    standard round. The orchestrator confirms bytes (`confirm-repair-brief --confirm`), sending only
    the receipt/path. The worker puts `session_id` in `--verify`; the guard binds each authorized path.
 6. **Standing rules** — binding every chip: surgical staging, the identity ritual,
-   generalization rules (no Owner name, no model names, no absolute paths), read-only sources.
+   generalization rules, read-only sources.
 7. **Consult protocol** — route questions to the orchestrator with stage, question, options with
    costs, and a recommendation. **Never end a turn on a consult:** name what you are doing while you
    wait, and state the addressee in visible output. **A consult older than ONE of your turns is

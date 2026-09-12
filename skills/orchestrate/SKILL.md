@@ -18,42 +18,33 @@ ordered; each verifies its predecessor landed. Never let two chips write one rep
 ## The three roles
 | Role | Owns | Never |
 |---|---|---|
-| **Owner** | spawning chips, and the decisions § Routing reserves | asked to run the method |
-| **Orchestrator** | briefs, rulings, fold-checks, merge diligence, the lesson bank | gives a merge-GO |
-| **Worker** | its own gate ladder, its PR, its post-merge verification | merges without the Owner's GO |
+| **Owner** | approved plan and the decisions § Routing reserves | asked to run the method |
+| **Workhorse PM** | worker/chip dispatch, briefs, rulings, fold-checks, local integration, lesson bank | authors designated Builder source or gives remote GO |
+| **Builder** | its raw T2/T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
 
-**The GO is the Owner's alone**, and may arrive DIRECTLY to a worker — a direct Owner instruction
-outranks any routing preference; the worker acts and tells the orchestrator promptly. **A GO
+**The GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner instruction
+outranks any routing preference; the Builder acts and tells the PM promptly. **A GO
 ratifies a specific artifact:** if the changeset gains a commit the GO is void until re-confirmed on
 the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
 
 ### Routing — the Owner is not a queue
-**The Owner's set is whatever YOUR REPO reserves to them — read it there. These five are the ones
-this method always needs, and they are EXAMPLES, not the closure:** the **merge/push GO** · **intent or risk acceptance** · the **tier
-ratification** (`core/WORKFLOW.md` § Steer — *"Builder proposes the tier; Owner ratifies before any
-T2/T3 gate"*) · the **wording sign-off on a core-document amendment** (§ Core-document amendments,
-which also stands as its push-GO) · and the **named WRITE-GO for each prod write**, which a push-GO
-never covers — *"the push-GO authorizes the deploy only… the two are never merged"* (`core/WORKFLOW.md` § Shipping). **A chip sends even these five to the
-ORCHESTRATOR, who takes them to the Owner and relays the answer.** **Unsure which bucket? Route it to the orchestrator AND wait for an answer**
-— an unsure consult never times out, because the timeout assumes you knew whose question it was.
-*An incomplete reserved list routes to the human by default; keyed to a timeout it routes AWAY from them — which is why the property binds, not the count.*
+Within approved plan, access and budget, the PM may dispatch workers/reviews, approve Gemini slice
+plans and in-scope artifact transmission, disposition findings and allowed repair batches, run tests,
+make safe local commits/eligible integration, and draft parent-linked tickets. The PM may inspect and
+integrate Builder-authored bytes but never authors designated T2/T3 source. One approval captures
+tier, risk and that routine authority; do not re-ask unchanged authority. Drafting a ticket does not
+authorize its implementation; the PM cannot relabel an unfinished repair as new scope.
 
-**Three rules:**
-1. **Every label rule 8 defines is OWNER-FACING — `QUESTION:`, `RECOMMENDATION:`, `DECISION NEEDED:`
-   (`core/OWNER_COMMS.md` rule 8, and take the list from THERE, not from here) — never
-   chip→orchestrator.** The Owner watches the chip's terminal and reads a labelled lead as theirs;
-   note a consult carries a recommendation, so that label is the easy one to fire by accident. Use
-   **`CONSULT:`** or **`RULING NEEDED:`**.
-2. **Never end a turn on a consult.** Send it, name **what you are doing while you wait**, and do it.
-3. **State the addressee in visible output** — one line.
-
-**Everything else consults the orchestrator first**; it keeps working while it waits.
+Only the Owner decides critical design/intent/risk, material scope/budget, credentials,
+destructive/irreversible acts, named live-write GO, fresh remote push/deploy GO, and an unresolved
+terminal decision. This includes merge/push GO, intent or risk acceptance, tier ratification,
+core-doc wording sign-off, and each named WRITE-GO. These five are EXAMPLES, not the closure. A chip routes those calls to the PM; use
+`CONSULT:` or `RULING NEEDED:`, never Owner-facing `QUESTION:`, `RECOMMENDATION:`, or `DECISION NEEDED:`;
+an unsure consult never times out, waiting rather than becoming authority.
 
 ## Standing duties
-- Near merge readiness, ask the Owner to delegate named-chip push/merge authority. It is SHA-pinned,
-  conditioned on orchestrator diligence, void when head moves, and remains an exception.
-- Surface landed/stale worktrees and branches; ask before removal. Use the merge-type proof and
-  occupancy refusal in `.agents/skills/orchestrate/PROTOCOLS.md`.
+- Surface landed/stale worktrees and branches; use the merge-type proof and occupancy refusal in
+  `.agents/skills/orchestrate/PROTOCOLS.md`.
 
 ## One writer per repo
 Before writing, a chip looks for competing writers in the repo's own **lane declarations** —
@@ -78,7 +69,7 @@ into a private worktree.
    receipt proves a reply COMPLETED, not that it judged** — demand a verdict and its inspected scope.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
    default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
-5. **One discretionary frontier firing per changeset**; default is the orchestrator's fold-check
+5. **One discretionary frontier firing per changeset**; default is the PM's fold-check
    (`/frontier-review`). Required planning/process consults are outside it, never review loops.
    Precommit, collect, disposition one panel.
    Verdicts are evidence, never repair authority: require concrete supported-use harm; route green
@@ -88,16 +79,15 @@ into a private worktree.
    review: finish once, successor after terminal close, or Owner decision with no dispatch. It
    resolves via an Owner-evidenced terminal child, never current-chip dispatch. Every fourth gate
    repeats it without granting a round. R4 is the
-   final GO/STOP bookend; no R5. **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
+   final GO/STOP bookend; no R5. One R4 STOP exception child is fixed paths/proof only: one verified
+   batch then one real final full review; parent terminal and inherited checkpoints remain. Final STOP,
+   second batch, scope growth, reset/relabel/repeat STOP; genuinely new Owner-approved successors stay.
+   **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
    lenses; zoom-out controls disagreement; KISS; carve-outs before RULE #1. Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
    (`confirm-repair-brief.mjs --confirm`); worker `--verify` first. The write guard
    rechecks session, candidate, bytes and paths.
-6. **PR, then independent diligence.** The orchestrator re-runs the evidence on the final head, not
-   the summary.
-7. **GO ask → merge → verify on merged main BY EXECUTION** → **fast-forward the primary clone ONLY
-   if it is clean, on the target branch, and the update is a pure fast-forward — otherwise REPORT and
-   let the Owner decide** → report residue.
+6. **PM diligence.** Re-run evidence on the final head, not the summary; remote stages await fresh GO.
 
 *What every brief must carry: `.agents/skills/orchestrate/CHIP_BRIEF.md`. The incident behind each
 rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing a brief.*
