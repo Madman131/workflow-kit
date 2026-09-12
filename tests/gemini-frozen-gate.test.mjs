@@ -151,3 +151,17 @@ test("retired automated flags refuse before access and the installed wrapper for
     const imported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-import", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(imported.status, 0, imported.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Slice: `aggregate`/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
+
+test("ordinary design mode acquires and releases its owner record before agy discovery", () => {
+  const f = fixture(true); try {
+    const bin = path.join(f.dir, "test-bin"); mkdirSync(bin);
+    writeFileSync(path.join(bin, "ps"), "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'test-runner' ;; esac\n");
+    chmodSync(path.join(bin, "ps"), 0o755);
+    const result = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--design", "docs/contract.md", "--no-log"],
+      { cwd: f.dir, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GEMINI_AGY_BIN: path.join(f.dir, "missing-agy") } });
+    assert.equal(result.status, 127, result.stderr);
+    assert.doesNotMatch(result.stderr, /cannot write single-flight owner record/);
+    const commonDir = path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"]));
+    assert.equal(existsSync(path.join(commonDir, "cold-review-gemini.lock")), false);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
