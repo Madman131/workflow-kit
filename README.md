@@ -1,4 +1,19 @@
-# workflow-kit — v2.30.1
+# workflow-kit — v2.31.0
+
+## What's new in v2.31.0 — explicit execution bindings and finite terminal repair
+
+Portable doctrine now names capability roles: a workhorse PM may dispatch, test, locally
+integrate, and inspect Builder-authored bytes within the approved plan, while the designated Builder
+retains raw T2/T3 authoring. Generated BINDINGS records dated exact PM, Builder, Gather, and Astra
+consult model/effort values, requires runtime verification, and forbids silent substitution.
+
+The aggregate controller admits one tightly bounded completion exception only after a terminal local
+R4 STOP: Owner evidence, fresh Astra zoom-out, PM recommendation, one verified fixed-scope batch,
+and one real final full child review. The parent remains terminal; inherited ordinals/checkpoints,
+one-batch and no-repeat/no-reset limits hold. Ordinary separately approved successors remain.
+
+Finish, wrap, and close now mean safe local closeout plus the exact remaining fresh remote GO; they
+never authorize a push, deploy, PR action, or live write.
 
 ## What's new in v2.29.0 — gate repair stays finite across successors
 
