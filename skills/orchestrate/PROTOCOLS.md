@@ -31,14 +31,15 @@ own repo gives it an artifact.** The same standard, applied to itself.
   where the bug is invisible.
 - **R1 permits one bounded batch unless the mechanism repeated; harm-bearing R2 and repeated R1
   require one shared-cause root kind and closure proof.** R3 tests that consolidated correction.
-  Before R4 dispatch, a fresh frontier process review bound to the latest frozen panel
-  rules: finish once; successor, or Owner decision with no current-chip dispatch, may be cited by
-  the Owner-evidenced child continuation after terminal close. Gate count
-  continues through children; each fourth gate repeats the review but grants no extra round. After
-  terminal R4 STOP, one Owner-approved completion child fixes only its recorded paths/proof: one
-  verified batch and one real final full review. Parent terminal and inherited checkpoints remain;
-  final STOP, second batch, scope growth, repeat/reset/relabel STOP. A genuinely new Owner-approved
-  successor remains. R4 is the final bookend; no R5.
+  Before R4 dispatch, fresh frontier process review binds latest frozen panel
+  rules: finish once; a successor or Owner decision with no current-chip dispatch may be cited by
+  an Owner-evidenced child continuation after terminal close. Gate count
+  continues through children; each fourth repeats review; no extra round. After
+  terminal R4 STOP, one Owner-approved completion child fixes recorded paths/proof: one
+  verified batch and one real final full review. Parent terminal, inherited checkpoints remain;
+  final STOP, second batch, scope growth, repeat/reset/relabel STOP; its failed/STOP surface stays
+  closed. Genuinely new Owner-approved work starts separately only on disjoint surfaces. R4 is the
+  final bookend; no R5.
 - **When ONE mechanism repeats, diagnose PLUMBING or CONCEPT before re-fixing.** Bespoke logic beside
   the real grammar may belong in that grammar; then re-test the original trigger because relocation
   does not cure a wrong concept. Once acceptance proof is green, desirable extensions become

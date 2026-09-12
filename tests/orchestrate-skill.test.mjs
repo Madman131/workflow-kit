@@ -167,8 +167,17 @@ test("the round controller pins the finite aggregate boundary", () => {
     "repair dispatch declaration fields");
   pin(brief, "the exact PM disposition and panel-close",
     "typed evidence is procedure-recorded and candidate-bound");
-  pin(brief, "The worker puts `session_id` in `--verify`; the guard binds",
+  pin(brief, "The guard binds each authorized path.",
     "worker verifies the persisted brief receipt");
+  pin(brief, "completion-exception worker does **not** run `--confirm`",
+    "completion workers reuse the continuation receipt instead of minting another one");
+  pin(brief, "uses it as `repair_dispatch_event_id` for `--verify` with the child task/session",
+    "the completion worker handshake binds the child continuation event, task, and session");
+  pin(body, "failed/STOP surface stays closed", "completion exception terminal surface remains closed");
+  pin(body, "genuinely new Owner-approved work begins separately only on disjoint surfaces",
+    "new work is not a relabel of the stopped completion surface");
+  pin(body, "exact Astra model/effort is runtime-verified procedure, not controller-authenticated identity",
+    "controller evidence binding does not claim provider identity authentication");
   pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
 
   const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");

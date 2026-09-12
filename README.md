@@ -10,7 +10,8 @@ consult model/effort values, requires runtime verification, and forbids silent s
 The aggregate controller admits one tightly bounded completion exception only after a terminal local
 R4 STOP: Owner evidence, fresh Astra zoom-out, PM recommendation, one verified fixed-scope batch,
 and one real final full child review. The parent remains terminal; inherited ordinals/checkpoints,
-one-batch and no-repeat/no-reset limits hold. Ordinary separately approved successors remain.
+one-batch and no-repeat/no-reset limits hold. Its failed/STOP surface remains closed; separately
+approved genuinely new work begins only on disjoint surfaces.
 
 Finish, wrap, and close now mean safe local closeout plus the exact remaining fresh remote GO; they
 never authorize a push, deploy, PR action, or live write.

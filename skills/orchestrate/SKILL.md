@@ -81,8 +81,11 @@ into a private worktree.
    resolves via an Owner-evidenced terminal child, never current-chip dispatch. Every fourth gate
    repeats it without granting a round. R4 is the
    final GO/STOP bookend; no R5. One R4 STOP exception child is fixed paths/proof only: one verified
-   batch then one real final full review; parent terminal and inherited checkpoints remain. Final STOP,
-   second batch, scope growth, reset/relabel/repeat STOP; genuinely new Owner-approved successors stay.
+   batch then one real final full review; parent terminal and inherited checkpoints remain. Its failed/STOP
+   surface stays closed: final STOP, second batch, scope growth, reset/relabel/repeat STOP; genuinely new
+   Owner-approved work begins separately only on disjoint surfaces. The controller binds the typed
+   `owner_decision` review and exact continuation proposal; exact Astra model/effort is runtime-verified
+   procedure, not controller-authenticated identity.
    **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
    lenses; zoom-out controls disagreement; KISS; carve-outs before RULE #1. Round events:
    `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes

@@ -150,12 +150,15 @@ test("execution roles, legacy slice provenance, and closeout preserve their auth
   const foundations = read("core/FOUNDATIONS.md");
   const orchestrate = read("skills/orchestrate/SKILL.md");
   const protocols = read("skills/orchestrate/PROTOCOLS.md");
+  const rootReadme = read("README.md");
   const gates = read("core/GATES.md");
   const closeout = read("skills/closeout/SKILL.md");
   assert.match(foundations, /PM independently inspects its bytes and may commit\/integrate them, but does not replace its authoring role/);
   assert.match(foundations, /Frontier planning or a critical consult hands its approved plan to the active workhorse PM for implementation/);
   assert.match(orchestrate, /PM may inspect and integrate Builder-authored bytes but never authors designated T2\/T3 source/);
-  assert.match(protocols, /terminal R4 STOP.*one Owner-approved completion child.*recorded paths\/proof.*one verified batch and one real final full review.*second batch, scope growth, repeat\/reset\/relabel STOP.*genuinely new Owner-approved successor remains/s);
+  assert.match(orchestrate, /failed\/STOP surface stays closed.*genuinely new Owner-approved work begins separately only on disjoint surfaces.*controller binds the typed `owner_decision` review and exact continuation proposal.*Astra model\/effort is runtime-verified procedure, not controller-authenticated identity/s);
+  assert.match(protocols, /terminal R4 STOP.*one Owner-approved completion child.*recorded paths\/proof.*one verified batch and one real final full review.*second batch, scope growth, repeat\/reset\/relabel STOP.*failed\/STOP surface stays closed.*Genuinely new Owner-approved work starts separately only on disjoint surfaces/s);
+  assert.match(rootReadme, /Its failed\/STOP surface remains closed; separately approved genuinely new work begins only on disjoint surfaces/);
   assert.match(gates, /`frontier-pm` is a legacy mechanical manifest token, not a model identity/);
   assert.match(closeout, /finish \/ wrap up \/ close this.*safe local closeout only.*not a fresh push, deploy, merge, activation, or prod-write GO/s);
   assert.match(closeout, /Do not push, open\/update a PR, merge a remote PR, deploy, or claim remote publication complete until that GO is explicit; eligible local merge and read-only remote inspection\/verification remain allowed/);

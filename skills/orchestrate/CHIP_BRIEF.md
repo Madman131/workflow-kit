@@ -31,7 +31,9 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    than silently substituting. Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
    standard round. The orchestrator confirms bytes (`confirm-repair-brief --confirm`), sending only
-   the receipt/path. The worker puts `session_id` in `--verify`; the guard binds each authorized path.
+   the receipt/path. A completion-exception worker does **not** run `--confirm`: the PM supplies
+   `child_continuation` event id, and the child worker uses it as `repair_dispatch_event_id` for
+   `--verify` with the child task/session. The guard binds each authorized path.
 6. **Standing rules** — binding every chip: surgical staging, the identity ritual,
    generalization rules, read-only sources.
 7. **Consult protocol** — route questions to the orchestrator with stage, question, options with
