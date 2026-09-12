@@ -2030,7 +2030,8 @@ export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
   if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
-      !input.children.every(aggregateChildShape)) {
+      !input.children.every(aggregateChildShape) ||
+      (input.continuation_kind === "completion_exception" && input.children.length !== 1)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
   // Screen-at-emission on the RECOMMENDATION: a successor is a screened action, never an automatic

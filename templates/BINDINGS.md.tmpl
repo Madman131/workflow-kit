@@ -9,15 +9,18 @@
 > `core/REVIEW.md` + `core/OPERATE.md`; nothing there names a project, and nothing here restates method.
 > **Complete every `{{PLACEHOLDER}}` before relying on this file.**
 
-## Roles → models *(default: {{DEFAULT_BUILDER}} is the Builder)*
-Owner = **{{OWNER}}** · PM = **the pinned frontier {{BUILDER_FAMILY}} seat in the active build
-thread** · Builder = **{{DEFAULT_BUILDER}}** · Cold reviewer = **blind {{COLD_PANEL_MODEL}} panel**
-(fresh context) · Cross-family lens = **{{CROSS_FAMILY_LENS}}** · External gate = **{{EXTERNAL_GATE}}**
-· Artifact store = `docs/journal/`.
+## Roles → exact models *(verified {{LAST_VERIFIED_DATE}})*
+Owner = **{{OWNER}}** · PM = **{{PM_MODEL_ID}}** at **{{PM_EFFORT}}** · Builder =
+**{{BUILDER_MODEL_ID}}** at **{{BUILDER_EFFORT}}** · Gather = **{{GATHER_MODEL_ID}}** at
+**{{GATHER_EFFORT}}** · Astra consult = **{{ASTRA_CONSULT_MODEL_ID}}** at
+**{{ASTRA_CONSULT_EFFORT}}** · Cold reviewer = **blind {{COLD_PANEL_MODEL}} panel** (fresh context)
+· Cross-family lens = **{{CROSS_FAMILY_LENS}}** · External gate = **{{EXTERNAL_GATE}}** · Artifact store =
+`docs/journal/`. Before each handoff, verify the configured runtime model and effort; friendly role
+names are not evidence, and unavailable configured seats are reported, never silently substituted.
 
 **Frontier consult (`/frontier-review`) — role bindings:** frontier judge = **{{FRONTIER_MODEL}}**
 (the most capable, most expensive tier; judges the packet, nothing else) · workhorse =
-**{{DEFAULT_BUILDER}}** (builds the packet, resumes as decider) · Codex-lane frontier =
+**{{PM_MODEL_ID}}** (builds the packet, resumes as decider) · Codex-lane frontier =
 **{{CODEX_FRONTIER_MODEL}}**. Re-binding the seat files themselves: the kit's `PORTABILITY.md` § the consult
 seat.
 

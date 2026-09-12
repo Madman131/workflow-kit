@@ -306,6 +306,8 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
         completion_proof: "rerun FINAL and collect the full final panel" },
       completion_batch: { worker_session_id: "finish-worker", brief_path: "briefs/completion.md" },
     };
+    assert.doesNotThrow(() => assert.equal(recordAggregateChildContinuation({ ...exception, children: [] }, options(ctx.dir)).state,
+      "aggregate-continuation-malformed"), "an empty completion child list is a typed refusal, not a throw");
     assert.equal(recordAggregateChildContinuation(exception, options(ctx.dir)).state,
       "aggregate-continuation-conflict", "fresh Astra review is required before exception work authority");
     const review = processReview(ctx, null, parent.candidate, "owner_decision", "task-1", "changeset-1",

@@ -69,7 +69,7 @@ and in `GATES.md`) · `docs/journal/` (append-only history).
 
 The whole method as one line, for orientation — each stage is a section in the METHOD files above.
 
-**Pipeline (the map):** classify (Builder proposes → Owner ratifies) → **code gate** for tier (T0 self-check · T1 cold · T2/T3 cold-panel → cross-family capstone[if avail] → external) → **frontier PM dispositions findings** (remediate · defer · decline · escalate) **+ Owner push-GO for any code push** → if it runs a prod write, **execution protocol** (named-GO → preflight → one-step → verify → success-exit / fail-branch) → **Garden** (update memory + docs; ledger/remediation where adopted).
+**Pipeline (the map):** classify (Builder proposes → Owner ratifies) → code gate for tier (T0 self-check · T1 cold · T2/T3 cold-panel → cross-family capstone[if avail] → external) → PM dispositions (remediate · defer · decline · escalate) → local closeout; **fresh Owner push-GO** for any remote code push → named execution-GO for any prod write → Garden (update memory + docs; ledger/remediation where adopted).
 
 ## Size discipline
 
