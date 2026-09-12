@@ -1,5 +1,8 @@
 # core/ — the canonical method set
 
+> Current kit release: **v2.31.0** — bounded completion exception, explicit execution-role bindings,
+> and fresh remote-GO closeout semantics.
+
 > **CLASS: REFERENCE (lookup-only).** **Kit v1.0.** A **map for a human**, or for an agent that lands
 > in this folder without going through the root entry stub. It is **not** an instruction to read
 > everything here — doing that re-creates the exact failure this layout fixes (a large corpus
