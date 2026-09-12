@@ -929,8 +929,10 @@ function aggregateWorld(events, standardEvents = []) {
             stdTaskUsed(row.task_id, rowSeq) || stdChangesetUsed(row.changeset_id, rowSeq)) continue;
         const lineage = lineageId !== null ? childLineage.get(row.task_id) : null;
         const completionException = lineage?.continuation_kind === "completion_exception";
+        const completionWorker = completionException ? completionBatchWorkers.get(row.task_id) : null;
         if (row.round !== 1 || row.phase !== (completionException ? "final_bookend" : "repair_round") || row.incoming_dispatch_event_id !== null ||
-            row.incoming_worker_event_id !== (completionException ? completionBatchWorkers.get(row.task_id)?.event_id ?? null : null) || activePathOverlap(paths, row.task_id, rowSeq) ||
+            row.incoming_worker_event_id !== (completionException ? completionWorker?.event_id ?? null : null) ||
+            (completionException && !completionWorker) || activePathOverlap(paths, row.task_id, rowSeq) ||
             pendingLineageOverlap(paths, row.task_id) ||
             (lineageId === null && stoppedPathOverlap(paths))) continue;
         if (lineageId !== null) {
@@ -952,10 +954,11 @@ function aggregateWorld(events, standardEvents = []) {
           policy_version: aggregatePolicyVersion(row), gate_base_ordinal: lineage?.gate_base_ordinal ?? 0,
           panels_open: [], panels_close: [], dispositions: [], root_exits: [], dispatches: [],
           process_reviews: [],
-          workers: [], worker_handoffs: [], latest: null, active_dispatch: null, active_worker: null,
+          workers: completionWorker ? [completionWorker] : [], worker_handoffs: [], latest: null, active_dispatch: null, active_worker: null,
           closes: [], terminal: null, active: false, authorized_paths: [], stopped_paths: [],
           lineage_event_id: lineageId, completion_exception: completionException };
         programs.set(row.task_id, created); usedTasks.add(row.task_id); usedChangesets.add(row.changeset_id);
+        if (completionWorker) admitSession(row.task_id, completionWorker.worker_session_id);
       } else {
         // A REFREEZE SUPERSEDE: the same round re-opened on a DIFFERENT frozen candidate while
         // the prior panel never closed — the cure for a mid-panel contaminated candidate, which
@@ -1224,6 +1227,7 @@ function aggregateWorld(events, standardEvents = []) {
             !same(row.authorized_paths, batch.authorized_paths) || row.brief_path !== batch.brief_path ||
             row.brief_sha256 !== batch.brief_sha256) continue;
         completionBatchWorkers.set(row.task_id, accept(row));
+        admitSession(row.task_id, row.worker_session_id);
         continue;
       }
       if (state.terminal) continue;
@@ -2608,8 +2612,10 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   if (!loaded.ok) return loaded;
   const completionWorld = aggregateWorld(loaded.aggregate_events, loaded.events);
   const completionLineage = completionWorld?.childLineage.get(taskId);
-  if (completionLineage?.continuation_kind === "completion_exception" &&
-      !completionWorld.programs.has(taskId)) {
+  if (completionLineage?.continuation_kind === "completion_exception") {
+    if (completionWorld.programs.has(taskId)) {
+      return { ok: false, state: "completion-batch-finished" };
+    }
     const batch = completionLineage.completion_batch;
     const admission = completionWorld.completionBatchWorkers.get(taskId);
     if (!batch?.authorized_paths.includes(target)) {

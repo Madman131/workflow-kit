@@ -38,8 +38,8 @@ local merge and read-only remote inspection/verification remain allowed.** Only 
 actually landed: `git fetch origin && git log origin/<branch> -1 --oneline`.
 
 ## 4. After explicit GO: open or update the PR, then LAND it
-Where the repo works that way. Merge only with the step-0 authorization — never over a failed
-check, an unresolved conflict, or a branch protection.
+Where the repo works that way. Merge a remote PR only after the fresh remote GO in §3 — never over
+a failed check, an unresolved conflict, or a branch protection.
 
 ## 5. After explicit GO: verify the TARGET
 Confirm the merge is on the target branch on the remote, that required checks passed THERE,

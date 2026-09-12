@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Run a program too large for one thread as sequential CHIPS — one orchestrator, one worker per changeset, an Owner who holds intent and the merge-GO. Use when work spans many separately gated changesets, or when asked how to split and sequence a program across sessions.
+description: Run a program as sequential CHIPS with an active workhorse PM, designated Builder, and Owner-held reserved decisions. Use when work spans separately gated changesets or needs sequencing across sessions.
 ---
 
 # /orchestrate — one writer, one ladder, one GO

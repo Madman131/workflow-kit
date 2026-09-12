@@ -422,8 +422,21 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
       task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
     }, { worker: worker.event_id });
     const finalPanel = { ...wrongPanel, phase: "final_bookend" };
+    assert.equal(recordAggregatePanelOpen({ ...finalPanel, incoming_worker_event_id: null }, options(ctx.dir)).state,
+      "aggregate-panel-open-conflict", "a completion final panel cannot open without the verified batch worker");
     const opened = recordAggregatePanelOpen(finalPanel, options(ctx.dir));
     assert.equal(opened.ok, true, opened.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/x.mjs" },
+      { projectRoot: ctx.dir }).state, "completion-batch-finished",
+    "opening the final panel ends the one completion batch before disposition");
+    const postOpenGuard = invokeInstalledGuard("src/x.mjs");
+    assert.equal(postOpenGuard.status, 0, `installed guard post-open execution failed: ${postOpenGuard.stderr}`);
+    assert.match(postOpenGuard.stdout, /"permissionDecision":"deny"/,
+      "the installed guard denies an in-scope completion write after final-panel open");
+    assert.equal(recordAggregateClose({ type: "aggregate_v2", kind: "close", task_id: "finish-child",
+      changeset_id: "finish-child-cs", panel_open_event_id: opened.event_id, reason: "worker cannot abandon itself",
+      owner_evidence: "Owner close evidence" }, options(ctx.dir, "finish-worker")).state,
+    "aggregate-close-self-authorized", "the completion batch worker is admitted into the opened child state");
     const closed = closePanel(ctx, opened, finalPanel.expected_seats, repaired, "FINAL-CHILD",
       { task_id: "finish-child", changeset_id: "finish-child-cs" });
     const final = disposition(ctx, closed.closed, {
@@ -437,6 +450,11 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     assert.equal(child.current_gate_ordinal, 5, "the child continuation itself did not consume an ordinal");
     assert.equal(child.terminal, "STOP", "the one real final child review may STOP but cannot mint a second batch");
     assert.equal(child.active_dispatch, null, "the stopped child retains no dispatch route for another batch");
+    assert.ok(child.workers.some((entry) => entry.worker_session_id === "finish-worker"),
+      "replay carries the completion worker into the child worker state");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/x.mjs" },
+      { projectRoot: ctx.dir }).state, "completion-batch-finished",
+    "the completion batch remains closed after terminal STOP");
     assert.equal(recordWorkerVerification({ task_id: "finish-child", repair_dispatch_event_id: continuation.event_id },
       options(ctx.dir, "second-finish-worker")).state, "repair-worker-verification-missing",
     "a second worker session cannot consume the one completion batch");
