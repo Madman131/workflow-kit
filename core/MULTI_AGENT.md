@@ -13,9 +13,9 @@ Subagent use *inside* the tiers; changes no tier, no gate. Classify by effect on
 |---|---|---|---|
 | **Gather** | context in | nothing — conclusions + pointers; source stays authoritative | freely (non-authoring) |
 | **Review** | verdict in | nothing — findings; PM dispositions | freely (non-deciding — IO) |
-| **Author** | artifact out | the shipped artifact | **no** for live-path / T2 / T3 — in-thread |
+| **Author** | artifact out | the shipped artifact | one designated Builder retains raw T2/T3 source; PM may inspect, commit and locally integrate it |
 
-**Retention guarantee.** The authoritative build of anything that can carry a *silent degenerative bug* never leaves the Builder's context: (1) no load-bearing fact may exist only as an agent's summary — if it gates a decision, touches the corpus, or rides the live-behavior path, the Builder reads raw source/diff and re-derives it; (2) authoring of T2/T3/live-path code stays in-thread; agents author only T0/T1 work, which the Builder re-reads raw and owns.
+**Retention guarantee.** The authoritative build of anything that can carry a *silent degenerative bug* never leaves the designated Builder's context: (1) no load-bearing fact may exist only as an agent's summary — the Builder reads raw source/diff and re-derives it; (2) the PM independently inspects raw bytes and decisive evidence, may commit and locally integrate Terra-authored T2/T3 work, but does not author that source; gathering agents author only T0/T1 work, which the Builder re-reads raw and owns.
 
 **Rule:** Gather + Review → delegate freely; Author → keep, gated by tier. Delegation never raises a tier, substitutes for a mandated gate, or lets a summary stand for a source — it front-loads Steer (classify with full context) and thickens Gate (more cold checks, earlier).
 

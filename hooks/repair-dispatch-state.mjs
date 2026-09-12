@@ -96,6 +96,8 @@ const effectiveAggregatePolicyVersion = (state, incoming) =>
   Math.max(state?.policy_version ?? 1, aggregatePolicyVersion(incoming));
 const continuationReviewAllows = (review) =>
   ["successor", "owner_decision"].includes(review?.ruling);
+const completionExceptionReviewAllows = (review) => review?.ruling === "owner_decision";
+const CONTINUATION_KINDS = new Set(["split", "new_changeset", "material_scope", "completion_exception"]);
 const PROCESS_REVIEW_PURPOSES = new Set(["dispatch", "child_continuation", "legacy_handoff"]);
 function processReviewRulingAllowed(purpose, ruling) {
   return purpose === "dispatch"
@@ -140,11 +142,19 @@ function proposedTransitionProjection(purpose, input) {
         !((ID64.test(input.parent_disposition_event_id || "") && input.parent_panel_open_event_id === undefined) ||
           (input.parent_disposition_event_id === null && ID64.test(input.parent_panel_open_event_id || ""))) ||
         !Array.isArray(input.trigger_ids) || !input.trigger_ids.every((id) => text(id, 300)) ||
-        !["split", "new_changeset", "material_scope"].includes(input.continuation_kind)) return null;
+        !CONTINUATION_KINDS.has(input.continuation_kind) ||
+        (input.continuation_kind === "completion_exception" &&
+          (!completionExceptionShape(input.completion_exception) || !completionBatchProposalShape(input.completion_batch))) ||
+        (input.continuation_kind !== "completion_exception" &&
+          (input.completion_exception !== undefined || input.completion_batch !== undefined))) return null;
     return { parent_disposition_event_id: input.parent_disposition_event_id,
       ...(input.parent_panel_open_event_id !== undefined
         ? { parent_panel_open_event_id: input.parent_panel_open_event_id } : {}),
       trigger_ids: [...input.trigger_ids].sort(), continuation_kind: input.continuation_kind,
+      ...(input.continuation_kind === "completion_exception"
+        ? { completion_exception: input.completion_exception,
+          completion_batch: { worker_session_id: input.completion_batch.worker_session_id,
+            brief_path: input.completion_batch.brief_path } } : {}),
       children: children.sort((a, b) => `${a.task_id}\0${a.changeset_id}`.localeCompare(`${b.task_id}\0${b.changeset_id}`)) };
   }
   if (purpose === "legacy_handoff") {
@@ -240,14 +250,17 @@ function validAggregateKindShape(event) {
         // against the prior 1200 cap.
         event.trigger_ids.length <= 2600 && new Set(event.trigger_ids).size === event.trigger_ids.length &&
         event.trigger_ids.every((id) => text(id, 300)) &&
-        ["split", "new_changeset", "material_scope"].includes(event.continuation_kind) &&
+        CONTINUATION_KINDS.has(event.continuation_kind) &&
         Array.isArray(event.children) && event.children.length > 0 && event.children.every(aggregateChildShape) &&
         text(event.owner_evidence, 1000) &&
         (liveAggregatePolicy(event) ? nullableId(event.process_review_event_id)
           : event.process_review_event_id === undefined || nullableId(event.process_review_event_id)) &&
         // action_screen is REQUIRED at the mint (recordAggregateChildContinuation); OPTIONAL in the
         // shape so rows minted before this field keep validating on replay (never re-minted here).
-        (event.action_screen === undefined || validActionScreen(event.action_screen));
+        (event.action_screen === undefined || validActionScreen(event.action_screen)) &&
+        (event.continuation_kind === "completion_exception"
+          ? completionExceptionShape(event.completion_exception) && completionBatchShape(event.completion_batch)
+          : event.completion_exception === undefined && event.completion_batch === undefined);
     case "legacy_handoff":
       return text(event.parent_task_id, 120) && text(event.parent_changeset_id, 120) &&
         ID64.test(event.parent_disposition_event_id || "") && Number.isSafeInteger(event.parent_round) &&
@@ -667,6 +680,21 @@ function validActionScreen(s) {
     text(s.smallest_action, 1000) && text(s.kiss, 1000) && text(s.zoom_out, 1000);
 }
 
+function completionExceptionShape(value) {
+  return plain(value) && value.repair_batches === 1 &&
+    text(value.pm_recommendation, 1200) && text(value.surviving_harm, 1200) &&
+    text(value.smallest_correction, 1200) && text(value.completion_proof, 1200);
+}
+
+function completionBatchProposalShape(value) {
+  return plain(value) && text(value.worker_session_id, 200) && strings([value.brief_path], { paths: true, itemMax: 500 });
+}
+
+function completionBatchShape(value) {
+  return completionBatchProposalShape(value) && Boolean(sortedPaths(value.authorized_paths)) &&
+    ID64.test(value.brief_sha256 || "") && Number.isSafeInteger(value.brief_size) && value.brief_size >= 0;
+}
+
 function completedGateCount(state) {
   if (!state) return 0;
   const rounds = new Set(state.panels_close.map((close) =>
@@ -713,7 +741,8 @@ function typedReviewMatches(review, purpose, anchor, transition) {
 function aggregateWorld(events, standardEvents = []) {
   if (!Array.isArray(events) || !events.every((row) => plain(row) && validAggregateEnvelope(row.event) &&
       row.event_id === eventId(row.event))) return null;
-  const programs = new Map(), accepted = new Map(), continuations = new Map(), childLineage = new Map();
+  const programs = new Map(), accepted = new Map(), continuations = new Map(), childLineage = new Map(),
+    completionBatchWorkers = new Map();
   const processReviews = [], processReviewKeys = new Set();
   const standardIdentities = standardEvents.filter((row) => row?.event?.type === "round_disposition" &&
     row.event.round === 1).filter((row, index, all) => all.findIndex((candidate) =>
@@ -890,8 +919,9 @@ function aggregateWorld(events, standardEvents = []) {
         if (usedTasks.has(row.task_id) || usedChangesets.has(row.changeset_id) ||
             stdTaskUsed(row.task_id, rowSeq) || stdChangesetUsed(row.changeset_id, rowSeq)) continue;
         const lineage = lineageId !== null ? childLineage.get(row.task_id) : null;
-        if (row.round !== 1 || row.phase !== "repair_round" || row.incoming_dispatch_event_id !== null ||
-            row.incoming_worker_event_id !== null || activePathOverlap(paths, row.task_id, rowSeq) ||
+        const completionException = lineage?.continuation_kind === "completion_exception";
+        if (row.round !== 1 || row.phase !== (completionException ? "final_bookend" : "repair_round") || row.incoming_dispatch_event_id !== null ||
+            row.incoming_worker_event_id !== (completionException ? completionBatchWorkers.get(row.task_id)?.event_id ?? null : null) || activePathOverlap(paths, row.task_id, rowSeq) ||
             pendingLineageOverlap(paths, row.task_id) ||
             (lineageId === null && stoppedPathOverlap(paths))) continue;
         if (lineageId !== null) {
@@ -901,7 +931,8 @@ function aggregateWorld(events, standardEvents = []) {
           if (!lineage || lineage.event_id !== lineageId || lineage.changeset_id !== row.changeset_id ||
               lineage.tier !== row.tier ||
               aggregatePolicyVersion(row) < (lineage.policy_version ?? 1) ||
-              !paths.every((entry) => lineage.authorized_paths.includes(entry))) continue;
+              !(completionException ? same(paths, lineage.authorized_paths)
+                : paths.every((entry) => lineage.authorized_paths.includes(entry)))) continue;
           if (stoppedPathOverlap(paths, lineageAncestors(row.task_id))) continue;
         } else if (childLineage.has(row.task_id) || lineageChangesetUsed(row.changeset_id)) {
           // A declared lineage child's identities are RESERVED: an unrelated program claiming the
@@ -914,7 +945,7 @@ function aggregateWorld(events, standardEvents = []) {
           process_reviews: [],
           workers: [], worker_handoffs: [], latest: null, active_dispatch: null, active_worker: null,
           closes: [], terminal: null, active: false, authorized_paths: [], stopped_paths: [],
-          lineage_event_id: lineageId };
+          lineage_event_id: lineageId, completion_exception: completionException };
         programs.set(row.task_id, created); usedTasks.add(row.task_id); usedChangesets.add(row.changeset_id);
       } else {
         // A REFREEZE SUPERSEDE: the same round re-opened on a DIFFERENT frozen candidate while
@@ -1011,7 +1042,7 @@ function aggregateWorld(events, standardEvents = []) {
       const rootKind = ["root_replacement", "simplification", "split"].includes(row.remediation_kind);
       const livePolicy = Math.max(state.policy_version, aggregatePolicyVersion(row)) >= AGGREGATE_POLICY_VERSION;
       let valid = false;
-      if (open.round === 4 && open.phase === "final_bookend") {
+      if ((open.round === 4 || state.completion_exception) && open.phase === "final_bookend") {
         // TOTAL by construction: `accepted` means BLOCKING-accepted, so the bookend is GO xor STOP
         // with no third case — a real non-blocking adjacent lives in `followup`, already routed.
         valid = row.remediation_kind === null && row.authorized_paths.length === 0 &&
@@ -1174,7 +1205,19 @@ function aggregateWorld(events, standardEvents = []) {
       }
       state.active_dispatch = accept(row); state.dispatches.push(row);
     } else if (row.kind === "worker") {
-      if (state?.terminal) continue;
+      if (!state) {
+        const lineage = childLineage.get(row.task_id);
+        const continuation = lineage && continuations.get(lineage.event_id);
+        const batch = lineage?.completion_batch;
+        if (!lineage || lineage.continuation_kind !== "completion_exception" || !continuation ||
+            completionBatchWorkers.has(row.task_id) || row.changeset_id !== lineage.changeset_id ||
+            row.dispatch_event_id !== lineage.event_id || row.worker_session_id !== batch?.worker_session_id ||
+            !same(row.authorized_paths, batch.authorized_paths) || row.brief_path !== batch.brief_path ||
+            row.brief_sha256 !== batch.brief_sha256) continue;
+        completionBatchWorkers.set(row.task_id, accept(row));
+        continue;
+      }
+      if (state.terminal) continue;
       if (!state || state.changeset_id !== row.changeset_id || state.active_worker ||
           !ID64.test(row.dispatch_event_id || "") || !text(row.worker_session_id, 200)) continue;
       const dispatch = state.dispatches.find((candidate) => candidate.event_id === row.dispatch_event_id);
@@ -1200,24 +1243,31 @@ function aggregateWorld(events, standardEvents = []) {
       // trigger rules per terminal: STOP inherits the accepted set EXACTLY; GO may carry only
       // routed follow-ups; CLOSED must CARRY the accepted set (a floor — an empty trigger list
       // must not inherit the exit while shedding the harms) and may add routed follow-ups.
-      if (!state || state.changeset_id !== row.changeset_id || !state.terminal ||
-          !["split", "new_changeset", "material_scope"].includes(row.continuation_kind) ||
+      if (!state || state.changeset_id !== row.changeset_id || !state.terminal || state.completion_exception ||
+          !CONTINUATION_KINDS.has(row.continuation_kind) ||
           !text(row.owner_evidence, 1000) || !Array.isArray(row.children)) continue;
+      const completionException = row.continuation_kind === "completion_exception";
+      const terminalR4Stop = state.terminal === "STOP" && state.latest?.round === 4 &&
+        state.panels_open.at(-1)?.phase === "final_bookend";
+      if ((completionException && (!terminalR4Stop || row.children.length !== 1 ||
+          !completionExceptionShape(row.completion_exception) || !completionBatchShape(row.completion_batch))) ||
+          (!completionException && (row.completion_exception !== undefined || row.completion_batch !== undefined))) continue;
       if (effectiveAggregatePolicyVersion(state, row) >= AGGREGATE_POLICY_VERSION) {
         const ordinal = nextGateOrdinal(state);
         const required = ordinal % 4 === 0;
         const review = row.process_review_event_id === null ? null
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
         const typed = review && typedReviewMatches(review, "child_continuation", aggregateTerminalAnchor(state), row) &&
-          review.next_gate_ordinal === ordinal && continuationReviewAllows(review);
+          review.next_gate_ordinal === ordinal && (completionException
+            ? completionExceptionReviewAllows(review) : continuationReviewAllows(review));
         const typedApplicable = state.process_reviews.find((candidate) =>
           typedReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), row) &&
           candidate.next_gate_ordinal === ordinal) || null;
         const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
           candidate.next_gate_ordinal === ordinal) || null;
-        const historical = review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
+        const historical = !completionException && review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
           continuationReviewAllows(review);
-        if (((required || typedApplicable) && !typed && !historical) ||
+        if (((completionException || required || typedApplicable) && !typed && !historical) ||
             (row.process_review_event_id !== null && !typed && !historical) ||
             (!typed && !historical && oldApplicable)) continue;
       }
@@ -1231,6 +1281,7 @@ function aggregateWorld(events, standardEvents = []) {
       const anchorConsumed = (anchorId) => {
         const standing = parentContinuations.get(anchorId);
         if (!standing) return false;
+        if (standing.continuation_kind === "completion_exception") return true;
         const children = standing.children.map((child) => programs.get(child.task_id));
         const allTerminal = children.every((child) => child?.terminal);
         const anyVirgin = children.some((child) =>
@@ -1327,6 +1378,8 @@ function aggregateWorld(events, standardEvents = []) {
       parentContinuations.set(row.parent_disposition_event_id ?? row.parent_panel_open_event_id, row);
       for (const child of row.children) {
         childLineage.set(child.task_id, { ...child, event_id: row.event_id, parent_task_id: row.task_id,
+          continuation_kind: row.continuation_kind, completion_exception: row.completion_exception ?? null,
+          completion_batch: row.completion_batch ?? null,
           policy_version: state.policy_version, gate_base_ordinal: currentGateOrdinal(state) });
       }
     } else if (row.kind === "legacy_handoff") {
@@ -1377,7 +1430,8 @@ function aggregateWorld(events, standardEvents = []) {
       continuations.set(row.event_id, handoff);
     }
   }
-  return poisoned ? null : { programs, accepted, continuations, childLineage, legacyHandedOff, processReviews };
+  return poisoned ? null : { programs, accepted, continuations, childLineage, completionBatchWorkers,
+    legacyHandedOff, processReviews };
 }
 
 export function deriveAggregateRepairState(events, taskId, { standardEvents = [] } = {}) {
@@ -1993,6 +2047,10 @@ export function recordAggregateChildContinuation(input,
   const state = deriveAggregateRepairState(rows.aggregate, input.task_id, { standardEvents: rows.standard });
   const parentOpen = state.ok ? (state.panels_open ?? []).at(-1) : null;
   if (!parentOpen) return { ok: false, state: "aggregate-continuation-malformed" };
+  const completionException = input.continuation_kind === "completion_exception";
+  const batchBrief = completionException && completionBatchProposalShape(input.completion_batch)
+    ? readRegularRepoFile(projectRoot, input.completion_batch.brief_path) : null;
+  if (completionException && !batchBrief) return { ok: false, state: "repair-brief-unconfirmed" };
   // The anchor is derived from the parent's actual terminal shape: its latest disposition, or —
   // for a no-disposition CLOSED parent whose panel was collected — its winning panel_open. The
   // caller's own citation is accepted only when it matches the derived truth (replay re-checks).
@@ -2004,6 +2062,10 @@ export function recordAggregateChildContinuation(input,
     trigger_ids: input.trigger_ids,
     continuation_kind: input.continuation_kind, children: input.children,
     owner_evidence: input.owner_evidence, action_screen: input.action_screen,
+    ...(completionException ? { completion_exception: input.completion_exception,
+      completion_batch: { worker_session_id: input.completion_batch.worker_session_id,
+        brief_path: batchBrief.path, brief_sha256: batchBrief.sha256, brief_size: batchBrief.size,
+        authorized_paths: [...input.children[0].authorized_paths] } } : {}),
     process_review_event_id: input.process_review_event_id ?? null };
   if (state.ok && effectiveAggregatePolicyVersion(state, event) >= AGGREGATE_POLICY_VERSION) {
     const ordinal = nextGateOrdinal(state);
@@ -2011,11 +2073,11 @@ export function recordAggregateChildContinuation(input,
       : state.process_reviews.find((candidate) => candidate.event_id === event.process_review_event_id);
     const authorized = review && typedReviewMatches(review, "child_continuation",
       aggregateTerminalAnchor(state), event) && review.next_gate_ordinal === ordinal &&
-      continuationReviewAllows(review);
+      (completionException ? completionExceptionReviewAllows(review) : continuationReviewAllows(review));
     const applicable = state.process_reviews.find((candidate) =>
       typedReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), event) &&
       candidate.next_gate_ordinal === ordinal) || null;
-    if ((ordinal % 4 === 0 || applicable || event.process_review_event_id !== null) && !authorized) {
+    if ((completionException || ordinal % 4 === 0 || applicable || event.process_review_event_id !== null) && !authorized) {
       return { ok: false, state: "aggregate-continuation-conflict" };
     }
   }
@@ -2405,6 +2467,26 @@ export function verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_even
     }
     return { ok: true, state: "repair-brief-confirmed", receipt, brief };
   }
+  const completionRow = loaded.aggregate_events.find((row) => row.event_id === eventId &&
+    row.event.kind === "child_continuation" && row.event.continuation_kind === "completion_exception");
+  if (completionRow) {
+    const world = aggregateWorld(loaded.aggregate_events, loaded.events);
+    const lineage = world?.childLineage.get(taskId);
+    const batch = completionRow.event.completion_batch;
+    if (!lineage || lineage.event_id !== eventId || lineage.changeset_id !== completionRow.event.children[0]?.changeset_id ||
+        !batch || !same(batch.authorized_paths, lineage.authorized_paths)) {
+      return { ok: false, state: "repair-brief-receipt-missing" };
+    }
+    const brief = readRegularRepoFile(projectRoot, batch.brief_path);
+    if (!brief || brief.sha256 !== batch.brief_sha256 || brief.size !== batch.brief_size) {
+      return { ok: false, state: "repair-brief-changed" };
+    }
+    return { ok: true, state: "repair-brief-confirmed", receipt: { ...completionRow.event,
+      event_id: eventId, kind: "completion_exception", changeset_id: lineage.changeset_id,
+      authorized_paths: [...batch.authorized_paths], target: batch.brief_path,
+      brief_sha256: batch.brief_sha256, brief_size: batch.brief_size,
+      worker_session_id: batch.worker_session_id }, brief };
+  }
   const state = deriveRepairState(loaded.events, taskId);
   if (!state.ok) return state;
   const receipt = state.dispatches.find((row) => row.event_id === eventId);
@@ -2451,6 +2533,20 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
       brief_sha256: receipt.brief_sha256 };
     return appendEligibleAggregate(file, event, "aggregate-worker-conflict");
   }
+  if (receipt.type === AGGREGATE_EVENT_TYPE && receipt.kind === "completion_exception") {
+    if (receipt.worker_session_id !== sessionId) return { ok: false, state: "repair-worker-verification-missing" };
+    const rows = controllerRows(file);
+    const world = rows && aggregateWorld(rows.aggregate, rows.standard);
+    const prior = world?.completionBatchWorkers.get(taskId);
+    if (prior?.worker_session_id === sessionId && prior.dispatch_event_id === eventId) {
+      return { ok: true, event_id: prior.event_id, idempotent: true };
+    }
+    const event = { type: AGGREGATE_EVENT_TYPE, policy_version: AGGREGATE_POLICY_VERSION,
+      kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id, recorded_at: now, session_id: sessionId,
+      dispatch_event_id: eventId, worker_session_id: sessionId, authorized_paths: [...receipt.authorized_paths],
+      brief_path: receipt.target, brief_sha256: receipt.brief_sha256 };
+    return appendEligibleAggregate(file, event, "aggregate-worker-conflict");
+  }
   const prior = current.find((row) => row.event.type === "worker_verification" &&
     row.event.task_id === taskId && row.event.repair_dispatch_event_id === eventId &&
     row.event.worker_session_id === sessionId);
@@ -2494,6 +2590,23 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   }
   const loaded = loadRepairEventsForProject(projectRoot, { execGit });
   if (!loaded.ok) return loaded;
+  const completionWorld = aggregateWorld(loaded.aggregate_events, loaded.events);
+  const completionLineage = completionWorld?.childLineage.get(taskId);
+  if (completionLineage?.continuation_kind === "completion_exception" &&
+      !completionWorld.programs.has(taskId)) {
+    const batch = completionLineage.completion_batch;
+    const admission = completionWorld.completionBatchWorkers.get(taskId);
+    if (!batch?.authorized_paths.includes(target)) {
+      return { ok: false, state: "repair-worker-path-unauthorized", authorized_paths: batch?.authorized_paths ?? [] };
+    }
+    if (!text(sessionId, 200) || admission?.worker_session_id !== sessionId || sessionId !== batch.worker_session_id) {
+      return { ok: false, state: "repair-worker-verification-missing" };
+    }
+    const verified = verifyRepairBriefReceipt({ task_id: taskId,
+      repair_dispatch_event_id: completionLineage.event_id }, { projectRoot, execGit });
+    if (!verified.ok) return verified;
+    return { ok: true, state: "repair-worker-write-authorized", admission, receipt: verified.receipt };
+  }
   const ownership = activeRepairPathOwners(loaded.events, target, { aggregateEvents: loaded.aggregate_events });
   if (!ownership.ok) return ownership;
   if (ownership.handed_off_task_ids.includes(taskId)) {
