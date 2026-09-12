@@ -43,8 +43,8 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    worktrees stay writable. A root outside ALL of those is one your file tools cannot reach.)
 3. **Identity ritual before EVERY commit/push:** run
    `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
-   and confirm the intended remote + branch. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}** — gate
-   per the method.
+   and confirm the intended remote + branch. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}** needs a
+   fresh Owner GO for the exact head and target, per the method.
 4. **Declare the task lane before the first code write.** `.claude/task-lane.json` binds this session
    id + a kebab task id + exactly one route: **`in-thread`** (with the tier) or **`exempt`** (with a
    ledgered reason **and the tier** — the reason names the unavailable seat, which says nothing about

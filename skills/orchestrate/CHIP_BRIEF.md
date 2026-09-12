@@ -53,9 +53,8 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    WRITE-GO for each prod write, which a push-GO never covers — and say that even those route THROUGH
    the orchestrator, who relays**; the write-GO is the one whose omission routes a live production
    write. **Give the orchestrator-facing
-   labels (`CONSULT:` / `RULING NEEDED:`) and forbid EVERY Owner-facing label rule 8 defines — `QUESTION:` · `RECOMMENDATION:` ·
-   `DECISION NEEDED:`**, which the Owner reads as theirs off the chip's terminal. Do not restate the list
-   by pointer alone: a chip reads its brief and may never load the body.
+   labels (`CONSULT:` / `RULING NEEDED:`). The generated `core/OWNER_COMMS.md` rule 8 is the sole
+   source for Owner-facing labels and form; do not duplicate its list in this portable brief.
 8. **Accumulated corrections** — the rulings and lessons this chip inherits, especially any that
    CONTRADICT what the brief said when it was first written. A superseded instruction left standing
    in a brief will be executed.

@@ -134,6 +134,40 @@ test("execution roles, legacy slice provenance, and closeout preserve their auth
   assert.match(closeout, /Do not push, open\/update a PR, merge a remote PR, deploy, or claim remote publication complete until that GO is explicit; eligible local merge and read-only remote inspection\/verification remain allowed/);
 });
 
+test("remote publication, endpoint, routing, and discovery claims retain one authority source", () => {
+  const operate = read("core/OPERATE.md");
+  const workflow = read("core/WORKFLOW.md");
+  const multiAgent = read("core/MULTI_AGENT.md");
+  const agents = raw("templates/AGENTS.md.tmpl");
+  const rungZero = read("skills/orchestrate/RUNG_ZERO.md");
+  const orchestrate = read("skills/orchestrate/SKILL.md");
+  const portability = read("PORTABILITY.md");
+  const readme = raw("core/README.md");
+  const claudeCloseout = raw("skill-shims/claude/closeout.md");
+  const claudeOrchestrate = raw("skill-shims/claude/orchestrate.md");
+  const codexCloseout = raw("skill-shims/codex/closeout.md");
+  const claudeTemplate = raw("templates/CLAUDE.md.tmpl");
+  for (const [name, text] of [["OPERATE", operate], ["WORKFLOW", workflow], ["MULTI_AGENT", multiAgent],
+    ["AGENTS template", agents], ["RUNG_ZERO", rungZero]]) {
+    assert.match(text, /every remote push or publication needs a fresh Owner\s+GO/i,
+      `${name} never grants a docs-only remote publication exception`);
+    assert.doesNotMatch(text, /docs-only[^.]{0,100}(GO-free|without a GO|push is free)/i,
+      `${name} contains no T0 docs-only remote push autonomy`);
+  }
+  assert.match(operate, /Owner's explicit.*local\/abandon endpoint.*intentionally retained artifact.*intentionally discarded artifact/i);
+  assert.match(orchestrate, /primary clone.*clean, on the target branch.*pure fast-forward.*Owner decision/i);
+  assert.match(orchestrate, /core\/OWNER_COMMS\.md` rule 8, not mirrored here/i);
+  assert.match(portability, /active workhorse PM coordinates, a designated Builder retains raw source/i);
+  assert.match(portability, /rule 8 as the sole source/i);
+  assert.match(claudeCloseout, /local checkpoint, fresh remote-GO boundary/);
+  assert.match(claudeOrchestrate, /active workhorse PM, designated Builder/);
+  assert.match(codexCloseout, /safe local closeout and an explicit remote boundary/);
+  assert.match(claudeTemplate, /needs a\s+fresh Owner GO for the exact head and target/);
+  assert.ok(readme.includes("read the repository-root [`VERSION`](../VERSION) file, the single source"),
+    "core README derives its current release identity from repository-root VERSION");
+  assert.doesNotMatch(readme, /v2\.31\.0/);
+});
+
 test("same-class recurrence enters root cause; material R2 process consults stay bounded", () => {
   const g = read("core/GATES.md");
   const f = read("skills/frontier-review/SKILL.md");

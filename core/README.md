@@ -1,7 +1,8 @@
 # core/ — the canonical method set
 
-> Current kit release: **v2.31.0** — bounded completion exception, explicit execution-role bindings,
-> and fresh remote-GO closeout semantics.
+> Current kit release: read the repository-root [`VERSION`](../VERSION) file, the single source of
+> truth for release identity. Its release notes describe bounded completion exceptions, explicit
+> execution-role bindings, and fresh remote-GO closeout semantics.
 
 > **CLASS: REFERENCE (lookup-only).** **Kit v1.0.** A **map for a human**, or for an agent that lands
 > in this folder without going through the root entry stub. It is **not** an instruction to read
@@ -72,7 +73,7 @@ and in `GATES.md`) · `docs/journal/` (append-only history).
 
 The whole method as one line, for orientation — each stage is a section in the METHOD files above.
 
-**Pipeline (the map):** classify (Builder proposes → Owner ratifies) → code gate for tier (T0 self-check · T1 cold · T2/T3 cold-panel → cross-family capstone[if avail] → external) → PM dispositions (remediate · defer · decline · escalate) → local closeout; **fresh Owner push-GO** for any remote code push → named execution-GO for any prod write → Garden (update memory + docs; ledger/remediation where adopted).
+**Pipeline (the map):** classify (Builder proposes → Owner ratifies) → code gate for tier (T0 self-check · T1 cold · T2/T3 cold-panel → cross-family capstone[if avail] → external) → PM dispositions (remediate · defer · decline · escalate) → local closeout; **fresh Owner GO** for any remote push or publication → named execution-GO for any prod write → Garden (update memory + docs; ledger/remediation where adopted).
 
 ## Size discipline
 

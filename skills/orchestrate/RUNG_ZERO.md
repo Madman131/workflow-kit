@@ -75,10 +75,9 @@ named restore-to-prior-state handle the Owner confirmed at classify-time — not
 works.
 
 **PUSH IS A SEPARATE AXIS FROM THE TIER, AND THIS TABLE DOES NOT SET IT.** Read the target repo's own
-push rule; in the repos this method came from, **any push containing code needs the Owner's push-GO
-regardless of tier**, docs-only pushes are free at T0 only, and a **core-document amendment's Owner
-wording sign-off IS its push-GO** — one decision, not two. Do not infer from the rows above that only
-T3 needs the Owner; that reading is wrong and it is the kind of wrong that pushes code.
+push rule; in this method, **every remote push or publication needs a fresh Owner GO for the exact head
+and target regardless of tier or file type**. Do not infer from the rows above that a T0 docs-only change
+may publish itself; that reading is wrong and it is the kind of wrong that pushes code.
 
 **Use T1. It is the honest tier for most instruction work and it is the one that goes unused.**
 **T3 is rare by construction:** a restructure or an irreversible write, not "this feels important."

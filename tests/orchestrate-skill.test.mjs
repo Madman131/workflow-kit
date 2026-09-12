@@ -59,7 +59,7 @@ test("the GO discipline is stated IN THE BODY — who gives it, and when it goes
   // The single most expensive thing to get wrong: a worker that merges on anyone else's word, or
   // on a GO given for an earlier head. Both halves are corrections of a plausible default, so both
   // stay in the executor-loaded body.
-  pin(body, "**The GO is the Owner's alone**", "GO ownership");
+  pin(body, "**A remote GO is the Owner's alone**", "GO ownership");
   pin(body, "a direct Owner\ninstruction outranks any routing preference", "Owner-direct-to-worker");
   pin(body, "**A GO ratifies a specific artifact:**", "stale-GO discipline");
   pin(body, "the GO\nis void until re-confirmed on the new head", "stale-GO consequence");
@@ -383,7 +383,7 @@ test("a fresh adopt lands the /orchestrate body and BOTH lane shims, and every p
     // install that silently truncated or templated the file would still pass an existence check.
     const installed = readFileSync(body, "utf8");
     assert.equal(installed, readFileSync(BODY, "utf8"), "the installed body is byte-identical to the kit's");
-    pin(installed, "**The GO is the Owner's alone**", "installed body keeps the GO rule");
+    pin(installed, "**A remote GO is the Owner's alone**", "installed body keeps the GO rule");
     pin(installed, "One rung on this page is enforced WHEN ITS HOOK IS ARMED", "installed body keeps the enforcement honesty");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -413,19 +413,15 @@ test("the pin helper reports a DEAD pin instead of passing it", () => {
 // release note vs the body. Every one was a HAND-MAINTAINED MIRROR with no mechanism holding it to
 // its source. The rule that came out of it: a mirror either goes, or it gets a pin. These are the
 // pins. § Routing and § Standing duties — the two sections this release exists for — had none.
-test("the reserved-decision list is FIVE wherever it is enumerated, and the role table does not restate it", () => {
+test("reserved decisions route through the PM without a portable mirror", () => {
   const body = readFileSync(BODY, "utf8");
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
-  for (const item of ["merge/push GO", "intent or risk acceptance", "tier\nratification", "wording sign-off", "WRITE-GO"]) {
-    assert.ok(body.includes(item.replace("\n", "\n")) || body.includes(item.replace("\n", " ")),
-      `§ Routing must name the reserved item ${JSON.stringify(item)} — an incomplete reserved list routes to the human by default`);
-  }
-  // PIN THE PROPERTY, NOT THE COUNT. A free pass found the count pinned while the CLOSURE was not:
-  // the carve-out was keyed to a closed list of five, three Owner decisions sat outside it, and the
-  // list being short had stopped meaning "ask the Owner" and started meaning "proceed without them".
-  // A portable file cannot enumerate an adopter.s reserved set, so the only safe form is the property.
-  assert.match(body, /EXAMPLES, not the closure/,
-    "§ Routing must state that the list is NOT closed — a closed list keyed to a timeout fails open");
+  assert.match(body, /Only the Owner decides critical design\/intent\/risk, material scope\/budget, credentials/,
+    "§ Routing names the Owner-only boundary without inventing a closed adopter list");
+  assert.match(body, /A chip routes those calls to the PM using `CONSULT:` or `RULING NEEDED:`/,
+    "§ Routing keeps chip-to-PM consultation distinct from Owner-facing form");
+  assert.match(body, /core\/OWNER_COMMS\.md` rule 8, not mirrored here/,
+    "§ Routing points to the canonical generated Owner-facing source");
   assert.match(brief, /EXAMPLES, not a closed set/,
     "CHIP_BRIEF must key the carve-out to what the TARGET REPO reserves, never to a shipped count");
   // The role table is the mirror a reader meets FIRST. It must POINT, never re-enumerate: a second
@@ -436,15 +432,13 @@ test("the reserved-decision list is FIVE wherever it is enumerated, and the role
     "the Owner role row must POINT at § Routing rather than restate the reserved set — a restated list is a mirror that goes stale");
 });
 
-test("the Owner-facing label forbid-list carries every label its cited source defines", () => {
+test("the Owner-facing label rule has one canonical generated source", () => {
   const body = readFileSync(BODY, "utf8");
-  const tmpl = readFileSync(path.join(KIT, "templates", "OWNER_COMMS.md.tmpl"), "utf8");
-  // Harvest from the SOURCE, not from a list here — this test must fail when rule 8 gains a label.
-  const defined = [...tmpl.matchAll(/`\*\*([A-Z][A-Z ]+):\*\*`/g)].map((m) => m[1]);
-  assert.ok(defined.length >= 3, `rule 8 defines at least 3 labels (found ${defined.join(", ")})`);
-  for (const label of defined) {
-    assert.ok(body.includes(`${label}:`),
-      `§ Routing forbids ${label}: chip→orchestrator — rule 8 defines it as Owner-facing, and a forbid-list short by one is the defect this release exists to close`);
+  const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
+  for (const [name, text] of [["body", body], ["brief", brief]]) {
+    assert.match(text, /core\/OWNER_COMMS\.md` rule 8/, `${name} routes Owner-facing form to generated rule 8`);
+    assert.doesNotMatch(text, /`QUESTION:`|`RECOMMENDATION:`|`DECISION NEEDED:`/,
+      `${name} does not hand-maintain a partial Owner-facing label mirror`);
   }
 });
 
@@ -452,7 +446,7 @@ test("§ Routing and § Standing duties exist in the body — the two sections t
   const body = readFileSync(BODY, "utf8");
   assert.match(body, /^### Routing — the Owner is not a queue$/m, "§ Routing is present");
   assert.match(body, /^## Standing duties/m, "§ Standing duties is present");
-  assert.match(body, /an unsure consult never times out/,
+  assert.match(body, /An unsure consult never times out/,
     "the consult timeout must fail CLOSED on an unsure classification — the tie-break otherwise routes the uncertain case into the bucket the timeout empties");
 });
 
@@ -541,7 +535,7 @@ test("cross-surface: every doc that forbids Owner-facing labels forbids ALL of t
   const gaps = [];
   for (const f of shippedDocs()) {
     const t = flat(readFileSync(f, "utf8"));
-    if (!/forbid.{0,60}Owner-facing|Owner-facing label/i.test(t)) continue;
+    if (!/forbid.{0,60}Owner-facing/i.test(t)) continue;
     for (const l of labels) if (!t.includes(`${l}:`)) gaps.push(`${path.relative(KIT, f)} omits ${l}:`);
   }
   assert.deepEqual(gaps, [],

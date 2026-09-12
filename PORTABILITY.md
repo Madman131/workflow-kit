@@ -639,9 +639,10 @@ roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 
 ## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
 
-`/orchestrate` describes how a program too large for one thread is run as sequential **chips**: one
-orchestrator session, one worker per changeset, and an Owner who holds intent, risk and the
-merge-GO. It is `[P]` and names no repo, model or person.
+`/orchestrate` describes how a program too large for one thread is run as sequential **chips**: an
+active workhorse PM coordinates, a designated Builder retains raw source, and the Owner holds
+intent, risk and reserved decisions including fresh remote GO. It is `[P]` and names no repo, model
+or person.
 
 **Read the split it states about itself.** The METHOD — the role boundaries, the one-writer rule,
 the freeze, the GO discipline, the chip cycle — is portable and is what the skill is for. The
@@ -651,7 +652,7 @@ cross-session messaging are harness features, not kit features. The body therefo
 that record — and states plainly that what degrades is latency, not the role split.
 
 **It has the same one-way `[G]` dependency `/humanize` has.** The body cites `core/OWNER_COMMS.md`
-for how an ask to the Owner is formatted, and that file is generated per repo — on an adopter whose
+rule 8 as the sole source for how an Owner ask is formatted, and that file is generated per repo — on an adopter whose
 `OWNER_COMMS.md` is missing or still carries its placeholders, that pointer resolves to nothing and
 the skill's Owner-facing half is a procedure over a contract you still owe. The dependency runs one
 way only: nothing in `core/OWNER_COMMS.md` depends on `/orchestrate`.

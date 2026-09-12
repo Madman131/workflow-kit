@@ -45,9 +45,8 @@ Owner) do the committing.
 5. **Dependency changes are single-lane:** while a `package.json`/lockfile change is in flight, no other
    lane writes the repo. A lockfile CONFLICT → keep the conflicted lockfile and run `npm install`
    (it resolves the markers, preserving pins); never hand-merge or delete-and-regenerate.
-6. **Pushing the deploy branch auto-deploys to the live service.** Only a T0 docs-only push is GO-free; ANY
-   push containing code — and any T1–T3 push, code OR instruction — needs the Owner's push-GO first
-   (framework: "Pushing is a separate axis"). A push ships the WHOLE branch, including the OTHER lane's
+6. **Pushing the deploy branch auto-deploys to the live service.** EVERY remote push or publication needs a
+   fresh Owner GO for the exact head and target, regardless of tier or file type. A push ships the WHOLE branch, including the OTHER lane's
    unpushed commits: before any push, check `git log origin/main..HEAD` for ungated work from ANY lane.
 
 ## Task-lane declaration — the binding fact

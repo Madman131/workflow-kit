@@ -942,7 +942,7 @@ function aggregateWorld(events, standardEvents = []) {
           if (!lineage || lineage.event_id !== lineageId || lineage.changeset_id !== row.changeset_id ||
               lineage.tier !== row.tier ||
               aggregatePolicyVersion(row) < (lineage.policy_version ?? 1) ||
-              !(completionException ? same(paths, lineage.authorized_paths)
+              !(completionException ? paths.length > 0 && paths.every((entry) => lineage.authorized_paths.includes(entry))
                 : paths.every((entry) => lineage.authorized_paths.includes(entry)))) continue;
           if (stoppedPathOverlap(paths, lineageAncestors(row.task_id))) continue;
         } else if (childLineage.has(row.task_id) || lineageChangesetUsed(row.changeset_id)) {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -346,7 +346,7 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     const parent = fourGateStopParent(ctx);
     mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
     writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "rerun FINAL after the narrow correction\n");
-    const completionPaths = [...parent.candidate.paths, "briefs/completion.md"].sort();
+    const completionPaths = [...parent.candidate.paths, "briefs/completion.md", "src/unused.mjs"].sort();
     const exception = {
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
       parent_disposition_event_id: parent.decided.event_id, trigger_ids: ["FINAL"],
@@ -385,6 +385,9 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
       owner_evidence: "different Owner evidence" }, options(ctx.dir)).state,
     "aggregate-continuation-conflict", "the review binds the exact Owner evidence for this exception");
+    assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
+      children: [{ ...exception.children[0], authorized_paths: exception.children[0].authorized_paths.filter((entry) => entry !== "src/unused.mjs") }] }, options(ctx.dir)).state,
+    "aggregate-continuation-conflict", "a narrower completion re-mint cannot replace the approved ceiling");
     const continuation = recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
     assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
@@ -417,16 +420,33 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
       "the installed guard admits the verified exception worker before its first child panel");
     assert.match(installedDeny.stdout, /outside the exact authorized-path set/,
       "the installed guard denies the completion batch's expanded path before its first child panel");
-    const repaired = commitSelected(ctx.dir, 5, ["briefs/completion.md"]);
+    let repaired = commitSelected(ctx.dir, 5, ["briefs/completion.md"]);
     const wrongPanel = openPanelInput(ctx, repaired, {
       task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
     }, { worker: worker.event_id });
     const finalPanel = { ...wrongPanel, phase: "final_bookend" };
-    assert.equal(recordAggregatePanelOpen({ ...finalPanel, incoming_worker_event_id: null }, options(ctx.dir)).state,
+    const emptyPanel = { ...finalPanel, changed_paths: [],
+      expected_seats: finalPanel.expected_seats.map((seat) => ({ ...seat, paths: [] })) };
+    assert.equal(recordAggregatePanelOpen(emptyPanel, options(ctx.dir)).state,
+      "aggregate-panel-open-malformed", "a completion final panel requires a nonempty frozen changed-path set");
+    writeFileSync(path.join(ctx.dir, "src", "outside.mjs"), "export const outside = true;\n");
+    const outsideCandidate = commitSelected(ctx.dir, 6, ["src/outside.mjs"]);
+    const outsidePanel = { ...openPanelInput(ctx, outsideCandidate, {
+      task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
+    }, { worker: worker.event_id }), phase: "final_bookend" };
+    assert.equal(recordAggregatePanelOpen(outsidePanel, options(ctx.dir)).state,
+      "aggregate-panel-open-conflict", "a completion final panel refuses an actual frozen path outside its approved ceiling");
+    unlinkSync(path.join(ctx.dir, "src", "outside.mjs"));
+    execFileSync("git", ["add", "-u", "src/outside.mjs"], { cwd: ctx.dir, stdio: "pipe" });
+    repaired = commitSelected(ctx.dir, 7, []);
+    const narrowedPanel = { ...openPanelInput(ctx, repaired, {
+      task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
+    }, { worker: worker.event_id }), phase: "final_bookend" };
+    assert.equal(recordAggregatePanelOpen({ ...narrowedPanel, incoming_worker_event_id: null }, options(ctx.dir)).state,
       "aggregate-panel-open-conflict", "a completion final panel cannot open without the verified batch worker");
-    assert.equal(recordAggregatePanelOpen({ ...finalPanel, incoming_worker_event_id: "f".repeat(64) }, options(ctx.dir)).state,
+    assert.equal(recordAggregatePanelOpen({ ...narrowedPanel, incoming_worker_event_id: "f".repeat(64) }, options(ctx.dir)).state,
       "aggregate-panel-open-conflict", "a syntactically valid but wrong worker receipt cannot open the completion panel");
-    const opened = recordAggregatePanelOpen(finalPanel, options(ctx.dir));
+    const opened = recordAggregatePanelOpen(narrowedPanel, options(ctx.dir));
     assert.equal(opened.ok, true, opened.state);
     assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/x.mjs" },
       { projectRoot: ctx.dir }).state, "completion-batch-finished",

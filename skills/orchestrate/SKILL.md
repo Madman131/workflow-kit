@@ -22,7 +22,7 @@ ordered; each verifies its predecessor landed. Never let two chips write one rep
 | **Workhorse PM** | worker/chip dispatch, briefs, rulings, fold-checks, local integration, lesson bank | authors designated Builder source or gives remote GO |
 | **Builder** | its raw T2/T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
 
-**The GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner instruction
+**A remote GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner instruction
 outranks any routing preference; the Builder acts and tells the PM promptly. **A GO
 ratifies a specific artifact:** if the changeset gains a commit the GO is void until re-confirmed on
 the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
@@ -37,12 +37,13 @@ authorize its implementation; the PM cannot relabel an unfinished repair as new 
 
 Only the Owner decides critical design/intent/risk, material scope/budget, credentials,
 destructive/irreversible acts, named live-write GO, fresh remote push/deploy GO, and an unresolved
-terminal decision. This includes merge/push GO, intent or risk acceptance, tier ratification,
-core-doc wording sign-off, and each named WRITE-GO. These five are EXAMPLES, not the closure. A chip routes those calls to the PM; use
-`CONSULT:` or `RULING NEEDED:`, never Owner-facing `QUESTION:`, `RECOMMENDATION:`, or `DECISION NEEDED:`;
-an unsure consult never times out, waiting rather than becoming authority.
+terminal decision. A chip routes those calls to the PM using `CONSULT:` or `RULING NEEDED:`; the
+Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
+An unsure consult never times out, waiting rather than becoming authority.
 
 ## Standing duties
+- Before PM local integration in a primary clone, it must be clean, on the target branch, and the
+  candidate must be a pure fast-forward; otherwise report the divergence for an Owner decision.
 - Surface landed/stale worktrees and branches; use the merge-type proof and occupancy refusal in
   `.agents/skills/orchestrate/PROTOCOLS.md`.
 

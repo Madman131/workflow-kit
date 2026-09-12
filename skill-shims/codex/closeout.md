@@ -1,4 +1,4 @@
-# /closeout — "finish" means shipped, verified on the remote, and receipted
+# /closeout — "finish" means safe local closeout and an explicit remote boundary
 
 Codex-lane entry point to the shared closeout procedure. **Read and follow
 `.agents/skills/closeout/SKILL.md`** in the repo you are working in — the single canonical body

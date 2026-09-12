@@ -64,8 +64,8 @@ violating one is unrecoverable, but that section governs.
    `npm test`** THERE, and only then land the merge.
 5. **Dependency changes are single-lane.** A lockfile CONFLICT → keep the conflicted lockfile and run
    `npm install` (it resolves the markers, preserving pins); never hand-merge or delete-and-regenerate.
-6. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}.** Only a T0 docs-only push is GO-free; ANY push
-   containing code — and any T1–T3 push — needs the Owner's push-GO first. A push ships the WHOLE
+6. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}.** Every remote push or publication needs a fresh Owner
+   GO for the exact head and target, regardless of tier or file type. A push ships the WHOLE
    branch: before any push, check `git log {{DEPLOY_REMOTE_REF}}..HEAD` for ungated work from ANY lane.
 
 <!-- workflow-kit:grilling-pointer -->
