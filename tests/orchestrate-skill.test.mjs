@@ -142,6 +142,7 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
 
 test("the round controller pins the finite aggregate boundary", () => {
   const body = readFileSync(BODY, "utf8");
+  const protocols = readFileSync(path.join(KIT, "skills", "orchestrate", "PROTOCOLS.md"), "utf8");
   pin(body, "R1 permits one bounded batch unless the mechanism", "first bounded repair");
   pin(body, "harm-bearing R2 and repeated R1 require one root kind", "early shared-cause checkpoint");
   pin(body, "R3 tests that consolidated correction", "consolidated root batch");
@@ -167,13 +168,16 @@ test("the round controller pins the finite aggregate boundary", () => {
     "repair dispatch declaration fields");
   pin(brief, "the exact PM disposition and panel-close",
     "typed evidence is procedure-recorded and candidate-bound");
-  pin(brief, "The guard binds each authorized path.",
-    "worker verifies the persisted brief receipt");
-  pin(brief, "completion-exception worker does **not** run `--confirm`",
-    "completion workers reuse the continuation receipt instead of minting another one");
-  pin(brief, "uses it as `repair_dispatch_event_id` for `--verify` with the child task/session",
+  pin(brief, "Ordinary workers include `session_id` in `--verify`",
+    "ordinary workers supply explicit session identity for verification");
+  pin(brief, "Completion-brief bytes bind at `child_continuation`, with no new `--confirm`",
+    "completion brief bytes are bound at continuation mint, not by a worker confirm step");
+  pin(brief, "uses it as `repair_dispatch_event_id` for `--verify` with child task/session",
     "the completion worker handshake binds the child continuation event, task, and session");
   pin(body, "failed/STOP surface stays closed", "completion exception terminal surface remains closed");
+  pin(protocols, "a fresh frontier process review bound to the latest frozen panel",
+    "the R4 process review is bound to the current frozen panel");
+  pin(protocols, "each fourth gate repeats the review", "cumulative cadence retains the gate noun");
   pin(body, "genuinely new Owner-approved work begins separately only on disjoint surfaces",
     "new work is not a relabel of the stopped completion surface");
   pin(body, "exact Astra model/effort is runtime-verified procedure, not controller-authenticated identity",
