@@ -15,9 +15,9 @@ Subagent use *inside* the tiers; changes no tier, no gate. Classify by effect on
 | **Review** | verdict in | nothing — findings; PM dispositions | freely (non-deciding — IO) |
 | **Author** | artifact out | the shipped artifact | one designated Builder retains raw T2/T3 source; PM may inspect, commit and locally integrate it |
 
-**Retention guarantee.** The authoritative build of anything that can carry a *silent degenerative bug* never leaves the designated Builder's context: (1) no load-bearing fact may exist only as an agent's summary — the Builder reads raw source/diff and re-derives it; (2) the PM independently inspects raw bytes and decisive evidence, may commit and locally integrate Terra-authored T2/T3 work, but does not author that source; gathering agents author only T0/T1 work, which the Builder re-reads raw and owns.
+**Retention guarantee.** The authoritative build of anything that can carry a *silent degenerative bug* never leaves the designated Builder's context: (1) no load-bearing fact may exist only as an agent's summary — the Builder reads raw source/diff and re-derives it; (2) the PM independently inspects raw bytes and decisive evidence, may commit and locally integrate designated Builder-authored T2/T3 work, but does not author that source; gathering agents author only T0/T1 work, which the Builder re-reads raw and owns.
 
-**Rule:** Gather + Review → delegate freely; Author → keep, gated by tier. Delegation never raises a tier, substitutes for a mandated gate, or lets a summary stand for a source — it front-loads Steer (classify with full context) and thickens Gate (more cold checks, earlier).
+**Rule:** Gather + Review → delegate freely; Author → keep in the designated Builder's retained context, gated by tier. Delegation never raises a tier, substitutes for a mandated gate, or lets a summary stand for a source — it front-loads Steer (classify with full context) and thickens Gate (more cold checks, earlier).
 
 ## Multi-writer checkout — surgical staging only
 *Canonical for ALL agent lanes writing one checkout. The repo entry stubs (`CLAUDE.md` / `AGENTS.md`) summarise these; this is the authoritative text.*
@@ -51,7 +51,7 @@ Owner) do the committing.
    unpushed commits: before any push, check `git log origin/main..HEAD` for ungated work from ANY lane.
 
 ## Task-lane declaration — the binding fact
-*The optional cost-inversion build lane was **RETIRED** by Owner ruling — **authoring is in-thread**.
+*The optional cost-inversion build lane was **RETIRED** by Owner ruling — **authoring is in the designated Builder's retained in-thread context**, not the PM's context.
 What the route carried, what was dropped with it, and what survived generally: `core/README.md`
 § Provenance.*
 

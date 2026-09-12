@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -25,6 +25,7 @@ const _DEFAULT_CONTINUATION_SCREEN = { surviving_finding_ids: [], harm: "n/a —
   zoom_out: "still the asked-for work" };
 const recordAggregateChildContinuation = (input, opts) =>
   _rawChildContinuation({ action_screen: _DEFAULT_CONTINUATION_SCREEN, ...input }, opts);
+const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
   : value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype
@@ -107,6 +108,30 @@ function commit(dir, value) {
   writeFileSync(path.join(dir, "src", "x.mjs"), `export const x = ${value};\n`);
   execFileSync("git", ["add", "-A"], { cwd: dir });
   execFileSync("git", ["commit", "-qm", `candidate-${value}`], { cwd: dir });
+  return {
+    commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim(),
+    tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: dir, encoding: "utf8" }).trim(),
+    paths: execFileSync("git", ["diff", "--name-only", "origin/main..HEAD"],
+      { cwd: dir, encoding: "utf8" }).trim().split("\n").filter(Boolean).sort(),
+  };
+}
+
+function commitSource(dir, value) {
+  writeFileSync(path.join(dir, "src", "x.mjs"), `export const x = ${value};\n`);
+  execFileSync("git", ["add", "src/x.mjs"], { cwd: dir });
+  execFileSync("git", ["commit", "-qm", `source-candidate-${value}`], { cwd: dir });
+  return {
+    commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim(),
+    tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: dir, encoding: "utf8" }).trim(),
+    paths: execFileSync("git", ["diff", "--name-only", "origin/main..HEAD"],
+      { cwd: dir, encoding: "utf8" }).trim().split("\n").filter(Boolean).sort(),
+  };
+}
+
+function commitSelected(dir, value, paths) {
+  writeFileSync(path.join(dir, "src", "x.mjs"), `export const x = ${value};\n`);
+  execFileSync("git", ["add", "src/x.mjs", ...paths], { cwd: dir });
+  execFileSync("git", ["commit", "--no-verify", "-qm", `selected-candidate-${value}`], { cwd: dir });
   return {
     commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim(),
     tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: dir, encoding: "utf8" }).trim(),
@@ -207,6 +232,34 @@ function dispatch(ctx, dispositionId, panelId, nextRound, rootExitId = null, pro
   }, options(ctx.dir, `worker-${nextRound}`));
   assert.equal(worker.ok, true, worker.state);
   return { dispatch: receipt.event_id, worker: worker.event_id };
+}
+
+function dispatchChild(ctx, { task_id, changeset_id, disposition_event_id, panel_close_event_id,
+  next_round, root_exit_event_id = null, process_review_event_id = null }) {
+  mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+  const brief = `briefs/${task_id}-round-${next_round}.md`;
+  writeFileSync(path.join(ctx.dir, brief), `${task_id} repair ${next_round}\n`);
+  const receipt = confirmRepairBrief({ declaration: {
+    aggregate_controller: "aggregate_v2", task_id, changeset_id, disposition_event_id,
+    panel_close_event_id, next_round, root_exit_event_id, process_review_event_id,
+  }, brief_path: brief }, options(ctx.dir));
+  assert.equal(receipt.ok, true, receipt.state);
+  const worker = recordWorkerVerification({ task_id, repair_dispatch_event_id: receipt.event_id },
+    options(ctx.dir, `${task_id}-worker-${next_round}`));
+  assert.equal(worker.ok, true, worker.state);
+  return { dispatch: receipt.event_id, worker: worker.event_id };
+}
+
+function rootExitChild(ctx, task_id, changeset_id, disposition_event_id) {
+  const result = recordAggregateRootExit({
+    type: "aggregate_v2", kind: "root_exit", task_id, changeset_id, disposition_event_id,
+    shared_mechanism: "one shared controller defect", symptom_explanation: "prior repairs treated symptoms",
+    owner_state_yield_seams: ["owner/state seam"], replacement: "one bounded correction",
+    removed_workarounds: ["repeat patch"], trigger_matrix: ["the original trigger closes"],
+    closure_evidence: "candidate evidence closes the trigger",
+  }, options(ctx.dir));
+  assert.equal(result.ok, true, result.state);
+  return result;
 }
 
 function processReview(ctx, panelCloseId, candidate, ruling = "finish_bounded_root",
@@ -319,6 +372,19 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     const review = processReview(ctx, null, parent.candidate, "owner_decision", "task-1", "changeset-1",
       "child_continuation", exception);
     assert.equal(review.ok, true, review.state);
+    writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "mutated after the approved proposal\n");
+    assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id }, options(ctx.dir)).state,
+      "aggregate-continuation-conflict", "the approved proposal cannot authorize changed brief bytes");
+    writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "rerun FINAL after the narrow correction\n");
+    assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
+      children: [{ ...exception.children[0], tier: "T1" }] }, options(ctx.dir)).state,
+    "aggregate-continuation-malformed", "the exception child cannot lower the terminal parent's tier");
+    assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
+      completion_exception: { ...exception.completion_exception, completion_proof: "" } }, options(ctx.dir)).state,
+    "aggregate-continuation-conflict", "completion proof is required before exception work authority");
+    assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
+      owner_evidence: "different Owner evidence" }, options(ctx.dir)).state,
+    "aggregate-continuation-conflict", "the review binds the exact Owner evidence for this exception");
     const continuation = recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
     assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
@@ -333,17 +399,31 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
       { projectRoot: ctx.dir }).ok, true);
     assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/outside.mjs" },
       { projectRoot: ctx.dir }).state, "repair-worker-path-unauthorized");
-    const repaired = commit(ctx.dir, 5);
+    execFileSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", ctx.dir,
+      "--repo-name", "completion-guard", "--skip-codex-prompt", "--skip-codex-lane"], { stdio: "pipe" });
+    writeFileSync(path.join(ctx.dir, ".claude", "task-lane.json"), JSON.stringify({
+      mode: "in-thread", sessionId: "finish-worker", taskId: "finish-child", tier: "T2",
+    }));
+    const installedGuard = path.join(ctx.dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const invokeInstalledGuard = (target) => spawnSync(process.execPath, [installedGuard, "--project-dir", ctx.dir], {
+      input: JSON.stringify({ session_id: "finish-worker", tool_name: "Write", cwd: ctx.dir,
+        tool_input: { file_path: path.join(ctx.dir, target) } }), encoding: "utf8",
+    });
+    assert.doesNotMatch(invokeInstalledGuard("src/x.mjs").stdout, /"permissionDecision":"deny"/,
+      "the installed guard admits the verified exception worker before its first child panel");
+    assert.match(invokeInstalledGuard("src/outside.mjs").stdout, /outside the exact authorized-path set/,
+      "the installed guard denies the completion batch's expanded path before its first child panel");
+    const repaired = commitSelected(ctx.dir, 5, ["briefs/completion.md"]);
     const wrongPanel = openPanelInput(ctx, repaired, {
       task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
     }, { worker: worker.event_id });
     const finalPanel = { ...wrongPanel, phase: "final_bookend" };
     const opened = recordAggregatePanelOpen(finalPanel, options(ctx.dir));
     assert.equal(opened.ok, true, opened.state);
-    const closed = closePanel(ctx, opened, finalPanel.expected_seats, repaired, null,
+    const closed = closePanel(ctx, opened, finalPanel.expected_seats, repaired, "FINAL-CHILD",
       { task_id: "finish-child", changeset_id: "finish-child-cs" });
     const final = disposition(ctx, closed.closed, {
-      task_id: "finish-child", changeset_id: "finish-child-cs", terminal_state: "GO",
+      task_id: "finish-child", changeset_id: "finish-child-cs", accepted: ["FINAL-CHILD"], terminal_state: "STOP",
       remediation_kind: null, authorized_paths: [],
     });
     assert.equal(final.ok, true, final.state);
@@ -351,6 +431,7 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
       standardEvents: loadRepairEventsForProject(ctx.dir).events,
     });
     assert.equal(child.current_gate_ordinal, 5, "the child continuation itself did not consume an ordinal");
+    assert.equal(child.terminal, "STOP", "the one real final child review may STOP but cannot mint a second batch");
     assert.equal(recordAggregateChildContinuation({ ...exception, children: [{ ...exception.children[0],
       task_id: "finish-sibling", changeset_id: "finish-sibling-cs" }], process_review_event_id: review.event_id }, options(ctx.dir)).state,
     "aggregate-continuation-conflict", "the parent cannot mint a sibling after its completion exception");
@@ -360,6 +441,141 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
         budget: "evade", authorized_paths: parent.candidate.paths }], completion_exception: undefined,
       completion_batch: undefined, process_review_event_id: null }, options(ctx.dir)).state,
     "aggregate-continuation-conflict", "an exception child cannot restart through a generic continuation");
+  } finally { ctx.cleanup(); }
+});
+
+test("completion exception refuses a non-R4 or nonterminal parent before any child authority", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const stopped = disposition(ctx, closed.closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "bounded completion\n");
+    const exception = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
+      changeset_id: "changeset-1", parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
+      continuation_kind: "completion_exception", owner_evidence: "Owner exact exception",
+      children: [{ task_id: "child", changeset_id: "child-cs", tier: "T2", budget: "one batch",
+        authorized_paths: [...candidate.paths, "briefs/completion.md"].sort() }],
+      completion_exception: { repair_batches: 1, pm_recommendation: "concrete harm", surviving_harm: "terminal harm",
+        smallest_correction: "one path", completion_proof: "one final panel" },
+      completion_batch: { worker_session_id: "child-worker", brief_path: "briefs/completion.md" } };
+    assert.equal(recordAggregateChildContinuation(exception, options(ctx.dir)).state, "aggregate-continuation-conflict",
+      "a terminal STOP before R4 cannot mint a completion exception");
+    const live = repo();
+    try {
+      const liveCandidate = commit(live.dir, 1);
+      const livePanel = openPanel(live, 1, liveCandidate);
+      const liveClosed = closePanel(live, livePanel.opened, livePanel.expected, liveCandidate, "F1");
+      const continued = disposition(live, liveClosed.closed, { accepted: ["F1"] });
+      mkdirSync(path.join(live.dir, "briefs"), { recursive: true });
+      writeFileSync(path.join(live.dir, "briefs", "completion.md"), "bounded completion\n");
+      assert.equal(recordAggregateChildContinuation({ ...exception,
+        parent_disposition_event_id: continued.event_id }, options(live.dir)).state, "aggregate-continuation-conflict",
+      "a nonterminal parent cannot mint a completion exception");
+    } finally { live.cleanup(); }
+  } finally { ctx.cleanup(); }
+});
+
+test("a base-three parent reaches ordinal eight only through the exception's reviewed final panel", () => {
+  const ctx = repo();
+  try {
+    const ancestor = threeGateParent(ctx, { terminal: true });
+    const ordinary = {
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: ancestor.decided.event_id, trigger_ids: ["F3"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner-approved new scope",
+      action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [{ task_id: "local-four", changeset_id: "local-four-cs", tier: "T2",
+        budget: "ordinary successor", authorized_paths: [...ancestor.candidate.paths,
+          "briefs/local-four-round-2.md", "briefs/local-four-round-3.md", "briefs/local-four-round-4.md"].sort() }],
+    };
+    const inheritedReview = processReview(ctx, null, ancestor.candidate, "successor", "task-1", "changeset-1",
+      "child_continuation", ordinary);
+    assert.equal(inheritedReview.ok, true, inheritedReview.state);
+    assert.equal(inheritedReview.next_gate_ordinal, 4, "the first inherited checkpoint remains due");
+    const lineage = recordAggregateChildContinuation({ ...ordinary, process_review_event_id: inheritedReview.event_id }, options(ctx.dir));
+    assert.equal(lineage.ok, true, lineage.state);
+    let candidate = commit(ctx.dir, 4);
+    let panel = openPanel(ctx, 1, candidate, {}, false, {
+      task_id: "local-four", changeset_id: "local-four-cs", child_continuation_event_id: lineage.event_id,
+    });
+    let closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F4", {
+      task_id: "local-four", changeset_id: "local-four-cs",
+    });
+    let decided = disposition(ctx, closed.closed, {
+      task_id: "local-four", changeset_id: "local-four-cs", accepted: ["F4"],
+    });
+    let authority = dispatchChild(ctx, { task_id: "local-four", changeset_id: "local-four-cs",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id, next_round: 2 });
+    candidate = commitSource(ctx.dir, 5);
+    panel = openPanel(ctx, 2, candidate, authority, false, { task_id: "local-four", changeset_id: "local-four-cs" });
+    closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F5", { task_id: "local-four", changeset_id: "local-four-cs" });
+    decided = disposition(ctx, closed.closed, { task_id: "local-four", changeset_id: "local-four-cs", accepted: ["F5"],
+      remediation_kind: "root_replacement" });
+    const childRootExit = rootExitChild(ctx, "local-four", "local-four-cs", decided.event_id);
+    authority = dispatchChild(ctx, { task_id: "local-four", changeset_id: "local-four-cs",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id, next_round: 3,
+      root_exit_event_id: childRootExit.event_id });
+    candidate = commitSource(ctx.dir, 6);
+    panel = openPanel(ctx, 3, candidate, authority, false, { task_id: "local-four", changeset_id: "local-four-cs" });
+    closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F6", { task_id: "local-four", changeset_id: "local-four-cs" });
+    decided = disposition(ctx, closed.closed, { task_id: "local-four", changeset_id: "local-four-cs", accepted: ["F6"],
+      remediation_kind: "root_replacement" });
+    const terminalRootExit = rootExitChild(ctx, "local-four", "local-four-cs", decided.event_id);
+    const localReview = processReview(ctx, closed.closed.event_id, candidate, "finish_bounded_root", "local-four", "local-four-cs");
+    assert.equal(localReview.ok, true, JSON.stringify(localReview));
+    authority = dispatchChild(ctx, { task_id: "local-four", changeset_id: "local-four-cs",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.closed.event_id, next_round: 4,
+      root_exit_event_id: terminalRootExit.event_id, process_review_event_id: localReview.event_id });
+    candidate = commit(ctx.dir, 7);
+    panel = openPanel(ctx, 4, candidate, authority, false, { task_id: "local-four", changeset_id: "local-four-cs" });
+    closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F7", { task_id: "local-four", changeset_id: "local-four-cs" });
+    decided = disposition(ctx, closed.closed, { task_id: "local-four", changeset_id: "local-four-cs",
+      accepted: ["F7"], terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+    const parent = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "local-four", {
+      standardEvents: loadRepairEventsForProject(ctx.dir).events,
+    });
+    assert.equal(parent.current_gate_ordinal, 7, "base three plus local R4 preserves cumulative history");
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs", "ordinal-eight.md"), "one final batch\n");
+    const exception = { type: "aggregate_v2", kind: "child_continuation", task_id: "local-four",
+      changeset_id: "local-four-cs", parent_disposition_event_id: decided.event_id, trigger_ids: ["F7"],
+      continuation_kind: "completion_exception", owner_evidence: "Owner authorized one final completion",
+      action_screen: { ..._DEFAULT_CONTINUATION_SCREEN, surviving_finding_ids: ["F7"] },
+      children: [{ task_id: "ordinal-eight", changeset_id: "ordinal-eight-cs", tier: "T2", budget: "one batch",
+        authorized_paths: [...candidate.paths, "briefs/ordinal-eight.md"].sort() }],
+      completion_exception: { repair_batches: 1, pm_recommendation: "concrete final harm", surviving_harm: "F7 remains",
+        smallest_correction: "one path", completion_proof: "full final review" },
+      completion_batch: { worker_session_id: "ordinal-eight-worker", brief_path: "briefs/ordinal-eight.md" },
+    };
+    assert.equal(recordAggregateChildContinuation(exception, options(ctx.dir)).state, "aggregate-continuation-conflict",
+      "ordinal eight still requires a fresh typed Owner decision review");
+    const review = processReview(ctx, null, candidate, "owner_decision", "local-four", "local-four-cs",
+      "child_continuation", exception);
+    assert.equal(review.ok, true, review.state);
+    assert.equal(review.next_gate_ordinal, 8, "the review binds the inherited checkpoint before work authority");
+    const continuation = recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
+    const worker = recordWorkerVerification({ task_id: "ordinal-eight", repair_dispatch_event_id: continuation.event_id },
+      options(ctx.dir, "ordinal-eight-worker"));
+    assert.equal(worker.ok, true, worker.state);
+    candidate = commit(ctx.dir, 8);
+    const final = openPanelInput(ctx, candidate, { task_id: "ordinal-eight", changeset_id: "ordinal-eight-cs",
+      child_continuation_event_id: continuation.event_id }, { worker: worker.event_id });
+    final.phase = "final_bookend";
+    const opened = recordAggregatePanelOpen(final, options(ctx.dir));
+    assert.equal(opened.ok, true, opened.state);
+    const finalClosed = closePanel(ctx, opened, final.expected_seats, candidate, "F8", {
+      task_id: "ordinal-eight", changeset_id: "ordinal-eight-cs",
+    });
+    const finalState = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "ordinal-eight", {
+      standardEvents: loadRepairEventsForProject(ctx.dir).events,
+    });
+    assert.equal(finalState.current_gate_ordinal, 8, "only the real final panel increments the inherited ordinal");
+    assert.ok(finalClosed.closed.event_id);
   } finally { ctx.cleanup(); }
 });
 

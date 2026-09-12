@@ -144,7 +144,8 @@ function proposedTransitionProjection(purpose, input) {
         !Array.isArray(input.trigger_ids) || !input.trigger_ids.every((id) => text(id, 300)) ||
         !CONTINUATION_KINDS.has(input.continuation_kind) ||
         (input.continuation_kind === "completion_exception" &&
-          (!completionExceptionShape(input.completion_exception) || !completionBatchProposalShape(input.completion_batch))) ||
+          (!text(input.owner_evidence, 1000) || !validActionScreen(input.action_screen) ||
+            !completionExceptionShape(input.completion_exception) || !completionBatchReviewProposalShape(input.completion_batch))) ||
         (input.continuation_kind !== "completion_exception" &&
           (input.completion_exception !== undefined || input.completion_batch !== undefined))) return null;
     return { parent_disposition_event_id: input.parent_disposition_event_id,
@@ -152,9 +153,12 @@ function proposedTransitionProjection(purpose, input) {
         ? { parent_panel_open_event_id: input.parent_panel_open_event_id } : {}),
       trigger_ids: [...input.trigger_ids].sort(), continuation_kind: input.continuation_kind,
       ...(input.continuation_kind === "completion_exception"
-        ? { completion_exception: input.completion_exception,
+        ? { owner_evidence: input.owner_evidence, action_screen: input.action_screen,
+          completion_exception: input.completion_exception,
           completion_batch: { worker_session_id: input.completion_batch.worker_session_id,
-            brief_path: input.completion_batch.brief_path } } : {}),
+            brief_path: input.completion_batch.brief_path,
+            brief_sha256: input.completion_batch.brief_sha256,
+            brief_size: input.completion_batch.brief_size } } : {}),
       children: children.sort((a, b) => `${a.task_id}\0${a.changeset_id}`.localeCompare(`${b.task_id}\0${b.changeset_id}`)) };
   }
   if (purpose === "legacy_handoff") {
@@ -688,6 +692,11 @@ function completionExceptionShape(value) {
 
 function completionBatchProposalShape(value) {
   return plain(value) && text(value.worker_session_id, 200) && strings([value.brief_path], { paths: true, itemMax: 500 });
+}
+
+function completionBatchReviewProposalShape(value) {
+  return completionBatchProposalShape(value) && ID64.test(value.brief_sha256 || "") &&
+    Number.isSafeInteger(value.brief_size) && value.brief_size >= 0;
 }
 
 function completionBatchShape(value) {
@@ -1965,7 +1974,13 @@ export function recordAggregateProcessReview(input,
   const rows = controllerRows(file);
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
   const purpose = input?.purpose;
-  const projection = proposedTransitionProjection(purpose, input?.proposed_transition);
+  const proposed = input?.proposed_transition;
+  const batchBrief = purpose === "child_continuation" &&
+    proposed?.continuation_kind === "completion_exception" && completionBatchProposalShape(proposed.completion_batch)
+    ? readRegularRepoFile(projectRoot, proposed.completion_batch.brief_path) : null;
+  const reviewedProposal = batchBrief ? { ...proposed, completion_batch: { ...proposed.completion_batch,
+    brief_sha256: batchBrief.sha256, brief_size: batchBrief.size } } : proposed;
+  const projection = proposedTransitionProjection(purpose, reviewedProposal);
   const state = deriveAggregateRepairState(rows.aggregate, input?.task_id, { standardEvents: rows.standard });
   const standard = purpose === "legacy_handoff" ? deriveRepairState(rows.standard, input?.task_id) : null;
   let anchor = null, ordinal = null, contextOk = false;

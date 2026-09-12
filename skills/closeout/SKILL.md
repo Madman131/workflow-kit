@@ -33,7 +33,8 @@ path-pinned — a pinned path reports the MAIN checkout's branch from inside a w
 
 ## 3. Remote boundary — stop here absent a fresh GO
 Report the fresh push/deploy GO needed after the local checkpoint. **Do not push, open/update a PR,
-merge, or verify remote state until that GO is explicit.** Only then push and confirm the ref
+merge a remote PR, deploy, or claim remote publication complete until that GO is explicit; eligible
+local merge and read-only remote inspection/verification remain allowed.** Only then push and confirm the ref
 actually landed: `git fetch origin && git log origin/<branch> -1 --oneline`.
 
 ## 4. After explicit GO: open or update the PR, then LAND it
