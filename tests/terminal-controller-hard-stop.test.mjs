@@ -424,11 +424,16 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     const finalPanel = { ...wrongPanel, phase: "final_bookend" };
     assert.equal(recordAggregatePanelOpen({ ...finalPanel, incoming_worker_event_id: null }, options(ctx.dir)).state,
       "aggregate-panel-open-conflict", "a completion final panel cannot open without the verified batch worker");
+    assert.equal(recordAggregatePanelOpen({ ...finalPanel, incoming_worker_event_id: "f".repeat(64) }, options(ctx.dir)).state,
+      "aggregate-panel-open-conflict", "a syntactically valid but wrong worker receipt cannot open the completion panel");
     const opened = recordAggregatePanelOpen(finalPanel, options(ctx.dir));
     assert.equal(opened.ok, true, opened.state);
     assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/x.mjs" },
       { projectRoot: ctx.dir }).state, "completion-batch-finished",
     "opening the final panel ends the one completion batch before disposition");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/outside.mjs" },
+      { projectRoot: ctx.dir }).state, "completion-batch-finished",
+    "opening the final panel denies outside-scope writes as well as in-scope writes");
     const postOpenGuard = invokeInstalledGuard("src/x.mjs");
     assert.equal(postOpenGuard.status, 0, `installed guard post-open execution failed: ${postOpenGuard.stderr}`);
     assert.match(postOpenGuard.stdout, /"permissionDecision":"deny"/,
@@ -455,6 +460,10 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     assert.equal(verifyRepairWorkerWrite({ task_id: "finish-child", session_id: "finish-worker", target: "src/x.mjs" },
       { projectRoot: ctx.dir }).state, "completion-batch-finished",
     "the completion batch remains closed after terminal STOP");
+    const postStopGuard = invokeInstalledGuard("src/x.mjs");
+    assert.equal(postStopGuard.status, 0, `installed guard post-STOP execution failed: ${postStopGuard.stderr}`);
+    assert.match(postStopGuard.stdout, /"permissionDecision":"deny"/,
+      "the installed guard denies the completion worker after terminal STOP");
     assert.equal(recordWorkerVerification({ task_id: "finish-child", repair_dispatch_event_id: continuation.event_id },
       options(ctx.dir, "second-finish-worker")).state, "repair-worker-verification-missing",
     "a second worker session cannot consume the one completion batch");
@@ -611,9 +620,15 @@ test("a base-three parent reaches ordinal eight only through the exception's rev
     final.phase = "final_bookend";
     const opened = recordAggregatePanelOpen(final, options(ctx.dir));
     assert.equal(opened.ok, true, opened.state);
-    const finalClosed = closePanel(ctx, opened, final.expected_seats, candidate, "F8", {
+    const finalClosed = closePanel(ctx, opened, final.expected_seats, candidate, null, {
       task_id: "ordinal-eight", changeset_id: "ordinal-eight-cs",
     });
+    const finalDecision = disposition(ctx, finalClosed.closed, { task_id: "ordinal-eight", changeset_id: "ordinal-eight-cs",
+      accepted: [], terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(finalDecision.ok, true, finalDecision.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "ordinal-eight", session_id: "ordinal-eight-worker", target: "src/x.mjs" },
+      { projectRoot: ctx.dir }).state, "completion-batch-finished",
+    "the completion batch remains closed after terminal GO");
     const finalState = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "ordinal-eight", {
       standardEvents: loadRepairEventsForProject(ctx.dir).events,
     });
