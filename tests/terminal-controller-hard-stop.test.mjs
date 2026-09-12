@@ -340,7 +340,7 @@ function fourGateStopParent(ctx) {
   return { candidate, decided };
 }
 
-test("a terminal R4 STOP admits one verified completion batch and one final child review", () => {
+test("a terminal R4 STOP admits one verified completion batch and one final child review", async () => {
   const ctx = repo();
   try {
     const parent = fourGateStopParent(ctx);
@@ -420,15 +420,41 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
       "the installed guard admits the verified exception worker before its first child panel");
     assert.match(installedDeny.stdout, /outside the exact authorized-path set/,
       "the installed guard denies the completion batch's expanded path before its first child panel");
+    execFileSync("git", ["add", "briefs/completion.md"], { cwd: ctx.dir, stdio: "pipe" });
+    execFileSync("git", ["commit", "--no-verify", "-qm", "completion-brief-base"], { cwd: ctx.dir, stdio: "pipe" });
+    const emptyBase = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim();
+    execFileSync("git", ["update-ref", "refs/remotes/origin/main", emptyBase], { cwd: ctx.dir, stdio: "pipe" });
+    execFileSync("git", ["commit", "--allow-empty", "--no-verify", "-qm", "completion-empty-candidate"],
+      { cwd: ctx.dir, stdio: "pipe" });
+    const emptyCandidate = {
+      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      paths: execFileSync("git", ["diff", "--name-only", "origin/main..HEAD"],
+        { cwd: ctx.dir, encoding: "utf8" }).trim().split("\n").filter(Boolean).sort(),
+    };
+    assert.deepEqual(emptyCandidate.paths, [], "the completion canary freezes an actual empty Git diff");
+    const emptyActualPanel = { ...openPanelInput(ctx, emptyCandidate, {
+      task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
+    }, { worker: worker.event_id }), phase: "final_bookend", base_commit: emptyBase };
+    const ledgerBeforeEmptyMutation = readFileSync(repairLedgerPath(ctx.dir), "utf8");
+    const emptyDiffCanary = await importMutant(ctx.dir, [[/value\.length === 0 \|\| /, ""]]);
+    assert.equal(emptyDiffCanary.recordAggregatePanelOpen(emptyActualPanel, options(ctx.dir)).state,
+      "aggregate-panel-open-conflict",
+      "with an actual empty diff admitted through evidence and a valid empty roster, the completion nonempty-path arm refuses it");
+    const emptyPathMutant = await importMutant(ctx.dir, [[/value\.length === 0 \|\| /, ""], [
+      /paths\.length > 0 && paths\.every\(\(entry\) => lineage\.authorized_paths\.includes\(entry\)\)/,
+      "paths.every((entry) => lineage.authorized_paths.includes(entry))",
+    ]]);
+    const emptyPathMutation = emptyPathMutant.recordAggregatePanelOpen(emptyActualPanel, options(ctx.dir));
+    assert.equal(emptyPathMutation.ok, true,
+      "neutralizing only the completion nonempty-path arm admits the same empty frozen diff");
+    writeFileSync(repairLedgerPath(ctx.dir), ledgerBeforeEmptyMutation);
+    execFileSync("git", ["update-ref", "refs/remotes/origin/main", ctx.base], { cwd: ctx.dir, stdio: "pipe" });
     let repaired = commitSelected(ctx.dir, 5, ["briefs/completion.md"]);
     const wrongPanel = openPanelInput(ctx, repaired, {
       task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: continuation.event_id,
     }, { worker: worker.event_id });
     const finalPanel = { ...wrongPanel, phase: "final_bookend" };
-    const emptyPanel = { ...finalPanel, changed_paths: [],
-      expected_seats: finalPanel.expected_seats.map((seat) => ({ ...seat, paths: [] })) };
-    assert.equal(recordAggregatePanelOpen(emptyPanel, options(ctx.dir)).state,
-      "aggregate-panel-open-malformed", "a completion final panel requires a nonempty frozen changed-path set");
     writeFileSync(path.join(ctx.dir, "src", "outside.mjs"), "export const outside = true;\n");
     const outsideCandidate = commitSelected(ctx.dir, 6, ["src/outside.mjs"]);
     const outsidePanel = { ...openPanelInput(ctx, outsideCandidate, {
