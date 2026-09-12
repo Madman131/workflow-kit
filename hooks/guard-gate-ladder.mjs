@@ -122,8 +122,8 @@ const GATE_RE = new RegExp(CMD_START + PREFIX + RUNNERS);
 const LADDER = {
   T0: "self-check → proceed",
   T1: "one blind cold reviewer → proceed",
-  T2: "cold panel (≥2 angle seats + 1 free adversary) → cross-family lens [if available] → external gate → Owner push-GO",
-  T3: "cold panel (≥3 angle seats + 1 free adversary) → BOTH cross-family families (lens + external, lens REQUIRED) → Owner push-GO",
+  T2: "cold panel (≥2 angle seats + 1 free adversary) → cross-family lens [if available] → external gate → fresh Owner remote GO (exact head + target)",
+  T3: "cold panel (≥3 angle seats + 1 free adversary) → BOTH cross-family families (lens + external, lens REQUIRED) → fresh Owner remote GO (exact head + target)",
 };
 
 function isPlainObject(v) {
@@ -326,7 +326,7 @@ process.stdin.on("end", () => {
 
   const body = `REQUIRED LADDER for ${tier} (families bound in core/BINDINGS.md):\n` +
     `  ${LADDER[tier]}\n` +
-    `Any push containing code additionally requires the Owner's push-GO, regardless of tier.\n`;
+    `Every remote push or publication requires a fresh Owner GO for the exact head and target, regardless of tier or file type.\n`;
 
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {

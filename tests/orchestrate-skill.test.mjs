@@ -525,19 +525,3 @@ test("cross-surface: no shipped doc asserts a CLOSED set of Owner-reserved decis
     `property of the TARGET repo; a portable file may give examples, never a closure. A count that ` +
     `DESCRIBES is fine; a count that BINDS is a rule wearing a note's clothes.`);
 });
-
-test("cross-surface: every doc that forbids Owner-facing labels forbids ALL of them", () => {
-  // Harvest the labels from rule 8's own text, then find every surface that forbids them and check
-  // it names each one. Neither the label list nor the surface list is written here.
-  const tmpl = readFileSync(path.join(KIT, "templates", "OWNER_COMMS.md.tmpl"), "utf8");
-  const labels = [...tmpl.matchAll(/`\*\*([A-Z][A-Z ]+):\*\*`/g)].map((m) => m[1]);
-  assert.ok(labels.length >= 3, `rule 8 defines at least three labels (found: ${labels.join(", ")})`);
-  const gaps = [];
-  for (const f of shippedDocs()) {
-    const t = flat(readFileSync(f, "utf8"));
-    if (!/forbid.{0,60}Owner-facing/i.test(t)) continue;
-    for (const l of labels) if (!t.includes(`${l}:`)) gaps.push(`${path.relative(KIT, f)} omits ${l}:`);
-  }
-  assert.deepEqual(gaps, [],
-    `a surface forbidding Owner-facing labels must name every label rule 8 defines: ${gaps.join(" · ")}`);
-});

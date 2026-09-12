@@ -13,6 +13,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -67,6 +68,32 @@ const printed = (rel) => {
     throw new Error(`printed(${rel}): only the gate-ladder hook exports what it prints`);
   }
   return buildAdditionalContext(true, "", "").replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+};
+
+// Unlike the shared doctrine assembled by `printed()`, the tier-specific ladder body is constructed
+// only after the hook has accepted a real gate invocation. Exercise that emitted decision
+// path in an isolated declared-PM fixture rather than pinning a source-text approximation of it.
+const emittedLadder = () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "workflow-kit-publication-go-"));
+  try {
+    mkdirSync(path.join(dir, ".claude"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
+      mode: "in-thread", sessionId: "publication-go-test", taskId: "publication-go-test", tier: "T2",
+    }) + "\n");
+    const result = spawnSync(process.execPath, [path.join(ROOT, "hooks", "guard-gate-ladder.mjs")], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+      input: JSON.stringify({
+        session_id: "publication-go-test",
+        tool_input: { command: "bash scripts/codex-gate.sh --design" },
+      }),
+    });
+    assert.equal(result.status, 0, `gate-ladder emitted hook exits 0: ${result.stderr}`);
+    return JSON.parse(result.stdout).hookSpecificOutput.additionalContext.replace(/\s+/g, " ").trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 };
 
 // ---------------------------------------------------------------- routing reversal
@@ -147,6 +174,8 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
   const claudeOrchestrate = raw("skill-shims/claude/orchestrate.md");
   const codexCloseout = raw("skill-shims/codex/closeout.md");
   const claudeTemplate = raw("templates/CLAUDE.md.tmpl");
+  const rootReadme = read("README.md");
+  const hookPrinted = emittedLadder();
   for (const [name, text] of [["OPERATE", operate], ["WORKFLOW", workflow], ["MULTI_AGENT", multiAgent],
     ["AGENTS template", agents], ["RUNG_ZERO", rungZero]]) {
     assert.match(text, /every remote push or publication needs a fresh Owner\s+GO/i,
@@ -163,6 +192,16 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
   assert.match(claudeOrchestrate, /active workhorse PM, designated Builder/);
   assert.match(codexCloseout, /safe local closeout and an explicit remote boundary/);
   assert.match(claudeTemplate, /needs a\s+fresh Owner GO for the exact head and target/);
+  assert.match(workflow, /Tier table = local build\/run depth; every remote push or publication needs a fresh Owner GO for the exact head and target/,
+    "the tier summary cannot narrow the universal remote-publication GO to code pushes");
+  assert.doesNotMatch(workflow, /wording sign-off also stands as its push-GO/,
+    "core-document wording sign-off is never equivalent to a remote-publication GO");
+  assert.match(hookPrinted, /Every remote push or publication requires a fresh Owner GO for the exact head and target, regardless of tier or file type/,
+    "the actual decision-time ladder must emit the universal remote-publication boundary");
+  assert.doesNotMatch(hookPrinted, /Any push containing code additionally requires/,
+    "the emitted ladder must not retain the code-only publication-GO limitation");
+  assert.match(rootReadme, /Superseded in v2\.31\.0:\*{0,2}\s+wording sign-off remains a core-document gate, never a remote-publication GO; every remote push or publication requires a fresh Owner GO for the exact head and target/,
+    "README history must mark its former wording-signoff-as-push-GO rule superseded");
   assert.ok(readme.includes("read the repository-root [`VERSION`](../VERSION) file, the single source"),
     "core README derives its current release identity from repository-root VERSION");
   assert.doesNotMatch(readme, /v2\.31\.0/);

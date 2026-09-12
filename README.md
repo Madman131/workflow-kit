@@ -419,6 +419,8 @@ package is complete only when the user install is re-synced:
 nothing else. But the method's own doctrine reserves three more to the Owner:** the tier ratification
 (`core/WORKFLOW.md` § Steer — *"Builder proposes the tier; Owner ratifies before any T2/T3 gate"*)
 and the wording sign-off on a core-document amendment, which also stands as that class's push-GO.
+**Superseded in v2.31.0:** wording sign-off remains a core-document gate, never a remote-publication
+GO; every remote push or publication requires a fresh Owner GO for the exact head and target.
 **A worker meeting a rung that says "the Owner ratifies" therefore found no routing rule covering it,
 and did the only thing left: asked the Owner directly and stopped.** Three workers hit exactly those
 two rungs in a single day. The defect was never carelessness — **a list that does not name a decision
