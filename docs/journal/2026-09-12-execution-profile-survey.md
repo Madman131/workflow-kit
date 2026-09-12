@@ -159,8 +159,7 @@ history and retrieval anchors.
 
 Focused unchanged baselines passed: terminal controller 19/19 and Gemini frozen gate 13/13.
 The full `npm test` outcome remains unverified. Terra stopped at a stable read-only boundary;
-its retained baseline worktree is
-`/Users/mcjos/Agent Workspaces/Codex/workflow-kit/terra-execution-profile-baseline`
+its retained baseline worktree is the Codex-owned `terra-execution-profile-baseline` checkout
 on `codex/terra-execution-profile-baseline`. No implementation edits, staging, commits, push,
 or other-repository ports occurred in this checkpoint.
 
@@ -207,7 +206,7 @@ This document checkpoint is not a claim that implementation or final gates have 
 - Orchestrate Claude Trader Brain: `01a06c65-f207-74c1-ac75-b5c107d0fdb7`; cleanup turn
   `01a0954e-5b38-7020-8b5a-07d94af75329`; inherited-Sol worker
   `01a093d8-8872-7632-83ce-31b08033157a`.
-- Trader source artifact: `/Users/mcjos/Github/market-research-mcp-render/docs/journal/claude_trader_brain_v2_organization_pm_disposition.md`,
+- Trader source artifact: `market-research-mcp-render:docs/journal/claude_trader_brain_v2_organization_pm_disposition.md`,
   particularly Owner Round 5 authorization, terminal design close and Cycle 2 headings. Observed
   history is retained as history; it is not authority to repeat that process.
 - Orchestrate Chip E follow-on: `01a025c2-4446-76d0-b0ee-b91e6aaa3670`; promotion turn
