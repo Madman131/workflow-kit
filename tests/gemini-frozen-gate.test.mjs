@@ -48,11 +48,11 @@ function packets(f) { const root = path.join(f.dir, ".gemini-gate", "handoff"); 
 function replies(f, verdicts) { const dir = path.join(f.dir, ".gemini-gate", "handoff", "replies"); for (const [index, verdict] of verdicts.entries()) writeFileSync(path.join(dir, `${String(index + 1).padStart(4, "0")}.txt`), reply(packets(f)[index], verdict)); }
 function importHandoff(f) { return invoke(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]); }
 function dry(f, extra = []) { return invoke(f, ["--context", "docs/contract.md", "--dry-run", ...extra]); }
-function fakeAgy({ hang = false } = {}) {
+function fakeAgy({ hang = false, initEffort } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "fake-agy-")), binary = path.join(dir, "agy"), settings = path.join(dir, "settings.json");
   writeFileSync(settings, JSON.stringify({ toolPermission: "request-review", allowNonWorkspaceAccess: false, permissions: { allow: [] } }));
   writeFileSync(binary, `#!/usr/bin/env node
-let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { if (process.argv.includes("--version")) return; if (${hang}) return setInterval(() => {}, 1000); const prompt = JSON.parse(input).message.content, scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0], model = process.argv[process.argv.indexOf("--model") + 1], effort = process.argv[process.argv.indexOf("--effort") + 1], response = "finding\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done; console.log(JSON.stringify({ event: "init", conversation_id: "fake", init: { cwd: process.cwd(), tools: [], permission_mode: "request-review", model, effort } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "fake", step_index: 0, state: "DONE", step_type: "user_input" } })); console.log(JSON.stringify({ event: "result", result: { conversation_id: "fake", status: "SUCCESS", response, duration_seconds: 0, num_turns: 1 } })); }); if (process.argv.includes("--version")) console.log("1.2.2");\n`);
+let input=""; const initEffort = ${JSON.stringify(initEffort)}; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { if (process.argv.includes("--version")) return; if (${hang}) return setInterval(() => {}, 1000); const prompt = JSON.parse(input).message.content, scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0], model = process.argv[process.argv.indexOf("--model") + 1], response = "finding\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done; console.log(JSON.stringify({ event: "init", conversation_id: "fake", init: { cwd: process.cwd(), tools: [], permission_mode: "request-review", model, ...(initEffort === undefined ? {} : { effort: initEffort }) } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "fake", step_index: 0, state: "DONE", step_type: "user_input" } })); console.log(JSON.stringify({ event: "result", result: { conversation_id: "fake", status: "SUCCESS", response, duration_seconds: 0, num_turns: 1 } })); }); if (process.argv.includes("--version")) console.log("1.2.2");\n`);
   chmodSync(binary, 0o755);
   const ps = path.join(dir, "ps"); writeFileSync(ps, "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'fake-supervisor' ;; esac\n"); chmodSync(ps, 0o755);
   return { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, GEMINI_AGY_SETTINGS: settings }, binary, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
@@ -160,6 +160,7 @@ test("automated subscription is the default, REST is refused, and the installed 
     manifest(f); const exported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(exported.status, 0, exported.stderr);
     const handoff = path.join(f.dir, ".gemini-gate/wrapper-handoff"), state = JSON.parse(readFileSync(path.join(handoff, "handoff.json"), "utf8")); for (const item of state.packets) writeFileSync(path.join(handoff, "replies", item.filename), reply(readFileSync(path.join(handoff, "packets", item.filename), "utf8"), "GO"));
     const imported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-import", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(imported.status, 0, imported.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Slice: `aggregate`/);
+    const mismatch = fixture(), wrongEffort = fakeAgy({ initEffort: "low" }); try { manifest(mismatch); const refused = invoke(mismatch, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", wrongEffort.binary], wrongEffort.env); assert.notEqual(refused.status, 0, refused.stderr); } finally { wrongEffort.cleanup(); rmSync(mismatch.dir, { recursive: true, force: true }); }
   } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("post-flight endpoint failure leaves no accepted automated provider result and records a diagnostic", async () => {
@@ -191,6 +192,17 @@ test("portable frozen-Gemini surfaces name automated subscription and manual fal
   }
   assert.match(readFileSync(path.join(root, "core/GATES.md"), "utf8"), /REST\/API transport is unavailable/);
   assert.doesNotMatch(readFileSync(path.join(root, "scripts/gemini-frozen-gate.mjs"), "utf8"), /GEMINI_API_KEY/);
+});
+
+test("subscription transport keeps secrets, unbounded capture, and malformed execution streams outside its admitted path", () => {
+  const runnerSource = readFileSync(runner, "utf8"), supervisorSource = readFileSync(path.join(root, "scripts/gemini-gate-supervisor.mjs"), "utf8");
+  assert.match(runnerSource, /function subscriptionEnv\(\)/);
+  assert.match(runnerSource, /env: subscriptionEnv\(\)/, "both version probe and supervisor use the reduced environment");
+  assert.doesNotMatch(runnerSource, /env: process\.env/, "ambient provider secrets are not forwarded");
+  assert.match(supervisorSource, /exceeded bounded capture limit/);
+  assert.match(supervisorSource, /capture-dir/);
+  assert.match(runnerSource, /invalid step lifecycle/);
+  assert.match(runnerSource, /onlyKeys\(step, allowed\)/);
 });
 
 test("ordinary design mode acquires and releases its owner record before agy discovery", () => {

@@ -468,6 +468,11 @@ function boundedCapture(limit) {
   const chunks = []; let bytes = 0, overflow = false;
   return { append(chunk) { if (overflow) return true; bytes += chunk.length; if (bytes > limit) { overflow = true; return true; } chunks.push(Buffer.from(chunk)); return false; }, get overflow() { return overflow; }, text() { return Buffer.concat(chunks).toString("utf8"); } };
 }
+function subscriptionEnv() {
+  const allowed = new Set(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG"]), env = {};
+  for (const [key, value] of Object.entries(process.env)) if ((allowed.has(key) || key.startsWith("LC_")) && typeof value === "string") env[key] = value;
+  return env;
+}
 export function preflightSubscriptionSettings(settingsPath = process.env.GEMINI_AGY_SETTINGS || path.join(os.homedir(), ".gemini", "antigravity-cli", "settings.json")) {
   let bytes; try { bytes = fs.readFileSync(settingsPath); } catch (error) { die(`cannot read agy settings: ${error.message}`, 3); }
   let settings; try { settings = JSON.parse(bytes); } catch { die("agy settings are malformed JSON", 3); }
@@ -483,7 +488,7 @@ function resolveSubscriptionTransport(o) {
   const requested = o.agyBin || fromPath(), stat = requested && fs.statSync(requested, { throwIfNoEntry: false });
   if (!stat || !stat.isFile() || !(stat.mode & 0o111)) die(`agy binary is not a regular executable: ${requested || "agy"}`, 127);
   const binary = fs.realpathSync(requested); let version;
-  try { version = String(execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10000 })).trim(); }
+  try { version = String(execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10000, env: subscriptionEnv() })).trim(); }
   catch (error) { die(`agy --version failed: ${String(error.stderr || error.message).trim()}`, 3); }
   if (!/^1\.2\.2(?:\s|$)/.test(version)) die(`unsupported agy version: ${version}`, 3);
   const settings = preflightSubscriptionSettings();
@@ -492,18 +497,22 @@ function resolveSubscriptionTransport(o) {
 function parseSubscriptionStream(stdout, workspace, o, e) {
   const lines = stdout.split(/\r?\n/); if (lines.at(-1) === "") lines.pop();
   if (!lines.length || lines.some(line => !line)) die("agy stream-json output is empty or contains a blank event", 3);
-  let initCount = 0, resultCount = 0, result, conversation;
+  let initCount = 0, resultCount = 0, result, conversation, lastIndex = -1; const stepStates = new Map();
   for (const [index, line] of lines.entries()) {
     let event; try { event = JSON.parse(line); } catch { die("agy stream-json output contains malformed JSON", 3); }
     if (!plainObject(event) || typeof event.event !== "string" || Object.keys(event).some(toolLikeKey)) die("agy stream-json output contains an unrecognized or execution-like event", 3);
     if (event.event === "init") {
       const init = event.init;
-      if (index !== 0 || ++initCount !== 1 || !onlyKeys(event, new Set(["event", "conversation_id", "init"])) || typeof event.conversation_id !== "string" || !plainObject(init) || !onlyKeys(init, new Set(["cwd", "tools", "permission_mode", "model", "effort"])) || !Array.isArray(init.tools) || init.tools.some(tool => typeof tool !== "string") || init.permission_mode !== "request-review" || init.model !== o.model || init.effort !== o.effort || fs.realpathSync(init.cwd) !== workspace) die("agy init does not prove the required disposable request-review rig", 3);
+      if (index !== 0 || ++initCount !== 1 || !onlyKeys(event, new Set(["event", "conversation_id", "init"])) || typeof event.conversation_id !== "string" || !plainObject(init) || !onlyKeys(init, new Set(["cwd", "tools", "permission_mode", "model", "effort"])) || !Array.isArray(init.tools) || init.tools.some(tool => typeof tool !== "string") || init.permission_mode !== "request-review" || init.model !== o.model || (Object.hasOwn(init, "effort") && init.effort !== o.effort) || fs.realpathSync(init.cwd) !== workspace) die("agy init does not prove the required disposable request-review rig", 3);
       conversation = event.conversation_id; continue;
     }
     if (event.event === "step_update") {
       const step = event.step_update;
-      if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || Object.keys(step).some(toolLikeKey) || !["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== conversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0) die("agy stream recorded a tool, subagent, denied action, or unrecognized step", 3);
+      const allowed = new Set(["conversation_id", "step_index", "state", "step_type", "text_delta", "duration_seconds", "usage"]), usageOk = !Object.hasOwn(step || {}, "usage") || (plainObject(step.usage) && Object.keys(step.usage).length <= 8 && Object.values(step.usage).every(nonnegativeNumber));
+      if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || !onlyKeys(step, allowed) || Object.keys(step).some(toolLikeKey) || !["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== conversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0 || (Object.hasOwn(step, "text_delta") && typeof step.text_delta !== "string") || (Object.hasOwn(step, "duration_seconds") && !nonnegativeNumber(step.duration_seconds)) || !usageOk) die("agy stream recorded a tool, subagent, denied action, or unrecognized step", 3);
+      const prior = stepStates.get(step.step_index);
+      if (step.step_index < lastIndex || step.step_index > lastIndex + 1 || (prior && !(prior === "ACTIVE" && step.state === "DONE")) || (!prior && step.step_index === lastIndex && step.state !== "DONE")) die("agy stream has an invalid step lifecycle", 3);
+      stepStates.set(step.step_index, step.state); if (step.step_index > lastIndex) lastIndex = step.step_index;
       continue;
     }
     if (event.event === "result") {
@@ -520,10 +529,10 @@ async function callSubscription(o, transport, e, lock) {
   const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gemini-subscription-"))), capture = fs.mkdtempSync(path.join(os.tmpdir(), "gemini-subscription-capture-")), stdoutPath = path.join(capture, "stdout"), stderrPath = path.join(capture, "stderr"), pidPath = path.join(capture, "agy.pid"), metaPath = path.join(capture, "parent-loss.meta"), heartbeatPath = path.join(capture, "parent-heartbeat");
   try {
     if (fs.readdirSync(workspace).length) die("subscription workspace is not empty", 3);
-    fs.writeFileSync(metaPath, `attempt_id=${random("PIL-FROZEN-ATTEMPT")}\nrecord_kind=FULL_REVIEW\ndo_log=0\n`, { mode: 0o600 }); fs.writeFileSync(heartbeatPath, "alive\n", { mode: 0o600 });
+    fs.writeFileSync(metaPath, `attempt_id=${random("PIL-FROZEN-ATTEMPT")}\nrecord_kind=FULL_REVIEW\ndo_log=1\n`, { mode: 0o600 }); fs.writeFileSync(heartbeatPath, "alive\n", { mode: 0o600 });
     const heartbeat = setInterval(() => { try { fs.utimesSync(heartbeatPath, new Date(), new Date()); } catch {} }, 250);
-    const supervisor = path.join(path.dirname(fileURLToPath(import.meta.url)), "gemini-gate-supervisor.mjs"), args = [supervisor, "--timeout-seconds", String(o.timeoutSeconds), "--grace-seconds", "2", "--stdin", "forward", "--cwd", workspace, "--stdout", stdoutPath, "--stderr", stderrPath, "--pid-file", pidPath, "--parent-pid", String(process.pid), "--parent-heartbeat", heartbeatPath, "--temp-dir", workspace, "--lock-dir", lock, "--attempt-log", journalPath(o.repo), "--parent-loss-meta", metaPath, "--", transport.binary, "--model", o.model, "--effort", o.effort, "--sandbox", "--disable-slash-commands", "--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout", `${o.timeoutSeconds}s`];
-    const child = spawn(process.execPath, args, { stdio: ["pipe", "ignore", "ignore"], shell: false, detached: true });
+    const supervisor = path.join(path.dirname(fileURLToPath(import.meta.url)), "gemini-gate-supervisor.mjs"), args = [supervisor, "--timeout-seconds", String(o.timeoutSeconds), "--grace-seconds", "2", "--stdin", "forward", "--cwd", workspace, "--stdout", stdoutPath, "--stderr", stderrPath, "--stdout-limit", String(SUBSCRIPTION_STDOUT_LIMIT), "--stderr-limit", String(SUBSCRIPTION_STDERR_LIMIT), "--capture-dir", capture, "--pid-file", pidPath, "--parent-pid", String(process.pid), "--parent-heartbeat", heartbeatPath, "--temp-dir", workspace, "--lock-dir", lock, "--attempt-log", journalPath(o.repo), "--parent-loss-meta", metaPath, "--", transport.binary, "--model", o.model, "--effort", o.effort, "--sandbox", "--disable-slash-commands", "--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout", `${o.timeoutSeconds}s`];
+    const child = spawn(process.execPath, args, { stdio: ["pipe", "ignore", "ignore"], shell: false, detached: true, env: subscriptionEnv() });
     const outcome = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", (code, signal) => resolve({ code, signal })); child.stdin.once("error", reject); child.stdin.end(`${JSON.stringify({ event: "user", message: { content: e.prompt } })}\n`); }).finally(() => clearInterval(heartbeat));
     const stdout = fs.existsSync(stdoutPath) ? fs.readFileSync(stdoutPath) : Buffer.alloc(0), stderr = fs.existsSync(stderrPath) ? fs.readFileSync(stderrPath) : Buffer.alloc(0);
     if (stdout.length > SUBSCRIPTION_STDOUT_LIMIT || stderr.length > SUBSCRIPTION_STDERR_LIMIT) die("agy subscription transport exceeded its bounded output limit", 3);

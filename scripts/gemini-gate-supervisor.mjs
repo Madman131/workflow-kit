@@ -32,6 +32,7 @@ const forwardStdin = options.stdin === "forward";
 if (options.stdin !== undefined && !forwardStdin) fail("--stdin must be forward when supplied");
 if (options.cwd !== undefined && (!fs.existsSync(options.cwd) || !fs.statSync(options.cwd).isDirectory())) fail("--cwd must name an existing directory");
 if (options["parent-heartbeat"] !== undefined && !fs.existsSync(options["parent-heartbeat"])) fail("--parent-heartbeat must name an existing file");
+for (const key of ["stdout-limit", "stderr-limit"]) if (options[key] !== undefined && (!/^\d+$/.test(options[key]) || Number(options[key]) < 1)) fail(`--${key} must be a positive byte limit`);
 for (const [name, value] of [["timeout-seconds", timeoutSeconds], ["grace-seconds", graceSeconds], ["parent-pid", parentPid]]) {
   if (!Number.isInteger(value) || value <= 0) fail(`${name} must be a positive integer`);
 }
@@ -149,6 +150,7 @@ function cleanupAfterParentLoss() {
     if (owner.split("\n").includes(`pid=${parentPid}`)) fs.rmSync(options["lock-dir"], { recursive: true, force: true });
   } catch {}
   try { fs.rmSync(options["temp-dir"], { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(options["capture-dir"], { recursive: true, force: true }); } catch {}
 }
 
 function signalGroup(signal) {
@@ -164,6 +166,7 @@ function finish(code) {
   finished = true;
   clearTimeout(timeoutTimer);
   clearInterval(parentTimer);
+  if (captureTimer) clearInterval(captureTimer);
   if (killTimer) clearTimeout(killTimer);
   cleanupAfterParentLoss();
   process.exit(code);
@@ -209,6 +212,12 @@ const parentTimer = setInterval(() => {
     }
   }
 }, 250);
+
+const captureTimer = options["stdout-limit"] === undefined ? null : setInterval(() => {
+  for (const [label, file, limit] of [["stdout", options.stdout, Number(options["stdout-limit"])], ["stderr", options.stderr, Number(options["stderr-limit"])]]) {
+    try { if (fs.statSync(file).size > limit) { terminate(3, `${label} exceeded bounded capture limit`); return; } } catch {}
+  }
+}, 25);
 
 process.on("SIGINT", () => terminate(130, "received INT"));
 process.on("SIGTERM", () => terminate(143, "received TERM"));

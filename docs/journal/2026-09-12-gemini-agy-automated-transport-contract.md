@@ -37,8 +37,9 @@ claim that a sandbox flag removes its ability to attempt tools. Instead, each in
 
 The runner must parse its settings before launch and require the request-review posture, no
 non-workspace access, and no permissive allow-list. It records the resolved `agy` version, cwd,
-settings fingerprint, exact model, and effort in the receipt, and refuses any observed stream value
-that differs from the requested value.
+settings fingerprint, exact model, and invoked effort in the receipt. It refuses any observed stream
+value that differs from the requested value; supported `agy` 1.2.2 may omit `effort` from `init`, so
+that field is invocation evidence unless the provider emits it.
 
 ## Fail-closed stream and process boundary
 
@@ -94,10 +95,10 @@ missing subscription capability is a typed refusal rather than a credential prom
 
 | Case | Required proof |
 |---|---|
-| Valid automated review | Fake `agy` emits the exact allowed stream, matching cwd/settings/version/model/effort, canaries, valid verdict, and terminal completion; one durable subscription receipt is accepted. |
+| Valid automated review | Fake `agy` emits the exact allowed stream, matching cwd/settings/version/model, canaries, valid verdict, and terminal completion; effort is pinned in argv and receipt although 1.2.2 may omit it from `init`; one durable subscription receipt is accepted. |
 | Tool/subagent/denied action | Each event shape independently fails closed, retains a non-verdict diagnostic, and tears down only its process group. |
 | Process/output failures | Stderr, nonzero, signal, timeout, and overflow each refuse and prove scoped teardown plus workspace cleanup. |
-| Boundary mismatch | Wrong cwd, settings, version, model, effort, tuple, tree, scope, plan/hash/order, canary, verdict, or completion each refuses before a gate receipt. |
+| Boundary mismatch | Wrong cwd, settings, version, model, or present effort, tuple, tree, scope, plan/hash/order, canary, verdict, or completion each refuses before a gate receipt. |
 | Mutation and malformed stream | Disposable-workspace mutation, frozen-checkout mutation, malformed/unknown/duplicate/out-of-order event, and malformed receipt each refuse. |
 | Transport hardening | Invocation inspection proves no repository cwd, directory/project option, prompt argv, broad permission bypass, or API-key path. |
 | Version drift | Contract tests characterize supported `agy` `1.2.2` behavior and reject incompatible drift from historical `1.1.27`; no historical assumption silently passes. |

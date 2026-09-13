@@ -716,8 +716,10 @@ fails closed on Windows until the runner has an owned process-group teardown the
 Before launch it parses the current `agy` settings and refuses a malformed file, `toolPermission`
 other than `request-review`, `allowNonWorkspaceAccess` other than absent or false, or a
 nonempty/malformed `permissions.allow`. The NDJSON stream must contain exactly one initial `init` and
-final `result`, identify that real disposable cwd, model, effort, and `request-review` mode, and use
-only documented user-input, agent-response, or checkpoint step events. Any tool event, tool output,
+final `result`, identify that real disposable cwd, model, and `request-review` mode, and use
+only documented user-input, agent-response, or checkpoint step events. The runner always pins
+`--effort high`; supported `agy` 1.2.2 may omit effort from `init`, which is therefore invocation
+evidence rather than a provider echo, but a present effort must equal `high`. Any tool event, tool output,
 subagent information, denied action, stderr diagnostic, workspace mutation, signal, nonzero exit,
 timeout, malformed/unknown event, non-success result, empty response, or receipt mismatch is a
 non-verdict failure. The runner accepts only allowlisted fields in those event shapes (except that a
