@@ -51,7 +51,7 @@
 //    Knowing where a consent grant lives never licenses writing it.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -121,6 +121,18 @@ export function observeAndClear(abs) {
   return existed;
 }
 
+// Is `repo` the workflow-kit SOURCE tree? core/REPO_INVARIANTS.md: that tree BUILDS with the method
+// and is never init-adopted, so "run bin/init.mjs" is the one instruction this check must not give
+// there (FM-2026-09-07-32). The signal is the pair the kit already treats as its own identity: the
+// installer (`bin/init.mjs`) beside the SOURCE spelling of the every-lane floor it copies
+// (`githooks/pre-commit`, no dot — githooks/pre-commit's SELF_SPELLINGS and init's kitPc read the
+// same path). An adopter carries neither: init installs `.githooks/pre-commit` and never `bin/`.
+// Both must be regular files; a directory or a lone match is not the kit.
+export function isKitSourceTree(repo) {
+  const isFile = (rel) => { try { return statSync(path.join(repo, rel)).isFile(); } catch { return false; } };
+  return isFile(path.join("bin", "init.mjs")) && isFile(path.join("githooks", "pre-commit"));
+}
+
 export function verdictFor({ before, after, wrote }) {
   if (after > before) return "ARMED";
   return wrote ? "NOT_ARMED" : "UNKNOWN";
@@ -131,6 +143,16 @@ function main() {
   const ledgerAbs = path.join(repo, LEDGER_REL);
   const probeAbs = path.join(repo, PROBE_REL);
 
+  if (!existsSync(path.join(repo, ".codex", "hooks.json")) && isKitSourceTree(repo)) {
+    // Same exit code as NOT INSTALLED: nothing here is armed, and this check never reads green for a
+    // lane it did not observe. What changes is the remedy, because the adopter remedy is forbidden.
+    console.log(`NOT INSTALLED, BY DESIGN — ${repo} is the workflow-kit SOURCE repository.`);
+    console.log("  The kit is never init-adopted (core/REPO_INVARIANTS.md), so it has no .codex/hooks.json and");
+    console.log("  no Codex PreToolUse registration. Do NOT run bin/init.mjs against it: that writes the");
+    console.log("  generated identity set into the template. The control that binds every lane here is the");
+    console.log("  tracked commit floor (githooks/pre-commit, armed by `npm install` via scripts/arm-commit-floor.mjs).");
+    process.exit(2);
+  }
   if (!existsSync(path.join(repo, ".codex", "hooks.json"))) {
     console.log(`NOT INSTALLED — .codex/hooks.json is absent in ${repo}.`);
     // The kit deliberately writes NO hooks.json when the adopter's own config.toml already declares

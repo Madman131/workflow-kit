@@ -1246,3 +1246,42 @@ test("RETRACTED: no current surface claims that editing or upgrading a hook SCRI
   const probe = readFileSync(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"), "utf8");
   assert.match(probe, /Codex keys trust to each \.codex\/hooks\.json ENTRY, not to the hook script\./);
 });
+
+test("the arming check tells the kit SOURCE tree it is not adopted, and still tells an adopter to run init (FM-2026-09-07-32)", async () => {
+  // core/REPO_INVARIANTS.md: the kit is never init-adopted. The check used to prescribe
+  // `node bin/init.mjs --target <kit>` there. Both branches executed; neither may read green.
+  const probe = path.join(KIT, "scripts", "check-codex-hooks-armed.mjs");
+  const { isKitSourceTree } = await import(probe);
+  const run = (dir) => spawnSync(process.execPath, [probe, dir], { encoding: "utf8", env: { ...process.env, PATH: path.join(dir, "no-codex") } });
+  const kitLike = mkdtempSync(path.join(os.tmpdir(), "kit-source-like-"));
+  const adopter = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-nohooks-"));
+  const decoy = mkdtempSync(path.join(os.tmpdir(), "kit-decoy-"));
+  try {
+    mkdirSync(path.join(kitLike, "bin"), { recursive: true }); mkdirSync(path.join(kitLike, "githooks"), { recursive: true });
+    writeFileSync(path.join(kitLike, "bin", "init.mjs"), "// installer\n"); writeFileSync(path.join(kitLike, "githooks", "pre-commit"), "#!/usr/bin/env node\n");
+    // An adopter's floor lives at .githooks/ and it has no bin/init.mjs — and a lone match is not the kit.
+    mkdirSync(path.join(adopter, ".githooks"), { recursive: true }); writeFileSync(path.join(adopter, ".githooks", "pre-commit"), "#!/usr/bin/env node\n");
+    mkdirSync(path.join(decoy, "bin", "init.mjs"), { recursive: true }); mkdirSync(path.join(decoy, "githooks"), { recursive: true });
+    writeFileSync(path.join(decoy, "githooks", "pre-commit"), "x\n");
+    assert.equal(isKitSourceTree(KIT), true, "the real kit tree is recognised");
+    assert.equal(isKitSourceTree(kitLike), true);
+    assert.equal(isKitSourceTree(adopter), false, "an adopter is not the kit");
+    assert.equal(isKitSourceTree(decoy), false, "a DIRECTORY named bin/init.mjs is not the installer");
+
+    for (const dir of [KIT, kitLike]) {
+      const r = run(dir);
+      assert.equal(r.status, 2, `the kit branch keeps the NOT INSTALLED exit code, never green (${dir})\n${r.stdout}`);
+      assert.match(r.stdout, /NOT INSTALLED, BY DESIGN — .* is the workflow-kit SOURCE repository\./);
+      assert.match(r.stdout, /The kit is never init-adopted \(core\/REPO_INVARIANTS\.md\), so it has no \.codex\/hooks\.json and\s+no Codex PreToolUse registration\./);
+      assert.match(r.stdout, /Do NOT run bin\/init\.mjs against it/);
+      assert.doesNotMatch(r.stdout, /Run: node bin\/init\.mjs/, "the forbidden remedy is not printed in the kit");
+    }
+    for (const dir of [adopter, decoy]) {
+      const r = run(dir);
+      assert.equal(r.status, 2, r.stdout);
+      assert.match(r.stdout, /^NOT INSTALLED — \.codex\/hooks\.json is absent in /m);
+      assert.match(r.stdout, /Run: node bin\/init\.mjs --target /, "an adopter still gets the init remedy");
+      assert.doesNotMatch(r.stdout, /BY DESIGN/);
+    }
+  } finally { for (const d of [kitLike, adopter, decoy]) rmSync(d, { recursive: true, force: true }); }
+});
