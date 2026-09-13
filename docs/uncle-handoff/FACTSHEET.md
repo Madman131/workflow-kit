@@ -273,7 +273,7 @@ The kit separates reusable method from project-specific facts:
 - **Project bindings:** `BINDINGS.md` maps models, tools, access, and commands;
   `REPO_INVARIANTS.md` states must-hold properties; `SYSTEM_MAP.md` describes current architecture;
   `OWNER_COMMS.md` sets your communication preferences. These files are generated for your project,
-  not copied from Josh's.
+  not copied from the sender's.
 - **Working tools:** hooks, tests, skills, and selected review runners. A runner's installation
   does not install or authenticate its provider.
 
