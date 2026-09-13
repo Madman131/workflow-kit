@@ -321,9 +321,9 @@ inventory. Codex verifies each result and repeats machine-specific checks on eac
 - **Claude Code and your own Claude account:** provide independent cross-family code review when
   Codex builds. Codex checks installation, sign-in, and model access, then configures and tests its
   Claude review route.
-- **Gemini access and a web browser:** provide cross-family review of the plan and contract. Codex
-  verifies model access and practices the manual browser handoff with you. This route requires no
-  Gemini CLI or API key.
+- **Gemini access and `agy`:** provide cross-family review of the plan and contract. Codex verifies
+  the subscription-only disposable request-review rig and preserves strict manual browser handoff for
+  high-sensitivity work. Neither route needs an API key.
 - **The kit’s hooks, skills, and review runners:** supply automatic controls and reusable procedures.
   Codex installs and configures them, guides your hook-trust approval, and tests that the controls
   and review tools work.

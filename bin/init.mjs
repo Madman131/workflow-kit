@@ -1079,7 +1079,7 @@ function main() {
     }
     const guard = path.join(T, "scripts", "codex-gate-guard", "claude");
     if (copyGuarded(path.join(KIT_ROOT, "scripts", "codex-gate-guard", "claude"), guard, force) === "written") chmodX(guard);
-    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + gate runners (legacy need codex/agy; frozen Gemini uses strict manual Gemini-subscription handoff; no frozen API key or automated provider invocation — see the kit's PORTABILITY.md)`);
+    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + gate runners (need codex/agy; frozen Gemini normally uses subscription agy with strict manual fallback; no frozen API key or REST route — see the kit's PORTABILITY.md)`);
   } else {
     // Skipped is not UNEXAMINED: runners a previous adopt installed are mechanism kept-files even
     // when this run omits the flag — read-only compared, like the skipped .codex lane below.

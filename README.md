@@ -1,4 +1,12 @@
-# workflow-kit — v2.31.0
+# workflow-kit — v2.32.0
+
+## What's new in v2.32.0 — automated frozen Gemini subscription transport
+
+Frozen Gemini gates normally run through the approved `agy` subscription transport in a disposable
+empty workspace. The runner pins the exact tuple and approved slice plan, rejects tool or subagent
+activity, records a result only after owned-process teardown and post-flight checks, and fails closed
+on drift or mutation. Strict manual web export/import remains the explicit high-sensitivity fallback;
+neither route uses REST/API credentials or billing.
 
 ## What's new in v2.31.0 — explicit execution bindings and finite terminal repair
 
@@ -44,12 +52,13 @@ run `scripts/sync-user-orchestrate-skill.mjs --install` for `~/.agents/skills/or
 and again with `--target ~/.claude/skills/orchestrate` for the Claude user copy. Provider names
 belong in adopter bindings, while the portable source names capability roles.
 
-## Frozen Gemini strict manual subscription handoff
+## Frozen Gemini subscription transport with manual fallback
 
-Exact committed Gemini gates now export hash-bound packets for a manually selected Gemini
-subscription UI and import only matching UTF-8 replies. The frozen engine never invokes `agy`, reads
-provider settings or credentials, or calls REST; the operator attests the UI/model selection while
-the runner verifies tuple, plan, fragments, scope, proof, completion, and receipts.
+Exact committed Gemini gates normally send the approved nonpublic review packet through subscription
+`agy` in a fresh disposable request-review workspace and accept only a fully verified tuple-bound
+response and durable receipt. Strict manual export/import remains the explicit high-sensitivity
+fallback: the operator attests the UI/model selection while the runner verifies tuple, plan,
+fragments, scope, proof, completion, and receipts. Neither route uses REST/API credentials.
 
 ## What's new in v2.30.1 — the Gemini seat says it is outside the matrix
 

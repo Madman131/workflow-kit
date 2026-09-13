@@ -94,8 +94,8 @@ a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is
 
 ## Tool bindings
 - **Cross-family lens / external gate:** {{GATE_TOOLING}} *(if you use the shipped Codex/Gemini
-  runners, they need `codex` / `agy` at runtime — see the kit's `PORTABILITY.md` (workflow-kit repository); if you gate by hand, say so
-  here).*
+  runners, they need `codex` / subscription `agy` at runtime; frozen Gemini normally uses the documented disposable
+  subscription route with strict manual fallback — see the kit's `PORTABILITY.md` (workflow-kit repository); if you gate by hand, say so here).*
 - **Task-lane declaration — enforcement paths:** declaration `.claude/task-lane.json`; ledger
   `.claude/lane-ledger.jsonl` (gitignored); write-time guard `.claude/hooks/guard-lane-authoring.mjs`,
   commit-time floor `.githooks/pre-commit`. Routes: `in-thread` (with the tier) · `exempt` (with a

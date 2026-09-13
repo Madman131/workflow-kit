@@ -58,10 +58,10 @@ function adopt(extra = []) {
   return { dir, codexDir, run, first, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
-test("gate-runner install summary names strict manual frozen Gemini handoff", () => {
+test("gate-runner install summary names automated frozen Gemini with strict manual fallback", () => {
   const { first, cleanup } = adopt(["--with-gate-runners", "--skip-codex-lane"]);
   try {
-    assert.match(first.stdout, /frozen Gemini uses strict manual Gemini-subscription handoff; no frozen API key or automated provider invocation/);
+    assert.match(first.stdout, /frozen Gemini normally uses subscription agy with strict manual fallback; no frozen API key or REST route/);
     assert.doesNotMatch(first.stdout, /direct API needs GEMINI_API_KEY/);
   } finally { cleanup(); }
 });

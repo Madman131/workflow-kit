@@ -456,25 +456,22 @@ substitution/escalation rule or HOLD; do not silently count another Codex pass a
 
 ### 9. Guide Gemini setup and practice the review handoff
 
-Prefer the Owner's own Gemini subscription with a documented manual handoff when that satisfies the
-chosen binding; it avoids transferring a secret. If the target deliberately binds the legacy `agy`
-design runner, verify the current official CLI and authentication flow before asking the Owner to
-install or sign in. Do not request `GEMINI_API_KEY` unless the Owner explicitly chooses a current,
-supported API route and its cost.
+Use the Owner's Gemini subscription through the documented automated `agy` frozen-review transport
+for approved nonpublic review packets, or choose its strict manual handoff for high-sensitivity work.
+Verify the current official CLI and authentication flow before asking the Owner to install or sign in.
+Do not request `GEMINI_API_KEY`: the current frozen route has no supported API/REST option.
 
-The current kit routes Gemini to the **design-as-contract**, not the code diff. For strict frozen
-exact-candidate packets, follow `core/GATES.md`'s active manual subscription export/import procedure:
-the operator selects the specified subscription model, submits numbered packets in order, saves
-exact UTF-8 replies, and the runner verifies the frozen tuple and response structure. The runner does
-not cryptographically verify the human's account or UI model selection.
+The current kit routes Gemini to the **design-as-contract**, not the code diff. For frozen
+exact-candidate packets, use the normal subscription-only `agy` transport in its disposable
+request-review rig; the runner verifies the frozen tuple, transport identity, response structure, and
+receipt. Use `core/GATES.md`'s strict manual export/import procedure instead for high-sensitivity
+work; the manual UI account and model selection remain operator-attested, not cryptographically
+verified by the runner.
 
-Walk the Owner through that exact route with a small, non-sensitive practice packet and permission
-for provider use: open the correct service, sign in, select the required model, submit the packet,
-and return its complete response. Prepare the packet and file locations yourself. Explain precisely
-how to save each reply without editing it, verify the import, and only then continue to the next
-packet. Do not hand the Owner a packet directory and expect them to infer the process. State plainly
-that Codex coordinates this manual browser handoff; it is not automatic Gemini execution inside
-Codex. Do not install a Gemini CLI or request an API key for the manual route.
+Practice the chosen route with a small, non-sensitive packet and provider permission. For automated
+use, verify the exact `agy` rig and receipt; for manual fallback, open the correct service, select the
+required model, submit ordered packets, save each reply unedited, and verify import before continuing.
+Do not request an API key for either route.
 
 If the model named by the received kit is unavailable, stop that gate with
 `HOLD: REQUIRED GEMINI SEAT UNAVAILABLE`. Do not silently change models or revive a historical transport command. A model

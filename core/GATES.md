@@ -682,50 +682,41 @@ Every slice record contains the entire normalized plan, exact diff ranges plus d
 
 ### Frozen Gemini exact-candidate gate
 
-> **2026-09-06 supersession — strict manual subscription handoff.** The automated frozen
-> subscription and direct-REST procedures below are historical transport evidence, not live commands.
-> `--run-slices`, `--transport`, `--agy-bin`, `--timeout-seconds`, and every frozen full live call now
-> refuse before provider/settings/credential access. Keep their measured receipts unchanged. The active
-> procedure is: generate and inspect the local DRAFT; fingerprint and approve the exact manifest; run
-> `--handoff-export .gemini-gate/<dir>`; submit each numbered packet manually in the operator-attested
-> Gemini subscription UI using `gemini-3.1-pro-high`; save exact UTF-8 replies as `replies/0001.txt`;
-> then run `--handoff-import .gemini-gate/<dir>`. Export/import recheck the exact tuple, plan,
-> fragments, packets, scopes, replies, and endpoint. A source-only NO-GO remains nonterminal
-> `UNRESOLVED_ATTRIBUTION`; only a diff-bearing/full terminal NO-GO permits a prefix, and all other
-> complete reply sets aggregate GO or `ATTRIBUTION_HOLD`. Manual UI/model identity is operator-attested,
-> not cryptographically verified by the runner. A retry reuses only an exact complete durable prefix
-> for its Handoff-ID and appends the expected suffix; a completed terminal/aggregate ID, or a mismatched,
-> extra, out-of-order, or incomplete prefix, refuses.
+> **2026-09-12 current procedure — automated subscription with strict manual fallback.** The normal
+> frozen exact-candidate route is subscription-only `agy`; `--run-slices`, `--agy-bin`, and
+> `--timeout-seconds` are supported only for that route. REST/API transport is unavailable. Generate
+> and inspect the local DRAFT, fingerprint and approve the exact manifest, then run the frozen
+> subscription command below. The runner buffers every response until its owned group closes and the
+> disposable workspace plus frozen checkout endpoint/base/candidate/tree rechecks pass; only then does
+> it append a durable result, and it aggregates only after all accepted results and a final endpoint
+> check. Strict `--handoff-export`/`--handoff-import` remains the explicit high-sensitivity fallback.
+> Export/import recheck exact tuple, plan, fragments, packets, scopes, replies, and endpoint. Manual
+> UI/model identity is operator-attested, not cryptographically verified by the runner.
 
-> **Historical automated-transport record begins.** The following transport commands and controls
-> explain preserved receipts from the superseded procedure. They are not supported current commands.
-
-For an exact committed code candidate, the ordinary non-API path was the explicit subscription
-transport. Direct Gemini REST remains available only when explicitly selected; neither path falls back
-to the other.
+For an exact committed candidate, the ordinary non-API path is the explicit subscription transport.
 
 ```sh
 bash scripts/cold-review-gemini.sh \
   --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
-  --rig-id <nonsecret-provider-configuration-id> --transport subscription --context docs/contract.md
+  --rig-id <nonsecret-provider-configuration-id> --context docs/contract.md
 ```
 
-The subscription runner resolves `agy` from an explicit absolute `--agy-bin`, then `PATH`, then the
-current user's `.local/bin`; receipts bind the stable subscription transport name, its `--version`,
-model, settings fingerprint, and nonsecret rig ID, never an operator home path. It requires
-`gemini-3.1-pro-high`, an empty disposable system-temp workspace, and exactly one NDJSON standard-input
-user event containing the complete prompt, so private review material is never an `agy` command-line
-argument. It passes `--input-format stream-json`, `--sandbox`, `--disable-slash-commands`,
-`--output-format stream-json`, and `--print-timeout <N>s`; it never passes
+The subscription runner resolves `agy` from an explicit absolute `--agy-bin` or `PATH`; receipts bind
+the stable subscription transport name, its exact supported `1.2.2` version, model, effort, settings
+fingerprint, and nonsecret rig ID, never an operator home path. It requires
+`gemini-3.1-pro-high` at `high` effort, an empty disposable system-temp workspace, and exactly one
+NDJSON standard-input user event containing the complete prompt, so private review material is never
+an `agy` command-line argument. It passes `--input-format stream-json`, `--sandbox`,
+`--disable-slash-commands`, `--output-format stream-json`, and `--print-timeout <N>s`; it never passes
 a repository cwd, `--add-dir`, `--new-project`, `--mode plan`, permission bypass, or a broad permission
 configuration. `--new-project` is forbidden because it creates durable global project records.
 `--timeout-seconds` may lower the bounded 600-second default but cannot raise it. Subscription execution
 fails closed on Windows until the runner has an owned process-group teardown there.
 
-Before launch it parses `~/.gemini/antigravity-cli/settings.json` and refuses a malformed file,
-`toolPermission` other than absent or `request-review`, `allowNonWorkspaceAccess` other than absent or
-false, or a nonempty/malformed `permissions.allow`. The NDJSON stream must contain exactly one initial
-`init` and final `result`, identify that real disposable cwd, model, and `request-review` mode, and use
+Before launch it parses the current `agy` settings and refuses a malformed file, `toolPermission`
+other than `request-review`, `allowNonWorkspaceAccess` other than absent or false, or a
+nonempty/malformed `permissions.allow`. The NDJSON stream must contain exactly one initial `init` and
+final `result`, identify that real disposable cwd, model, effort, and `request-review` mode, and use
 only documented user-input, agent-response, or checkpoint step events. Any tool event, tool output,
 subagent information, denied action, stderr diagnostic, workspace mutation, signal, nonzero exit,
 timeout, malformed/unknown event, non-success result, empty response, or receipt mismatch is a
@@ -736,19 +727,9 @@ overflow, or runner interrupt, waiting through teardown before it releases the s
 does not infer no tool activity from an omitted
 `denied_actions` field: the event stream is the authoritative local execution record.
 
-The deterministic fake-`agy` suite proves this runner behavior only. No live subscription review,
-current-account eligibility, or review quality was exercised here. **Activation remains HOLD** until an
-Owner separately authorizes live use and retains the resulting current-rig preflight and review receipt;
-do not change permissions or retry by widening them to obtain that receipt.
-
-For separately authorized direct REST, select `--transport api`; it retains the text-only endpoint and
-requires `GEMINI_API_KEY` only at that live invocation:
-
-```sh
-bash scripts/cold-review-gemini.sh \
-  --base <40-lowercase-hex> --candidate <40-lowercase-hex> --tree <40-lowercase-hex> \
-  --rig-id <nonsecret-provider-configuration-id> --transport api --context docs/contract.md
-```
+The deterministic fake-`agy` suite proves this runner behavior only. No fake test establishes live
+subscription eligibility or review quality; do not widen permissions to obtain a receipt. No direct
+REST command exists.
 
 The runner disables Git replacement-object processing for every read, verifies that the base is an
 ancestor, the checked-out HEAD and tree equal the supplied candidate tuple, and rechecks that clean
@@ -758,13 +739,11 @@ deletions; symlinks, gitlinks, type changes, renames, copies, escaping/nonregula
 malformed slice boundaries refuse before any provider request. It assembles full text from
 Git blobs only: current changed files, old deleted files, the diff, the candidate's invariants, and
 candidate-relative contract context. Binary, non-UTF-8, renamed/type-changed, escaping, dirty, or
-secret-looking input refuses before any provider request. It never creates a snapshot, stages the
-caller tree, supplies a directory, or lets Gemini execute a tool.
+secret-looking input refuses before any provider request. The `agy` harness advertises tools, so the
+runner does not claim they are absent: it rejects any tool, subagent, denied-action, or execution-like
+stream event before accepting a response.
 
-The direct REST request is one fixed-host HTTPS `generateContent` call with text-only contents and one
-candidate requested. Every response part must contain exactly one `text` field; there are no
-tools/function declarations and no function-call executor. Its
-complete serialized request is strictly below **81,920 bytes**; no setting can raise that cap. A
+Each complete frozen subscription packet is strictly below **81,920 bytes**; no setting can raise that cap. A
 larger complete candidate requires a v2 manifest augmented with `scope.candidate_commit` and
 `scope.candidate_tree`. A changed source, deleted source, or per-file diff that cannot fit whole is
 represented by ordered `fragments` on its coverage slices. Every fragment binds the same tuple and
@@ -861,9 +840,9 @@ parts may carry an opaque `thoughtSignature`, but no other non-text part field i
 
 ### Exit codes and traps
 
-- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. This remains the legacy runner's delivered-review success code. A frozen strict-manual import returns `0` only for a verified aggregate `GO`; Git discovery failure is never “no changes.”
+- `0`: a full/aggregate release receipt, an explicitly non-release slice result, dry-run, or confirmed no code changes. A frozen subscription or strict-manual aggregate returns `0` only for a verified `GO`; Git discovery failure is never “no changes.”
 - `2`: bad arguments or invalid environment value.
-- `3`: a frozen strict-manual terminal `NO-GO`, `UNRESOLVED_ATTRIBUTION`/`ATTRIBUTION_HOLD`, or refusal is non-release. The durable record distinguishes terminal evidence from a refusal. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
+- `3`: a frozen subscription/manual terminal `NO-GO`, `UNRESOLVED_ATTRIBUTION`/`ATTRIBUTION_HOLD`, or refusal is non-release. The durable record distinguishes terminal evidence from a refusal. For legacy modes, this remains artifact-freeze, delivery/ingestion, timeout, tool, empty-response, malformed-verdict, advisory, or refusal failure.
 - `4`: single-flight refusal.
 - `127`: `agy` unavailable.
 - `130` / `143`: legacy runner handled `INT` / `TERM` exits; always non-verdict.

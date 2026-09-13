@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const LIMIT = 81920, JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.1-pro-high", MANUAL_TRANSPORT = "operator-attested-manual-gemini-subscription-v1";
+const LIMIT = 81920, JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.1-pro-high", SUBSCRIPTION_EFFORT = "high", SUBSCRIPTION_TIMEOUT_SECONDS = 600, SUBSCRIPTION_STDOUT_LIMIT = 4 * 1024 * 1024, SUBSCRIPTION_STDERR_LIMIT = 1024 * 1024, MANUAL_TRANSPORT = "operator-attested-manual-gemini-subscription-v1";
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 const FRAGMENT_KINDS = new Set(["frozen_source", "deleted_source", "per_file_diff"]);
@@ -67,12 +68,12 @@ function journalPath(repo) {
 }
 function parse(argv) {
   for (const key of GIT_LOCATION_OVERRIDES) if (process.env[key]) die(`ambient ${key} is not allowed for a frozen review`, 3);
-  const o = { repo: process.cwd(), model: SUBSCRIPTION_MODEL, dryRun: false, noLog: false, fingerprint: false, generateSlicePlan: undefined, handoffExport: undefined, handoffImport: undefined };
-  const flags = new Set(["--dry-run", "--no-log", "--fingerprint"]), valueOptions = new Set(["repo", "model", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "generateSlicePlan", "handoffExport", "handoffImport", "sharedLockDir", "lockOwnerPid"]);
+  const o = { repo: process.cwd(), model: SUBSCRIPTION_MODEL, effort: SUBSCRIPTION_EFFORT, timeoutSeconds: SUBSCRIPTION_TIMEOUT_SECONDS, dryRun: false, noLog: false, runSlices: false, fingerprint: false, generateSlicePlan: undefined, handoffExport: undefined, handoffImport: undefined };
+  const flags = new Set(["--dry-run", "--no-log", "--run-slices", "--fingerprint"]), valueOptions = new Set(["repo", "model", "effort", "agyBin", "timeoutSeconds", "base", "candidate", "tree", "rigId", "context", "sliceManifest", "generateSlicePlan", "handoffExport", "handoffImport", "sharedLockDir", "lockOwnerPid"]);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (["--run-slices", "--transport", "--agy-bin", "--timeout-seconds"].includes(key)) die(`${key} is retired for frozen reviews; use --handoff-export then --handoff-import`, 3);
-    if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--fingerprint": "fingerprint" }[key]] = true; continue; }
+    if (key === "--transport") die("frozen Gemini transport is subscription-only; REST/API transport is unavailable", 3);
+    if (flags.has(key)) { o[{ "--dry-run": "dryRun", "--no-log": "noLog", "--run-slices": "runSlices", "--fingerprint": "fingerprint" }[key]] = true; continue; }
     if (!key?.startsWith("--")) die(`invalid argument near ${key}`);
     const name = key.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (!valueOptions.has(name)) die(`unknown option ${key}`);
@@ -81,17 +82,20 @@ function parse(argv) {
   }
   for (const key of ["base", "candidate", "tree", "rigId"]) if (!o[key]) die(`missing --${key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
   if (![o.base, o.candidate, o.tree].every(value => HEX.test(value))) die("base, candidate, and tree must be exact lowercase 40-hex IDs");
-  if (!RIG.test(o.rigId) || !MODEL.test(o.model)) die("invalid nonsecret rig ID or Gemini model ID");
-  if (o.model !== SUBSCRIPTION_MODEL) die(`strict manual handoff requires --model ${SUBSCRIPTION_MODEL}`);  // gate-binding-ok: out-of-matrix — the Gemini cross-family seat, pinned to the operator's subscription model by core/GATES.md § Gemini cross-family gate; § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
+  if (!RIG.test(o.rigId) || !MODEL.test(o.model) || o.effort !== SUBSCRIPTION_EFFORT) die(`frozen subscription transport requires model ${SUBSCRIPTION_MODEL} and effort ${SUBSCRIPTION_EFFORT}`);
+  if (o.model !== SUBSCRIPTION_MODEL) die(`frozen subscription transport requires --model ${SUBSCRIPTION_MODEL}`);  // gate-binding-ok: out-of-matrix — the Gemini cross-family seat, pinned to the operator's subscription model by core/GATES.md § Gemini cross-family gate; § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
+  if (o.agyBin && !path.isAbsolute(o.agyBin)) die("--agy-bin must be an absolute executable path", 3);
+  if (!/^\d+$/.test(String(o.timeoutSeconds)) || Number(o.timeoutSeconds) < 1 || Number(o.timeoutSeconds) > SUBSCRIPTION_TIMEOUT_SECONDS) die(`--timeout-seconds must be a whole number from 1 through ${SUBSCRIPTION_TIMEOUT_SECONDS}`, 3);
+  o.timeoutSeconds = Number(o.timeoutSeconds);
   if (o.generateSlicePlan) {
-    if (o.sliceManifest || o.handoffExport || o.handoffImport || o.fingerprint || o.dryRun || o.noLog || !o.context) die("--generate-slice-plan requires --context and forbids handoff, fingerprint, and logging flags");
+    if (o.sliceManifest || o.handoffExport || o.handoffImport || o.runSlices || o.fingerprint || o.dryRun || o.noLog || !o.context) die("--generate-slice-plan requires --context and forbids handoff, run, fingerprint, and logging flags");
     o.generateSlicePlan = relative(o.generateSlicePlan, "--generate-slice-plan");
     if (!o.generateSlicePlan.startsWith(".gemini-gate/")) die("--generate-slice-plan must name a repository-relative .gemini-gate/ manifest");
   } else if (o.handoffExport || o.handoffImport) {
     if (Boolean(o.handoffExport) === Boolean(o.handoffImport) || !o.sliceManifest || o.context || o.fingerprint || o.dryRun || o.noLog) die("a strict manual handoff requires exactly one of --handoff-export/--handoff-import with --slice-manifest only", 3);
     const key = o.handoffExport ? "handoffExport" : "handoffImport", label = o.handoffExport ? "--handoff-export" : "--handoff-import";
     o[key] = relative(o[key], label); if (!o[key].startsWith(".gemini-gate/")) die(`${label} must name a repository-relative .gemini-gate directory`, 3);
-  } else if (o.sliceManifest ? !o.fingerprint || o.context : (!o.dryRun || !o.context)) die("use --context --dry-run for local inspection, --slice-manifest --fingerprint, or strict manual handoff", 3);
+  } else if (o.sliceManifest ? ((!o.runSlices && !o.fingerprint) || o.context) : (!o.context || o.runSlices || o.fingerprint)) die("use --context for an automated full review, --slice-manifest --run-slices, --fingerprint, or strict manual handoff", 3);
   if (o.context) o.context = relative(o.context, "--context"); if (o.sliceManifest) o.sliceManifest = relative(o.sliceManifest, "--slice-manifest");
   if (o.noLog && !o.dryRun && !o.fingerprint) die("--no-log is only allowed with --dry-run or --fingerprint; live reviews require a durable receipt", 3);
   if (Boolean(o.sharedLockDir) !== Boolean(o.lockOwnerPid)) die("--shared-lock-dir and --lock-owner-pid must be supplied together", 3);
@@ -457,6 +461,78 @@ function sharedLock(repo, o) {
 function complete(block) { const candidate = block.startsWith("## Gemini frozen gate attempt — ") ? `\n${block}` : block, match = candidate.match(/^([\s\S]*?)- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`\n?$/); return Boolean(match && sha(match[1]) === match[2]); }
 function rigKey(o, transport) { return sha(`${transport.name}|${transport.identity}|${o.model}|${o.rigId}`); }
 function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+function onlyKeys(value, keys) { return Object.keys(value).every(key => keys.has(key)); }
+function toolLikeKey(key) { return /(?:tool|subagent|function|command|action|output)/i.test(key); }
+function nonnegativeNumber(value) { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+function boundedCapture(limit) {
+  const chunks = []; let bytes = 0, overflow = false;
+  return { append(chunk) { if (overflow) return true; bytes += chunk.length; if (bytes > limit) { overflow = true; return true; } chunks.push(Buffer.from(chunk)); return false; }, get overflow() { return overflow; }, text() { return Buffer.concat(chunks).toString("utf8"); } };
+}
+export function preflightSubscriptionSettings(settingsPath = process.env.GEMINI_AGY_SETTINGS || path.join(os.homedir(), ".gemini", "antigravity-cli", "settings.json")) {
+  let bytes; try { bytes = fs.readFileSync(settingsPath); } catch (error) { die(`cannot read agy settings: ${error.message}`, 3); }
+  let settings; try { settings = JSON.parse(bytes); } catch { die("agy settings are malformed JSON", 3); }
+  if (!plainObject(settings) || settings.toolPermission !== "request-review") die("agy settings must require request-review", 3);
+  if (settings.allowNonWorkspaceAccess !== undefined && settings.allowNonWorkspaceAccess !== false) die("agy settings must not allow non-workspace access", 3);
+  if (settings.permissions !== undefined && (!plainObject(settings.permissions) || (settings.permissions.allow !== undefined && (!Array.isArray(settings.permissions.allow) || settings.permissions.allow.length)))) die("agy settings must not contain a permission allow-list", 3);
+  return { identity: `settings-sha256:${sha(bytes)}` };
+}
+function resolveSubscriptionTransport(o) {
+  const fromPath = () => (process.env.PATH || "").split(path.delimiter).filter(Boolean).map(directory => path.join(directory, "agy")).find(candidate => {
+    const stat = fs.statSync(candidate, { throwIfNoEntry: false }); return Boolean(stat?.isFile() && (stat.mode & 0o111));
+  });
+  const requested = o.agyBin || fromPath(), stat = requested && fs.statSync(requested, { throwIfNoEntry: false });
+  if (!stat || !stat.isFile() || !(stat.mode & 0o111)) die(`agy binary is not a regular executable: ${requested || "agy"}`, 127);
+  const binary = fs.realpathSync(requested); let version;
+  try { version = String(execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10000 })).trim(); }
+  catch (error) { die(`agy --version failed: ${String(error.stderr || error.message).trim()}`, 3); }
+  if (!/^1\.2\.2(?:\s|$)/.test(version)) die(`unsupported agy version: ${version}`, 3);
+  const settings = preflightSubscriptionSettings();
+  return { name: "antigravity-agy-subscription-stream-v2", identity: `${version}|${settings.identity}|${SUBSCRIPTION_EFFORT}`, binary };
+}
+function parseSubscriptionStream(stdout, workspace, o, e) {
+  const lines = stdout.split(/\r?\n/); if (lines.at(-1) === "") lines.pop();
+  if (!lines.length || lines.some(line => !line)) die("agy stream-json output is empty or contains a blank event", 3);
+  let initCount = 0, resultCount = 0, result, conversation;
+  for (const [index, line] of lines.entries()) {
+    let event; try { event = JSON.parse(line); } catch { die("agy stream-json output contains malformed JSON", 3); }
+    if (!plainObject(event) || typeof event.event !== "string" || Object.keys(event).some(toolLikeKey)) die("agy stream-json output contains an unrecognized or execution-like event", 3);
+    if (event.event === "init") {
+      const init = event.init;
+      if (index !== 0 || ++initCount !== 1 || !onlyKeys(event, new Set(["event", "conversation_id", "init"])) || typeof event.conversation_id !== "string" || !plainObject(init) || !onlyKeys(init, new Set(["cwd", "tools", "permission_mode", "model", "effort"])) || !Array.isArray(init.tools) || init.tools.some(tool => typeof tool !== "string") || init.permission_mode !== "request-review" || init.model !== o.model || init.effort !== o.effort || fs.realpathSync(init.cwd) !== workspace) die("agy init does not prove the required disposable request-review rig", 3);
+      conversation = event.conversation_id; continue;
+    }
+    if (event.event === "step_update") {
+      const step = event.step_update;
+      if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || Object.keys(step).some(toolLikeKey) || !["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== conversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0) die("agy stream recorded a tool, subagent, denied action, or unrecognized step", 3);
+      continue;
+    }
+    if (event.event === "result") {
+      const terminal = event.result;
+      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, new Set(["event", "result"])) || !plainObject(terminal) || !onlyKeys(terminal, new Set(["conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"])) || terminal.conversation_id !== conversation || terminal.status !== "SUCCESS" || typeof terminal.response !== "string" || !terminal.response.trim() || Object.hasOwn(terminal, "error") || Object.hasOwn(terminal, "denied_actions") || !nonnegativeNumber(terminal.duration_seconds) || !Number.isSafeInteger(terminal.num_turns) || terminal.num_turns < 0) die("agy subscription response is not one clean successful result", 3);
+      result = terminal; continue;
+    }
+    die("agy stream-json output contains an unrecognized event", 3);
+  }
+  if (initCount !== 1 || resultCount !== 1 || !result) die("agy stream lacks one complete init/result sequence", 3);
+  return verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: result.response }] } }] }, e);
+}
+async function callSubscription(o, transport, e, lock) {
+  const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gemini-subscription-"))), capture = fs.mkdtempSync(path.join(os.tmpdir(), "gemini-subscription-capture-")), stdoutPath = path.join(capture, "stdout"), stderrPath = path.join(capture, "stderr"), pidPath = path.join(capture, "agy.pid"), metaPath = path.join(capture, "parent-loss.meta"), heartbeatPath = path.join(capture, "parent-heartbeat");
+  try {
+    if (fs.readdirSync(workspace).length) die("subscription workspace is not empty", 3);
+    fs.writeFileSync(metaPath, `attempt_id=${random("PIL-FROZEN-ATTEMPT")}\nrecord_kind=FULL_REVIEW\ndo_log=0\n`, { mode: 0o600 }); fs.writeFileSync(heartbeatPath, "alive\n", { mode: 0o600 });
+    const heartbeat = setInterval(() => { try { fs.utimesSync(heartbeatPath, new Date(), new Date()); } catch {} }, 250);
+    const supervisor = path.join(path.dirname(fileURLToPath(import.meta.url)), "gemini-gate-supervisor.mjs"), args = [supervisor, "--timeout-seconds", String(o.timeoutSeconds), "--grace-seconds", "2", "--stdin", "forward", "--cwd", workspace, "--stdout", stdoutPath, "--stderr", stderrPath, "--pid-file", pidPath, "--parent-pid", String(process.pid), "--parent-heartbeat", heartbeatPath, "--temp-dir", workspace, "--lock-dir", lock, "--attempt-log", journalPath(o.repo), "--parent-loss-meta", metaPath, "--", transport.binary, "--model", o.model, "--effort", o.effort, "--sandbox", "--disable-slash-commands", "--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout", `${o.timeoutSeconds}s`];
+    const child = spawn(process.execPath, args, { stdio: ["pipe", "ignore", "ignore"], shell: false, detached: true });
+    const outcome = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", (code, signal) => resolve({ code, signal })); child.stdin.once("error", reject); child.stdin.end(`${JSON.stringify({ event: "user", message: { content: e.prompt } })}\n`); }).finally(() => clearInterval(heartbeat));
+    const stdout = fs.existsSync(stdoutPath) ? fs.readFileSync(stdoutPath) : Buffer.alloc(0), stderr = fs.existsSync(stderrPath) ? fs.readFileSync(stderrPath) : Buffer.alloc(0);
+    if (stdout.length > SUBSCRIPTION_STDOUT_LIMIT || stderr.length > SUBSCRIPTION_STDERR_LIMIT) die("agy subscription transport exceeded its bounded output limit", 3);
+    if (outcome.signal || outcome.code !== 0) die(`agy subscription transport exited ${outcome.signal || outcome.code}: ${stderr.toString("utf8").trim() || "no supervisor diagnostic"}`, 3);
+    if (stderr.toString("utf8").trim()) die("agy subscription transport emitted stderr diagnostics or a permission notice", 3);
+    if (fs.readdirSync(workspace).length) die("agy subscription transport mutated its disposable workspace", 3);
+    return parseSubscriptionStream(stdout.toString("utf8"), workspace, o, e);
+  } finally { fs.rmSync(workspace, { recursive: true, force: true }); fs.rmSync(capture, { recursive: true, force: true }); }
+}
 function handoffDirectory(repo, rel, create = false) {
   rel = relative(rel, "handoff directory"); if (!rel.startsWith(".gemini-gate/")) die("handoff directory must be inside .gemini-gate", 3);
   const parts = rel.split("/"), target = path.resolve(repo, rel); let current = repo;
@@ -557,6 +633,37 @@ function writeImportedReceipts(repo, o, plan, prepared, imported, afterSliceRece
   if (aggregate) { afterSliceReceipts?.(); endpoint(repo, o); append(repo, aggregate); }
   if (expected.exitCode) process.exitCode = expected.exitCode;
 }
+async function writeAutomatedReceipts(repo, o, plan, prepared, hooks, lock) {
+  const transport = resolveSubscriptionTransport(o), key = rigKey(o, transport), contributors = [], results = [], unresolved = [];
+  for (const item of prepared) {
+    const attemptId = random("PIL-FROZEN-ATTEMPT");
+    try {
+      endpoint(repo, o);
+      const result = await callSubscription(o, transport, item, lock);
+      hooks.afterProviderResponse?.(item);
+      endpoint(repo, o);
+      const common = { transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes };
+      if (result.unresolvedAttribution) {
+        const observation = { attempt_id: attemptId, slice: item.name, provider_verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) };
+        append(repo, { ...common, status: "UNRESOLVED_ATTRIBUTION", kind: "SLICE_RESULT", release: "NO", providerVerdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
+        contributors.push(attemptId); results.push({ status: "UNRESOLVED_ATTRIBUTION", ...observation }); unresolved.push(observation); process.stdout.write(`${result.reply}\n`); continue;
+      }
+      append(repo, { ...common, status: result.verdict === "GO" ? "PASS_VERDICT" : "NO_GO", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: result.verdict === "GO" && !plan ? "YES" : "NO", verdict: result.verdict, scope: item.scope, replySha: result.replySha, completionSha: result.completionSha, reply: result.reply });
+      contributors.push(attemptId); results.push({ attempt_id: attemptId, slice: item.name, verdict: result.verdict, material_sha256: item.materialId, reply_sha256: result.replySha, inspected_scope_sha256: sha(item.scope) }); process.stdout.write(`${result.reply}\n`);
+      if (result.verdict === "NO-GO") { process.exitCode = 3; return; }
+    } catch (error) {
+      let detail = String(error.message || error);
+      try { endpoint(repo, o); } catch (postflight) { detail += `; post-flight endpoint: ${String(postflight.message || postflight)}`; }
+      append(repo, { status: "FAILED_TRANSPORT", kind: plan ? "SLICE_RESULT" : "FULL_REVIEW", release: "NO", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId, rigId: o.rigId, rigKey: key, failureClass: "TRANSPORT", base: o.base, candidate: o.candidate, tree: o.tree, planId: plan?.planId, slice: item.name, materialId: item.materialId, envelopeSha: item.envelopeSha, bytes: item.bytes, detail });
+      throw error;
+    }
+  }
+  if (!plan) return;
+  endpoint(repo, o); hooks.beforeAggregate?.(); endpoint(repo, o);
+  const materialId = sha(JSON.stringify({ plan_id: plan.planId, contributors: results, unresolved_attribution: unresolved })), scope = JSON.stringify({ slice: "aggregate", base: o.base, candidate: o.candidate, tree: o.tree, plan_id: plan.planId, material_sha256: materialId, contributors: results, unresolved_attribution: unresolved }), resultSha = sha(JSON.stringify({ status: unresolved.length ? "ATTRIBUTION_HOLD" : "GO", scope }));
+  append(repo, { status: unresolved.length ? "ATTRIBUTION_HOLD" : "PASS_VERDICT", kind: "SLICE_SET", release: unresolved.length ? "NO" : "YES", transport: transport.name, transportIdentity: transport.identity, model: o.model, attemptId: random("PIL-FROZEN-AGGREGATE"), rigId: o.rigId, rigKey: key, base: o.base, candidate: o.candidate, tree: o.tree, planId: plan.planId, slice: "aggregate", materialId, envelopeSha: sha(prepared.map(item => item.envelopeSha).join("")), bytes: prepared.reduce((sum, item) => sum + item.bytes, 0), contributors, verdict: unresolved.length ? undefined : "GO", scope: unresolved.length ? undefined : scope, resultSha, aggregateResult: unresolved.length ? "assembled verified subscription replies; unresolved source-only attribution requires PM adjudication" : undefined, unresolvedAttempts: unresolved.map(item => item.attempt_id) });
+  if (unresolved.length) process.exitCode = 3;
+}
 export async function run(argv = process.argv.slice(2), hooks = {}) {
   const o = parse(argv), repo = validate(o.repo, o), rows = changed(repo, o);
   if (o.generateSlicePlan) {
@@ -577,8 +684,10 @@ export async function run(argv = process.argv.slice(2), hooks = {}) {
   if (o.fingerprint) { process.stdout.write(JSON.stringify({ plan_id: plan.planId, envelopes: identities, next: "Set approval.status=APPROVED and approval.expected_plan_id to plan_id after PM review." }, null, 2) + "\n"); return; }
   if (o.dryRun) { process.stdout.write(JSON.stringify({ frozen: { base: o.base, candidate: o.candidate, tree: o.tree }, plan_id: plan?.planId || null, envelopes: identities }, null, 2) + "\n"); return; }
   if (o.handoffExport) { writeHandoff(repo, o, plan, prepared); return; }
-  if (!o.handoffImport) die("automated frozen provider execution is retired; use --handoff-export then --handoff-import", 3);
-  const imported = readHandoff(repo, o, plan, prepared); const lock = sharedLock(repo, o);
-  try { writeImportedReceipts(repo, o, plan, prepared, imported, hooks.afterSliceReceipts); } finally { fs.rmSync(lock, { recursive: true, force: true }); }
+  const lock = sharedLock(repo, o);
+  try {
+    if (o.handoffImport) writeImportedReceipts(repo, o, plan, prepared, readHandoff(repo, o, plan, prepared), hooks.afterSliceReceipts);
+    else { preflightJournal(repo); endpoint(repo, o); await writeAutomatedReceipts(repo, o, plan, prepared, hooks, lock); }
+  } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) run().catch(error => { process.stderr.write(`gemini-frozen-gate: ${error.message}\n`); process.exit(error.exitCode || 3); });

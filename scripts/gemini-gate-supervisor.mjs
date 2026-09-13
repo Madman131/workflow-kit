@@ -28,6 +28,10 @@ if (!command) fail("missing child command");
 const timeoutSeconds = Number(options["timeout-seconds"]);
 const graceSeconds = Number(options["grace-seconds"] ?? 2);
 const parentPid = Number(options["parent-pid"]);
+const forwardStdin = options.stdin === "forward";
+if (options.stdin !== undefined && !forwardStdin) fail("--stdin must be forward when supplied");
+if (options.cwd !== undefined && (!fs.existsSync(options.cwd) || !fs.statSync(options.cwd).isDirectory())) fail("--cwd must name an existing directory");
+if (options["parent-heartbeat"] !== undefined && !fs.existsSync(options["parent-heartbeat"])) fail("--parent-heartbeat must name an existing file");
 for (const [name, value] of [["timeout-seconds", timeoutSeconds], ["grace-seconds", graceSeconds], ["parent-pid", parentPid]]) {
   if (!Number.isInteger(value) || value <= 0) fail(`${name} must be a positive integer`);
 }
@@ -79,7 +83,8 @@ try {
   child = spawn(command, commandArgs, {
     detached: true,
     env: process.env,
-    stdio: ["ignore", stdoutFd, stderrFd],
+    ...(options.cwd ? { cwd: options.cwd } : {}),
+    stdio: [forwardStdin ? process.stdin : "ignore", stdoutFd, stderrFd],
   });
 } catch (error) {
   fs.closeSync(stdoutFd);
@@ -171,6 +176,10 @@ function terminate(exitCode, reason) {
   signalGroup("SIGTERM");
   killTimer = setTimeout(() => signalGroup("SIGKILL"), graceSeconds * 1000);
   killTimer.unref();
+  if (parentLost) {
+    const parentLossFinish = setTimeout(() => finish(exitCode), graceSeconds * 1000 + 300);
+    parentLossFinish.unref();
+  }
 }
 
 const timeoutTimer = setTimeout(
@@ -179,6 +188,13 @@ const timeoutTimer = setTimeout(
 );
 
 const parentTimer = setInterval(() => {
+  if (options["parent-heartbeat"]) {
+    try {
+      if (Date.now() - fs.statSync(options["parent-heartbeat"]).mtimeMs > 1500) {
+        parentLost = true; terminate(125, `runner parent ${parentPid} heartbeat stopped`); return;
+      }
+    } catch { parentLost = true; terminate(125, `runner parent ${parentPid} heartbeat disappeared`); return; }
+  }
   if (process.ppid !== parentPid) {
     parentLost = true;
     terminate(125, `runner parent ${parentPid} exited`);

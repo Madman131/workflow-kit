@@ -684,10 +684,11 @@ no behavioral gain — bounded > tidy). A later version may neutralize the prefi
 
 The gate runners are optional (`init --with-gate-runners`). They need tools you provide:
 - `codex-gate.sh` → the `codex` CLI (a ChatGPT-subscription session).
-- `cold-review-gemini.sh` legacy modes → the `agy` CLI (an Antigravity / Google AI Pro session);
-  exact `--base --candidate --tree` frozen reviews → local packet export and strict manual
-  Gemini-subscription reply import. The operator attests UI/model selection; the runner verifies only
-  frozen bytes and reply structure. It does not need `agy`, provider settings, or `GEMINI_API_KEY`.
+- `cold-review-gemini.sh` → the `agy` CLI (an Antigravity / Google AI Pro subscription session) for
+  exact `--base --candidate --tree` frozen review in its documented disposable request-review rig;
+  strict manual Gemini-subscription export/import remains the explicit high-sensitivity fallback.
+  The runner verifies frozen bytes, transport rig, response structure, and receipts. It never uses
+  `GEMINI_API_KEY` or a REST/API route.
 
 The legacy Codex/`agy` harnesses are **not** wired into the kit's default control suite because they
 need those tools or their fakes. Frozen handoff tests are local-only and make no network, credential,

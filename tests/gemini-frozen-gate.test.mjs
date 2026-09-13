@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,7 +18,7 @@ function fixture(options = false) {
   git(dir, ["init", "-q"]); git(dir, ["config", "user.email", "test@example.invalid"]); git(dir, ["config", "user.name", "Test"]);
   mkdirSync(path.join(dir, "core"), { recursive: true }); mkdirSync(path.join(dir, "docs"), { recursive: true });
   writeFileSync(path.join(dir, "core", "INVARIANTS.md"), "portable invariant\n"); writeFileSync(path.join(dir, "core", "REPO_INVARIANTS.md"), "repo invariant\n"); writeFileSync(path.join(dir, "docs", "contract.md"), "acceptance context\n"); writeFileSync(path.join(dir, "src.mjs"), baseSource);
-  if (installed) { mkdirSync(path.join(dir, "scripts")); for (const name of ["cold-review-gemini.sh", "gemini-frozen-gate.mjs"]) writeFileSync(path.join(dir, "scripts", name), readFileSync(path.join(root, "scripts", name))); chmodSync(path.join(dir, "scripts/cold-review-gemini.sh"), 0o755); }
+  if (installed) { mkdirSync(path.join(dir, "scripts")); for (const name of ["cold-review-gemini.sh", "gemini-frozen-gate.mjs", "gemini-gate-supervisor.mjs"]) writeFileSync(path.join(dir, "scripts", name), readFileSync(path.join(root, "scripts", name))); chmodSync(path.join(dir, "scripts/cold-review-gemini.sh"), 0o755); }
   git(dir, ["add", "."]); git(dir, ["commit", "-qm", "base"]); const base = git(dir, ["rev-parse", "HEAD"]);
   writeFileSync(path.join(dir, "src.mjs"), candidateSource); git(dir, ["add", "."]); git(dir, ["commit", "-qm", "candidate"]);
   return { dir, base, candidate: git(dir, ["rev-parse", "HEAD"]), tree: git(dir, ["rev-parse", "HEAD^{tree}"]) };
@@ -38,7 +38,7 @@ function manifest(f) {
   const finger = invoke(f, ["--slice-manifest", "plan.json", "--fingerprint"]); assert.equal(finger.status, 0, finger.stderr); value.approval = { status: "APPROVED", by: "pm", expected_plan_id: JSON.parse(finger.stdout).plan_id }; writeFileSync(path.join(f.dir, "plan.json"), JSON.stringify(value));
 }
 function args(f, extra = []) { return ["--repo", f.dir, "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", ...extra]; }
-function invoke(f, extra = []) { return spawnSync(process.execPath, [runner, ...args(f, extra)], { encoding: "utf8" }); }
+function invoke(f, extra = [], env = process.env) { return spawnSync(process.execPath, [runner, ...args(f, extra)], { encoding: "utf8", env }); }
 function exportHandoff(f) { manifest(f); const result = invoke(f, ["--slice-manifest", "plan.json", "--handoff-export", ".gemini-gate/handoff"]); assert.equal(result.status, 0, result.stderr); return JSON.parse(result.stdout); }
 function reply(packet, verdict) {
   const scope = packet.match(/=== NORMALIZED INSPECTED SCOPE ===\n([^\n]+)/)[1], markers = [...packet.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = packet.match(/PIL-DONE-[0-9a-f]+/)[0];
@@ -48,6 +48,16 @@ function packets(f) { const root = path.join(f.dir, ".gemini-gate", "handoff"); 
 function replies(f, verdicts) { const dir = path.join(f.dir, ".gemini-gate", "handoff", "replies"); for (const [index, verdict] of verdicts.entries()) writeFileSync(path.join(dir, `${String(index + 1).padStart(4, "0")}.txt`), reply(packets(f)[index], verdict)); }
 function importHandoff(f) { return invoke(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]); }
 function dry(f, extra = []) { return invoke(f, ["--context", "docs/contract.md", "--dry-run", ...extra]); }
+function fakeAgy({ hang = false } = {}) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "fake-agy-")), binary = path.join(dir, "agy"), settings = path.join(dir, "settings.json");
+  writeFileSync(settings, JSON.stringify({ toolPermission: "request-review", allowNonWorkspaceAccess: false, permissions: { allow: [] } }));
+  writeFileSync(binary, `#!/usr/bin/env node
+let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { if (process.argv.includes("--version")) return; if (${hang}) return setInterval(() => {}, 1000); const prompt = JSON.parse(input).message.content, scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0], model = process.argv[process.argv.indexOf("--model") + 1], effort = process.argv[process.argv.indexOf("--effort") + 1], response = "finding\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done; console.log(JSON.stringify({ event: "init", conversation_id: "fake", init: { cwd: process.cwd(), tools: [], permission_mode: "request-review", model, effort } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "fake", step_index: 0, state: "DONE", step_type: "user_input" } })); console.log(JSON.stringify({ event: "result", result: { conversation_id: "fake", status: "SUCCESS", response, duration_seconds: 0, num_turns: 1 } })); }); if (process.argv.includes("--version")) console.log("1.2.2");\n`);
+  chmodSync(binary, 0o755);
+  const ps = path.join(dir, "ps"); writeFileSync(ps, "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'fake-supervisor' ;; esac\n"); chmodSync(ps, 0o755);
+  return { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, GEMINI_AGY_SETTINGS: settings }, binary, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+async function eventually(check, timeout = 5000) { const end = Date.now() + timeout; while (Date.now() < end) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 50)); } assert.fail("timed out waiting for asynchronous runner state"); }
 function generated(f, output = ".gemini-gate/generated/manifest.json") { const result = invoke(f, ["--context", "docs/contract.md", "--generate-slice-plan", output]); assert.equal(result.status, 0, result.stderr); return { result: JSON.parse(result.stdout), output, plan: JSON.parse(readFileSync(path.join(f.dir, output), "utf8")) }; }
 function componentBytes(f, fragment) { return fragment.component_kind === "per_file_diff" ? execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", fragment.path]) : execFileSync("git", ["-C", f.dir, "show", `${fragment.component_kind === "deleted_source" ? f.base : f.candidate}:${fragment.path}`]); }
 function assertPartitions(f, plan) {
@@ -87,7 +97,7 @@ test("generator stays cap-measured, UTF-8 safe, ordered, deterministic, and bloc
 
 test("export is local-only and binds deterministic packets to the exact approved plan", () => {
   const f = fixture(); try {
-    const source = readFileSync(runner, "utf8"); assert.doesNotMatch(source, /\bfetch\s*\(/); assert.doesNotMatch(source, /\bspawn\s*\(/); assert.doesNotMatch(source, /antigravity-cli|GEMINI_API_KEY/);
+    const source = readFileSync(runner, "utf8"); assert.doesNotMatch(source, /\bfetch\s*\(/); assert.doesNotMatch(source, /GEMINI_API_KEY/);
     const output = exportHandoff(f), handoff = JSON.parse(readFileSync(path.join(f.dir, ".gemini-gate/handoff/handoff.json"), "utf8"));
     assert.match(output.handoff_id, /^PIL-GEMINI-HANDOFF-[0-9a-f]{24}$/); assert.equal(handoff.tuple.candidate, f.candidate); assert.equal(handoff.plan_id.length, 64); assert.equal(handoff.manual_transport.model, "gemini-3.1-pro-high"); assert.equal(handoff.packets.length, 3); assert.equal(existsSync(path.join(f.dir, journal)), false); assert.deepEqual(readdirSync(path.join(f.dir, ".gemini-gate/handoff/replies")), []);
     assert.ok(handoff.packets.every(item => item.prompt_sha256 === sha(readFileSync(path.join(f.dir, ".gemini-gate/handoff/packets", item.filename)))));
@@ -143,13 +153,44 @@ test("tampered state, tuple, plan, endpoint, and reply enumeration fail before j
   for (const mutate of cases) { const f = fixture(); try { exportHandoff(f); mutate(f); const result = importHandoff(f); assert.notEqual(result.status, 0, result.stderr); assert.equal(existsSync(path.join(f.dir, journal)), false); } finally { rmSync(f.dir, { recursive: true, force: true }); } }
   const linked = fixture(); try { exportHandoff(linked); const packetsDir = path.join(linked.dir, ".gemini-gate/handoff/packets"), saved = path.join(linked.dir, ".gemini-gate/handoff/packets-real"); renameSync(packetsDir, saved); symlinkSync("packets-real", packetsDir); const result = importHandoff(linked); assert.equal(result.status, 3); assert.equal(existsSync(path.join(linked.dir, journal)), false); } finally { rmSync(linked.dir, { recursive: true, force: true }); }
 });
-test("retired automated flags refuse before access and the installed wrapper forwards manual handoff", () => {
-  const f = fixture(true); try {
-    for (const flag of [["--transport", "api"], ["--run-slices"], ["--agy-bin", "ignored"], ["--timeout-seconds", "1"]]) { const result = invoke(f, flag); assert.equal(result.status, 3, result.stderr); }
-    manifest(f); const common = ["--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json"], env = { ...process.env, GEMINI_REVIEW_CONTEXT: "" }, exported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(exported.status, 0, exported.stderr);
+test("automated subscription is the default, REST is refused, and the installed wrapper retains manual fallback", () => {
+  const f = fixture(true), fake = fakeAgy(); try {
+    assert.equal(invoke(f, ["--transport", "api"], fake.env).status, 3);
+    manifest(f); const common = ["--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json"], env = { ...fake.env, GEMINI_REVIEW_CONTEXT: "" }, automated = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--run-slices", "--agy-bin", fake.binary], { cwd: f.dir, encoding: "utf8", env }); assert.equal(automated.status, 0, automated.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Transport: `antigravity-agy-subscription-stream-v2`/);
+    manifest(f); const exported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(exported.status, 0, exported.stderr);
     const handoff = path.join(f.dir, ".gemini-gate/wrapper-handoff"), state = JSON.parse(readFileSync(path.join(handoff, "handoff.json"), "utf8")); for (const item of state.packets) writeFileSync(path.join(handoff, "replies", item.filename), reply(readFileSync(path.join(handoff, "packets", item.filename), "utf8"), "GO"));
     const imported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-import", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(imported.status, 0, imported.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Slice: `aggregate`/);
-  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+  } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("post-flight endpoint failure leaves no accepted automated provider result and records a diagnostic", async () => {
+  const f = fixture(), fake = fakeAgy(), priorSettings = process.env.GEMINI_AGY_SETTINGS, priorPath = process.env.PATH; try {
+    process.env.GEMINI_AGY_SETTINGS = fake.env.GEMINI_AGY_SETTINGS;
+    process.env.PATH = fake.env.PATH;
+    manifest(f);
+    await assert.rejects(run(args(f, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", fake.binary]), { afterProviderResponse: () => writeFileSync(path.join(f.dir, "outside.txt"), "dirty\n") }), /source checkout is dirty outside sanctioned artifacts/);
+    const receipt = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(receipt, /Status: `FAILED_TRANSPORT`/); assert.doesNotMatch(receipt, /Status: `PASS_VERDICT`|Release-Gate: `YES`/);
+  } finally { if (priorSettings === undefined) delete process.env.GEMINI_AGY_SETTINGS; else process.env.GEMINI_AGY_SETTINGS = priorSettings; if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath; fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("supervisor retains and recovers single-flight ownership after frozen runner parent loss", async () => {
+  const f = fixture(), fake = fakeAgy({ hang: true }); try {
+    manifest(f);
+    const runnerProcess = spawn(process.execPath, [runner, ...args(f, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", fake.binary])], { env: fake.env, stdio: "ignore" });
+    const common = path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), lock = path.join(common, "cold-review-gemini.lock");
+    await eventually(() => existsSync(path.join(lock, "owner")) && /supervisor_pid=/.test(readFileSync(path.join(lock, "owner"), "utf8")));
+    runnerProcess.kill("SIGKILL");
+    await new Promise(resolve => runnerProcess.once("exit", resolve));
+    await eventually(() => !existsSync(lock));
+  } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("portable frozen-Gemini surfaces name automated subscription and manual fallback without REST", () => {
+  const surfaces = ["README.md", "PORTABILITY.md", "core/GATES.md", "core/REPO_INVARIANTS.md", "templates/BINDINGS.md.tmpl", "docs/uncle-handoff/CODEX_ADOPTION_TICKET.md"];
+  for (const file of surfaces) {
+    const text = readFileSync(path.join(root, file), "utf8");
+    assert.match(text, /subscription/i, `${file} names the subscription route`);
+    assert.match(text, /manual/i, `${file} retains manual fallback`);
+  }
+  assert.match(readFileSync(path.join(root, "core/GATES.md"), "utf8"), /REST\/API transport is unavailable/);
+  assert.doesNotMatch(readFileSync(path.join(root, "scripts/gemini-frozen-gate.mjs"), "utf8"), /GEMINI_API_KEY/);
 });
 
 test("ordinary design mode acquires and releases its owner record before agy discovery", () => {
