@@ -1,4 +1,26 @@
-# workflow-kit — v2.32.0
+# workflow-kit — v2.32.1
+
+## What's new in v2.32.1 — hook trust is keyed to the registration, and three kit defects
+
+- **Codex hook trust, corrected.** Codex keys trust to each `.codex/hooks.json` entry (command,
+  timeout, statusMessage), not to the hook script. Measured with the arming probe: a script-only
+  edit stayed ARMED; changing one hook's `statusMessage` made it NOT ARMED until re-approved. A
+  script-only upgrade therefore keeps trust, and an edited script runs without re-approval. The
+  migration order is now: upgrade → `node scripts/check-codex-hooks-armed.mjs` → re-trust
+  interactively only if it reports NOT ARMED. Corrected in `PORTABILITY.md`, init's output, the
+  arming check, `/orchestrate` (`SKILL.md`, `RUNG_ZERO.md`) and the adoption ticket; older release
+  notes below keep the earlier wording as history.
+- **Gemini frozen gate:** a quoted value after `token`/`secret`/`password`/`api_key`/`passphrase` must
+  now be 8+ characters to count as credential-like, the same floor the unquoted form already had.
+  A short fixture such as `token: "xhigh"` no longer makes the gate refuse its own repository.
+- **`cold-review-gemini.sh`:** the code-mode refusal now recommends the standing Codex effort
+  (`-e high`), not the exception tier.
+- **Arming check in the kit source tree:** it says the kit is not adopted by design, instead of
+  telling you to run `init` against the kit. Exit code unchanged (2).
+
+Upgrading: installed mechanism files changed (`hooks/guard-brief-rung.mjs`, the arming check,
+`record-repair-event.mjs`, the Gemini runners, `/orchestrate`), so re-run init with `--force`, then
+run the arming check. This release changes no hook registration entry.
 
 ## What's new in v2.32.0 — automated frozen Gemini subscription transport
 
