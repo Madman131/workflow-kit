@@ -178,7 +178,7 @@ cold-review-gemini: CODE MODE is reserved — pick by WHO BUILT the change.
                                        --folded docs/journal/<feature>_cold_review.md
 
   Code gate, CLAUDE-as-Builder → use CODEX (core/GATES.md):
-    scripts/codex-gate.sh -o OUT -m gpt-5.6-terra -e xhigh -C <repo> -f PROMPT.md
+    scripts/codex-gate.sh -o OUT -m gpt-5.6-terra -e high -C <repo> -f PROMPT.md
 
   Code gate, CODEX-as-Builder → Codex cannot gate itself, so GEMINI IS the
   cross-family lens here (core/BINDINGS.md). SANCTIONED:
