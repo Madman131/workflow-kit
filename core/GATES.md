@@ -233,7 +233,7 @@ global write lock · silent dedupe data-loss · validate-vs-stamp timing break �
 *Change class → model · effort. The cell names a **capability tier**; the concrete model IDs are a binding (`core/BINDINGS.md`) and drift — confirm against the runtime config.*
 
 *Vocabulary — three **capability tiers**, named here and bound to concrete ids in `core/BINDINGS.md`
-§ Roles → models: **frontier** (most capable, most expensive) · **workhorse** (balanced; the standing
+§ Roles → exact models: **frontier** (most capable, most expensive) · **workhorse** (balanced; the standing
 gate seat) · **fast-cheap**. Each family supplies its own three. Effort dial
 `low→medium→high→xhigh→max→ultra` (`ultra` = max reasoning + auto-delegation; frontier only).
 **The gate floor is the workhorse: the fast-cheap tier never gates.***

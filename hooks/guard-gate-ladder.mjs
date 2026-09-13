@@ -117,7 +117,7 @@ const RUNNERS = String.raw`(?:codex\s+exec\b|\S*codex-gate\.sh\b|\S*cold-review-
 const GATE_RE = new RegExp(CMD_START + PREFIX + RUNNERS);
 
 // The ladder each tier owes — a transcription of core/WORKFLOW.md § Gate's tier table, not an
-// inference. Concrete model families are a per-repo binding (core/BINDINGS.md § Roles → models), so
+// inference. Concrete model families are a per-repo binding (core/BINDINGS.md § Roles → exact models), so
 // this text stays family-neutral and points there.
 const LADDER = {
   T0: "self-check → proceed",

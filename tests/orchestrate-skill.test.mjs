@@ -461,6 +461,10 @@ test("§ Routing and § Standing duties exist in the body — the two sections t
   assert.match(body, /^## Standing duties/m, "§ Standing duties is present");
   assert.match(body, /An unsure consult never times out/,
     "the consult timeout must fail CLOSED on an unsure classification — the tie-break otherwise routes the uncertain case into the bucket the timeout empties");
+  // v2.31 dropped this rule from the body; a background worker then ended its turn "waiting" on a
+  // review that had already exited, and nothing woke it.
+  assert.match(body, /Never end a turn on a\s+consult or a wait/,
+    "a worker must never end a turn on a consult or a wait");
 });
 
 // ── (5) CROSS-SURFACE SENSOR — derived SURFACE set, ENUMERATED phrase set ──────────────────────

@@ -39,7 +39,8 @@ Only the Owner decides critical design/intent/risk, material scope/budget, crede
 destructive/irreversible acts, named live-write GO, fresh remote push/deploy GO, and an unresolved
 terminal decision. A chip routes those calls to the PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
-An unsure consult never times out, waiting rather than becoming authority.
+An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a
+consult or a wait:** send it, name what you do meanwhile, and do it.
 
 ## Standing duties
 - Before PM local integration in a primary clone, it must be clean, on the target branch, and the
