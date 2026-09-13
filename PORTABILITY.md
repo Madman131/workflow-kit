@@ -210,10 +210,16 @@ consent — and the quiet route (writing the trust record directly) is the same 
 this kit's. So the kit's arming path is **documentation plus a verification probe**:
 
 1. **Upgrade** — `node bin/init.mjs --target <repo> --force` when a release changes a hook.
-2. **Re-trust, interactively** — run `codex` in the repo once and answer "Hooks need review" with
-   "Trust all and continue". Editing or upgrading a hook marks it CHANGED, which **DISARMS** it until
-   you approve again. This step is why the order matters: trusting before upgrading arms the old file.
-3. **Verify** — `node scripts/check-codex-hooks-armed.mjs`.
+2. **Verify** — `node scripts/check-codex-hooks-armed.mjs`. An UNKNOWN is an abstain: fix what it
+   names and run it again.
+3. **Re-trust, interactively, ONLY if it reports NOT ARMED** — run `codex` in the repo once, answer
+   "Hooks need review" with "Trust all and continue", then run the check again. **Codex keys trust to
+   each `.codex/hooks.json` ENTRY (its command, timeout and statusMessage), not to the hook script's
+   bytes:** an upgrade that changes only a script stays ARMED, while a new or changed registration
+   entry is NOT ARMED until you approve it. Measured 2026-09-13 with this probe: appending a comment
+   to `guard-lane-authoring.mjs` kept it ARMED; changing only that hook's `statusMessage` made it NOT
+   ARMED until re-approved. The honest limit that follows: **an edited hook script runs WITHOUT
+   re-approval**, so review a hook-script change like any other code that runs on your machine.
 
 **The probe observes the control, not the outcome — and that distinction is the whole design.** It
 does not ask "did the forbidden write fail?", because a write can fail for at least four reasons and
@@ -660,7 +666,7 @@ way only: nothing in `core/OWNER_COMMS.md` depends on `/orchestrate`.
 **ONE rung in it is enforced WHEN THE HOOK IS ARMED, and the rest is not.** No control counts gate rounds,
 reads a freeze, or checks who gave a GO; the exception is `guard-brief-rung`, which denies a brief
 write or cross-session send lacking a fresh, session- and target-bound, single-use record of executed
-checks — and proves such a record EXISTS, never that its commands were run. **It is TRUST-GATED: `init --force` marks a hook CHANGED and DISARMS it until re-approved, and an untrusted hook is skipped SILENTLY — so this release, which mandates `--force`, turns it off in the Codex lane until you approve it again.** The other controls the
+checks — and proves such a record EXISTS, never that its commands were run. **It is TRUST-GATED: an untrusted hook is skipped SILENTLY, and Codex keys trust to each `.codex/hooks.json` entry, not to the hook script — an upgrade that changes a registration entry leaves that hook NOT ARMED until re-approved, while a script-only upgrade keeps it armed. After any upgrade, run `node scripts/check-codex-hooks-armed.mjs` and re-trust only if it reports NOT ARMED.** The other controls the
 kit ships are the task-lane declaration and the commit floor, each with the limits recorded above
 (§ The enforcement asymmetry, § FM1). Treat the rest as doctrine your agents follow because you told
 them to, exactly like the gate ladder in `core/WORKFLOW.md` — not as a mechanism. Its **three**

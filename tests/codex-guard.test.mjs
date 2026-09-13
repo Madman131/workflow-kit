@@ -1067,7 +1067,8 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
     assert.match(plain, /two lanes' hooks are NOT identical/, "init DETECTS the split rather than exiting 0 in silence");
     assert.match(plain, /guard-cross-repo-writes\.mjs/, "…and names the file that differs");
     assert.match(plain, /--force/, "…and names the fix");
-    assert.match(plain, /DISARMED until you do/, "…including the re-trust the fix then requires");
+    assert.match(plain, /then run node scripts\/check-codex-hooks-armed\.mjs and re-trust interactively only if it reports NOT ARMED \(Codex keys trust to each \.codex\/hooks\.json entry, not to the hook script\)/,
+      "…and the verify-then-re-trust-only-if-NOT-ARMED order the fix then requires");
 
     // --force resolves it, and the lanes match again.
     const forced = init("--force");
@@ -1077,7 +1078,7 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
       "--force brings both lanes to this kit version");
     assert.doesNotMatch(forced, /two lanes' hooks are NOT identical/, "…and the warning stops (it is not a permanent scold)");
     // The forced run's OWN exit 1 is the armed-check's doing, not a leftover split: the upgraded
-    // hooks are CURRENT-BUT-DISARMED until a human re-trusts them, and init says so.
+    // registration is CURRENT-BUT-UNVERIFIED (no codex CLI here to probe it), and init says so.
     assert.match(forced, /NOT verified armed/, "the post-force armed-check failure is the named cause");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
@@ -1119,7 +1120,13 @@ test("the TRUST caveat ships in the same breath as \"installed\", and the kit ne
     assert.match(A.out, /INSTALLED but INERT until you grant hook trust/);
     assert.match(A.out, /INTERACTIVE/);
     assert.match(A.out, /skips untrusted hooks\s+SILENTLY/);
-    assert.match(A.out, /DISARMS it until you approve/, "the upgrade path disarms — migration order must be stated at install time");
+    // THE TRUST GRANULARITY, AS MEASURED (2026-09-13, restock-watch, this kit's arming probe): a
+    // script-only edit kept the lane ARMED; changing only a hook's statusMessage made it NOT ARMED.
+    // Codex keys trust to the hooks.json ENTRY. The migration order follows from that fact.
+    assert.match(A.out, /Codex keys trust to each \.codex\/hooks\.json ENTRY \(command, timeout, statusMessage\),\s+not to the hook script: an upgrade that changes only a script stays armed \(and runs\s+the new script WITHOUT re-approval\), while a new or changed entry is NOT ARMED until\s+approved\./,
+      "the install-time caveat states what trust is keyed to, including the honest limit");
+    assert.match(A.out, /Migration order is: upgrade → re-run that check → re-trust interactively\s+ONLY if it reports NOT ARMED\./,
+      "migration order must be stated at install time: verify first, re-trust only on NOT ARMED");
     // THE DOCTRINE, MECHANICALLY. The kit must never write Codex's trust store nor recommend the
     // bypass flag: automating another tool's consent is forging consent, and the flag arms every
     // hook from every source. The only place that flag may appear is a warning NOT to use it.
@@ -1202,4 +1209,40 @@ test("--skip-codex-lane still leaves NO .codex residue now that the lane carries
     assert.ok(existsSync(path.join(A.dir, ".claude", "hooks", "payload-targets.mjs")));
     assert.ok(existsSync(path.join(A.dir, ".claude", "hooks", "guard-lane-authoring.mjs")));
   } finally { A.cleanup(); }
+});
+
+test("RETRACTED: no current surface claims that editing or upgrading a hook SCRIPT disarms it", () => {
+  // Measured 2026-09-13 (restock-watch, scripts/check-codex-hooks-armed.mjs, the lane guard's ledger
+  // row as signature): appending to a hook SCRIPT kept the lane ARMED; changing only that hook's
+  // statusMessage in .codex/hooks.json made it NOT ARMED, and restoring it re-armed. Codex keys trust
+  // to the hooks.json ENTRY. The old claim shipped on a dozen surfaces; a correction on one surface
+  // leaves the rest shipping it, so every tracked current surface is scanned. README release
+  // sections and docs/journal/ are HISTORY (what was believed then) and tests/ carry the patterns.
+  const retracted = [
+    /marks (?:it|a hook) CHANGED/i,
+    /upgrades? disarms? hooks/i,
+    /changed hook bytes/i,
+    /(?:upgraded|changed) hooks? (?:is|are) DISARMED/i,
+    /editing or upgrading a hook[^\n]{0,60}DISARM/i,
+    /re-trust changed hooks/i,
+  ];
+  for (const decoy of ["Editing or upgrading a hook marks it CHANGED, which DISARMS it", "upgrades disarm hooks until re-trusted",
+    "because changed hook bytes disarm the lane", "an upgraded hook is DISARMED until you do", "changed hooks are DISARMED in the",
+    "re-trust changed hooks in the Codex lane"]) {
+    assert.ok(retracted.some((re) => re.test(decoy)), `the retraction patterns still bite their own spelling: ${decoy}`);
+  }
+  const files = execFileSync("git", ["ls-files"], { cwd: KIT, encoding: "utf8" }).split("\n")
+    .filter((f) => f && f !== "README.md" && !f.startsWith("docs/journal/") && !f.startsWith("tests/") && /\.(?:md|mjs|js|sh|toml|json|tmpl)$/.test(f));
+  assert.ok(files.includes("PORTABILITY.md") && files.includes("bin/init.mjs"), "the scan's denominator includes the surfaces that carried the claim");
+  for (const f of files) {
+    const text = readFileSync(path.join(KIT, f), "utf8");
+    for (const re of retracted) assert.doesNotMatch(text, re, `${f} still carries the retracted trust claim (${re})`);
+  }
+  // …and the corrected sentence is pinned where operators read it.
+  const port = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8").replace(/\s+/g, " ");
+  assert.match(port, /Codex keys trust to each `\.codex\/hooks\.json` ENTRY \(its command, timeout and statusMessage\), not to the hook script's bytes:\*\* an upgrade that changes only a script stays ARMED, while a new or changed registration entry is NOT ARMED until you approve it\./);
+  assert.match(port, /\*\*Re-trust, interactively, ONLY if it reports NOT ARMED\*\*/);
+  assert.match(port, /an edited hook script runs WITHOUT re-approval/);
+  const probe = readFileSync(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"), "utf8");
+  assert.match(probe, /Codex keys trust to each \.codex\/hooks\.json ENTRY, not to the hook script\./);
 });

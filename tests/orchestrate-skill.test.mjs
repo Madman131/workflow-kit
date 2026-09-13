@@ -104,6 +104,9 @@ test("the body states EXACTLY how much of it is enforced — one rung, and no mo
   // which never installs, while the unconditioned claim shipped in this body, which installs verbatim.
   // A pin on an unconditioned claim HARDENS it, so this pins the condition, not the claim.
   pin(body, "TRUST-GATED", "the enforced rung is trust-gated");
+  // Trust granularity, as measured 2026-09-13: Codex keys trust to the hooks.json ENTRY, not the
+  // script bytes. The retracted "upgrading a hook DISARMS it" is barred cross-surface in codex-guard.
+  pin(body, "Codex keys trust to the `hooks.json`\nentry, not the script — a changed entry is NOT ARMED until re-approved", "trust is keyed to the registration entry");
   // The v2.4 correction's own honesty half. `guard-brief-rung` makes the old blanket "nothing is
   // enforced" false, and the replacement must not over-correct in the other direction: what ships
   // is a tripwire that proves a session- and dispatch-bound RECORD EXISTS — not that its commands

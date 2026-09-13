@@ -474,8 +474,8 @@ test("a plain init re-run KEEPS a stale installed [P] control and FAILS, naming 
     assert.match(stale.stdout + stale.stderr, /KEPT BUT STALE/, "…names the stale keep");
     assert.match(stale.stdout + stale.stderr, /A plain rerun never claims the new controller/,
       "…states the rule outright");
-    assert.match(stale.stdout + stale.stderr, /re-trusted interactively/,
-      "…and carries the Codex re-trust consequence beside the --force remedy");
+    assert.match(stale.stdout + stale.stderr, /a \.codex\/hooks\.json entry the upgrade changes is NOT ARMED in the Codex lane until re-trusted interactively \(Codex keys trust to the entry, not the script\), so verify: node scripts\/check-codex-hooks-armed\.mjs, and re-trust only if it reports NOT ARMED\./,
+      "…and carries the Codex trust consequence (keyed to the entry, verify first) beside the --force remedy");
     assert.ok(readFileSync(installed, "utf8").startsWith(marker),
       "a plain re-run still KEEPS the already-installed control (this is why --force is required)");
     // Since v2.16.0 a hermetic forced rerun exits 1 — the post-force armed-check cannot verify

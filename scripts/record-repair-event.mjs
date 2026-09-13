@@ -64,7 +64,7 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
       if (!result.ok) {
         const action = {
           "repair-session-missing": ` — add the current session as \"session_id\" in ${args[at + 1]} (or set WORKFLOW_KIT_SESSION_ID)`,
-          "repair-controller-version-skew": " — the installed controller beside this recorder predates the aggregate grammar; upgrade the install (init --force; re-trust changed hooks in the Codex lane) before recording aggregate events",
+          "repair-controller-version-skew": " — the installed controller beside this recorder predates the aggregate grammar; upgrade the install (init --force; then run node scripts/check-codex-hooks-armed.mjs for the Codex lane) before recording aggregate events",
           "aggregate-close-self-authorized": " — this close's session id is one the program ADMITTED as a worker (a verification or handoff replacement); record the close from a session distinct from every admitted worker (degraded mode: the Owner's keyboard)",
           "aggregate-terminal": " — the program is terminal (GO, STOP, or Owner-closed); continuation is a typed child_continuation successor, never another round",
           "aggregate-continuation-action-screen-required": " — a successor is a SCREENED recommendation, not an automatic route: the child_continuation must carry a structured action_screen {surviving_finding_ids:[...], harm, trigger, smallest_action, kiss, zoom_out} (each a non-empty string; ids may be empty for a GO-lineage follow-on). Screen the ACTION against RULE #1 / KISS / zoom-out BEFORE minting it (screen-at-emission)",

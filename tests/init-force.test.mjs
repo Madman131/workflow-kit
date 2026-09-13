@@ -5,7 +5,7 @@
 //   · the backup-before-overwrite is UNIFORM: ANY differing file init would overwrite under
 //     --force gets a .bak first, convenience class included, not just the mechanism set;
 //   · a post-force armed-check that does not pass FAILS the run (the upgraded Codex hooks are
-//     CURRENT-BUT-DISARMED, and exit 0 there is manufactured assurance);
+//     CURRENT-BUT-UNVERIFIED, and exit 0 there is manufactured assurance);
 //   · a SYMLINK at an overwrite target or its .bak slot refuses rather than writing through;
 //   · an unparseable settings.json under --force is backed up byte-for-byte before replacement;
 //   · a lane excluded by a skip flag but PRESENT on disk still gets the read-only stale-keep check;
@@ -130,7 +130,11 @@ test("a post-force armed-check that does not pass FAILS the run — and still pr
     const r = run(["--force"]);
     assert.equal(r.status, 1, "an unverified armed state after --force is a FAILING state, not a warning");
     assert.match(r.stderr, /NOT verified armed/, "the guidance still prints");
-    assert.match(r.stderr, /check-codex-hooks-armed\.mjs/, "…and names the check to re-run after re-trusting");
+    assert.match(r.stderr, /check-codex-hooks-armed\.mjs/, "…and names the check to run");
+    assert.match(r.stderr, /Codex keys trust to each \.codex\/hooks\.json entry, so an entry this upgrade changed is NOT ARMED until a human re-trusts it interactively/,
+      "…states what trust is keyed to");
+    assert.match(r.stderr, /Run node scripts\/check-codex-hooks-armed\.mjs, and re-trust only if it reports NOT ARMED/,
+      "…and the verify-first order");
     // …and the exit code is the armed-check's doing: the same --force over the same tree with the
     // Codex lane skipped runs no armed-check and exits 0.
     const skipped = run(["--force", "--skip-codex-lane"]);

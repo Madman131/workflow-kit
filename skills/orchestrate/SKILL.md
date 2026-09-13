@@ -107,8 +107,9 @@ ROLE SPLIT survives intact; what degrades is LATENCY. **Integrity of the shared 
 discipline of any shared checkout.
 
 ⚠ **One rung on this page is enforced WHEN ITS HOOK IS ARMED; the rest is honour-system. That rung
-is TRUST-GATED: upgrading a hook marks it CHANGED and DISARMS it until re-approved, and an untrusted
-hook is skipped SILENTLY.** The controller reads
+is TRUST-GATED: an untrusted hook is skipped SILENTLY, and Codex keys trust to the `hooks.json`
+entry, not the script — a changed entry is NOT ARMED until re-approved; after any upgrade, run
+`check-codex-hooks-armed.mjs`.** The controller reads
 typed author-recorded rounds, `panel_open` DOES read its freeze, and for a RECORDED program the
 armed hook walls the cadence (terminal states, batch caps, path ownership). No control checks who
 gave a GO. `guard-brief-rung` denies a brief WRITE lacking a fresh, session- and

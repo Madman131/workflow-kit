@@ -220,8 +220,9 @@ function main() {
   console.log("  `codex exec` it skips them SILENTLY — which is why this check exists.");
   console.log("  Fix: run `codex` INTERACTIVELY in this repo once. It shows \"Hooks need review\";");
   console.log("  choose \"Trust all and continue\". Trust then persists for non-interactive runs too.");
-  console.log("  Note: editing or upgrading a hook (e.g. `init --force`) marks it CHANGED and");
-  console.log("  DISARMS it until you approve again — re-run this check after any kit upgrade.");
+  console.log("  Note: Codex keys trust to each .codex/hooks.json ENTRY, not to the hook script. An");
+  console.log("  upgrade that changes a registration entry leaves it NOT ARMED until you approve again;");
+  console.log("  a script-only change stays armed. Re-run this check after any kit upgrade.");
   console.log("  Do NOT use --dangerously-bypass-hook-trust: it arms every hook from every source.");
   process.exit(1);
 }

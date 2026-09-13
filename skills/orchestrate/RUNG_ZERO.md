@@ -243,7 +243,7 @@ this whole method exists to delete:
   means landing these rules in a repo's own docs — **a controlling-document change owing its own
   tier.**
 - Nothing HERE is mechanically enforced — the controller walls the ROUND COUNT of a RECORDED
-  program when its hook is ARMED (upgrades disarm hooks until re-trusted), and `panel_open` DOES
+  program when its hook is ARMED (a changed `hooks.json` entry is NOT ARMED until re-trusted), and `panel_open` DOES
   read its freeze. **That no control checks who gave a GO is an OBSERVATION about the shipped
   controls, not a clause you can cite** — check your own repo rather than inheriting it here. **Rung zero is cheap because it is honest about being a
   checklist, not a control.**

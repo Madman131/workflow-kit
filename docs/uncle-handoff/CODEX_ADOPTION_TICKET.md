@@ -419,9 +419,10 @@ Then run:
 node scripts/check-codex-hooks-armed.mjs
 ```
 
-Do not treat a clean `codex exec` as evidence: it silently skips untrusted hooks. If any hook bytes
-later change, including through `init --force`, the Owner must grant trust again and this probe must
-pass again.
+Do not treat a clean `codex exec` as evidence: it silently skips untrusted hooks. Codex keys trust to
+each `.codex/hooks.json` entry, not to the hook script's bytes: if a later upgrade, including
+`init --force`, changes a hook's registration entry, that hook is not armed until the Owner grants
+trust again. Run this probe after every upgrade and re-grant trust only if it reports NOT ARMED.
 
 If the documented prompt does not appear, inspect the installed version and current official hook
 instructions; do not repeatedly ask the Owner to look for a missing button or use a bypass. Verify
@@ -551,5 +552,6 @@ explicitly authorizes the named action on the reviewed candidate.
 A future upgrade is not “run the installer again and hope.” Read the new release's upgrade section.
 When `--force` is required, first read every existing family from `.claude/kit.config.json`, pass all
 of those families explicitly, review the `.bak` files, restore intentional repository-owned text,
-and re-grant Codex hook trust because changed hook bytes disarm the lane. A plain re-run that reports
+then run `node scripts/check-codex-hooks-armed.mjs` and re-grant Codex hook trust only if it reports
+NOT ARMED (trust is keyed to each `hooks.json` entry, not to hook script bytes). A plain re-run that reports
 stale mechanism files is a failed upgrade, not a warning.
