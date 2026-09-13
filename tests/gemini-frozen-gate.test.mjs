@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -241,7 +241,7 @@ test("supervisor proves TERM-ignoring writer closure before releasing parent-los
     assert.equal(record.kind, "ABRUPT_PARENT_LOSS_UNVERIFIED"); assert.equal(record.non_verdict, true); assert.match(record.attempt_id, /^PIL-FROZEN-ATTEMPT-[0-9a-f]{24}$/); assert.deepEqual(record.frozen, { base: f.base, candidate: f.candidate, tree: f.tree }); assert.equal(record.plan_id, plan.approval.expected_plan_id); assert.equal(record.slice, "coverage-source"); assert.equal(record.transport.name, "antigravity-agy-subscription-stream-v2"); assert.equal(record.transport.identity, `1.2.2|settings-sha256:${sha(readFileSync(fake.settings))}|high`); assert.equal(record.verification.endpoint, "NOT_COMPLETED"); assert.equal(record.verification.workspace, "NOT_COMPLETED"); assert.doesNotMatch(readFileSync(path.join(f.dir, journal), "utf8"), /Gemini frozen gate attempt|PASS_VERDICT|FAILED_TOOL/);
   } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("public frozen ownership survives Bash-to-Node exec, later slices, and later parent-loss teardown", async () => {
+test("matching live frozen subscription ownership survives Bash-to-Node exec, later slices, and later parent-loss teardown", async () => {
   const f = fixture(true), controlled = controlledAgy(), command = ["scripts/cold-review-gemini.sh", "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json", "--run-slices", "--agy-bin", controlled.binary], lock = gateLock(f); let first, firstStderr = "";
   try {
     manifest(f); first = spawn("bash", command, { cwd: f.dir, env: { ...controlled.env, GEMINI_REVIEW_CONTEXT: "" }, stdio: ["ignore", "ignore", "pipe"] }); first.stderr.on("data", chunk => firstStderr += chunk);
@@ -301,6 +301,28 @@ test("public wrapper refuses an unresolved supervisor lock instead of stale-recl
     assert.match(result.stderr, /unresolved supervisor process-group ownership/);
     assert.equal(existsSync(lock), true);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("subscription PID reuse recovers stale ownership while matching subscription and direct owners stay live", () => {
+  const cases = [
+    { kind: "subscription", ownerStart: "current-start", currentStart: "current-start", status: 4, retained: true },
+    { kind: "subscription", ownerStart: "prior-start", currentStart: "current-start", status: undefined, retained: false },
+    { kind: "direct", ownerStart: "", currentStart: "current-start", status: 4, retained: true },
+  ];
+  for (const item of cases) {
+    const f = fixture(true); let owner;
+    try {
+      owner = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+      const lock = gateLock(f), bin = path.join(f.dir, "identity-bin"); mkdirSync(lock); mkdirSync(bin);
+      writeFileSync(path.join(bin, "ps"), "#!/bin/sh\npid=\nfor arg do case \"$arg\" in *[0-9]*) pid=$arg ;; esac; done\ncase \"$*\" in *lstart=*) printf '%s-%s\\n' \"$TEST_OWNER_START\" \"$pid\" ;; *command=*) printf 'owner-command-%s\\n' \"$pid\" ;; esac\n"); chmodSync(path.join(bin, "ps"), 0o755);
+      writeFileSync(path.join(lock, "owner"), `pid=${owner.pid}\n${item.ownerStart ? `start=${item.ownerStart}-${owner.pid}\n` : ""}repo=${realpathSync(path.dirname(lock))}\nkind=${item.kind}\ncommand=prior-owner\n`);
+      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_OWNER_START: item.currentStart, GEMINI_AGY_BIN: path.join(f.dir, "missing-agy") };
+      assert.doesNotThrow(() => process.kill(owner.pid, 0));
+      assert.equal(psValue(env, owner.pid, "lstart"), `${item.currentStart}-${owner.pid}`);
+      const result = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--design", "docs/contract.md", "--no-log"], { cwd: f.dir, encoding: "utf8", env });
+      if (item.status !== undefined) { assert.equal(result.status, item.status, `${item.kind}: ${result.stderr}`); assert.match(result.stderr, new RegExp(`live frozen ${item.kind} invocation`)); assert.equal(existsSync(lock), item.retained); }
+      else { assert.notEqual(result.status, 4, result.stderr); assert.match(result.stderr, /recovered stale single-flight guard/); assert.equal(existsSync(lock), false); }
+    } finally { owner?.kill(); rmSync(f.dir, { recursive: true, force: true }); }
+  }
 });
 test("portable frozen-Gemini surfaces name automated subscription and manual fallback without REST", () => {
   const surfaces = ["README.md", "PORTABILITY.md", "core/GATES.md", "core/REPO_INVARIANTS.md", "templates/BINDINGS.md.tmpl", "docs/uncle-handoff/CODEX_ADOPTION_TICKET.md"];
