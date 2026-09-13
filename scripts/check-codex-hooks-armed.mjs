@@ -126,11 +126,16 @@ export function observeAndClear(abs) {
 // there (FM-2026-09-07-32). The signal is the pair the kit already treats as its own identity: the
 // installer (`bin/init.mjs`) beside the SOURCE spelling of the every-lane floor it copies
 // (`githooks/pre-commit`, no dot — githooks/pre-commit's SELF_SPELLINGS and init's kitPc read the
-// same path). An adopter carries neither: init installs `.githooks/pre-commit` and never `bin/`.
-// Both must be regular files; a directory or a lone match is not the kit.
+// same path), inside a package.json NAMED "workflow-kit". init installs `.githooks/pre-commit` and
+// never `bin/`, but an adopter can have an installer and a source-spelled hook of its OWN — the
+// name is what keeps that adopter on the init remedy (cold review of the first draft). A renamed
+// fork reads as an adopter and gets the init line: the old message, never a green. All three must
+// hold; a directory, a lone match or an unreadable package.json is not the kit.
 export function isKitSourceTree(repo) {
   const isFile = (rel) => { try { return statSync(path.join(repo, rel)).isFile(); } catch { return false; } };
-  return isFile(path.join("bin", "init.mjs")) && isFile(path.join("githooks", "pre-commit"));
+  if (!isFile(path.join("bin", "init.mjs")) || !isFile(path.join("githooks", "pre-commit"))) return false;
+  try { return JSON.parse(readFileSync(path.join(repo, "package.json"), "utf8"))?.name === "workflow-kit"; }
+  catch { return false; }
 }
 
 export function verdictFor({ before, after, wrote }) {

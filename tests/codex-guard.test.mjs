@@ -1256,17 +1256,24 @@ test("the arming check tells the kit SOURCE tree it is not adopted, and still te
   const kitLike = mkdtempSync(path.join(os.tmpdir(), "kit-source-like-"));
   const adopter = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-nohooks-"));
   const decoy = mkdtempSync(path.join(os.tmpdir(), "kit-decoy-"));
+  const ownInstaller = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-own-installer-"));
   try {
     mkdirSync(path.join(kitLike, "bin"), { recursive: true }); mkdirSync(path.join(kitLike, "githooks"), { recursive: true });
     writeFileSync(path.join(kitLike, "bin", "init.mjs"), "// installer\n"); writeFileSync(path.join(kitLike, "githooks", "pre-commit"), "#!/usr/bin/env node\n");
+    writeFileSync(path.join(kitLike, "package.json"), JSON.stringify({ name: "workflow-kit" }));
+    // An adopter with an installer and a source-spelled hook of its OWN is still an adopter.
+    mkdirSync(path.join(ownInstaller, "bin"), { recursive: true }); mkdirSync(path.join(ownInstaller, "githooks"), { recursive: true });
+    writeFileSync(path.join(ownInstaller, "bin", "init.mjs"), "// their installer\n"); writeFileSync(path.join(ownInstaller, "githooks", "pre-commit"), "#!/bin/sh\n");
+    writeFileSync(path.join(ownInstaller, "package.json"), JSON.stringify({ name: "their-app" }));
     // An adopter's floor lives at .githooks/ and it has no bin/init.mjs — and a lone match is not the kit.
     mkdirSync(path.join(adopter, ".githooks"), { recursive: true }); writeFileSync(path.join(adopter, ".githooks", "pre-commit"), "#!/usr/bin/env node\n");
     mkdirSync(path.join(decoy, "bin", "init.mjs"), { recursive: true }); mkdirSync(path.join(decoy, "githooks"), { recursive: true });
-    writeFileSync(path.join(decoy, "githooks", "pre-commit"), "x\n");
+    writeFileSync(path.join(decoy, "githooks", "pre-commit"), "x\n"); writeFileSync(path.join(decoy, "package.json"), JSON.stringify({ name: "workflow-kit" }));
     assert.equal(isKitSourceTree(KIT), true, "the real kit tree is recognised");
     assert.equal(isKitSourceTree(kitLike), true);
     assert.equal(isKitSourceTree(adopter), false, "an adopter is not the kit");
     assert.equal(isKitSourceTree(decoy), false, "a DIRECTORY named bin/init.mjs is not the installer");
+    assert.equal(isKitSourceTree(ownInstaller), false, "an adopter with its own bin/init.mjs and githooks/pre-commit is not the kit");
 
     for (const dir of [KIT, kitLike]) {
       const r = run(dir);
@@ -1276,12 +1283,12 @@ test("the arming check tells the kit SOURCE tree it is not adopted, and still te
       assert.match(r.stdout, /Do NOT run bin\/init\.mjs against it/);
       assert.doesNotMatch(r.stdout, /Run: node bin\/init\.mjs/, "the forbidden remedy is not printed in the kit");
     }
-    for (const dir of [adopter, decoy]) {
+    for (const dir of [adopter, decoy, ownInstaller]) {
       const r = run(dir);
       assert.equal(r.status, 2, r.stdout);
       assert.match(r.stdout, /^NOT INSTALLED — \.codex\/hooks\.json is absent in /m);
       assert.match(r.stdout, /Run: node bin\/init\.mjs --target /, "an adopter still gets the init remedy");
       assert.doesNotMatch(r.stdout, /BY DESIGN/);
     }
-  } finally { for (const d of [kitLike, adopter, decoy]) rmSync(d, { recursive: true, force: true }); }
+  } finally { for (const d of [kitLike, adopter, decoy, ownInstaller]) rmSync(d, { recursive: true, force: true }); }
 });

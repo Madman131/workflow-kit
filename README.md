@@ -10,13 +10,15 @@
   interactively only if it reports NOT ARMED. Corrected in `PORTABILITY.md`, init's output, the
   arming check, `/orchestrate` (`SKILL.md`, `RUNG_ZERO.md`) and the adoption ticket; older release
   notes below keep the earlier wording as history.
-- **Gemini frozen gate:** a quoted value after `token`/`secret`/`password`/`api_key`/`passphrase` must
-  now be 8+ characters to count as credential-like, the same floor the unquoted form already had.
-  A short fixture such as `token: "xhigh"` no longer makes the gate refuse its own repository.
+- **Gemini frozen gate:** a quoted value after `token` must now be 8+ characters to count as
+  credential-like, the same floor the unquoted form already had. A short fixture such as
+  `token: "xhigh"` no longer makes the gate refuse its own repository. Quoted `password`, `secret`,
+  `passphrase` and `api_key` values of any length still refuse.
 - **`cold-review-gemini.sh`:** the code-mode refusal now recommends the standing Codex effort
   (`-e high`), not the exception tier.
 - **Arming check in the kit source tree:** it says the kit is not adopted by design, instead of
-  telling you to run `init` against the kit. Exit code unchanged (2).
+  telling you to run `init` against the kit. It recognises the kit by `bin/init.mjs`,
+  `githooks/pre-commit` and the package name `workflow-kit`. Exit code unchanged (2).
 
 Upgrading: installed mechanism files changed (`hooks/guard-brief-rung.mjs`, the arming check,
 `record-repair-event.mjs`, the Gemini runners, `/orchestrate`), so re-run init with `--force`, then
