@@ -105,15 +105,22 @@ test("current and deleted Basic or Token credential-like material refuses before
 test("the credential scanner lets a short quoted token-shaped fixture through and still refuses real credential shapes (FM-2026-09-08-36)", () => {
   // The adopter fixture that made the gate refuse its own repository: market-research-mcp-render
   // tests/gate-model-binding.test.mjs:475. The quoted-value branch matched ANY non-empty quoted value
-  // after token/secret/password, while the unquoted branch already required 8+ characters; the quoted
-  // branch now carries the same floor. Whole-file scanning is unchanged (whole files are transmitted).
+  // after token/secret/password. Only `token` — an ordinary identifier in test data and API shapes,
+  // and a name no issuer gives a 1-7 character credential — now needs 8+ quoted characters, the
+  // floor its unquoted form already had. A short quoted PASSWORD, SECRET, PASSPHRASE or API KEY is a
+  // human-chosen secret and still refuses (cold review of the first draft, which floored them all:
+  // it admitted `password: 'hunter2'` to the provider). Whole-file scanning is unchanged.
   // Credential shapes are assembled at runtime so this test file is not itself a scanner hit.
   const j = (...parts) => parts.join("");
   const admitted = [
     j("assert.deepEqual(r.orphanEfforts, [{ line: 1, ", "token", ': "xhigh" }], "orphan effort");\n'),
-    j("const fixture = { ", "password", ": 'hunter2' };\n"),
+    j("const fixture = { ", "token", ": '1234567' };\n"),
   ];
   const refused = [
+    j("const fixture = { ", "password", ": 'hunter2' };\n"),
+    j("const fixture = { ", "secret", ' = "a" };\n'),
+    j("const fixture = { ", "passphrase", ': "x y" };\n'),
+    j("const cfg = { ", "token", ': "', "12345678", '" };\n'),
     j("const cfg = { ", "token", ': "', "abcd1234efgh", '" };\n'),
     j("const cfg = { ", "api_key", ": '", "k9", "Lm3Qp7Z", "' };\n"),
     j("export const ", "secret", " = ", "s3cr3tvalue99", ";\n"),
