@@ -10,10 +10,12 @@
   interactively only if it reports NOT ARMED. Corrected in `PORTABILITY.md`, init's output, the
   arming check, `/orchestrate` (`SKILL.md`, `RUNG_ZERO.md`) and the adoption ticket; older release
   notes below keep the earlier wording as history.
-- **Gemini frozen gate:** a quoted value after `token` must now be 8+ characters to count as
-  credential-like, the same floor the unquoted form already had. A short fixture such as
-  `token: "xhigh"` no longer makes the gate refuse its own repository. Quoted `password`, `secret`,
-  `passphrase` and `api_key` values of any length still refuse.
+- **Gemini frozen gate: the credential scanner is UNCHANGED, deliberately.** Two rounds tried to stop
+  it refusing an adopter's `token: "xhigh"` test fixture, and each loosening let a real credential
+  shape through — first every short quoted secret, then a short quoted token. The scanner sends
+  whole files to an external reviewer, so it stays fail-closed: a refusal costs one gate run, a miss
+  costs a credential. An adopter whose fixture trips it renames that value to a placeholder the
+  scanner already exempts (`${…}`, `$(…)`, `<…>`, `CHANGEME`, `REDACTED`).
 - **`cold-review-gemini.sh`:** the code-mode refusal now recommends the standing Codex effort
   (`-e high`), not the exception tier.
 - **Arming check in the kit source tree:** it says the kit is not adopted by design, instead of

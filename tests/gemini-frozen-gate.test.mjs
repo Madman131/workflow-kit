@@ -102,47 +102,6 @@ test("current and deleted Basic or Token credential-like material refuses before
   ];
   try { for (const f of cases) assert.notEqual(dry(f).status, 0, `credential accepted in ${f.dir}`); } finally { for (const f of cases) rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("the credential scanner lets a short quoted token-shaped fixture through and still refuses real credential shapes (FM-2026-09-08-36)", () => {
-  // The adopter fixture that made the gate refuse its own repository: market-research-mcp-render
-  // tests/gate-model-binding.test.mjs:475. The quoted-value branch matched ANY non-empty quoted value
-  // after token/secret/password. Only `token` — an ordinary identifier in test data and API shapes,
-  // and a name no issuer gives a 1-7 character credential — now needs 8+ quoted characters, the
-  // floor its unquoted form already had. A short quoted PASSWORD, SECRET, PASSPHRASE or API KEY is a
-  // human-chosen secret and still refuses (cold review of the first draft, which floored them all:
-  // it admitted `password: 'hunter2'` to the provider). Whole-file scanning is unchanged.
-  // Credential shapes are assembled at runtime so this test file is not itself a scanner hit.
-  const j = (...parts) => parts.join("");
-  const admitted = [
-    j("assert.deepEqual(r.orphanEfforts, [{ line: 1, ", "token", ': "xhigh" }], "orphan effort");\n'),
-    j("const fixture = { ", "token", ": '1234567' };\n"),
-  ];
-  const refused = [
-    j("const fixture = { ", "password", ": 'hunter2' };\n"),
-    j("const fixture = { ", "secret", ' = "a" };\n'),
-    j("const fixture = { ", "passphrase", ': "x y" };\n'),
-    j("const cfg = { ", "token", ': "', "12345678", '" };\n'),
-    j("const cfg = { ", "token", ': "', "abcd1234efgh", '" };\n'),
-    j("const cfg = { ", "api_key", ": '", "k9", "Lm3Qp7Z", "' };\n"),
-    j("export const ", "secret", " = ", "s3cr3tvalue99", ";\n"),
-    j("const google = '", "AIza", "B".repeat(35), "';\n"),
-    j("-----BEGIN ", "RSA PRIVATE KEY", "-----\nMIIEow\n"),
-    j("fetch(url, { headers: { h: 'Authorization: ", "Bearer", " ", "abcdefgh12345678", "' } });\n"),
-  ];
-  const fixtures = [];
-  try {
-    for (const source of admitted) {
-      const f = fixture({ candidateSource: source }); fixtures.push(f);
-      const r = dry(f);
-      assert.equal(r.status, 0, `a short quoted fixture must not refuse the review: ${JSON.stringify(source)}\n${r.stderr}`);
-    }
-    for (const source of refused) {
-      const f = fixture({ candidateSource: source }); fixtures.push(f);
-      const r = dry(f);
-      assert.equal(r.status, 3, `credential shape accepted: ${JSON.stringify(source)}\n${r.stderr}`);
-      assert.match(r.stderr, /possible credential-like value/, "…and refused by the scanner, not by something else");
-    }
-  } finally { for (const f of fixtures) rmSync(f.dir, { recursive: true, force: true }); }
-});
 test("response proof firewall rejects altered scope, markers, completion, and mixed output", () => {
   const e = { scope: "{\"slice\":\"proof\"}", markers: ["PIL-INGEST-HEAD-a", "PIL-INGEST-MIDDLE-b", "PIL-INGEST-EOF-c"], done: "PIL-DONE-proof" }, text = `VERDICT: GO\nINSPECTED SCOPE: ${e.scope}\nINGESTION PROOF: ${e.markers.join(" | ")}\n${e.done}`;
   assert.equal(verifyResponse({ candidates: [{ finishReason: "STOP", content: { parts: [{ text }] } }] }, e).verdict, "GO");
