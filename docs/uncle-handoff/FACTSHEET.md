@@ -1,6 +1,6 @@
 # Workflow-Kit Factsheet
 
-Interim revision · 12 September 2026 · Kit v2.31.0
+Handoff edition · 13 September 2026 · Kit v2.32.0
 
 ## Purpose
 
@@ -383,7 +383,7 @@ production-data write.
   Written briefs and a shared record are the fallback.
 - **frontier-review:** Claude's restricted-tool consult and Codex's repository-aware gate runner
   are different implementations. Bind and record the actual role and model; they are not interchangeable.
-- **sweep:** v2.31.0 installs the skill but does not copy `scripts/sweep.mjs`. Arrange the runner
+- **sweep:** v2.32.0 installs the skill but does not copy `scripts/sweep.mjs`. Arrange the runner
   from the verified kit source, bind its inexpensive `sweepSeat` model, and test it before claiming readiness.
 - **humanize and grilling:** complete `core/OWNER_COMMS.md` with your communication preferences.
 
