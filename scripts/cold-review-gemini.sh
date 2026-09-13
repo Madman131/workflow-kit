@@ -339,7 +339,7 @@ recover_stale_lock() {
 }
 
 acquire_single_flight() {
-  local common owner_tmp owner_pid owner_start owner_repo owner_command owner_kind owner_pid_live supervisor_owner_pid supervisor_owner_start supervisor_owner_command current_start current_command self_start self_command attempt age now mtime
+  local common owner_tmp owner_pid owner_start owner_repo owner_command owner_kind owner_pid_live supervisor_owner_pid supervisor_owner_start supervisor_owner_command supervisor_owner_state current_start current_command self_start self_command attempt age now mtime
   common="$(git rev-parse --git-common-dir 2>/dev/null)" || { echo "cold-review-gemini: cannot resolve git common directory." >&2; exit 2; }
   case "$common" in /*) ;; *) common="$REPO_ROOT/$common" ;; esac
   common="$(cd "$common" 2>/dev/null && pwd -P)" || { echo "cold-review-gemini: cannot canonicalize git common directory." >&2; exit 2; }
@@ -377,7 +377,11 @@ acquire_single_flight() {
       continue
     fi
 
-    owner_pid="$(lock_owner_value pid || true)"; owner_start="$(lock_owner_value start || true)"; owner_repo="$(lock_owner_value repo || true)"; owner_command="$(lock_owner_value command || true)"; owner_kind="$(lock_owner_value kind || true)"
+    owner_pid="$(lock_owner_value pid || true)"; owner_start="$(lock_owner_value start || true)"; owner_repo="$(lock_owner_value repo || true)"; owner_command="$(lock_owner_value command || true)"; owner_kind="$(lock_owner_value kind || true)"; supervisor_owner_state="$(lock_owner_value supervisor_state || true)"
+    if [ "$supervisor_owner_state" = "UNRESOLVED_PROCESS_GROUP" ]; then
+      echo "cold-review-gemini: unresolved supervisor process-group ownership is retained; refusing stale recovery until an operator establishes closure ($LOCK_DIR)." >&2
+      exit 4
+    fi
     case "$owner_pid" in ''|*[!0-9]*) recover_stale_lock && continue; continue ;; esac
     owner_pid_live=0
     if kill -0 "$owner_pid" 2>/dev/null; then

@@ -53,13 +53,21 @@ completion-token mismatch.
 
 The public entrypoint retains the existing per-repository single-flight supervisor identity,
 parent-loss handling, and stale-owner recovery. It retains ownership while its child is active and
-through verification and record emission. The runner owns only its launched process group. One
-always-executed owned teardown path runs after verified normal success and every abnormal path. On
-timeout, interrupt, overflow, or abnormal exit, it sends scoped TERM then KILL and waits for group
-closure; on every path it verifies the disposable workspace and frozen-checkout endpoint/tuple/tree,
-then releases the existing per-repository single-flight ownership. Cleanup removes only the
+through verification and record emission. The runner owns only its launched process group. Child
+stdout and stderr are pipes whose bytes are counted as received; each capture file persists no more
+than its configured cap. Overflow fails closed, sends scoped TERM then KILL, and continues draining
+and discarding pipe bytes. Teardown observes process-group closure before releasing ownership. If
+closure cannot be established within its bound, the lock records `UNRESOLVED_PROCESS_GROUP`; public
+stale recovery refuses that lock until an operator establishes closure. Cleanup removes only
 runner-created disposable workspace and owned temporary records; it never uses process-name killing
 or broad cleanup.
+
+An abrupt parent loss is not a verified provider result. After group closure, the supervisor writes
+one bounded structured `ABRUPT_PARENT_LOSS_UNVERIFIED` artifact under `.gemini-gate/diagnostics/`.
+It binds the real attempt ID, exact frozen tuple, plan, slice, and transport identity, and records
+endpoint and workspace verification as `NOT_COMPLETED`. It is not a journal receipt, has no verdict
+or release-gate fields, and cannot participate in an aggregate. Normal provider responses receive
+disposable-workspace and endpoint/tuple/tree post-flight verification before a durable receipt.
 
 Each provider response stays buffered until owned group closure, disposable-workspace verification,
 and frozen-checkout endpoint/tuple/tree post-flight checks all pass. Only then may the runner append
@@ -71,8 +79,10 @@ verdict or a partial durable result.
 
 Automated subscription transport preserves the existing exact tuple: base commit, candidate commit,
 and tree must match at every preflight, launch, and final-record boundary. It preserves the approved
-slice plan, plan hash, selected slice order, normalized scope, and ordered canaries. Endpoint
-rechecks and cache identity remain tuple- and rig-bound. Durable receipts remain complete,
+slice plan, plan hash, selected slice order, normalized scope, and ordered canaries. It resolves and
+fingerprints only `$HOME/.gemini/antigravity-cli/settings.json` under the same sanitized `HOME` sent
+to version probe and provider, then rechecks that fingerprint after each provider response and before
+every receipt or aggregate. Endpoint rechecks and cache identity remain tuple- and rig-bound. Durable receipts remain complete,
 checksummed, replay-safe records with reply identity, transport/model/effort/settings identity,
 scope, verdict, and completion proof.
 
@@ -98,12 +108,12 @@ missing subscription capability is a typed refusal rather than a credential prom
 | Valid automated review | Fake `agy` emits the exact allowed stream, matching cwd/settings/version/model, canaries, valid verdict, and terminal completion; effort is pinned in argv and receipt although 1.2.2 may omit it from `init`; one durable subscription receipt is accepted. |
 | Tool/subagent/denied action | Each event shape independently fails closed, retains a non-verdict diagnostic, and tears down only its process group. |
 | Process/output failures | Stderr, nonzero, signal, timeout, and overflow each refuse and prove scoped teardown plus workspace cleanup. |
-| Boundary mismatch | Wrong cwd, settings, version, model, or present effort, tuple, tree, scope, plan/hash/order, canary, verdict, or completion each refuses before a gate receipt. |
+| Boundary mismatch | Wrong cwd, sanitized-HOME settings identity or post-response settings drift, version, model, or present effort, tuple, tree, scope, plan/hash/order, canary, verdict, or completion each refuses before a gate receipt. |
 | Mutation and malformed stream | Disposable-workspace mutation, frozen-checkout mutation, malformed/unknown/duplicate/out-of-order event, and malformed receipt each refuse. |
 | Transport hardening | Invocation inspection proves no repository cwd, directory/project option, prompt argv, broad permission bypass, or API-key path. |
 | Version drift | Contract tests characterize supported `agy` `1.2.2` behavior and reject incompatible drift from historical `1.1.27`; no historical assumption silently passes. |
 | Installed parity | Source and initialized-adopter runners execute the same fake-`agy` matrix and produce equivalent acceptance/refusal behavior. |
-| Supervisor and receipt order | Fake-provider parent loss retains the existing supervisor recovery semantics; a delayed or failed post-flight check proves no durable result or aggregate verdict precedes verification. |
+| Supervisor and receipt order | Fast TERM-ignoring output proves capped pipe persistence and observed closure; abrupt parent loss produces only its exact-bound unverified diagnostic, never a receipt or aggregate. |
 | Manual fallback | Export/import still accepts a complete valid manual reply set and rejects ordering, tuple, scope, canary, verdict, or completion drift. |
 | No live provider | Tests use fake `agy` only. Live subscription eligibility, provider quality, and activation require separate Owner authorization and are not established by this chip. |
 

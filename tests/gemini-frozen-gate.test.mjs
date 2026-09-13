@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -48,14 +48,15 @@ function packets(f) { const root = path.join(f.dir, ".gemini-gate", "handoff"); 
 function replies(f, verdicts) { const dir = path.join(f.dir, ".gemini-gate", "handoff", "replies"); for (const [index, verdict] of verdicts.entries()) writeFileSync(path.join(dir, `${String(index + 1).padStart(4, "0")}.txt`), reply(packets(f)[index], verdict)); }
 function importHandoff(f) { return invoke(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]); }
 function dry(f, extra = []) { return invoke(f, ["--context", "docs/contract.md", "--dry-run", ...extra]); }
-function fakeAgy({ hang = false, initEffort } = {}) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "fake-agy-")), binary = path.join(dir, "agy"), settings = path.join(dir, "settings.json");
+function fakeAgy({ hang = false, termIgnoringWriter = false, initEffort } = {}) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "fake-agy-")), home = path.join(dir, "home"), binary = path.join(dir, "agy"), settings = path.join(home, ".gemini", "antigravity-cli", "settings.json");
+  mkdirSync(path.dirname(settings), { recursive: true });
   writeFileSync(settings, JSON.stringify({ toolPermission: "request-review", allowNonWorkspaceAccess: false, permissions: { allow: [] } }));
   writeFileSync(binary, `#!/usr/bin/env node
-let input=""; const initEffort = ${JSON.stringify(initEffort)}; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { if (process.argv.includes("--version")) return; if (${hang}) return setInterval(() => {}, 1000); const prompt = JSON.parse(input).message.content, scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0], model = process.argv[process.argv.indexOf("--model") + 1], response = "finding\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done; console.log(JSON.stringify({ event: "init", conversation_id: "fake", init: { cwd: process.cwd(), tools: [], permission_mode: "request-review", model, ...(initEffort === undefined ? {} : { effort: initEffort }) } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "fake", step_index: 0, state: "DONE", step_type: "user_input" } })); console.log(JSON.stringify({ event: "result", result: { conversation_id: "fake", status: "SUCCESS", response, duration_seconds: 0, num_turns: 1 } })); }); if (process.argv.includes("--version")) console.log("1.2.2");\n`);
+let input=""; const initEffort = ${JSON.stringify(initEffort)}; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { if (process.argv.includes("--version")) return; if (${hang}) return setInterval(() => {}, 1000); if (${termIgnoringWriter}) { process.on("SIGTERM", () => {}); return setInterval(() => process.stdout.write("x".repeat(65536)), 1); } const prompt = JSON.parse(input).message.content, scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0], model = process.argv[process.argv.indexOf("--model") + 1], response = "finding\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done; console.log(JSON.stringify({ event: "init", conversation_id: "fake", init: { cwd: process.cwd(), tools: [], permission_mode: "request-review", model, ...(initEffort === undefined ? {} : { effort: initEffort }) } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "fake", step_index: 0, state: "DONE", step_type: "user_input" } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "fake", step_index: 1, state: "DONE", step_type: "agent_response", text_delta: response } })); console.log(JSON.stringify({ event: "result", result: { conversation_id: "fake", status: "SUCCESS", response, duration_seconds: 0, num_turns: 1 } })); }); if (process.argv.includes("--version")) console.log("1.2.2");\n`);
   chmodSync(binary, 0o755);
   const ps = path.join(dir, "ps"); writeFileSync(ps, "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'fake-supervisor' ;; esac\n"); chmodSync(ps, 0o755);
-  return { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, GEMINI_AGY_SETTINGS: settings }, binary, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { env: { ...process.env, HOME: home, PATH: `${dir}:${process.env.PATH}` }, home, settings, binary, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 async function eventually(check, timeout = 5000) { const end = Date.now() + timeout; while (Date.now() < end) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 50)); } assert.fail("timed out waiting for asynchronous runner state"); }
 function generated(f, output = ".gemini-gate/generated/manifest.json") { const result = invoke(f, ["--context", "docs/contract.md", "--generate-slice-plan", output]); assert.equal(result.status, 0, result.stderr); return { result: JSON.parse(result.stdout), output, plan: JSON.parse(readFileSync(path.join(f.dir, output), "utf8")) }; }
@@ -156,7 +157,7 @@ test("tampered state, tuple, plan, endpoint, and reply enumeration fail before j
 test("automated subscription is the default, REST is refused, and the installed wrapper retains manual fallback", () => {
   const f = fixture(true), fake = fakeAgy(); try {
     assert.equal(invoke(f, ["--transport", "api"], fake.env).status, 3);
-    manifest(f); const common = ["--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json"], env = { ...fake.env, GEMINI_REVIEW_CONTEXT: "" }, automated = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--run-slices", "--agy-bin", fake.binary], { cwd: f.dir, encoding: "utf8", env }); assert.equal(automated.status, 0, automated.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Transport: `antigravity-agy-subscription-stream-v2`/);
+    manifest(f); const common = ["--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json"], env = { ...fake.env, GEMINI_REVIEW_CONTEXT: "" }, automated = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--run-slices", "--agy-bin", fake.binary], { cwd: f.dir, encoding: "utf8", env }); assert.equal(automated.status, 0, automated.stderr); const receipt = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(receipt, /Transport: `antigravity-agy-subscription-stream-v2`/); assert.match(receipt, new RegExp(`settings-sha256:${sha(readFileSync(fake.settings))}`));
     manifest(f); const exported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-export", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(exported.status, 0, exported.stderr);
     const handoff = path.join(f.dir, ".gemini-gate/wrapper-handoff"), state = JSON.parse(readFileSync(path.join(handoff, "handoff.json"), "utf8")); for (const item of state.packets) writeFileSync(path.join(handoff, "replies", item.filename), reply(readFileSync(path.join(handoff, "packets", item.filename), "utf8"), "GO"));
     const imported = spawnSync("bash", ["scripts/cold-review-gemini.sh", ...common, "--handoff-import", ".gemini-gate/wrapper-handoff"], { cwd: f.dir, encoding: "utf8", env }); assert.equal(imported.status, 0, imported.stderr); assert.match(readFileSync(path.join(f.dir, journal), "utf8"), /Slice: `aggregate`/);
@@ -164,24 +165,64 @@ test("automated subscription is the default, REST is refused, and the installed 
   } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("post-flight endpoint failure leaves no accepted automated provider result and records a diagnostic", async () => {
-  const f = fixture(), fake = fakeAgy(), priorSettings = process.env.GEMINI_AGY_SETTINGS, priorPath = process.env.PATH; try {
-    process.env.GEMINI_AGY_SETTINGS = fake.env.GEMINI_AGY_SETTINGS;
+  const f = fixture(), fake = fakeAgy(), priorHome = process.env.HOME, priorPath = process.env.PATH; try {
+    process.env.HOME = fake.env.HOME;
     process.env.PATH = fake.env.PATH;
     manifest(f);
     await assert.rejects(run(args(f, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", fake.binary]), { afterProviderResponse: () => writeFileSync(path.join(f.dir, "outside.txt"), "dirty\n") }), /source checkout is dirty outside sanctioned artifacts/);
     const receipt = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(receipt, /Status: `FAILED_TRANSPORT`/); assert.doesNotMatch(receipt, /Status: `PASS_VERDICT`|Release-Gate: `YES`/);
-  } finally { if (priorSettings === undefined) delete process.env.GEMINI_AGY_SETTINGS; else process.env.GEMINI_AGY_SETTINGS = priorSettings; if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath; fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+  } finally { if (priorHome === undefined) delete process.env.HOME; else process.env.HOME = priorHome; if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath; fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
 });
-test("supervisor retains and recovers single-flight ownership after frozen runner parent loss", async () => {
-  const f = fixture(), fake = fakeAgy({ hang: true }); try {
+test("fake HOME settings identity is rechecked after a provider response before a receipt", async () => {
+  const f = fixture(), fake = fakeAgy(), priorHome = process.env.HOME, priorPath = process.env.PATH; try {
+    process.env.HOME = fake.env.HOME; process.env.PATH = fake.env.PATH; manifest(f);
+    await assert.rejects(run(args(f, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", fake.binary]), { afterProviderResponse: () => writeFileSync(fake.settings, JSON.stringify({ toolPermission: "request-review", allowNonWorkspaceAccess: false, permissions: { allow: [], changed: true } })) }), /agy settings changed after subscription transport preflight/);
+    const receipt = readFileSync(path.join(f.dir, journal), "utf8"); assert.match(receipt, /Status: `FAILED_TRANSPORT`/); assert.doesNotMatch(receipt, /Status: `PASS_VERDICT`/);
+  } finally { if (priorHome === undefined) delete process.env.HOME; else process.env.HOME = priorHome; if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath; fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("fake HOME settings drift before aggregation prevents the aggregate receipt", async () => {
+  const f = fixture(), fake = fakeAgy(), priorHome = process.env.HOME, priorPath = process.env.PATH; try {
+    process.env.HOME = fake.env.HOME; process.env.PATH = fake.env.PATH; manifest(f);
+    await assert.rejects(run(args(f, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", fake.binary]), { beforeAggregate: () => writeFileSync(fake.settings, JSON.stringify({ toolPermission: "request-review", allowNonWorkspaceAccess: false, permissions: { allow: [], aggregateChanged: true } })) }), /agy settings changed after subscription transport preflight/);
+    const receipt = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((receipt.match(/Status: `PASS_VERDICT`/g) || []).length, 3); assert.doesNotMatch(receipt, /Record-Kind: `SLICE_SET`/);
+  } finally { if (priorHome === undefined) delete process.env.HOME; else process.env.HOME = priorHome; if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath; fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("supervisor proves TERM-ignoring writer closure before releasing parent-loss ownership", async () => {
+  const f = fixture(), fake = fakeAgy({ termIgnoringWriter: true }); try {
     manifest(f);
     const runnerProcess = spawn(process.execPath, [runner, ...args(f, ["--slice-manifest", "plan.json", "--run-slices", "--agy-bin", fake.binary])], { env: fake.env, stdio: "ignore" });
     const common = path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), lock = path.join(common, "cold-review-gemini.lock");
     await eventually(() => existsSync(path.join(lock, "owner")) && /supervisor_pid=/.test(readFileSync(path.join(lock, "owner"), "utf8")));
     runnerProcess.kill("SIGKILL");
     await new Promise(resolve => runnerProcess.once("exit", resolve));
-    await eventually(() => !existsSync(lock));
+    const plan = JSON.parse(readFileSync(path.join(f.dir, "plan.json"), "utf8")), diagnostic = path.join(f.dir, ".gemini-gate", "diagnostics");
+    await eventually(() => !existsSync(lock) && existsSync(diagnostic));
+    const files = readdirSync(diagnostic); assert.equal(files.length, 1); const record = JSON.parse(readFileSync(path.join(diagnostic, files[0]), "utf8"));
+    assert.equal(record.kind, "ABRUPT_PARENT_LOSS_UNVERIFIED"); assert.equal(record.non_verdict, true); assert.match(record.attempt_id, /^PIL-FROZEN-ATTEMPT-[0-9a-f]{24}$/); assert.deepEqual(record.frozen, { base: f.base, candidate: f.candidate, tree: f.tree }); assert.equal(record.plan_id, plan.approval.expected_plan_id); assert.equal(record.slice, "coverage-source"); assert.equal(record.transport.name, "antigravity-agy-subscription-stream-v2"); assert.equal(record.transport.identity, `1.2.2|settings-sha256:${sha(readFileSync(fake.settings))}|high`); assert.equal(record.verification.endpoint, "NOT_COMPLETED"); assert.equal(record.verification.workspace, "NOT_COMPLETED"); assert.doesNotMatch(readFileSync(path.join(f.dir, journal), "utf8"), /Gemini frozen gate attempt|PASS_VERDICT|FAILED_TOOL/);
   } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("pipe capture caps a fast TERM-ignoring writer before process-group teardown", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-supervisor-overflow-")), lock = path.join(dir, "lock"), capture = path.join(dir, "capture"), workspace = path.join(dir, "workspace"), bin = path.join(dir, "bin"), writer = path.join(dir, "writer.mjs"), stdout = path.join(capture, "stdout"), stderr = path.join(capture, "stderr"), pid = path.join(capture, "pid"), meta = path.join(capture, "meta"), attemptLog = path.join(dir, "attempt.log"), supervisor = path.join(root, "scripts", "gemini-gate-supervisor.mjs");
+  try {
+    mkdirSync(lock); mkdirSync(capture); mkdirSync(workspace); mkdirSync(bin); writeFileSync(path.join(lock, "owner"), `pid=${process.pid}\n`); writeFileSync(meta, "do_log=0\n"); writeFileSync(attemptLog, ""); writeFileSync(path.join(bin, "ps"), "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'test-supervisor' ;; esac\n"); chmodSync(path.join(bin, "ps"), 0o755);
+    writeFileSync(writer, "import process from 'node:process'; process.on('SIGTERM', () => {}); setInterval(() => process.stdout.write('x'.repeat(65536)), 1);\n");
+    const result = spawnSync(process.execPath, [supervisor, "--timeout-seconds", "20", "--grace-seconds", "1", "--stdout", stdout, "--stderr", stderr, "--stdout-limit", "1024", "--stderr-limit", "1024", "--capture-dir", capture, "--pid-file", pid, "--parent-pid", String(process.pid), "--temp-dir", workspace, "--lock-dir", lock, "--parent-loss-meta", meta, "--parent-loss-diagnostic", path.join(dir, "parent-loss.json"), "--", process.execPath, writer], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    assert.equal(result.status, 3, result.stderr);
+    assert.equal(existsSync(stdout), true, result.stderr);
+    assert.ok(statSync(stdout).size <= 1024, "stdout file never exceeds its configured byte cap");
+    assert.ok(statSync(stderr).size <= 1024, "stderr file never exceeds its configured byte cap");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("public wrapper refuses an unresolved supervisor lock instead of stale-reclaiming it", () => {
+  const f = fixture(true); try {
+    const common = path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), lock = path.join(common, "cold-review-gemini.lock");
+    mkdirSync(lock); writeFileSync(path.join(lock, "owner"), `pid=999999\nrepo=${common}\nsupervisor_state=UNRESOLVED_PROCESS_GROUP\n`);
+    const bin = path.join(f.dir, "test-bin"); mkdirSync(bin); writeFileSync(path.join(bin, "ps"), "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'test-runner' ;; esac\n"); chmodSync(path.join(bin, "ps"), 0o755);
+    const result = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--design", "docs/contract.md", "--no-log"], { cwd: f.dir, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    assert.equal(result.status, 4, result.stderr);
+    assert.match(result.stderr, /unresolved supervisor process-group ownership/);
+    assert.equal(existsSync(lock), true);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("portable frozen-Gemini surfaces name automated subscription and manual fallback without REST", () => {
   const surfaces = ["README.md", "PORTABILITY.md", "core/GATES.md", "core/REPO_INVARIANTS.md", "templates/BINDINGS.md.tmpl", "docs/uncle-handoff/CODEX_ADOPTION_TICKET.md"];
@@ -197,10 +238,17 @@ test("portable frozen-Gemini surfaces name automated subscription and manual fal
 test("subscription transport keeps secrets, unbounded capture, and malformed execution streams outside its admitted path", () => {
   const runnerSource = readFileSync(runner, "utf8"), supervisorSource = readFileSync(path.join(root, "scripts/gemini-gate-supervisor.mjs"), "utf8");
   assert.match(runnerSource, /function subscriptionEnv\(\)/);
-  assert.match(runnerSource, /env: subscriptionEnv\(\)/, "both version probe and supervisor use the reduced environment");
+  assert.match(runnerSource, /env = subscriptionEnv\(\)/, "the version probe resolves one reduced environment");
+  assert.match(runnerSource, /env: transport\.env/, "the provider receives that same reduced environment");
   assert.doesNotMatch(runnerSource, /env: process\.env/, "ambient provider secrets are not forwarded");
+  assert.doesNotMatch(runnerSource, /GEMINI_AGY_SETTINGS/, "the production transport cannot override its sanitized-HOME settings path");
+  assert.match(runnerSource, /\.gemini", "antigravity-cli", "settings\.json"/);
+  assert.match(runnerSource, /recheckSubscriptionSettings\(transport\)/);
   assert.match(supervisorSource, /exceeded bounded capture limit/);
   assert.match(supervisorSource, /capture-dir/);
+  assert.match(supervisorSource, /stdio: \[forwardStdin \? process\.stdin : "ignore", "pipe", "pipe"\]/);
+  assert.match(supervisorSource, /captureOutput\("stdout", chunk\)/);
+  assert.match(supervisorSource, /observeClosureThenFinish/);
   assert.match(runnerSource, /invalid step lifecycle/);
   assert.match(runnerSource, /onlyKeys\(step, allowed\)/);
   assert.match(runnerSource, /prior\.state !== "ACTIVE" \|\| !\["ACTIVE", "DONE"\]\.includes\(step\.state\)/, "a streaming agent-response index may repeat ACTIVE before its one DONE");

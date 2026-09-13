@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import path from "node:path";
 import process from "node:process";
 import { execFileSync, spawn } from "node:child_process";
 
@@ -36,9 +37,10 @@ for (const key of ["stdout-limit", "stderr-limit"]) if (options[key] !== undefin
 for (const [name, value] of [["timeout-seconds", timeoutSeconds], ["grace-seconds", graceSeconds], ["parent-pid", parentPid]]) {
   if (!Number.isInteger(value) || value <= 0) fail(`${name} must be a positive integer`);
 }
-for (const required of ["stdout", "stderr", "pid-file", "temp-dir", "lock-dir", "attempt-log", "parent-loss-meta"]) {
+for (const required of ["stdout", "stderr", "pid-file", "temp-dir", "lock-dir", "parent-loss-meta"]) {
   if (!options[required]) fail(`missing --${required}`);
 }
+const stdoutLimit = options["stdout-limit"] === undefined ? 4 * 1024 * 1024 : Number(options["stdout-limit"]), stderrLimit = options["stderr-limit"] === undefined ? 1024 * 1024 : Number(options["stderr-limit"]);
 
 function psField(pid, field) {
   try {
@@ -64,19 +66,47 @@ function publishSupervisorOwner() {
   }
 }
 
+function readBoundedFile(file, limit) {
+  const fd = fs.openSync(file, "r");
+  try {
+    const chunks = []; let remaining = limit + 1;
+    while (remaining > 0) {
+      const chunk = Buffer.allocUnsafe(Math.min(65536, remaining)), read = fs.readSync(fd, chunk, 0, chunk.length, null);
+      if (!read) break;
+      chunks.push(chunk.subarray(0, read)); remaining -= read;
+    }
+    const bytes = Buffer.concat(chunks);
+    return { bytes: bytes.subarray(0, limit), overflow: bytes.length > limit };
+  } finally { fs.closeSync(fd); }
+}
+
 // Publication precedes spawn: no agy process can exist without a durable supervisor owner.
 publishSupervisorOwner();
 
-let stdoutFd;
-let stderrFd;
+const captures = {
+  stdout: { file: options.stdout, limit: stdoutLimit, bytes: 0, overflow: false, fd: undefined },
+  stderr: { file: options.stderr, limit: stderrLimit, bytes: 0, overflow: false, fd: undefined },
+};
 try {
-  stdoutFd = fs.openSync(options.stdout, "w", 0o600);
-  stderrFd = fs.openSync(options.stderr, "w", 0o600);
+  for (const capture of Object.values(captures)) capture.fd = fs.openSync(capture.file, "w", 0o600);
 } catch (error) {
-  if (stdoutFd !== undefined) {
-    try { fs.closeSync(stdoutFd); } catch {}
-  }
+  for (const capture of Object.values(captures)) if (capture.fd !== undefined) try { fs.closeSync(capture.fd); } catch {}
   fail(`cannot open output files: ${error.message}`, 3);
+}
+
+function closeCaptures() {
+  for (const capture of Object.values(captures)) if (capture.fd !== undefined) {
+    try { fs.closeSync(capture.fd); } catch {}
+    capture.fd = undefined;
+  }
+}
+
+function writeAll(fd, bytes) {
+  for (let offset = 0; offset < bytes.length;) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (!written) throw new Error("output capture write made no progress");
+    offset += written;
+  }
 }
 
 let child;
@@ -85,15 +115,12 @@ try {
     detached: true,
     env: process.env,
     ...(options.cwd ? { cwd: options.cwd } : {}),
-    stdio: [forwardStdin ? process.stdin : "ignore", stdoutFd, stderrFd],
+    stdio: [forwardStdin ? process.stdin : "ignore", "pipe", "pipe"],
   });
 } catch (error) {
-  fs.closeSync(stdoutFd);
-  fs.closeSync(stderrFd);
+  closeCaptures();
   fail(`cannot start child: ${error.message}`, 127);
 }
-fs.closeSync(stdoutFd);
-fs.closeSync(stderrFd);
 
 if (!Number.isInteger(child.pid) || child.pid <= 0) {
   fail("child process did not start with a valid pid", 127);
@@ -110,14 +137,96 @@ let finished = false;
 let requestedExit = null;
 let killTimer = null;
 let parentLost = false;
+let closureTimer = null;
+let unresolvedOwnership = false;
+let nextUnresolvedOwnershipWrite = 0;
+
+function signalGroup(signal) {
+  try {
+    process.kill(-child.pid, signal);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    process.stderr.write(`gemini-gate-supervisor: ${signal} failed: ${error.message}\n`);
+    return true;
+  }
+}
+
+function groupIsLive() {
+  try { process.kill(-child.pid, 0); return true; }
+  catch (error) { return error.code !== "ESRCH"; }
+}
+
+function markUnresolvedOwnership() {
+  if (unresolvedOwnership) return true;
+  const ownerPath = `${options["lock-dir"]}/owner`, temporary = `${ownerPath}.unresolved.${process.pid}`;
+  try {
+    const owner = fs.readFileSync(ownerPath, "utf8");
+    fs.writeFileSync(temporary, `${owner.trimEnd()}\nsupervisor_state=UNRESOLVED_PROCESS_GROUP\nsupervisor_unresolved_at=${new Date().toISOString()}\n`, { mode: 0o600 });
+    fs.renameSync(temporary, ownerPath);
+    unresolvedOwnership = true;
+    return true;
+  } catch (error) {
+    try { fs.rmSync(temporary, { force: true }); } catch {}
+    process.stderr.write(`gemini-gate-supervisor: could not preserve unresolved ownership: ${error.message}\n`);
+    return false;
+  }
+}
+
+function captureOutput(label, chunk) {
+  const capture = captures[label];
+  if (capture.overflow) return;
+  const allowed = Math.max(0, capture.limit - capture.bytes), persisted = Math.min(allowed, chunk.length);
+  try {
+    if (persisted) writeAll(capture.fd, chunk.subarray(0, persisted));
+    capture.bytes += persisted;
+  } catch (error) {
+    capture.overflow = true;
+    terminate(3, `cannot persist bounded ${label} capture: ${error.message}`);
+    return;
+  }
+  if (persisted !== chunk.length) {
+    capture.overflow = true;
+    terminate(3, `${label} exceeded bounded capture limit`);
+  }
+}
+
+child.stdout.on("data", chunk => captureOutput("stdout", chunk));
+child.stderr.on("data", chunk => captureOutput("stderr", chunk));
+child.stdout.once("error", error => terminate(3, `stdout capture failed: ${error.message}`));
+child.stderr.once("error", error => terminate(3, `stderr capture failed: ${error.message}`));
 
 function readMeta() {
-  const meta = {};
-  for (const line of fs.readFileSync(options["parent-loss-meta"], "utf8").split("\n")) {
-    const at = line.indexOf("=");
-    if (at > 0) meta[line.slice(0, at)] = line.slice(at + 1);
-  }
+  const meta = JSON.parse(fs.readFileSync(options["parent-loss-meta"], "utf8"));
+  if (!meta || typeof meta !== "object" || Array.isArray(meta) || !/^PIL-FROZEN-ATTEMPT-[0-9a-f]{24}$/.test(meta.attempt_id || "") || !meta.frozen || typeof meta.frozen !== "object" || !/^[0-9a-f]{40}$/.test(meta.frozen.base || "") || !/^[0-9a-f]{40}$/.test(meta.frozen.candidate || "") || !/^[0-9a-f]{40}$/.test(meta.frozen.tree || "") || typeof meta.plan_id !== "string" || typeof meta.slice !== "string" || !meta.transport || typeof meta.transport !== "object" || typeof meta.transport.name !== "string" || typeof meta.transport.identity !== "string" || typeof meta.diagnostic_path !== "string") throw new Error("parent-loss metadata is malformed");
   return meta;
+}
+
+function writeParentLossDiagnostic(meta, end) {
+  if (!options["parent-loss-diagnostic"] || meta.diagnostic_path !== options["parent-loss-diagnostic"]) throw new Error("parent-loss diagnostic path is not bound by metadata");
+  let captured = { bytes: Buffer.alloc(0), overflow: false };
+  try { captured = readBoundedFile(options.stdout, stdoutLimit); } catch {}
+  const diagnostic = {
+    version: 1,
+    kind: "ABRUPT_PARENT_LOSS_UNVERIFIED",
+    non_verdict: true,
+    attempt_id: meta.attempt_id,
+    frozen: meta.frozen,
+    plan_id: meta.plan_id,
+    slice: meta.slice,
+    transport: meta.transport,
+    parent_pid: parentPid,
+    supervisor_pid: process.pid,
+    started_at: meta.started_at,
+    ended_at: end,
+    process_group: { pid: child.pid, closure_observed: !unresolvedOwnership, ownership: unresolvedOwnership ? "UNRESOLVED_PROCESS_GROUP" : "CLOSED" },
+    verification: { endpoint: "NOT_COMPLETED", workspace: "NOT_COMPLETED" },
+    captured_stdout: { bytes: captured.bytes.length, truncated: captured.overflow, utf8_base64: captured.bytes.toString("base64") },
+  };
+  const temporary = `${meta.diagnostic_path}.tmp.${process.pid}`;
+  fs.mkdirSync(path.dirname(meta.diagnostic_path), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(temporary, `${JSON.stringify(diagnostic)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  fs.renameSync(temporary, meta.diagnostic_path);
 }
 
 function cleanupAfterParentLoss() {
@@ -125,39 +234,17 @@ function cleanupAfterParentLoss() {
   const end = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   try {
     const meta = readMeta();
-    if (meta.do_log !== "0") {
-      let output = "";
-      try { output = fs.readFileSync(options.stdout, "utf8"); } catch {}
-      const indented = (output.trim() || "(no output)").split("\n").map((line) => `    ${line}`).join("\n");
-      const record = `\n## Gemini gate attempt — FAILED_TOOL — ${end}\n\n` +
-        `- Status: \`FAILED_TOOL\`\n- Attempt-ID: \`${meta.attempt_id || "unknown"}\`\n` +
-        `- Record-Kind: \`${meta.record_kind || "FULL_REVIEW"}\`\n- Release-Gate: \`NO\`\n` +
-        `${meta.plan_id ? `- Plan-ID: \`${meta.plan_id}\`\n` : ""}` +
-        `- Delivery: \`${meta.delivery || "UNSELECTED"}\`\n` +
-        `- Bytes: raw_payload=${meta.raw_payload || 0}; instrumented_payload=${meta.payload || 0}; inline_combined=${meta.combined || 0}; file=${meta.file || 0}\n` +
-        `- Ingestion proof: EOF receipt + ${meta.canaries || 0} distributed random canary token(s)\n` +
-        `- Model: ${meta.model || "unknown"}\n- Context/design: ${meta.context || "(none)"}\n` +
-        `- HEAD: \`${meta.head || "unknown"}\`\n- Start: ${meta.start || "unknown"}\n- End: ${end}\n` +
-        `- Slice: ${meta.slice || "(none; full artifact)"}\n\n### Diagnostic output — NOT A VERDICT\n\n` +
-        `    runner parent ${parentPid} exited abruptly; supervisor terminated the owned process group and performed parent-loss cleanup\n${indented}\n`;
-      fs.appendFileSync(options["attempt-log"], record, { encoding: "utf8" });
-    }
+    writeParentLossDiagnostic(meta, end);
   } catch (error) {
-    process.stderr.write(`gemini-gate-supervisor: could not append parent-loss attempt: ${error.message}\n`);
+    process.stderr.write(`gemini-gate-supervisor: could not write parent-loss diagnostic: ${error.message}\n`);
   }
   try {
     const owner = fs.readFileSync(`${options["lock-dir"]}/owner`, "utf8");
-    if (owner.split("\n").includes(`pid=${parentPid}`)) fs.rmSync(options["lock-dir"], { recursive: true, force: true });
+    if (!unresolvedOwnership && owner.split("\n").includes(`pid=${parentPid}`)) fs.rmSync(options["lock-dir"], { recursive: true, force: true });
   } catch {}
-  try { fs.rmSync(options["temp-dir"], { recursive: true, force: true }); } catch {}
-  try { fs.rmSync(options["capture-dir"], { recursive: true, force: true }); } catch {}
-}
-
-function signalGroup(signal) {
-  try {
-    process.kill(-child.pid, signal);
-  } catch (error) {
-    if (error.code !== "ESRCH") process.stderr.write(`gemini-gate-supervisor: ${signal} failed: ${error.message}\n`);
+  if (!unresolvedOwnership) {
+    try { fs.rmSync(options["temp-dir"], { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(options["capture-dir"], { recursive: true, force: true }); } catch {}
   }
 }
 
@@ -166,10 +253,25 @@ function finish(code) {
   finished = true;
   clearTimeout(timeoutTimer);
   clearInterval(parentTimer);
-  if (captureTimer) clearInterval(captureTimer);
   if (killTimer) clearTimeout(killTimer);
+  if (closureTimer) clearInterval(closureTimer);
+  closeCaptures();
   cleanupAfterParentLoss();
   process.exit(code);
+}
+
+function observeClosureThenFinish(exitCode) {
+  if (finished || closureTimer) return;
+  const deadline = Date.now() + Math.max(1000, graceSeconds * 1000 + 1000);
+  const observe = () => {
+    if (!groupIsLive()) { clearInterval(closureTimer); closureTimer = null; finish(exitCode); return; }
+    if (Date.now() >= deadline && Date.now() >= nextUnresolvedOwnershipWrite) {
+      nextUnresolvedOwnershipWrite = Date.now() + 1000;
+      if (markUnresolvedOwnership()) { clearInterval(closureTimer); closureTimer = null; finish(exitCode); }
+    }
+  };
+  observe();
+  if (!finished && !closureTimer) closureTimer = setInterval(observe, 50);
 }
 
 function terminate(exitCode, reason) {
@@ -177,12 +279,11 @@ function terminate(exitCode, reason) {
   requestedExit = exitCode;
   process.stderr.write(`gemini-gate-supervisor: ${reason}; terminating owned process group ${child.pid}\n`);
   signalGroup("SIGTERM");
-  killTimer = setTimeout(() => signalGroup("SIGKILL"), graceSeconds * 1000);
+  killTimer = setTimeout(() => {
+    signalGroup("SIGKILL");
+    if (parentLost) observeClosureThenFinish(exitCode);
+  }, graceSeconds * 1000);
   killTimer.unref();
-  if (parentLost) {
-    const parentLossFinish = setTimeout(() => finish(exitCode), graceSeconds * 1000 + 300);
-    parentLossFinish.unref();
-  }
 }
 
 const timeoutTimer = setTimeout(
@@ -213,12 +314,6 @@ const parentTimer = setInterval(() => {
   }
 }, 250);
 
-const captureTimer = options["stdout-limit"] === undefined ? null : setInterval(() => {
-  for (const [label, file, limit] of [["stdout", options.stdout, Number(options["stdout-limit"])], ["stderr", options.stderr, Number(options["stderr-limit"])]]) {
-    try { if (fs.statSync(file).size > limit) { terminate(3, `${label} exceeded bounded capture limit`); return; } } catch {}
-  }
-}, 25);
-
 process.on("SIGINT", () => terminate(130, "received INT"));
 process.on("SIGTERM", () => terminate(143, "received TERM"));
 process.on("SIGHUP", () => terminate(129, "received HUP"));
@@ -234,9 +329,8 @@ child.once("exit", (code, signal) => {
   signalGroup("SIGTERM");
   setTimeout(() => {
     signalGroup("SIGKILL");
-    if (requestedExit !== null) return finish(requestedExit);
-    if (Number.isInteger(code)) return finish(code);
-    const signalExit = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143, SIGKILL: 137 }[signal];
-    finish(signalExit ?? 1);
+    const exitCode = requestedExit ?? (Number.isInteger(code) ? code : ({ SIGHUP: 129, SIGINT: 130, SIGTERM: 143, SIGKILL: 137 }[signal] ?? 1));
+    if (parentLost) return observeClosureThenFinish(exitCode);
+    return finish(exitCode);
   }, Math.min(graceSeconds * 1000, 250));
 });

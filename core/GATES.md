@@ -613,7 +613,7 @@ Do not raise the 3 MB gate-valid envelope without a new contiguous-read experime
 > lock and a second live invocation **exits 4** — including from a sibling worktree of the same repo.
 > Two lanes cannot both hold a Gemini gate; the second must wait. This is a mechanism, not a norm.
 
-The runner owns one per-repository lock under the canonical Git common directory, shared by legacy `agy` and frozen subscription/direct dispatches, so sibling worktrees cannot run duplicate reviews against one repository. The legacy owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity; a live frozen subscription or direct owner is refused by PID and common-directory identity before command comparison. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown, so a dead Bash parent cannot admit a duplicate `agy`. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused legacy ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
+The runner owns one per-repository lock under the canonical Git common directory, shared by legacy `agy` and frozen subscription/direct dispatches, so sibling worktrees cannot run duplicate reviews against one repository. The legacy owner record binds the runner and its supervisor by PID, process start stamp, exact command, and common-directory identity; a live frozen subscription or direct owner is refused by PID and common-directory identity before command comparison. A live supervisor retains ownership throughout parent-loss TERM→KILL teardown and observed process-group closure, so a dead Bash parent cannot admit a duplicate `agy`. If closure cannot be established inside the supervisor bound, it writes `supervisor_state=UNRESOLVED_PROCESS_GROUP`; public stale recovery refuses that distinguishable owner rather than silently reclaiming it. A second matching live owner exits immediately with code 4. A freshly dead runner without a published supervisor is held for a bounded startup grace instead of being stolen; this closes the scheduler window between launching the supervisor and its atomic publication. Older dead, malformed, or PID-reused legacy ownership is recovered by atomic rename; stale recovery never signals the recorded PID. An owner file still being initialized is not stolen.
 
 ### Durable attempt records
 
@@ -628,7 +628,7 @@ Unless `--no-log` is set, every owned real attempt has exactly one typed record:
 
 Each record includes attempt ID, record kind, release-gate eligibility, transport, raw/instrumented/combined/file byte counts, ingestion proof count, model, context/design path, base SHA, frozen artifact SHA, start/end times, and normalized slice manifest when applicable. A valid review also records its enum and inspected scope. A full pass uses `Verified review verdict`; an individual slice uses `Verified slice verdict — NOT A COMPLETE GATE`; only the aggregate uses `Verified bounded-slice-set verdict`. Failed/rejected model output is emitted only with an adjacent `NOT A VERDICT` label and is indented under `Diagnostic output — NOT A VERDICT` in the log.
 
-A documented release gate requires all three machine fields: `Status: PASS_VERDICT`, `Release-Gate: YES`, and `Record-Kind: FULL_REVIEW` or `SLICE_SET`. A `SLICE_RESULT` is never a release receipt even though it is a valid verdict on that slice. `--no-log` is retained for diagnostics and live interruption tests only, including abrupt parent loss.
+A documented release gate requires all three machine fields: `Status: PASS_VERDICT`, `Release-Gate: YES`, and `Record-Kind: FULL_REVIEW` or `SLICE_SET`. A `SLICE_RESULT` is never a release receipt even though it is a valid verdict on that slice. Abrupt frozen-subscription parent loss creates instead one bounded `.gemini-gate/diagnostics/` `ABRUPT_PARENT_LOSS_UNVERIFIED` artifact with exact attempt/tuple/plan/slice/transport identity and `NOT_COMPLETED` endpoint/workspace verification; it is not a durable attempt record, verdict, or release receipt. `--no-log` is retained for diagnostics and live interruption tests only.
 
 ### Bounded slicing
 
@@ -701,16 +701,21 @@ bash scripts/cold-review-gemini.sh \
   --rig-id <nonsecret-provider-configuration-id> --context docs/contract.md
 ```
 
-The subscription runner resolves `agy` from an explicit absolute `--agy-bin` or `PATH`; receipts bind
-the stable subscription transport name, its exact supported `1.2.2` version, model, effort, settings
-fingerprint, and nonsecret rig ID, never an operator home path. It requires
+The subscription runner resolves `agy` from an explicit absolute `--agy-bin` or `PATH`; it resolves
+and fingerprints only `$HOME/.gemini/antigravity-cli/settings.json` under the same sanitized `HOME`
+passed to its version probe and provider. Receipts bind the stable subscription transport name, its
+exact supported `1.2.2` version, model, effort, settings fingerprint, and nonsecret rig ID, never an
+operator home path. The runner rechecks that exact settings fingerprint after each provider response
+and before any receipt or aggregate. It requires
 `gemini-3.1-pro-high` at `high` effort, an empty disposable system-temp workspace, and exactly one
 NDJSON standard-input user event containing the complete prompt, so private review material is never
 an `agy` command-line argument. It passes `--input-format stream-json`, `--sandbox`,
 `--disable-slash-commands`, `--output-format stream-json`, and `--print-timeout <N>s`; it never passes
 a repository cwd, `--add-dir`, `--new-project`, `--mode plan`, permission bypass, or a broad permission
 configuration. `--new-project` is forbidden because it creates durable global project records.
-`--timeout-seconds` may lower the bounded 600-second default but cannot raise it. Subscription execution
+`--timeout-seconds` may lower the bounded 600-second default but cannot raise it. Subscription child
+stdout/stderr use pipe-based byte counting and persist at most their configured caps; overflow fails
+closed, tears down the owned process group, and drains/discards remaining bytes. Subscription execution
 fails closed on Windows until the runner has an owned process-group teardown there.
 
 Before launch it parses the current `agy` settings and refuses a malformed file, `toolPermission`
