@@ -58,8 +58,27 @@ let input=""; const initEffort = ${JSON.stringify(initEffort)}, initPermissionMo
   const ps = path.join(dir, "ps"); writeFileSync(ps, "#!/bin/sh\ncase \"$*\" in *lstart=*) echo 'Mon Sep  1 00:00:00 2026' ;; *command=*) echo 'fake-supervisor' ;; esac\n"); chmodSync(ps, 0o755);
   return { env: { ...process.env, HOME: home, PATH: `${dir}:${process.env.PATH}` }, home, settings, binary, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
+function controlledAgy() {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "controlled-agy-")), home = path.join(dir, "home"), binary = path.join(dir, "agy"), settings = path.join(home, ".gemini", "antigravity-cli", "settings.json"), events = path.join(dir, "events"), releaseVersion = path.join(dir, "release-version"), releaseFirst = path.join(dir, "release-first"), phase = path.join(dir, "phase"), ps = path.join(dir, "ps");
+  mkdirSync(path.dirname(settings), { recursive: true }); writeFileSync(settings, JSON.stringify({ toolPermission: "request-review", allowNonWorkspaceAccess: false, permissions: { allow: [] } })); writeFileSync(events, "");
+  writeFileSync(phase, "bash\n"); writeFileSync(ps, "#!/bin/sh\npid=\"$2\"\ncase \"$*\" in *lstart=*) printf 'start-%s\\n' \"$pid\" ;; *command=*) printf '%s-%s\\n' \"$(cat \"$(dirname \"$0\")/phase\")\" \"$pid\" ;; esac\n"); chmodSync(ps, 0o755);
+  writeFileSync(binary, `#!/usr/bin/env node
+import fs from "node:fs"; const events = ${JSON.stringify(events)}, releaseVersion = ${JSON.stringify(releaseVersion)}, releaseFirst = ${JSON.stringify(releaseFirst)}, phase = ${JSON.stringify(phase)}; const mark = value => fs.appendFileSync(events, value + "\\n"); if (process.argv.includes("--version")) { fs.writeFileSync(phase, "node\\n"); mark("version"); const wait = () => fs.existsSync(releaseVersion) ? (console.log("1.2.2"), process.exit(0)) : setTimeout(wait, 10); wait(); } else { let input = ""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { const count = fs.readFileSync(events, "utf8").split("\\n").filter(value => value === "provider").length + 1; mark("provider"); const respond = () => { const prompt = JSON.parse(input).message.content, scope = prompt.match(/=== NORMALIZED INSPECTED SCOPE ===\\n([^\\n]+)/)[1], markers = [...prompt.matchAll(/PIL-INGEST-(?:HEAD|MIDDLE|EOF)-[0-9a-f]+/g)].map(match => match[0]), done = prompt.match(/PIL-DONE-[0-9a-f]+/)[0], model = process.argv[process.argv.indexOf("--model") + 1], response = "finding\\nVERDICT: GO\\nINSPECTED SCOPE: " + scope + "\\nINGESTION PROOF: " + markers.join(" | ") + "\\n" + done; console.log(JSON.stringify({ event: "init", conversation_id: "controlled", init: { cwd: process.cwd(), tools: [], permission_mode: "request-review", model } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "controlled", step_index: 0, state: "DONE", step_type: "user_input" } })); console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "controlled", step_index: 1, state: "DONE", step_type: "agent_response", text_delta: response } })); console.log(JSON.stringify({ event: "result", result: { conversation_id: "controlled", status: "SUCCESS", response, duration_seconds: 0, num_turns: 1 } })); }; if (count === 1) { const wait = () => fs.existsSync(releaseFirst) ? respond() : setTimeout(wait, 10); wait(); return; } if (count === 2) { process.on("SIGTERM", () => mark("term")); return setInterval(() => {}, 1000); } respond(); }); }\n`);
+  chmodSync(binary, 0o755);
+  return { env: { ...process.env, HOME: home, PATH: `${dir}:${process.env.PATH}` }, binary, events, releaseVersion, releaseFirst, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
 async function eventually(check, timeout = 5000) { const end = Date.now() + timeout; while (Date.now() < end) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 50)); } assert.fail("timed out waiting for asynchronous runner state"); }
 function gateLock(f) { return path.join(path.resolve(f.dir, git(f.dir, ["rev-parse", "--git-common-dir"])), "cold-review-gemini.lock"); }
+function eventsOf(controlled, name) { return readFileSync(controlled.events, "utf8").split("\n").filter(value => value === name).length; }
+function ownerFields(lock) { return Object.fromEntries(readFileSync(path.join(lock, "owner"), "utf8").trim().split("\n").map(line => line.split(/=(.*)/s))); }
+function psValue(env, pid, field) { return execFileSync("ps", ["-p", String(pid), "-o", `${field}=`], { encoding: "utf8", env }).trim(); }
+function assertLiveSupervisor(lock, env) {
+  const text = readFileSync(path.join(lock, "owner"), "utf8"), owner = Object.fromEntries(text.trim().split("\n").map(line => line.split(/=(.*)/s)));
+  for (const key of ["supervisor_pid", "supervisor_start", "supervisor_command"]) assert.equal((text.match(new RegExp(`^${key}=`, "gm")) || []).length, 1, `${key} is replaced, not appended`);
+  assert.equal(psValue(env, owner.supervisor_pid, "lstart"), owner.supervisor_start);
+  assert.equal(psValue(env, owner.supervisor_pid, "command"), owner.supervisor_command);
+  return owner;
+}
 function generated(f, output = ".gemini-gate/generated/manifest.json") { const result = invoke(f, ["--context", "docs/contract.md", "--generate-slice-plan", output]); assert.equal(result.status, 0, result.stderr); return { result: JSON.parse(result.stdout), output, plan: JSON.parse(readFileSync(path.join(f.dir, output), "utf8")) }; }
 function componentBytes(f, fragment) { return fragment.component_kind === "per_file_diff" ? execFileSync("git", ["-C", f.dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=80", f.base, f.candidate, "--", fragment.path]) : execFileSync("git", ["-C", f.dir, "show", `${fragment.component_kind === "deleted_source" ? f.base : f.candidate}:${fragment.path}`]); }
 function assertPartitions(f, plan) {
@@ -221,6 +240,30 @@ test("supervisor proves TERM-ignoring writer closure before releasing parent-los
     const files = readdirSync(diagnostic); assert.equal(files.length, 1); const record = JSON.parse(readFileSync(path.join(diagnostic, files[0]), "utf8"));
     assert.equal(record.kind, "ABRUPT_PARENT_LOSS_UNVERIFIED"); assert.equal(record.non_verdict, true); assert.match(record.attempt_id, /^PIL-FROZEN-ATTEMPT-[0-9a-f]{24}$/); assert.deepEqual(record.frozen, { base: f.base, candidate: f.candidate, tree: f.tree }); assert.equal(record.plan_id, plan.approval.expected_plan_id); assert.equal(record.slice, "coverage-source"); assert.equal(record.transport.name, "antigravity-agy-subscription-stream-v2"); assert.equal(record.transport.identity, `1.2.2|settings-sha256:${sha(readFileSync(fake.settings))}|high`); assert.equal(record.verification.endpoint, "NOT_COMPLETED"); assert.equal(record.verification.workspace, "NOT_COMPLETED"); assert.doesNotMatch(readFileSync(path.join(f.dir, journal), "utf8"), /Gemini frozen gate attempt|PASS_VERDICT|FAILED_TOOL/);
   } finally { fake.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("public frozen ownership survives Bash-to-Node exec, later slices, and later parent-loss teardown", async () => {
+  const f = fixture(true), controlled = controlledAgy(), command = ["scripts/cold-review-gemini.sh", "--base", f.base, "--candidate", f.candidate, "--tree", f.tree, "--rig-id", "manual-test", "--slice-manifest", "plan.json", "--run-slices", "--agy-bin", controlled.binary], lock = gateLock(f); let first, firstStderr = "";
+  try {
+    manifest(f); first = spawn("bash", command, { cwd: f.dir, env: { ...controlled.env, GEMINI_REVIEW_CONTEXT: "" }, stdio: ["ignore", "ignore", "pipe"] }); first.stderr.on("data", chunk => firstStderr += chunk);
+    await eventually(() => { if (first.exitCode !== null) assert.fail(firstStderr); return eventsOf(controlled, "version") === 1 && existsSync(path.join(lock, "owner")); });
+    const beforeSupervisor = readFileSync(path.join(lock, "owner"), "utf8"), beforeFields = ownerFields(lock);
+    assert.equal(beforeFields.kind, "subscription"); assert.equal(beforeFields.pid, String(first.pid)); assert.equal(beforeFields.command, "frozen-subscription-exec"); assert.equal(psValue(controlled.env, first.pid, "command"), `node-${first.pid}`, "the Bash command changed after exec, so subscription kind is the stable contention identity"); assert.doesNotMatch(beforeSupervisor, /^supervisor_pid=/m);
+    const early = spawnSync("bash", command, { cwd: f.dir, encoding: "utf8", env: { ...controlled.env, GEMINI_REVIEW_CONTEXT: "" } });
+    assert.equal(early.status, 4, early.stderr); assert.match(early.stderr, /live frozen subscription invocation/); assert.equal(readFileSync(path.join(lock, "owner"), "utf8"), beforeSupervisor); assert.equal(eventsOf(controlled, "provider"), 0, "a contender cannot launch a provider before first supervisor publication");
+    writeFileSync(controlled.releaseVersion, "release\n");
+    await eventually(() => eventsOf(controlled, "provider") === 1 && /^supervisor_pid=/m.test(readFileSync(path.join(lock, "owner"), "utf8")));
+    const firstSupervisor = assertLiveSupervisor(lock, controlled.env); writeFileSync(controlled.releaseFirst, "release\n");
+    await eventually(() => eventsOf(controlled, "provider") === 2 && ownerFields(lock).supervisor_pid !== firstSupervisor.supervisor_pid);
+    const laterSupervisor = assertLiveSupervisor(lock, controlled.env), duringLaterSlice = readFileSync(path.join(lock, "owner"), "utf8");
+    const later = spawnSync("bash", command, { cwd: f.dir, encoding: "utf8", env: { ...controlled.env, GEMINI_REVIEW_CONTEXT: "" } });
+    assert.equal(later.status, 4, later.stderr); assert.equal(readFileSync(path.join(lock, "owner"), "utf8"), duringLaterSlice); assert.equal(eventsOf(controlled, "provider"), 2, "a later-slice contender cannot replace ownership or launch a provider");
+    first.kill("SIGKILL"); await new Promise(resolve => first.once("exit", resolve));
+    await eventually(() => eventsOf(controlled, "term") === 1);
+    const duringTeardown = readFileSync(path.join(lock, "owner"), "utf8"); assert.equal(assertLiveSupervisor(lock, controlled.env).supervisor_pid, laterSupervisor.supervisor_pid);
+    const teardown = spawnSync("bash", command, { cwd: f.dir, encoding: "utf8", env: { ...controlled.env, GEMINI_REVIEW_CONTEXT: "" } });
+    assert.equal(teardown.status, 4, teardown.stderr); assert.equal(readFileSync(path.join(lock, "owner"), "utf8"), duringTeardown); assert.equal(eventsOf(controlled, "provider"), 2, "a teardown contender cannot replace ownership or launch a provider");
+    await eventually(() => !existsSync(lock));
+  } finally { try { if (first?.exitCode === null) first.kill("SIGKILL"); } catch {} controlled.cleanup(); rmSync(f.dir, { recursive: true, force: true }); }
 });
 test("pipe capture caps a fast TERM-ignoring writer before process-group teardown", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "gemini-supervisor-overflow-")), lock = path.join(dir, "lock"), capture = path.join(dir, "capture"), workspace = path.join(dir, "workspace"), bin = path.join(dir, "bin"), writer = path.join(dir, "writer.mjs"), stdout = path.join(capture, "stdout"), stderr = path.join(capture, "stderr"), pid = path.join(capture, "pid"), meta = path.join(capture, "meta"), attemptLog = path.join(dir, "attempt.log"), supervisor = path.join(root, "scripts", "gemini-gate-supervisor.mjs");

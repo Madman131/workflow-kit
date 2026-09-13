@@ -198,7 +198,7 @@ ATTEMPT_ID="PIL-GATE-$(date +%s)-$$-${RANDOM}${RANDOM}"
 HEAD_SHA="$(git -C "$SOURCE_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 ARTIFACT_BASE_SHA="$HEAD_SHA"; ARTIFACT_SHA=""; ARTIFACT_REF=""; FROZEN_WORKTREE=""; ARTIFACT_WAS_DETACHED=0; FREEZE_INDEX=""
 LOG="$SOURCE_REPO_ROOT/docs/journal/gemini_review_log.md"
-TMPD=""; LOCK_DIR=""; LOCK_HELD=0; SUPERVISOR_PID=""; ATTEMPT_RECORDED=0
+TMPD=""; LOCK_DIR=""; LOCK_COMMON=""; LOCK_HELD=0; SUPERVISOR_PID=""; ATTEMPT_RECORDED=0
 DELIVERY="UNSELECTED"; PAYLOAD_BYTES=0; COMBINED_BYTES=0; FILE_BYTES=0; REVIEW=""; RECEIPT=""
 SLICE_NORMALIZED=""; ATTEMPT_DETAIL=""
 PLAN_ID=""; RECORD_KIND="FULL_REVIEW"; RELEASE_GATE="YES"
@@ -338,6 +338,10 @@ recover_stale_lock() {
   return 1
 }
 
+is_automated_frozen_run() {
+  [ "$FROZEN_DISPATCH" = "1" ] && [ "$FROZEN_FINGERPRINT" = "0" ] && [ -z "$GENERATE_SLICE_PLAN$HANDOFF_EXPORT$HANDOFF_IMPORT" ]
+}
+
 acquire_single_flight() {
   local common owner_tmp owner_pid owner_start owner_repo owner_command owner_kind owner_pid_live supervisor_owner_pid supervisor_owner_start supervisor_owner_command supervisor_owner_state current_start current_command self_start self_command attempt age now mtime
   common="$(git rev-parse --git-common-dir 2>/dev/null)" || { echo "cold-review-gemini: cannot resolve git common directory." >&2; exit 2; }
@@ -347,7 +351,8 @@ acquire_single_flight() {
   [ -n "$self_start" ] || { echo "cold-review-gemini: cannot establish process-start identity for the single-flight guard." >&2; exit 3; }
   self_command="$(ps -p $$ -o command= 2>/dev/null | sed 's/^ *//;s/ *$//')"
   [ -n "$self_command" ] || { echo "cold-review-gemini: cannot establish process-command identity for the single-flight guard." >&2; exit 3; }
-  LOCK_DIR="$common/cold-review-gemini.lock"
+  LOCK_COMMON="$common"
+  LOCK_DIR="$LOCK_COMMON/cold-review-gemini.lock"
   attempt=0
   while [ "$attempt" -lt 4 ]; do
     attempt=$((attempt + 1))
@@ -359,7 +364,7 @@ acquire_single_flight() {
         echo "repo=$common"
         echo "script=$SCRIPT_DIR/cold-review-gemini.sh"
         echo "command=$self_command"
-        if [ "$FROZEN_DISPATCH" = "1" ]; then echo "kind=manual-handoff"; fi
+        if is_automated_frozen_run; then echo "kind=subscription"; elif [ "$FROZEN_DISPATCH" = "1" ]; then echo "kind=manual-handoff"; fi
       } > "$owner_tmp" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot write single-flight owner record." >&2; exit 3; }
       mv "$owner_tmp" "$LOCK_DIR/owner" || { rm -rf "$LOCK_DIR"; echo "cold-review-gemini: cannot publish single-flight owner record." >&2; exit 3; }
       LOCK_HELD=1
@@ -421,6 +426,25 @@ acquire_single_flight() {
   done
   echo "cold-review-gemini: could not safely acquire the per-repo single-flight guard: $LOCK_DIR" >&2
   exit 4
+}
+
+publish_subscription_exec_owner() {
+  local owner_tmp self_start
+  [ "${LOCK_HELD:-0}" = "1" ] && [ -d "$LOCK_DIR" ] || return 0
+  [ "$(lock_owner_value pid 2>/dev/null || true)" = "$$" ] || { echo "cold-review-gemini: runner no longer owns the frozen subscription lock." >&2; exit 3; }
+  self_start="$(ps -p $$ -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//')"
+  [ -n "$self_start" ] || { echo "cold-review-gemini: cannot establish process-start identity for frozen subscription ownership." >&2; exit 3; }
+  [ -n "$LOCK_COMMON" ] || { echo "cold-review-gemini: frozen subscription lock has no repository identity." >&2; exit 3; }
+  owner_tmp="$LOCK_DIR/owner.subscription.$$"
+  {
+    echo "pid=$$"
+    echo "start=$self_start"
+    echo "repo=$LOCK_COMMON"
+    echo "kind=subscription"
+    echo "script=$SCRIPT_DIR/gemini-frozen-gate.mjs"
+    echo "command=frozen-subscription-exec"
+  } > "$owner_tmp" || { rm -f "$owner_tmp"; echo "cold-review-gemini: cannot publish frozen subscription ownership." >&2; exit 3; }
+  mv "$owner_tmp" "$LOCK_DIR/owner" || { rm -f "$owner_tmp"; echo "cold-review-gemini: cannot publish frozen subscription ownership." >&2; exit 3; }
 }
 
 record_attempt() {
@@ -611,6 +635,7 @@ if [ "$FROZEN_DISPATCH" = "1" ]; then
   [ "$DRY_RUN" = 1 ] && frozen_args+=(--dry-run)
   [ "$DO_LOG" = 0 ] && frozen_args+=(--no-log)
   [ "${LOCK_HELD:-0}" = "1" ] && frozen_args+=(--shared-lock-dir "$LOCK_DIR" --lock-owner-pid "$$")
+  if is_automated_frozen_run; then publish_subscription_exec_owner; fi
   exec node "$SCRIPT_DIR/gemini-frozen-gate.mjs" "${frozen_args[@]}"
 fi
 TMPD="$(mktemp -d)" || { ATTEMPT_DETAIL="could not create a temp dir"; echo "cold-review-gemini: $ATTEMPT_DETAIL." >&2; record_attempt FAILED_TOOL "$ATTEMPT_DETAIL"; exit 3; }

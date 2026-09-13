@@ -56,9 +56,10 @@ function publishSupervisorOwner() {
   let owner;
   try { owner = fs.readFileSync(ownerPath, "utf8"); } catch (error) { fail(`cannot read runner lock owner: ${error.message}`, 3); }
   if (!owner.split("\n").includes(`pid=${parentPid}`)) fail("runner no longer owns the lock; refusing to spawn agy", 3);
+  const retained = owner.split("\n").filter(line => !/^supervisor_(?:pid|start|command|state|unresolved_at)=/.test(line) && line).join("\n");
   const addition = `supervisor_pid=${process.pid}\nsupervisor_start=${psField(process.pid, "lstart")}\nsupervisor_command=${psField(process.pid, "command")}\n`;
   try {
-    fs.writeFileSync(temporary, `${owner.trimEnd()}\n${addition}`, { mode: 0o600 });
+    fs.writeFileSync(temporary, `${retained}\n${addition}`, { mode: 0o600 });
     fs.renameSync(temporary, ownerPath);
   } catch (error) {
     try { fs.rmSync(temporary, { force: true }); } catch {}
@@ -161,8 +162,8 @@ function markUnresolvedOwnership() {
   if (unresolvedOwnership) return true;
   const ownerPath = `${options["lock-dir"]}/owner`, temporary = `${ownerPath}.unresolved.${process.pid}`;
   try {
-    const owner = fs.readFileSync(ownerPath, "utf8");
-    fs.writeFileSync(temporary, `${owner.trimEnd()}\nsupervisor_state=UNRESOLVED_PROCESS_GROUP\nsupervisor_unresolved_at=${new Date().toISOString()}\n`, { mode: 0o600 });
+    const retained = fs.readFileSync(ownerPath, "utf8").split("\n").filter(line => !/^supervisor_(?:state|unresolved_at)=/.test(line) && line).join("\n");
+    fs.writeFileSync(temporary, `${retained}\nsupervisor_state=UNRESOLVED_PROCESS_GROUP\nsupervisor_unresolved_at=${new Date().toISOString()}\n`, { mode: 0o600 });
     fs.renameSync(temporary, ownerPath);
     unresolvedOwnership = true;
     return true;
