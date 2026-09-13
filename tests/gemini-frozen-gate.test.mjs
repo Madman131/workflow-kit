@@ -203,6 +203,7 @@ test("subscription transport keeps secrets, unbounded capture, and malformed exe
   assert.match(supervisorSource, /capture-dir/);
   assert.match(runnerSource, /invalid step lifecycle/);
   assert.match(runnerSource, /onlyKeys\(step, allowed\)/);
+  assert.match(runnerSource, /prior\.state !== "ACTIVE" \|\| !\["ACTIVE", "DONE"\]\.includes\(step\.state\)/, "a streaming agent-response index may repeat ACTIVE before its one DONE");
 });
 
 test("ordinary design mode acquires and releases its owner record before agy discovery", () => {

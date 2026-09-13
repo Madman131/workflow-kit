@@ -511,8 +511,8 @@ function parseSubscriptionStream(stdout, workspace, o, e) {
       const allowed = new Set(["conversation_id", "step_index", "state", "step_type", "text_delta", "duration_seconds", "usage"]), usageOk = !Object.hasOwn(step || {}, "usage") || (plainObject(step.usage) && Object.keys(step.usage).length <= 8 && Object.values(step.usage).every(nonnegativeNumber));
       if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || !onlyKeys(step, allowed) || Object.keys(step).some(toolLikeKey) || !["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== conversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0 || (Object.hasOwn(step, "text_delta") && typeof step.text_delta !== "string") || (Object.hasOwn(step, "duration_seconds") && !nonnegativeNumber(step.duration_seconds)) || !usageOk) die("agy stream recorded a tool, subagent, denied action, or unrecognized step", 3);
       const prior = stepStates.get(step.step_index);
-      if (step.step_index < lastIndex || step.step_index > lastIndex + 1 || (prior && !(prior === "ACTIVE" && step.state === "DONE")) || (!prior && step.step_index === lastIndex && step.state !== "DONE")) die("agy stream has an invalid step lifecycle", 3);
-      stepStates.set(step.step_index, step.state); if (step.step_index > lastIndex) lastIndex = step.step_index;
+      if (step.step_index < lastIndex || step.step_index > lastIndex + 1 || (prior && (prior.type !== step.step_type || prior.state !== "ACTIVE" || !["ACTIVE", "DONE"].includes(step.state))) || (!prior && step.step_index === lastIndex && step.state !== "DONE")) die("agy stream has an invalid step lifecycle", 3);
+      stepStates.set(step.step_index, { state: step.state, type: step.step_type }); if (step.step_index > lastIndex) lastIndex = step.step_index;
       continue;
     }
     if (event.event === "result") {
