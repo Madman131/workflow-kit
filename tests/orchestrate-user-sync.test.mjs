@@ -54,6 +54,30 @@ test("a symlinked target or package member fails closed", () => {
   } finally { g.cleanup(); }
 });
 
+test("with no --target the CLI installs and checks BOTH the Codex and the Claude user copy", () => {
+  const f = fixture();
+  const env = { ...process.env, HOME: f.root, USERPROFILE: f.root };
+  const agents = path.join(f.root, ".agents", "skills", "orchestrate");
+  const claude = path.join(f.root, ".claude", "skills", "orchestrate");
+  const run = (flag) => spawnSync(process.execPath, [CLI, flag], { encoding: "utf8", env });
+  try {
+    // Nothing installed: check fails closed rather than passing on an empty set.
+    assert.equal(run("--check").status, 1);
+    assert.equal(run("--install").status, 0);
+    for (const dir of [agents, claude]) {
+      assert.deepEqual(compareInstalled({ target: dir }), { ok: true, drift: [] }, dir);
+    }
+    // The defect this pins: a stale Claude copy behind an in-sync Codex copy read green.
+    writeFileSync(path.join(claude, "SKILL.md"), "stale\n");
+    const stale = run("--check");
+    assert.equal(stale.status, 1);
+    assert.match(stale.stderr, /\.claude.*SKILL\.md/);
+    // A copy that was never installed is absent, not stale.
+    rmSync(claude, { recursive: true, force: true });
+    assert.equal(run("--check").status, 0);
+  } finally { f.cleanup(); }
+});
+
 test("the CLI installs and then verifies a custom target", () => {
   const f = fixture();
   try {

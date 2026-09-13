@@ -38,9 +38,9 @@ const RUNGS = [
 // where /orchestrate is installed, however, leaving this optional recreated the exact split this
 // check exists to detect: the source suite was green while the command agents actually loaded was
 // stale. Presence makes parity a required local rung.
-const userOrchestrate = path.join(os.homedir(), ".agents", "skills", "orchestrate");
+const userOrchestrates = [".agents", ".claude"].map((d) => path.join(os.homedir(), d, "skills", "orchestrate"));
 const syncScript = path.join(KIT, "scripts", "sync-user-orchestrate-skill.mjs");
-if (existsSync(userOrchestrate) && existsSync(syncScript)) {
+if (userOrchestrates.some((d) => existsSync(d)) && existsSync(syncScript)) {
   RUNGS.push({ name: "orchestrate user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check"] });
 }
 

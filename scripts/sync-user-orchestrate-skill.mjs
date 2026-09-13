@@ -12,6 +12,10 @@ export const ORCHESTRATE_FILES = ["SKILL.md", "CHIP_BRIEF.md", "PROTOCOLS.md", "
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_SOURCE = path.join(ROOT, "skills", "orchestrate");
 export const DEFAULT_TARGET = path.join(os.homedir(), ".agents", "skills", "orchestrate");
+// Claude loads its own user copy from ~/.claude. Syncing only ~/.agents left that copy a release
+// behind while this check read green, so with no --target both copies are installed and checked.
+export const CLAUDE_TARGET = path.join(os.homedir(), ".claude", "skills", "orchestrate");
+export const DEFAULT_TARGETS = [DEFAULT_TARGET, CLAUDE_TARGET];
 
 function regularFile(file) {
   try {
@@ -79,21 +83,28 @@ function argValue(args, flag) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const mode = args.includes("--install") ? "install" : args.includes("--check") ? "check" : null;
-  const target = path.resolve(argValue(args, "--target") || DEFAULT_TARGET);
+  const explicit = argValue(args, "--target");
+  // A default copy that was never installed is absent, not stale: check skips it, but at least one
+  // must exist. An explicit --target is always checked.
+  const present = DEFAULT_TARGETS.filter((t) => existsSync(t));
+  const targets = explicit ? [path.resolve(explicit)]
+    : mode === "check" && present.length > 0 ? present : DEFAULT_TARGETS;
   if (!mode || (args.includes("--install") && args.includes("--check"))) {
     console.error("usage: sync-user-orchestrate-skill.mjs (--check|--install) [--target DIR]");
     process.exitCode = 2;
   } else {
-    try {
-      const result = mode === "install" ? installOrchestrate({ target }) : compareInstalled({ target });
-      if (result.ok) console.log(`orchestrate user install is in sync: ${target}`);
-      else {
-        console.error(`orchestrate user install drift: ${result.drift.join(", ")}`);
-        process.exitCode = 1;
+    for (const target of targets) {
+      try {
+        const result = mode === "install" ? installOrchestrate({ target }) : compareInstalled({ target });
+        if (result.ok) console.log(`orchestrate user install is in sync: ${target}`);
+        else {
+          console.error(`orchestrate user install drift: ${target}: ${result.drift.join(", ")}`);
+          process.exitCode = Math.max(process.exitCode ?? 0, 1);
+        }
+      } catch (error) {
+        console.error(`orchestrate user install unsafe: ${target}: ${error.message}`);
+        process.exitCode = 2;
       }
-    } catch (error) {
-      console.error(`orchestrate user install unsafe: ${error.message}`);
-      process.exitCode = 2;
     }
   }
 }

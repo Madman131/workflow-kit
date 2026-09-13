@@ -48,8 +48,8 @@ run, so repeat every local configuration flag and diff the backups. (That rewrit
 v2.30.0 replaced with a refusal — see the v2.30.0 section below; from v2.30.0 on, a partial flag set
 does not silently rewrite this file, it fails.) Re-grant Codex hook trust after
 the hook bytes change. The repository's `skills/orchestrate/` package is authoritative. After freeze,
-run `scripts/sync-user-orchestrate-skill.mjs --install` for `~/.agents/skills/orchestrate`
-and again with `--target ~/.claude/skills/orchestrate` for the Claude user copy. Provider names
+run `scripts/sync-user-orchestrate-skill.mjs --install`, which writes both user copies
+(`~/.agents/skills/orchestrate` and `~/.claude/skills/orchestrate`); `--check` verifies each one present. Provider names
 belong in adopter bindings, while the portable source names capability roles.
 
 ## Frozen Gemini subscription transport with manual fallback
