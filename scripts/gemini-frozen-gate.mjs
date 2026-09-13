@@ -458,12 +458,18 @@ function sharedLock(repo, o) {
   } catch (error) { fs.rmSync(lock, { recursive: true, force: true }); die(`cannot publish direct shared lock owner: ${error.message}`, 3); }
   return lock;
 }
+function unresolvedSupervisorOwnership(lock) {
+  try { return fs.readFileSync(path.join(lock, "owner"), "utf8").split("\n").includes("supervisor_state=UNRESOLVED_PROCESS_GROUP"); }
+  catch { return false; }
+}
 function complete(block) { const candidate = block.startsWith("## Gemini frozen gate attempt — ") ? `\n${block}` : block, match = candidate.match(/^([\s\S]*?)- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`\n?$/); return Boolean(match && sha(match[1]) === match[2]); }
 function rigKey(o, transport) { return sha(`${transport.name}|${transport.identity}|${o.model}|${o.rigId}`); }
 function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function onlyKeys(value, keys) { return Object.keys(value).every(key => keys.has(key)); }
 function toolLikeKey(key) { return /(?:tool|subagent|function|command|action|output)/i.test(key); }
 function nonnegativeNumber(value) { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+const AGY_USAGE_KEYS = new Set(["input_tokens", "output_tokens", "thinking_tokens", "cache_read_tokens", "total_tokens"]);
+function validAgyUsage(value) { return plainObject(value) && onlyKeys(value, AGY_USAGE_KEYS) && [...AGY_USAGE_KEYS].every(key => nonnegativeNumber(value[key])); }
 function readBoundedCapture(file, limit) {
   let fd;
   try { fd = fs.openSync(file, "r"); } catch (error) { if (error.code === "ENOENT") return Buffer.alloc(0); throw error; }
@@ -486,11 +492,13 @@ function subscriptionEnv() {
   return env;
 }
 function subscriptionSettingsPath(env) { return path.join(env.HOME, ".gemini", "antigravity-cli", "settings.json"); }
-export function preflightSubscriptionSettings(env = subscriptionEnv()) {
+export function preflightSubscriptionSettings(env = subscriptionEnv(), version = "") {
   const settingsPath = subscriptionSettingsPath(env);
   let bytes; try { bytes = fs.readFileSync(settingsPath); } catch (error) { die(`cannot read agy settings: ${error.message}`, 3); }
   let settings; try { settings = JSON.parse(bytes); } catch { die("agy settings are malformed JSON", 3); }
-  if (!plainObject(settings) || settings.toolPermission !== "request-review") die("agy settings must require request-review", 3);
+  if (!plainObject(settings)) die("agy settings must be an object", 3);
+  if (Object.hasOwn(settings, "toolPermission") && settings.toolPermission !== "request-review") die("agy settings toolPermission must require request-review when present", 3);
+  if (!Object.hasOwn(settings, "toolPermission") && !/^1\.2\.2(?:\s|$)/.test(version)) die("agy settings may omit toolPermission only for supported agy 1.2.2", 3);
   if (settings.allowNonWorkspaceAccess !== undefined && settings.allowNonWorkspaceAccess !== false) die("agy settings must not allow non-workspace access", 3);
   if (settings.permissions !== undefined && (!plainObject(settings.permissions) || (settings.permissions.allow !== undefined && (!Array.isArray(settings.permissions.allow) || settings.permissions.allow.length)))) die("agy settings must not contain a permission allow-list", 3);
   return { identity: `settings-sha256:${sha(bytes)}` };
@@ -505,11 +513,11 @@ function resolveSubscriptionTransport(o) {
   try { version = String(execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10000, env })).trim(); }
   catch (error) { die(`agy --version failed: ${String(error.stderr || error.message).trim()}`, 3); }
   if (!/^1\.2\.2(?:\s|$)/.test(version)) die(`unsupported agy version: ${version}`, 3);
-  const settings = preflightSubscriptionSettings(env);
-  return { name: "antigravity-agy-subscription-stream-v2", identity: `${version}|${settings.identity}|${SUBSCRIPTION_EFFORT}`, settingsIdentity: settings.identity, binary, env };
+  const settings = preflightSubscriptionSettings(env, version);
+  return { name: "antigravity-agy-subscription-stream-v2", identity: `${version}|${settings.identity}|${SUBSCRIPTION_EFFORT}`, settingsIdentity: settings.identity, version, binary, env };
 }
 function recheckSubscriptionSettings(transport) {
-  if (preflightSubscriptionSettings(transport.env).identity !== transport.settingsIdentity) die("agy settings changed after subscription transport preflight", 3);
+  if (preflightSubscriptionSettings(transport.env, transport.version).identity !== transport.settingsIdentity) die("agy settings changed after subscription transport preflight", 3);
 }
 function parseSubscriptionStream(stdout, workspace, o, e) {
   const lines = stdout.split(/\r?\n/); if (lines.at(-1) === "") lines.pop();
@@ -525,7 +533,7 @@ function parseSubscriptionStream(stdout, workspace, o, e) {
     }
     if (event.event === "step_update") {
       const step = event.step_update;
-      const allowed = new Set(["conversation_id", "step_index", "state", "step_type", "text_delta", "duration_seconds", "usage"]), usageOk = !Object.hasOwn(step || {}, "usage") || (plainObject(step.usage) && Object.keys(step.usage).length <= 8 && Object.values(step.usage).every(nonnegativeNumber));
+      const allowed = new Set(["conversation_id", "step_index", "state", "step_type", "text_delta", "duration_seconds", "usage"]), usageOk = !Object.hasOwn(step || {}, "usage") || validAgyUsage(step.usage);
       if (!onlyKeys(event, new Set(["event", "step_update"])) || !plainObject(step) || !onlyKeys(step, allowed) || Object.keys(step).some(toolLikeKey) || !["user_input", "agent_response", "checkpoint"].includes(step.step_type) || !["ACTIVE", "DONE"].includes(step.state) || step.conversation_id !== conversation || !Number.isSafeInteger(step.step_index) || step.step_index < 0 || (Object.hasOwn(step, "text_delta") && typeof step.text_delta !== "string") || (Object.hasOwn(step, "duration_seconds") && !nonnegativeNumber(step.duration_seconds)) || !usageOk) die("agy stream recorded a tool, subagent, denied action, or unrecognized step", 3);
       const prior = stepStates.get(step.step_index);
       if (step.step_index < lastIndex || step.step_index > lastIndex + 1 || (prior && (prior.type !== step.step_type || prior.state !== "ACTIVE" || !["ACTIVE", "DONE"].includes(step.state))) || (!prior && step.step_index === lastIndex && step.state !== "DONE")) die("agy stream has an invalid step lifecycle", 3);
@@ -534,7 +542,7 @@ function parseSubscriptionStream(stdout, workspace, o, e) {
     }
     if (event.event === "result") {
       const terminal = event.result;
-      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, new Set(["event", "result"])) || !plainObject(terminal) || !onlyKeys(terminal, new Set(["conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"])) || terminal.conversation_id !== conversation || terminal.status !== "SUCCESS" || typeof terminal.response !== "string" || !terminal.response.trim() || Object.hasOwn(terminal, "error") || Object.hasOwn(terminal, "denied_actions") || !nonnegativeNumber(terminal.duration_seconds) || !Number.isSafeInteger(terminal.num_turns) || terminal.num_turns < 0) die("agy subscription response is not one clean successful result", 3);
+      if (index !== lines.length - 1 || ++resultCount !== 1 || !onlyKeys(event, new Set(["event", "result"])) || !plainObject(terminal) || !onlyKeys(terminal, new Set(["conversation_id", "status", "response", "duration_seconds", "num_turns", "usage", "error", "denied_actions"])) || terminal.conversation_id !== conversation || terminal.status !== "SUCCESS" || typeof terminal.response !== "string" || !terminal.response.trim() || Object.hasOwn(terminal, "error") || Object.hasOwn(terminal, "denied_actions") || !nonnegativeNumber(terminal.duration_seconds) || !Number.isSafeInteger(terminal.num_turns) || terminal.num_turns < 0 || (Object.hasOwn(terminal, "usage") && !validAgyUsage(terminal.usage))) die("agy subscription response is not one clean successful result", 3);
       result = terminal; continue;
     }
     die("agy stream-json output contains an unrecognized event", 3);
@@ -720,6 +728,6 @@ export async function run(argv = process.argv.slice(2), hooks = {}) {
   try {
     if (o.handoffImport) writeImportedReceipts(repo, o, plan, prepared, readHandoff(repo, o, plan, prepared), hooks.afterSliceReceipts);
     else { preflightJournal(repo); endpoint(repo, o); await writeAutomatedReceipts(repo, o, plan, prepared, hooks, lock); }
-  } finally { fs.rmSync(lock, { recursive: true, force: true }); }
+  } finally { if (!unresolvedSupervisorOwnership(lock)) fs.rmSync(lock, { recursive: true, force: true }); }
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) run().catch(error => { process.stderr.write(`gemini-frozen-gate: ${error.message}\n`); process.exit(error.exitCode || 3); });

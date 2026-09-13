@@ -469,7 +469,9 @@ work; the manual UI account and model selection remain operator-attested, not cr
 verified by the runner.
 
 Practice the chosen route with a small, non-sensitive packet and provider permission. For automated
-use, verify the exact `agy` rig and receipt; for manual fallback, open the correct service, select the
+setup, use that harmless runtime canary to verify the exact `agy` rig, its `init` request-review mode,
+and receipt; do not promise that a request-review field persists in the standard settings file. For
+manual fallback, open the correct service, select the
 required model, submit ordered packets, save each reply unedited, and verify import before continuing.
 Do not request an API key for either route.
 

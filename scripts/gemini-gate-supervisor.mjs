@@ -281,7 +281,7 @@ function terminate(exitCode, reason) {
   signalGroup("SIGTERM");
   killTimer = setTimeout(() => {
     signalGroup("SIGKILL");
-    if (parentLost) observeClosureThenFinish(exitCode);
+    observeClosureThenFinish(exitCode);
   }, graceSeconds * 1000);
   killTimer.unref();
 }
@@ -330,7 +330,6 @@ child.once("exit", (code, signal) => {
   setTimeout(() => {
     signalGroup("SIGKILL");
     const exitCode = requestedExit ?? (Number.isInteger(code) ? code : ({ SIGHUP: 129, SIGINT: 130, SIGTERM: 143, SIGKILL: 137 }[signal] ?? 1));
-    if (parentLost) return observeClosureThenFinish(exitCode);
-    return finish(exitCode);
+    return observeClosureThenFinish(exitCode);
   }, Math.min(graceSeconds * 1000, 250));
 });

@@ -606,7 +606,7 @@ Do not raise the 3 MB gate-valid envelope without a new contiguous-read experime
 
 `GEMINI_TIMEOUT_SECONDS` defaults to **600 seconds** and applies to INLINE and FILE. `GEMINI_TERMINATE_GRACE_SECONDS` defaults to 2 seconds.
 
-`scripts/gemini-gate-supervisor.mjs` publishes its PID, process-start stamp, and exact command into the owned lock **before** it can spawn `agy`, then starts `agy` in a dedicated process group. On timeout, `INT`, `TERM`, loss of the runner parent, or normal CLI exit with lingering descendants, it sends targeted TERM then KILL to that group and waits for closure. On abrupt parent loss it additionally appends a typed failure and removes only the temp directory and lock whose owner PID matches that parent. It never uses `pkill` or a process-name pattern.
+`scripts/gemini-gate-supervisor.mjs` publishes its PID, process-start stamp, and exact command into the owned lock **before** it can spawn `agy`, then starts `agy` in a dedicated process group. Before every success or failure exit, including timeout, `INT`, `TERM`, loss of the runner parent, output overflow, and normal CLI exit with lingering descendants, it sends targeted TERM then KILL as needed and observes group closure. On abrupt parent loss it writes only a bounded non-verdict diagnostic and removes only the temp directory and lock whose owner PID matches that parent after closure. It never uses `pkill` or a process-name pattern.
 
 > **⚠ GEMINI IS NOT CONCURRENT-SAFE, AND THAT IS ENFORCED, NOT ADVISED.** The 2026-07-18 ruling that
 > permits concurrent **Codex** gates does **not** apply here: the runner takes a per-repo single-flight
@@ -718,10 +718,13 @@ stdout/stderr use pipe-based byte counting and persist at most their configured 
 closed, tears down the owned process group, and drains/discards remaining bytes. Subscription execution
 fails closed on Windows until the runner has an owned process-group teardown there.
 
-Before launch it parses the current `agy` settings and refuses a malformed file, `toolPermission`
-other than `request-review`, `allowNonWorkspaceAccess` other than absent or false, or a
-nonempty/malformed `permissions.allow`. The NDJSON stream must contain exactly one initial `init` and
-final `result`, identify that real disposable cwd, model, and `request-review` mode, and use
+Before launch it parses and fingerprints the current `agy` settings and refuses a malformed file,
+present `toolPermission` other than `request-review`, `allowNonWorkspaceAccess` other than absent or
+false, or a nonempty/malformed `permissions.allow`. Pinned `agy` 1.2.2 may omit `toolPermission`
+after normalizing the file; that absence is accepted only at the pinned version, never as a relaxed
+runtime permission claim. The NDJSON stream must contain exactly one initial `init` and final `result`,
+identify that real disposable cwd, model, and `request-review` mode on every invocation. Setup proves
+that runtime fact with a harmless canary rather than promising that the settings-file field persists, and uses
 only documented user-input, agent-response, or checkpoint step events. The runner always pins
 `--effort high`; supported `agy` 1.2.2 may omit effort from `init`, which is therefore invocation
 evidence rather than a provider echo, but a present effort must equal `high`. Any tool event, tool output,
@@ -729,8 +732,11 @@ subagent information, denied action, stderr diagnostic, workspace mutation, sign
 timeout, malformed/unknown event, non-success result, empty response, or receipt mismatch is a
 non-verdict failure. The runner accepts only allowlisted fields in those event shapes (except that a
 nonempty advertised `init.tools` list is expected) and rejects unknown or execution-like output fields.
-It owns the detached `agy` process group and escalates TERM to KILL on a timeout, bounded-output
-overflow, or runner interrupt, waiting through teardown before it releases the single-flight lock. It
+When present, each step and terminal `usage` object has exactly the closed 1.2.2 token schema
+`input_tokens`, `output_tokens`, `thinking_tokens`, `cache_read_tokens`, and `total_tokens`, all
+nonnegative numbers. It owns the detached `agy` process group and observes closure before every
+success or failure exit, escalating TERM to KILL on timeout, bounded-output overflow, or runner
+interrupt; it releases the single-flight lock only after closure or durable unresolved ownership. It
 does not infer no tool activity from an omitted
 `denied_actions` field: the event stream is the authoritative local execution record.
 

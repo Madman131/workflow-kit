@@ -35,11 +35,14 @@ claim that a sandbox flag removes its ability to attempt tools. Instead, each in
    `.gemini-gate` artifacts. Any frozen-checkout mutation is a transport failure, not evidence of a
    review; it does not inventory unrelated worktrees, shared `.git` state, or the whole repository.
 
-The runner must parse its settings before launch and require the request-review posture, no
-non-workspace access, and no permissive allow-list. It records the resolved `agy` version, cwd,
-settings fingerprint, exact model, and invoked effort in the receipt. It refuses any observed stream
-value that differs from the requested value; supported `agy` 1.2.2 may omit `effort` from `init`, so
-that field is invocation evidence unless the provider emits it.
+The runner parses and fingerprints its settings before launch and requires no non-workspace access
+or permissive allow-list. If `toolPermission` is present it must equal `request-review`; its absence
+is accepted only for pinned `agy` 1.2.2, which may normalize the standard settings file after launch.
+The runtime `init.permission_mode` remains mandatory `request-review` evidence on every invocation.
+Setup therefore uses a harmless runtime canary, not a promise that a settings-file posture field will
+persist. The receipt records the resolved `agy` version, cwd, settings fingerprint, exact model, and
+invoked effort. It refuses any observed stream value that differs from the requested value; supported
+`agy` 1.2.2 may omit `effort` from `init`, so that field is invocation evidence unless the provider emits it.
 
 ## Fail-closed stream and process boundary
 
@@ -49,14 +52,17 @@ out-of-order, or incomplete events refuse. A tool call, tool output, subagent ev
 or execution-like field refuses even if a later final message looks valid. Stderr is failure, as are
 nonzero exit, signal termination, timeout, output overflow, cwd/settings/version/model/effort
 mismatch, mutation, malformed receipt, scope mismatch, canary mismatch, verdict-shape mismatch, or
-completion-token mismatch.
+completion-token mismatch. When present, each step and final-result `usage` object has exactly the
+closed 1.2.2 schema `input_tokens`, `output_tokens`, `thinking_tokens`, `cache_read_tokens`, and
+`total_tokens`, each a nonnegative number.
 
 The public entrypoint retains the existing per-repository single-flight supervisor identity,
 parent-loss handling, and stale-owner recovery. It retains ownership while its child is active and
 through verification and record emission. The runner owns only its launched process group. Child
 stdout and stderr are pipes whose bytes are counted as received; each capture file persists no more
 than its configured cap. Overflow fails closed, sends scoped TERM then KILL, and continues draining
-and discarding pipe bytes. Teardown observes process-group closure before releasing ownership. If
+and discarding pipe bytes. Every supervisor success or failure exit observes process-group closure
+before releasing ownership. If
 closure cannot be established within its bound, the lock records `UNRESOLVED_PROCESS_GROUP`; public
 stale recovery refuses that lock until an operator establishes closure. Cleanup removes only
 runner-created disposable workspace and owned temporary records; it never uses process-name killing
