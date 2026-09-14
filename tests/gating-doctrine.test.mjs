@@ -1001,6 +1001,27 @@ test("the shipped gate runner's DEFAULT effort agrees with the matrix it serves"
   // model call — stating the limit rather than implying this test covers it.
 });
 
+test("the Gemini runner's CODE-MODE refusal steers a Claude-built change to the STANDING Codex seat, not the exception tier", () => {
+  // scripts/cold-review-gemini.sh prints a quoted heredoc naming the Codex command to run instead. It
+  // recommended `-e xhigh` — the rare irreversible/money/auth cell — while codex-gate.sh's own default
+  // and core/GATES.md name `high` as standing effort. Executed, not grepped: the refusal is what an
+  // operator actually reads, and a quoted heredoc prints its lines literally.
+  const cwd = mkdtempSync(path.join(os.tmpdir(), "kit-gemini-codemode-"));
+  try {
+    const env = { ...process.env }; delete env.GEMINI_ALLOW_CODE_MODE;
+    const r = spawnSync("bash", [path.join(ROOT, "scripts", "cold-review-gemini.sh")], { cwd, env, encoding: "utf8" });
+    assert.notEqual(r.status, 0, "code mode without the sanction refuses");
+    assert.match(r.stderr, /CODE MODE is reserved/, "…through the refusal this test is about");
+    const line = r.stderr.split("\n").find((l) => /codex-gate\.sh -o OUT/.test(l));
+    assert.ok(line, "the refusal still names the Codex command");
+    const [, model, effort] = /^MODEL="([^"]+)"; EFFORT="([a-z]+)"/m.exec(raw("scripts/codex-gate.sh"));
+    const flags = /-m (\S+) -e (\S+)/.exec(line);
+    assert.ok(flags, "the recommended command binds -m and -e explicitly, as the matrix requires");
+    assert.equal(flags[2], effort, `the recommended effort is the runner's standing effort (${effort}), not an exception tier`);
+    assert.equal(flags[1], model, "…and the recommended model is the runner's own default seat");
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
+});
+
 // ---------------------------------------------------------------- coverage honesty, the kit's own shape
 
 test("CHARACTERIZATION: the kit's governed-file census reads the FILESYSTEM, so it sees untracked files", () => {

@@ -1405,7 +1405,7 @@ function main() {
         } catch { drifted.push(`${h} (unreadable in one lane)`); }
       }
       if (drifted.length) {
-        warn(`the two lanes' hooks are NOT identical: ${drifted.join(", ")} differ between .claude/hooks/ and .codex/hooks/. The guards are ONE source installed twice, so this means one lane is running an older or edited copy — the most likely cause is a re-run without --force, which KEEPS existing files. Re-run with --force to bring both lanes to this kit version, then re-grant Codex hook trust (an upgraded hook is DISARMED until you do).`);
+        warn(`the two lanes' hooks are NOT identical: ${drifted.join(", ")} differ between .claude/hooks/ and .codex/hooks/. The guards are ONE source installed twice, so this means one lane is running an older or edited copy — the most likely cause is a re-run without --force, which KEEPS existing files. Re-run with --force to bring both lanes to this kit version, then run node scripts/check-codex-hooks-armed.mjs and re-trust interactively only if it reports NOT ARMED (Codex keys trust to each .codex/hooks.json entry, not to the hook script).`);
       }
 
       // ONE REPRESENTATION ONLY. Codex accepts hook registrations in EITHER `.codex/config.toml` or
@@ -1823,8 +1823,11 @@ function main() {
       `continue". \`codex exec\` NEVER prompts and NEVER warns — it skips untrusted hooks`,
       `SILENTLY, so a clean run proves nothing. Then VERIFY, do not assume:`,
       `    node scripts/check-codex-hooks-armed.mjs`,
-      `Upgrading a hook (\`init --force\`) marks it CHANGED and DISARMS it until you approve`,
-      `again. Migration order is: upgrade → re-trust interactively → re-run that check.`,
+      `Codex keys trust to each .codex/hooks.json ENTRY (command, timeout, statusMessage),`,
+      `not to the hook script: an upgrade that changes only a script stays armed (and runs`,
+      `the new script WITHOUT re-approval), while a new or changed entry is NOT ARMED until`,
+      `approved. Migration order is: upgrade → re-run that check → re-trust interactively`,
+      `ONLY if it reports NOT ARMED.`,
       `The kit will never grant this for you: it does not write Codex's trust store and it`,
       `does not use --dangerously-bypass-hook-trust. Automating another tool's consent is`,
       `forging consent, and it would arm every hook from every source, not just ours.`,
@@ -1871,9 +1874,10 @@ function main() {
   // upgrading and never learns it. The remediation is explicit about its costs because --force is
   // GLOBAL: every kept file whose content differs — [G] doc or portable copy alike — is backed up
   // to .bak first (a backup that cannot be taken REFUSES rather than destroys, and fails the run),
-  // and any CHANGED HOOK is DISARMED in the Codex lane until a human re-trusts it interactively —
-  // a plain `codex exec` skips an untrusted hook silently.
-  // AFTER a --force that replaced Codex-lane hooks, the dangerous state is CURRENT-BUT-DISARMED.
+  // and any .codex/hooks.json ENTRY the upgrade changed is NOT ARMED in the Codex lane until a human
+  // re-trusts it interactively (Codex keys trust to the entry, not the script bytes) — a plain
+  // `codex exec` skips an untrusted hook silently.
+  // AFTER a --force that rewrote the Codex-lane registration, the dangerous state is CURRENT-BUT-UNVERIFIED.
   // Verify out loud, and FAIL the run when the verification does not pass — an exit 0 there told
   // an adopter the upgrade completed while its Codex-lane controls were dead, which is the same
   // manufactured assurance the check itself exists to stop. An ABSTAIN counts as not-verified for
@@ -1887,8 +1891,9 @@ function main() {
       } catch (error) {
         console.error(`\ninit: the Codex lane's hooks are NOT verified armed after this --force ` +
           `upgrade (${String(error?.stdout || error?.message || "check failed").toString().trim().split("\n")[0]}). ` +
-          `A changed hook is DISARMED until a human re-trusts it interactively; \`codex exec\` skips ` +
-          `untrusted hooks SILENTLY. Re-trust, then: node scripts/check-codex-hooks-armed.mjs`);
+          `Codex keys trust to each .codex/hooks.json entry, so an entry this upgrade changed is NOT ARMED ` +
+          `until a human re-trusts it interactively; \`codex exec\` skips untrusted hooks SILENTLY. Run ` +
+          `node scripts/check-codex-hooks-armed.mjs, and re-trust only if it reports NOT ARMED`);
         process.exitCode = 1;
       }
     }
@@ -1924,8 +1929,9 @@ function main() {
     console.error(
       `A plain rerun never claims the new controller. To upgrade, re-run with --force — GLOBAL: ` +
       `every kept file whose content differs is backed up to .bak before overwrite (a backup that ` +
-      `cannot be taken REFUSES the overwrite and fails the run); changed hooks are DISARMED in the ` +
-      `Codex lane until re-trusted interactively (then verify: node scripts/check-codex-hooks-armed.mjs).`);
+      `cannot be taken REFUSES the overwrite and fails the run); a .codex/hooks.json entry the upgrade ` +
+      `changes is NOT ARMED in the Codex lane until re-trusted interactively (Codex keys trust to the ` +
+      `entry, not the script), so verify: node scripts/check-codex-hooks-armed.mjs, and re-trust only if it reports NOT ARMED.`);
     process.exitCode = 1;
   }
 }

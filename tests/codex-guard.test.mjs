@@ -1067,7 +1067,8 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
     assert.match(plain, /two lanes' hooks are NOT identical/, "init DETECTS the split rather than exiting 0 in silence");
     assert.match(plain, /guard-cross-repo-writes\.mjs/, "…and names the file that differs");
     assert.match(plain, /--force/, "…and names the fix");
-    assert.match(plain, /DISARMED until you do/, "…including the re-trust the fix then requires");
+    assert.match(plain, /then run node scripts\/check-codex-hooks-armed\.mjs and re-trust interactively only if it reports NOT ARMED \(Codex keys trust to each \.codex\/hooks\.json entry, not to the hook script\)/,
+      "…and the verify-then-re-trust-only-if-NOT-ARMED order the fix then requires");
 
     // --force resolves it, and the lanes match again.
     const forced = init("--force");
@@ -1077,7 +1078,7 @@ test("UPGRADE: a plain re-run over a v2.0 adopter leaves the lanes SPLIT — and
       "--force brings both lanes to this kit version");
     assert.doesNotMatch(forced, /two lanes' hooks are NOT identical/, "…and the warning stops (it is not a permanent scold)");
     // The forced run's OWN exit 1 is the armed-check's doing, not a leftover split: the upgraded
-    // hooks are CURRENT-BUT-DISARMED until a human re-trusts them, and init says so.
+    // registration is CURRENT-BUT-UNVERIFIED (no codex CLI here to probe it), and init says so.
     assert.match(forced, /NOT verified armed/, "the post-force armed-check failure is the named cause");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); }
 });
@@ -1119,7 +1120,13 @@ test("the TRUST caveat ships in the same breath as \"installed\", and the kit ne
     assert.match(A.out, /INSTALLED but INERT until you grant hook trust/);
     assert.match(A.out, /INTERACTIVE/);
     assert.match(A.out, /skips untrusted hooks\s+SILENTLY/);
-    assert.match(A.out, /DISARMS it until you approve/, "the upgrade path disarms — migration order must be stated at install time");
+    // THE TRUST GRANULARITY, AS MEASURED (2026-09-13, restock-watch, this kit's arming probe): a
+    // script-only edit kept the lane ARMED; changing only a hook's statusMessage made it NOT ARMED.
+    // Codex keys trust to the hooks.json ENTRY. The migration order follows from that fact.
+    assert.match(A.out, /Codex keys trust to each \.codex\/hooks\.json ENTRY \(command, timeout, statusMessage\),\s+not to the hook script: an upgrade that changes only a script stays armed \(and runs\s+the new script WITHOUT re-approval\), while a new or changed entry is NOT ARMED until\s+approved\./,
+      "the install-time caveat states what trust is keyed to, including the honest limit");
+    assert.match(A.out, /Migration order is: upgrade → re-run that check → re-trust interactively\s+ONLY if it reports NOT ARMED\./,
+      "migration order must be stated at install time: verify first, re-trust only on NOT ARMED");
     // THE DOCTRINE, MECHANICALLY. The kit must never write Codex's trust store nor recommend the
     // bypass flag: automating another tool's consent is forging consent, and the flag arms every
     // hook from every source. The only place that flag may appear is a warning NOT to use it.
@@ -1202,4 +1209,86 @@ test("--skip-codex-lane still leaves NO .codex residue now that the lane carries
     assert.ok(existsSync(path.join(A.dir, ".claude", "hooks", "payload-targets.mjs")));
     assert.ok(existsSync(path.join(A.dir, ".claude", "hooks", "guard-lane-authoring.mjs")));
   } finally { A.cleanup(); }
+});
+
+test("RETRACTED: no current surface claims that editing or upgrading a hook SCRIPT disarms it", () => {
+  // Measured 2026-09-13 (restock-watch, scripts/check-codex-hooks-armed.mjs, the lane guard's ledger
+  // row as signature): appending to a hook SCRIPT kept the lane ARMED; changing only that hook's
+  // statusMessage in .codex/hooks.json made it NOT ARMED, and restoring it re-armed. Codex keys trust
+  // to the hooks.json ENTRY. The old claim shipped on a dozen surfaces; a correction on one surface
+  // leaves the rest shipping it, so every tracked current surface is scanned. README release
+  // sections and docs/journal/ are HISTORY (what was believed then) and tests/ carry the patterns.
+  const retracted = [
+    /marks (?:it|a hook) CHANGED/i,
+    /upgrades? disarms? hooks/i,
+    /changed hook bytes/i,
+    /(?:upgraded|changed) hooks? (?:is|are) DISARMED/i,
+    /editing or upgrading a hook[^\n]{0,60}DISARM/i,
+    /re-trust changed hooks/i,
+  ];
+  for (const decoy of ["Editing or upgrading a hook marks it CHANGED, which DISARMS it", "upgrades disarm hooks until re-trusted",
+    "because changed hook bytes disarm the lane", "an upgraded hook is DISARMED until you do", "changed hooks are DISARMED in the",
+    "re-trust changed hooks in the Codex lane"]) {
+    assert.ok(retracted.some((re) => re.test(decoy)), `the retraction patterns still bite their own spelling: ${decoy}`);
+  }
+  const files = execFileSync("git", ["ls-files"], { cwd: KIT, encoding: "utf8" }).split("\n")
+    .filter((f) => f && f !== "README.md" && !f.startsWith("docs/journal/") && !f.startsWith("tests/") && /\.(?:md|mjs|js|sh|toml|json|tmpl)$/.test(f));
+  assert.ok(files.includes("PORTABILITY.md") && files.includes("bin/init.mjs"), "the scan's denominator includes the surfaces that carried the claim");
+  for (const f of files) {
+    const text = readFileSync(path.join(KIT, f), "utf8");
+    for (const re of retracted) assert.doesNotMatch(text, re, `${f} still carries the retracted trust claim (${re})`);
+  }
+  // …and the corrected sentence is pinned where operators read it.
+  const port = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8").replace(/\s+/g, " ");
+  assert.match(port, /Codex keys trust to each `\.codex\/hooks\.json` ENTRY \(its command, timeout and statusMessage\), not to the hook script's bytes:\*\* an upgrade that changes only a script stays ARMED, while a new or changed registration entry is NOT ARMED until you approve it\./);
+  assert.match(port, /\*\*Re-trust, interactively, ONLY if it reports NOT ARMED\*\*/);
+  assert.match(port, /an edited hook script runs WITHOUT re-approval/);
+  const probe = readFileSync(path.join(KIT, "scripts", "check-codex-hooks-armed.mjs"), "utf8");
+  assert.match(probe, /Codex keys trust to each \.codex\/hooks\.json ENTRY, not to the hook script\./);
+});
+
+test("the arming check tells the kit SOURCE tree it is not adopted, and still tells an adopter to run init (FM-2026-09-07-32)", async () => {
+  // core/REPO_INVARIANTS.md: the kit is never init-adopted. The check used to prescribe
+  // `node bin/init.mjs --target <kit>` there. Both branches executed; neither may read green.
+  const probe = path.join(KIT, "scripts", "check-codex-hooks-armed.mjs");
+  const { isKitSourceTree } = await import(probe);
+  const run = (dir) => spawnSync(process.execPath, [probe, dir], { encoding: "utf8", env: { ...process.env, PATH: path.join(dir, "no-codex") } });
+  const kitLike = mkdtempSync(path.join(os.tmpdir(), "kit-source-like-"));
+  const adopter = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-nohooks-"));
+  const decoy = mkdtempSync(path.join(os.tmpdir(), "kit-decoy-"));
+  const ownInstaller = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-own-installer-"));
+  try {
+    mkdirSync(path.join(kitLike, "bin"), { recursive: true }); mkdirSync(path.join(kitLike, "githooks"), { recursive: true });
+    writeFileSync(path.join(kitLike, "bin", "init.mjs"), "// installer\n"); writeFileSync(path.join(kitLike, "githooks", "pre-commit"), "#!/usr/bin/env node\n");
+    writeFileSync(path.join(kitLike, "package.json"), JSON.stringify({ name: "workflow-kit" }));
+    // An adopter with an installer and a source-spelled hook of its OWN is still an adopter.
+    mkdirSync(path.join(ownInstaller, "bin"), { recursive: true }); mkdirSync(path.join(ownInstaller, "githooks"), { recursive: true });
+    writeFileSync(path.join(ownInstaller, "bin", "init.mjs"), "// their installer\n"); writeFileSync(path.join(ownInstaller, "githooks", "pre-commit"), "#!/bin/sh\n");
+    writeFileSync(path.join(ownInstaller, "package.json"), JSON.stringify({ name: "their-app" }));
+    // An adopter's floor lives at .githooks/ and it has no bin/init.mjs — and a lone match is not the kit.
+    mkdirSync(path.join(adopter, ".githooks"), { recursive: true }); writeFileSync(path.join(adopter, ".githooks", "pre-commit"), "#!/usr/bin/env node\n");
+    mkdirSync(path.join(decoy, "bin", "init.mjs"), { recursive: true }); mkdirSync(path.join(decoy, "githooks"), { recursive: true });
+    writeFileSync(path.join(decoy, "githooks", "pre-commit"), "x\n"); writeFileSync(path.join(decoy, "package.json"), JSON.stringify({ name: "workflow-kit" }));
+    assert.equal(isKitSourceTree(KIT), true, "the real kit tree is recognised");
+    assert.equal(isKitSourceTree(kitLike), true);
+    assert.equal(isKitSourceTree(adopter), false, "an adopter is not the kit");
+    assert.equal(isKitSourceTree(decoy), false, "a DIRECTORY named bin/init.mjs is not the installer");
+    assert.equal(isKitSourceTree(ownInstaller), false, "an adopter with its own bin/init.mjs and githooks/pre-commit is not the kit");
+
+    for (const dir of [KIT, kitLike]) {
+      const r = run(dir);
+      assert.equal(r.status, 2, `the kit branch keeps the NOT INSTALLED exit code, never green (${dir})\n${r.stdout}`);
+      assert.match(r.stdout, /NOT INSTALLED, BY DESIGN — .* is the workflow-kit SOURCE repository\./);
+      assert.match(r.stdout, /The kit is never init-adopted \(core\/REPO_INVARIANTS\.md\), so it has no \.codex\/hooks\.json and\s+no Codex PreToolUse registration\./);
+      assert.match(r.stdout, /Do NOT run bin\/init\.mjs against it/);
+      assert.doesNotMatch(r.stdout, /Run: node bin\/init\.mjs/, "the forbidden remedy is not printed in the kit");
+    }
+    for (const dir of [adopter, decoy, ownInstaller]) {
+      const r = run(dir);
+      assert.equal(r.status, 2, r.stdout);
+      assert.match(r.stdout, /^NOT INSTALLED — \.codex\/hooks\.json is absent in /m);
+      assert.match(r.stdout, /Run: node bin\/init\.mjs --target /, "an adopter still gets the init remedy");
+      assert.doesNotMatch(r.stdout, /BY DESIGN/);
+    }
+  } finally { for (const d of [kitLike, adopter, decoy, ownInstaller]) rmSync(d, { recursive: true, force: true }); }
 });
