@@ -14,8 +14,10 @@
   it refusing an adopter's `token: "xhigh"` test fixture, and each loosening let a real credential
   shape through — first every short quoted secret, then a short quoted token. The scanner sends
   whole files to an external reviewer, so it stays fail-closed: a refusal costs one gate run, a miss
-  costs a credential. An adopter whose fixture trips it renames that value to a placeholder the
-  scanner already exempts (`${…}`, `$(…)`, `<…>`, `CHANGEME`, `REDACTED`).
+  costs a credential. There is no general unblock: renaming the value to an exempt placeholder
+  (`${…}`, `$(…)`, `<…>`, `CHANGEME`, `REDACTED`) only helps where the test does not depend on the
+  literal, and a candidate that removes the literal still carries it in the scanned diff. A changeset
+  whose files must keep such a value is reviewed by another seat, not by the Gemini gate.
 - **`cold-review-gemini.sh`:** the code-mode refusal now recommends the standing Codex effort
   (`-e high`), not the exception tier.
 - **Arming check in the kit source tree:** it says the kit is not adopted by design, instead of
