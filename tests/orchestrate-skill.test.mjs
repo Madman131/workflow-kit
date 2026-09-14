@@ -143,6 +143,16 @@ test("the escalation rule stays in the body — it is a rule, not rationale that
   pin(body, "**evidence escalates them, appetite does not.**", "evidence not appetite");
 });
 
+test("the bank carries the probe-denominator rule and the read-checks-before-merge rule", () => {
+  const protocols = readFileSync(path.join(KIT, "skills", "orchestrate", "PROTOCOLS.md"), "utf8");
+  // Graduated 2026-09-14 after four probes stood outside their control's denominator (a docs-only
+  // floor probe, an untracked file against `git ls-files`, a one-copy parity check, a trust claim
+  // relayed without the arming probe) and a red PR was merged because the ritual never read checks.
+  pin(protocols, "Name the control's DENOMINATOR before believing a probe, then prove the probe sits inside it.", "probe denominator");
+  pin(protocols, "never merge past either without the Owner ruling on that specific failure", "read checks before merge");
+  pin(protocols, "first show the target branch fails identically before calling it the host", "red local suite");
+});
+
 test("the round controller pins the finite aggregate boundary", () => {
   const body = readFileSync(BODY, "utf8");
   const protocols = readFileSync(path.join(KIT, "skills", "orchestrate", "PROTOCOLS.md"), "utf8");
