@@ -1,13 +1,8 @@
 # PROTOCOLS — the rules, and the incident each one cost
 
-Word budget: 2400 (**Owner-ratified 2026-08-05**; its own number, never summed with its body). It
-moved 1300 → 2000 during the release that introduced it and 2000 → 2400 in v2.4.0, each time because
-the bank absorbed more incidents, each time disclosed rather than quietly rewritten, and each time
-ratified by the Owner afterwards. **Raising it again is an Owner call.** **Still not split, and in
-v2.4.0 that was re-decided rather than inherited:** the alternative to this number was cutting three
-banked rules totalling 256 words, since the only non-rule prose here is a 165-word header that
-cannot cover the gap even if wholly deleted. A cap may never force deleting doctrine. A bank's only
-seam is its section headings, and two half-banks are two files to forget.
+Word budget: 2400 (**Owner-ratified 2026-08-05**; its own number, never summed with its body).
+**Raising it again is an Owner call.** A cap may never force deleting doctrine. Not split: a bank's
+only seam is its section headings, and two half-banks are two files to forget.
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
 omits any of these hands the worker the incident again.
@@ -15,11 +10,11 @@ omits any of these hands the worker the incident again.
 ⚠ **Read these as anonymised illustrative lessons, not as receipts.** Each came from a real program,
 but anonymising strips what § Evidence discipline demands of an observation — named artifact — so
 these are shapes to recognise, not evidence you can check. **A rule here is load-bearing once your
-own repo gives it an artifact.** The same standard, applied to itself.
+own repo gives it an artifact.**
 
 ## Freeze and the panel
 - **Freeze compliance is PANEL-ENFORCED, not willpower.** Three changesets edited the artifact while
-  seats were live before the rule stuck; each disclosed it, and disclosure is not a control. Give
+  seats were live; each disclosed it, and disclosure is not a control. Give
   every seat the frozen SHA and have it verify that SHA itself.
 - **Seat FRESH-CONTEXT blind panels in a scratch worktree with review-history artifacts DELETED and the contract
   redacted of round narration** — `free` becomes verifiable rather than aspirational.
@@ -75,6 +70,10 @@ own repo gives it an artifact.** The same standard, applied to itself.
   and the failure flatters the author into deleting a "useless" assertion.
 - **An observation NAMES THE ARTIFACT it was observed on; anything without one is a HYPOTHESIS,
   whoever wrote it.** The recurring failure is a claim phrased in the register of an observation.
+- **Name the control's DENOMINATOR before believing a probe, then prove the probe sits inside it.**
+  A docs-only probe read "clean" against a floor exempting docs; an untracked file read "broken"
+  against a checker enumerating `git ls-files`; a parity check covering one of two installed copies
+  read "in sync" while the other ran a release behind.
 - **One variable per probe.** A canary proves the MECHANISM is live, never the ATTRIBUTION: a probe
   pair that differed in two ways was reported as evidence for one of them.
 - **A probe observes the control's OWN SIGNATURE, never infers mechanism from outcome.** A guard's
@@ -85,7 +84,7 @@ own repo gives it an artifact.** The same standard, applied to itself.
   alarm is not the safe direction: told a working control is dead, an adopter switches it off.
 - **Audit the RIG before the CONTROL when a verdict surprises you.** A rig LACKING a property real
   repos have, or GAINING one they lack, mints confident findings about the control that are findings
-  about the rig. Both directions appeared inside ONE release, in consecutive commits.
+  about the rig.
 - **A doc-pinning assertion is decoration until you strike the EXACT PHRASE and watch it go red** —
   if the spelling occurs innocently elsewhere in scope, the assertion pins nothing. Mutate the
   phrase, assert the sentence, never the word.
@@ -98,7 +97,7 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **`installed · registered · RUNS-in-the-adopter-tree`, each proven by execution.** Presence and
   registration are the two lies shipped one release apart.
 - **Read pipeline exit codes honestly.** `$?` after a pipe is the LAST command's status, and under
-  `pipefail` an early-exiting consumer can poison a producer's status. Three misreads in one chip.
+  `pipefail` an early-exiting consumer can poison a producer's status.
 - **"Byte-identical" is a claim about INSTALLATION, not execution.** Two copies proven identical can
   still fail in one location and not the other; only running each where it installs settles it.
 - **A fix DESCRIBED as "mechanical" invites execution without re-verification.** Banked
@@ -117,6 +116,10 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Proving a change landed has TWO forms, and using the wrong one fails in the direction that
   looks safe.** A true merge: the head is an ancestor of the target. A SQUASH merge: the PR state is
   MERGED *and* the tree matches the squash commit — "ancestor-of" is permanently false there.
+- **Read the PR's checks before merging** (`gh pr checks`): STOP on a failing check, WAIT on a pending
+  one, and never merge past either without the Owner ruling on that specific failure. A merge ritual
+  written where no repo ran PR CI merged a red PR in the one repo that did. A red LOCAL suite gets
+  the same ruling — first show the target branch fails identically before calling it the host.
 - **On any merge-command error, check PR STATE FIRST.** In a worktree layout the branch-delete step
   can fail AFTER the remote merge succeeded; read that as "merge failed" and you double-merge.
 - **If the harness blocks a merge or push, STOP and report the exact command to the Owner — never
@@ -130,10 +133,9 @@ own repo gives it an artifact.** The same standard, applied to itself.
   OPENED at its line; every number RECOMPUTED by execution, never by eye; every claim about a frozen
   artifact checked against the artifact, not your memory of it. Minutes, in your own turn, no seat.
   **Scope it to LOAD-BEARING dispatches and no wider** — a rule taxing every status message is one
-  nobody can afford, and an unaffordable rule gets switched off. Two programs produced this class
-  repeatedly in one day: a count asserted over a table contradicting it, a budget from a heuristic,
-  a date never opened at its cited line, an elapsed time off by an order of magnitude, a stale
-  premise ratified into a mis-scoped carve-out. One `grep -c`, or one opened line, kills each. All
+  nobody can afford, and an unaffordable rule gets switched off. Two programs hit this class
+  repeatedly in one day — counts, budgets, dates and elapsed times asserted without execution, and a
+  stale premise ratified into a carve-out; one `grep -c` or one opened line kills each. All
   were caught LATE, by a worker's raw look or the Owner's, because nothing checks an orchestrator's
   OUTBOUND text — and a defect in a brief reaches the artifact it authorises before any seat sees it.
 - **A brief POINTS, it never DICTATES.** Name the landed form and its line; let the worker derive the
@@ -165,9 +167,8 @@ own repo gives it an artifact.** The same standard, applied to itself.
 - **Residue ritual at chip close:** prune, enumerate remote branches from the SERVER (a local mirror
   listing is not the server), delete merged ones, and sweep processes — including any whose working
   directory names a deleted worktree. **Enumerate every worktree you CREATED, scratch registrations
-  included**: one registered against the shared repo outlives the session silently, and is missed by
-  otherwise exemplary residue reports. **A sweep's count excludes its own pipeline** — its grep
-  included, or the count is self-manufactured.
+  included**: one registered against the shared repo outlives the session silently. **A sweep's
+  count excludes its own pipeline** — its grep included, or the count is self-manufactured.
 - **Killing a task strands its children.** ~140 orphaned test processes accumulated across one
   program, some days old, degrading the machine. A post-kill process sweep joins the ritual.
 - **A `pgrep -f`-shaped waiter MATCHES ITS OWN SHELL'S ARGV**, so "still running" is

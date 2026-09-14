@@ -3349,3 +3349,991 @@
 - Reply-UTF8-Base64: `QW4gaW5zcGVjdGlvbiBvZiB0aGUgcHJvdmlkZWQgZnJvemVuIGFydGlmYWN0IHNsaWNlIHJldmVhbHMgYSBjcml0aWNhbCBjb25jdXJyZW5jeSBhbmQgaWRlbXBvdGVuY3kgdnVsbmVyYWJpbGl0eSBpbnRyb2R1Y2VkIGluIHRoZSBiYXNoIHdyYXBwZXIgbG9naWMuCgpJZGVtcG90ZW5jeSAvIExvY2sgRXhjbHVzaW9uIEJ1ZyAoRG91YmxlLUluc2VydCBSYWNlIENvbmRpdGlvbikKVGhlIGNvbmRpdGlvbiBndWFyZGluZyB0aGUgcmVwb3NpdG9yeSdzIHNpbmdsZS1mbGlnaHQgd3JpdGUgbG9jayBpbnRlbnRpb25hbGx5IGV2YWx1YXRlcyB0byBmYWxzZSBmb3Igc3RyaWN0IG1hbnVhbCBoYW5kb2ZmIGltcG9ydHMsIGJ5cGFzc2luZyB0aGUgbG9jayBmb3IgYW4gb3BlcmF0aW9uIHRoYXQgbXV0YXRlcyB0aGUgZHVyYWJsZSBqb3VybmFsOgoKQmFzaAppZiBbICIkRFJZX1JVTiIgPSAiMCIgXSAmJiAhIHsgWyAiJEZST1pFTl9ESVNQQVRDSCIgPSAiMSIgXSAmJiB7IFsgIiRGUk9aRU5fRklOR0VSUFJJTlQiID0gIjEiIF0gfHwgWyAtbiAiJEdFTkVSQVRFX1NMSUNFX1BMQU4kSEFORE9GRl9FWFBPUlQkSEFORE9GRl9JTVBPUlQiIF07IH07IH07IHRoZW4gYWNxdWlyZV9zaW5nbGVfZmxpZ2h0OyBmaQoKCldoZW4gLS1oYW5kb2ZmLWltcG9ydCBpcyBleGVjdXRlZCwgWyAtbiAiJC4uLiRIQU5ET0ZGX0lNUE9SVCIgXSBpcyB0cnVlLiBUaGUgaW5uZXIgYmxvY2sgWyAiJEZST1pFTl9ESVNQQVRDSCIgPSAiMSIgXSAmJiB0cnVlIHJlc29sdmVzIHRvIHRydWUuIFRoZSBpbnZlcnNpb24gISB0cnVlIHJlc3VsdHMgaW4gZmFsc2UsIGVuc3VyaW5nIGFjcXVpcmVfc2luZ2xlX2ZsaWdodCBpcyBuZXZlciBjYWxsZWQuCgpDb25zZXF1ZW50bHksIExPQ0tfSEVMRCByZW1haW5zIDAsIGFuZCAtLXNoYXJlZC1sb2NrLWRpciAiJExPQ0tfRElSIiBpcyBuZXZlciBwYXNzZWQgZHVyaW5nIHRoZSBleGVjIG5vZGUgIiRTQ1JJUFRfRElSL2dlbWluaS1mcm96ZW4tZ2F0ZS5tanMiIGhhbmRvZmYuCgpCZWNhdXNlIEhBTkRPRkZfSU1QT1JUICJyZXVzZXMgdGhlIGZyb3plbiB2ZXJpZmllciBhbmQgcmVjZWlwdCBzZXF1ZW5jZSIgdG8gYXBwZW5kIHRvIGRvY3Mvam91cm5hbC9nZW1pbmlfcmV2aWV3X2xvZy5tZCwgZXhlY3V0aW5nIGl0IHdpdGhvdXQgdGhlIHJlcG9zaXRvcnkgd3JpdGUgbG9jayBhbGxvd3MgY29uY3VycmVudCBvcGVyYXRvcnMgKG9yIENJIGluc3RhbmNlcykgaGFuZGxpbmcgdGhlIHNhbWUgSGFuZG9mZi1JRCB0byByYWNlLiBCb3RoIGNhbiByZWFkIHRoZSBJRCBhcyB1bmNvbXBsZXRlZCBzaW11bHRhbmVvdXNseSBhbmQgZG91YmxlLWluc2VydCByZWNlaXB0cyBpbnRvIHRoZSBqb3VybmFsLCB2aW9sYXRpbmcgdGhlIHN0cmljdCBpZGVtcG90ZW5jeSBpbnZhcmlhbnQgKCJhIHJlLXJ1biBkb3VibGUtaW5zZXJ0cy4uLiBhIG5vbi10cmFuc2FjdGlvbmFsIG11bHRpLXN0ZXAgd3JpdGUgdGhhdCBsZWF2ZXMgb3JwaGFucyIpLgoKRnVydGhlciBjb25maXJtaW5nIHRoaXMgaXMgYSBsb2dpYyBkZWZlY3QgcmF0aGVyIHRoYW4gYW4gaW50ZW50aW9uYWwgZGVzaWduIGNob2ljZSwgYWNxdWlyZV9zaW5nbGVfZmxpZ2h0IGNvbnRhaW5zIGRlYWQgY29kZSBleHBsaWNpdGx5IHdyaXR0ZW4gZm9yIHRoaXMgcGF0aDoKCkJhc2gKKyAgICAgICAgWyAiJEZST1pFTl9ESVNQQVRDSCIgPSAiMSIgXSAmJiBlY2hvICJraW5kPW1hbnVhbC1oYW5kb2ZmIgoKCkJlY2F1c2UgdGhlIGxvY2stYWNxdWlzaXRpb24gc3RhdGVtZW50IGlzIG1hdGhlbWF0aWNhbGx5IHVucmVhY2hhYmxlIHdoZW4gRlJPWkVOX0RJU1BBVENIPSIxIiAoZHVlIHRvIHRoZSBhcmd1bWVudCB2YWxpZGF0aW9uIG11dHVhbGx5IGV4Y2x1ZGluZyB0aGUgcmVtYWluaW5nIGVsc2UgcGF0aHMpLCB0aGlzIGluc3RydWN0aW9uIGNhbiBuZXZlciBleGVjdXRlLiBUaGUgbG9jayB3YXMgY2xlYXJseSBpbnRlbmRlZCB0byBndWFyZCB0aGUgbWFudWFsIGhhbmRvZmYgYnV0IHdhcyBsb2dpY2FsbHkgZXhjbHVkZWQgYnkgdGhlICEgeyAuLi4gfSBncm91cGluZy4KClZFUkRJQ1Q6IE5PLUdPCgpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMjAiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImY3OGE1MmM0NDM1MzcxOWIyMGVmMTgyNTJjOTFiNTBlY2E0Zjg5MGQiLCJjYW5kaWRhdGUiOiI4Y2VhNDBhNTk3NzRjMTZiMTJkODNmZDdjOWQ0MDFhZmNmMjc0ZDQ2IiwidHJlZSI6IjM5OTM5NDk0NmY2NTU3MGUyZDFiMDhhYmVlYWEzNDIyOGQ4Y2NiOWQiLCJmaWxlcyI6WyJzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCIsInNjcmlwdHMvZ2VtaW5pLWZyb3plbi1nYXRlLXNlbGZ0ZXN0Lm1qcyJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTA2LWdlbWluaS1zdHJpY3Qtc3Vic2NyaXB0aW9uLWhhbmRvZmYtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiI5ZmNkNDg2MGFhMmNiMzZhN2RhOGUxZDg1YTlmMjdlZjdjM2JlZTgyMWQzNTMzOTExMTkwMzliY2YzYzBmZWZkIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6dHJ1ZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjc4NjQyLCJjb21wb25lbnRfc2hhMjU2IjoiNzU2NTdjNmRmYzdiNTI0M2YwMGMyMjc3N2ExZDhkYmUxY2JkYTU1ZGM2MDkwY2IxOGQzYTgzYmM2NDJmMTVkZSIsImJ5dGVfc3RhcnQiOjY0ODYxLCJieXRlX2VuZCI6Nzg2NDIsImZyYWdtZW50X3NoYTI1NiI6IjhhOWIzZjFmNWFiMjlkMDllY2ExOWE1YTBjZDFiZDY2M2NhYTg5MzZmZmFmNjhhMzk3MzliYzNmYmVmZDc4YTciLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjQwNDEyLCJjb21wb25lbnRfc2hhMjU2IjoiMjI4ZDA5ODkxMzc1NTRhZWJjNWRjNGM5NGI4Mjk5YzY5MDkwYWZlNmRlNDJjMzIyZjk1ZDJkNGQxNzNjMDRhMCIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxNzcsImZyYWdtZW50X3NoYTI1NiI6ImJmZWQ5ZGM2N2IxNjcxY2UwNmE4OWNlNmYwMDlhMzljYTZkZWQ1ZmViZTA5MThmODc2MGQzNjZhOGI5YjgxYzUiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjQwNDEyLCJjb21wb25lbnRfc2hhMjU2IjoiMjI4ZDA5ODkxMzc1NTRhZWJjNWRjNGM5NGI4Mjk5YzY5MDkwYWZlNmRlNDJjMzIyZjk1ZDJkNGQxNzNjMDRhMCIsImJ5dGVfc3RhcnQiOjE3NywiYnl0ZV9lbmQiOjE5NjYzLCJmcmFnbWVudF9zaGEyNTYiOiIwY2M1MWQxMDM1YTIyZGIwMTgxMzU1MDcyZWQ5NzJhNjEyYjM5NDUyMmQ3MTU5MzQwNWQ0NjRhNjJhODYxMTUwIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo0MDQxMiwiY29tcG9uZW50X3NoYTI1NiI6IjIyOGQwOTg5MTM3NTU0YWViYzVkYzRjOTRiODI5OWM2OTA5MGFmZTZkZTQyYzMyMmY5NWQyZDRkMTczYzA0YTAiLCJieXRlX3N0YXJ0IjoxOTY2MywiYnl0ZV9lbmQiOjMxMDAzLCJmcmFnbWVudF9zaGEyNTYiOiJlZDUwODMxNTIwOTFlZTZhZDkyMTU4ZDhlNGUyNTY0MTFiZjY5ZDk2MzVkNDlhMDk3MDg4MDlhY2I2MmViZWI3IiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo0MDQxMiwiY29tcG9uZW50X3NoYTI1NiI6IjIyOGQwOTg5MTM3NTU0YWViYzVkYzRjOTRiODI5OWM2OTA5MGFmZTZkZTQyYzMyMmY5NWQyZDRkMTczYzA0YTAiLCJieXRlX3N0YXJ0IjozMTAwMywiYnl0ZV9lbmQiOjQwNDEyLCJmcmFnbWVudF9zaGEyNTYiOiIzZmQwYmFjMjBhOWVhM2ZkMGNiYjRkMjdiNTEwNmFlY2IxZjExOTlhNTk0NjE3ZjVjZjQ5NjM1Nzk5ZTM3ZDI4IiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InNjcmlwdHMvZ2VtaW5pLWZyb3plbi1nYXRlLXNlbGZ0ZXN0Lm1qcyIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTI0MCwiY29tcG9uZW50X3NoYTI1NiI6IjhjZjQxZWE3NTNlZjBmM2Q2OTc3NGJiZTBiYjE1ZTE1NGY3MzZmNzhkOTExNWExYzIwYzJmM2Q1M2NmOGQzNjgiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTI0MCwiZnJhZ21lbnRfc2hhMjU2IjoiOGNmNDFlYTc1M2VmMGYzZDY5Nzc0YmJlMGJiMTVlMTU0ZjczNmY3OGQ5MTE1YTFjMjBjMmYzZDUzY2Y4ZDM2OCIsInJhbmdlX3N0YXR1cyI6Indob2xlIn0seyJwYXRoIjoic2NyaXB0cy9nZW1pbmktZnJvemVuLWdhdGUtc2VsZnRlc3QubWpzIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNDY5LCJjb21wb25lbnRfc2hhMjU2IjoiZGYzNzBiMmNhZDFiNmM0NDNjODg1NzI4OGY0M2M0Y2FiMmVkYjNmMjMzYTMzNGZlNmQ1ODc0M2JjMmY2MTVjMiIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxOTksImZyYWdtZW50X3NoYTI1NiI6Ijc0ZDQ5MjRiZjllM2JkZjMyZDZkZDU2ZDU2YTNiOTU2Mzg2NDk1ZjgwOWEyNmUyMzdlNGM0YTRlNTM2NmUwOGQiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9nZW1pbmktZnJvemVuLWdhdGUtc2VsZnRlc3QubWpzIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNDY5LCJjb21wb25lbnRfc2hhMjU2IjoiZGYzNzBiMmNhZDFiNmM0NDNjODg1NzI4OGY0M2M0Y2FiMmVkYjNmMjMzYTMzNGZlNmQ1ODc0M2JjMmY2MTVjMiIsImJ5dGVfc3RhcnQiOjE5OSwiYnl0ZV9lbmQiOjE0NjksImZyYWdtZW50X3NoYTI1NiI6IjZjZjQzY2U4OGUzZTgzMWUzOTFjZTFiYjE1M2Y0Y2EwZWZjZGFjNmM0NzBlM2ZkMDRjODRjNjFmMTUzYzcwZDUiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQoKSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtYTMxZTk3MjY0Mjk0NDBiYWI0MjgzNmI5IHwgUElMLUlOR0VTVC1NSURETEUtMDEwOTg3NDBkNTEwNGI0MmYxODE5Y2JhIHwgUElMLUlOR0VTVC1FT0YtYzcxNDNjMDY4NWViNjc2ZTNiYWQ4ZjIzCgpQSUwtRE9ORS1iODlkM2ZmNzcwNTc0Yjk3YjgyOWQ0ZWQ=`
 - Record-SHA256: `27b3fa2394ff40a48f6d6d7b4e3bdd5290348c082d9af51054400e1dcaa1198c`
 - Complete-Record: `YES`
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-12T15:56:00Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789228441-39190-1933524459`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=18436; instrumented_payload=18538; inline_combined=22355; file=18611
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/2026-09-12-execution-profile-contract.md
+- HEAD: `3c931c07a464648442a8bc487d08bc046e634062`
+- Artifact-Base: `6178c1de4ebcf94df626de5666dcf803c195054a`
+- Artifact-SHA: `3c931c07a464648442a8bc487d08bc046e634062`
+- Artifact-Ref: `refs/pil/gate-artifacts/3c931c07a464648442a8bc487d08bc046e634062`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+- Start: 2026-09-12T15:54:01Z
+- End: 2026-09-12T15:56:00Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-c85ad49d3ba45e815474bc0d
+    CANARIES: PIL-INGEST-01023830f630 PIL-INGEST-02459235dd3a
+    
+    Here is the cross-family audit of the proposed execution profile contract. 
+    
+    1. [BLOCKER] INTER-SECTION CONTRADICTION / MECHANISM CORRECTNESS
+    - **Section:** "Model roles and continuity"
+    - **Concrete failure scenario:** The design strictly isolates the Builder's context: "Raw T2/T3/live-path source and decisive facts remain in that Builder's own context." However, the immediate next sentence dictates: "The PM independently inspects actual changes and decisive evidence; a worker summary alone cannot discharge that responsibility." 
+    - **Why it matters:** This defines a physical paradox. The PM (Sol) is legally bound to inspect the "actual changes" (raw diffs/source) to fulfill its gating duty, but is explicitly forbidden from accessing the Builder's context where those raw changes reside, and cannot rely on a summary. The workflow will either permanently deadlock (PM blocked from seeing the required input) or silently fail-open (PM hallucinates an approval without actually seeing the diff).
+    - **Fix:** Clarify the context boundary. Either specify a deterministic extraction tool that bridges exact read-only diffs to the PM's context, or relax the Builder's context isolation to permit the PM direct read access to the raw source.
+    
+    2. [HIGH] INVARIANT VIOLATION (Epistemic Rule 1) / VACUOUS CONTROL
+    - **Section:** "Falsifiable acceptance evidence" (#7) vs "Finite controller and one completion exception"
+    - **Concrete failure scenario:** The design dictates an exception only occurs "After terminal Round 4 STOP". Thus, the parent is exactly Round 4. The exception is granted "exactly one repair batch" (making its ordinal Round 5). Yet, Section 7 mandates: "an exception whose next ordinal is divisible by four still requires the checkpoint."
+    - **Why it matters:** A child exception born at Round 5 that gets exactly 1 batch will transition to Round 6. Neither 5 nor 6 is divisible by 4. This modulo-4 checkpoint rule for exceptions is mathematically unreachable. It violates Epistemic Rule 1 by manufacturing false assurance of a safety bound (the checkpoint) that can never execute in practice.
+    - **Fix:** Remove the modulo-4 checkpoint rule for exceptions, as their fixed 1-batch limit prevents them from ever reaching a cumulative boundary. 
+    
+    3. [HIGH] COMPLETENESS GAP / PERMANENT STATE ORPHANING (DEADLOCK)
+    - **Section:** "Finite controller and one completion exception" & "Falsifiable acceptance evidence" (#6)
+    - **Concrete failure scenario:** If the 1-batch completion exception fails to fix the defect, the design dictates a hard "stop". It explicitly refuses a "second repair batch," a "repeat child," a "child of an exception," or a "refreeze-as-new-budget." It also explicitly bans the PM from classifying the "same unfinished repair as new scope". 
+    - **Why it matters:** The system provides literally zero legal state transitions to ever fix the remaining defect. The parent is permanently closed ("terminal Round 4 STOP"), the exception is exhausted, and the new scope route is banned. The partially-repaired worktree is permanently orphaned in a deadlocked state, with no Owner escalation path to salvage the work.
+    - **Fix:** Define an explicit, deterministic Owner-level escape hatch (e.g., the Owner manually authorizes a "Round 4 reset" or manually blesses the unfinished state as a new parent root) to recover from an exhausted exception.
+    
+    4. [MEDIUM] CONCURRENCY / MULTI-STEP WRITE ORPHANING
+    - **Section:** "Routine authority and Owner boundaries"
+    - **Concrete failure scenario:** The PM's allowed routine workflow includes a non-transactional sequence of mutations and network calls: "run tests, make local commits and eligible local integrations, prepare Gemini slices/packets... adjudicate findings and dispatch allowed repair batches."
+    - **Why it matters:** If the PM's process crashes or the network transport fails *after* making local commits/integrations but *before* successfully dispatching the repair batch, the local worktree is left in a dirty, mutated state. The design states "failed transmissions do not add rounds" but fails to mandate cleaning up the local state.
+    - **Fix:** Mandate that PM local mutations occur in a transactional scratch worktree, or require an explicit rollback of local commits to the parent's frozen state upon a failed downstream dispatch.
+    
+    **Highest-risk thing to resolve first:** The physical paradox in Finding 1. You cannot legally obligate the PM to perform an independent inspection of code changes while simultaneously denying it access to the very context where those raw changes reside.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+    
+    PIL-DONE-9f8f152d54573d9ea2bc2872
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-12T15:59:21Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789228681-14340-127443083`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=18793; instrumented_payload=18895; inline_combined=22712; file=18968
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/2026-09-12-execution-profile-contract.md
+- HEAD: `eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
+- Artifact-Base: `6178c1de4ebcf94df626de5666dcf803c195054a`
+- Artifact-SHA: `eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
+- Artifact-Ref: `refs/pil/gate-artifacts/eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+- Start: 2026-09-12T15:58:01Z
+- End: 2026-09-12T15:59:21Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-9efd127197cacf2635ee1cfe
+    CANARIES: PIL-INGEST-01a2f833d179 PIL-INGEST-0265c9841685
+    
+    **1. BLOCKER: INVARIANT VIOLATION / MECHANISM CORRECTNESS**
+    - **§ Section**: § Finite controller and one completion exception
+    - **Concrete failure scenario**: The design creates a "completion exception" bypass contingent on Owner approval, but explicitly admits that "Controls validate records and mechanical bounds, not the truth of semantic declarations or the identity behind human approval evidence." A compromised or hallucinating PM (Sol) can autonomously write a record asserting "Owner approved" to bypass the gate.
+    - **Why it matters**: Violates Epistemic Rule 2 ("A prompt is not a control... Make outputs checkable") and Invariant 2 ("Exact provenance"). By stripping the gate of identity verification, the PM can forge Owner approval, entirely neutralizing the Owner's boundary authority and autonomously evading the 4-round limit.
+    - **Fix**: Require the mechanical gate to validate an unforgeable, cryptographically secure receipt (e.g., authenticated API state transition, signed token) to prove the human Owner authorized the exception, rather than trusting PM-generated text records.
+    
+    **2. HIGH: INTER-SECTION CONTRADICTION**
+    - **§ Section**: § Model roles and continuity vs. § Routine authority and Owner boundaries
+    - **Concrete failure scenario**: In "Model roles and continuity", the PM is strictly restricted to "direct read-only access to the shared source". In the very next section ("Routine authority and Owner boundaries"), the PM is authorized to "make local commits and eligible local integrations".
+    - **Why it matters**: If the PM's environment enforces the stated read-only invariant, it will crash when attempting its authorized local commits, deadlocking the workflow. If it is granted write access to commit, the security invariant is broken, allowing the PM to silently rewrite raw T2/T3 source without the Terra Builder's involvement.
+    - **Fix**: Reconcile permissions. Either restrict the PM from making commits (delegating them entirely to the Terra Builder), or provide the PM a tightly constrained Git-only interface for commits while preserving strict read-only access to the raw file system.
+    
+    **3. HIGH: MECHANISM CORRECTNESS / COMPLETENESS (FRONTIER BYPASS)**
+    - **§ Section**: § Falsifiable acceptance evidence (Bullet 7) & § Finite controller and one completion exception
+    - **Concrete failure scenario**: Checkpoints are enforced "at each cumulative multiple of four". An exception launched after a terminal Round 4 performs its single repair at ordinal 5, and its final review at ordinal 6. Since 6 is not a multiple of 4, the exception's final review skips the frontier checkpoint.
+    - **Why it matters**: The exception is designed to fix "surviving concrete harm". Bypassing the frontier checkpoint on ordinal 6 means the cheaper PM model (Sol) makes the final semantic decision on a critical repair without frontier oversight. This violates Invariant 1 (Intelligence-ordering).
+    - **Fix**: Explicitly require that the completion exception's final review unconditionally triggers a mandatory frontier checkpoint, or enforce that *any* terminal review triggers the gate, regardless of the cumulative ordinal math.
+    
+    **4. MEDIUM: COMPLETENESS GAPS**
+    - **§ Section**: § Finite controller and one completion exception
+    - **Concrete failure scenario**: If the single completion exception fails, the rules dictate to "stop" with "No automatic repeated exception". The only allowed path forward is for "genuinely new... successor scope".
+    - **Why it matters**: If the exception fails to fix the defect, the branch is permanently deadlocked. The PM is forbidden from relabeling the unfinished repair as "new scope", and no other repair mechanism is legally allowed for that parent. The Owner has no structured mechanism to salvage the branch without falsifying the intent.
+    - **Fix**: Define a formal escalation or hard-reset path for a failed completion exception. Allow the Owner to explicitly authorize a new parent plan specifically to rescue the failed state, rather than forcing them to abandon the branch or lie about "new scope".
+    
+    **HIGHEST-RISK TO RESOLVE FIRST:**
+    The complete inability of the mechanical gate to verify the human identity behind the approval (Finding 1), which renders the Owner's boundary functionally non-existent and allows the PM to forge authorization for the exception.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+    PIL-DONE-5d792c73c0381c7bf3dd2924
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-12T20:04:51Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789243366-83852-733632086`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=17200; instrumented_payload=17302; inline_combined=21119; file=17375
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md
+- HEAD: `8b17fa9d96961683feffe92f6a54729a255a1f1b`
+- Artifact-Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Artifact-SHA: `8b17fa9d96961683feffe92f6a54729a255a1f1b`
+- Artifact-Ref: `refs/pil/gate-artifacts/8b17fa9d96961683feffe92f6a54729a255a1f1b`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md, core/INVARIANTS.md
+- Start: 2026-09-12T20:02:46Z
+- End: 2026-09-12T20:04:51Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-1fbe14e63460d767672bd9aa
+    CANARIES: PIL-INGEST-01fcc6e10435 PIL-INGEST-02fa74440a25
+    
+    The design for the automated frozen Gemini subscription transport has severe structural flaws relating to how it verifies the repository and handles process teardown. It introduces major False-FAIL traps and TOCTOU vulnerabilities by operating on the live tree instead of a scratch copy.
+    
+    ### 1. BLOCKER: Invariant Violation (Epistemic Rule #6) — Moving Tree & False-FAIL Trap
+    **§ Section:** `Non-negotiable automated transport shape` & `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The design mandates taking a "deterministic pre-launch repository-state baseline" and comparing it after the run, explicitly excluding only the sanctioned journal. Because `agy` can take minutes to stream a response, any concurrent, legitimate developer activity in the live repository (e.g., saving a file, a background compile, an IDE updating its index) will mutate the tree. The post-run comparison will detect this and hard-fail the review.
+    **Why it matters:** This violates Epistemic Rule #6 ("Reviewers judge a pinned revision, not a moving tree... Run controls on a scratch copy") and creates a massive False-FAIL check on legitimate data. It penalizes users for not sitting idle during a background review.
+    **Fix:** Remove the whole-repository state comparison. Run the review against a frozen scratch copy of the exact tuple. A scratch copy trivially prevents the LLM from mutating the real repo and guarantees a pinned revision without false-failing on the user's independent git activity.
+    
+    ### 2. HIGH: Mechanism Correctness — Validate-at-X-but-stamp-at-Y (TOCTOU)
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The runner parses the NDJSON stream and processes the `final-result` verdict from `agy`. However, the repository-state baseline comparison and tuple re-check occur in the "always-executed owned teardown path". If the runner writes the durable receipt upon receiving the successful `final-result` packet but *before* teardown completes, a mutating or escaping `agy` run will successfully stamp a valid receipt before the mutation check has a chance to fail the transport.
+    **Why it matters:** Silent data safety gap. A compromised or misbehaving agent run could successfully authorize a malicious payload because the binding verdict is recorded before the transport security invariants are verified.
+    **Fix:** The runner must buffer the verdict and *only* write the durable receipt to the journal *after* the teardown and all post-flight verifications (including the tuple recheck) have fully passed.
+    
+    ### 3. HIGH: Concurrency / Lock Hazards — Orphaned Single-Flight Lock
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The runner acquires a "per-repository single-flight ownership" lock and releases it manually "on every path" (normal success, timeout, abnormal exit). If the runner script itself is forcefully terminated (e.g., `kill -9`, OOM killer, host power loss), the teardown trap never executes.
+    **Why it matters:** Violates the "Idempotency / partial-failure" invariant regarding "a non-transactional multi-step write that leaves orphans." The repository becomes permanently wedged, requiring manual intervention to unblock future reviews.
+    **Fix:** Use an OS-managed lock tied to the process lifecycle that the kernel automatically reaps on death (e.g., `flock` on a file descriptor), rather than application-level state bookkeeping.
+    
+    ### 4. MEDIUM: Mechanism Correctness — False-FAIL on `Stderr is failure`
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The design dictates that "Stderr is failure". If the underlying `agy` runtime (e.g., Node.js or Python) emits a non-fatal ambient warning to stderr (like `ExperimentalWarning`, a deprecation notice from a transitive dependency, or a network retry log), the runner will instantly abort the review.
+    **Why it matters:** Brittle transport that violates the "False-FAIL checks on legitimate data" invariant. A minor runtime update could permanently break all automated gate reviews until patched.
+    **Fix:** Do not make any stderr output a binding failure condition. Fail explicitly on nonzero exit codes, timeouts, malformed NDJSON streams, or explicit FATAL event types in the protocol.
+    
+    ### 5. MEDIUM: Concurrency / Lock Hazards — O(N) Work Inside the Write Lock
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** Computing a "deterministic pre-launch repository-state baseline" and comparing it post-run requires an O(N) hash/walk of the entire repository tree. Doing this work *inside* the "per-repository single-flight ownership" lock means the lock-hold time scales with repository size, rather than just the review duration.
+    **Why it matters:** Violates the invariant forbidding "O(N)-growing or network/IO work done INSIDE the one process-wide write lock." For massive monorepos, computing the tree hash might block all other concurrent review attempts severely.
+    **Fix:** (Resolved if Finding #1 is implemented to use a scratch copy). Otherwise, ensure the lock only protects the write to the sanctioned journal, not the baseline computation.
+    
+    ***
+    
+    **Highest-risk thing to resolve first:** The live-tree repository baseline check (Finding #1). It breaks the core guarantee of reviewing a pinned revision and will cause continuous false failures for active developers.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md, core/INVARIANTS.md
+    
+    PIL-DONE-5f80d233952c5549cc540ee6
+
+## Gemini frozen gate attempt — FAILED_TRANSPORT — 2026-09-13T01:04:49.009Z
+
+- Status: `FAILED_TRANSPORT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:d2fd92a87eceb55a4de831c3b483b50053f8dce238d78f73ce718c0f63ec9934|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-a7ada77072161c5b5844908c`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `2da62f2aa39624aedf500466443419ca0d17513127e01e025929a4a82e0d6cd8`
+- Failure-Class: `TRANSPORT`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `b847a2d2c85c891b292d42fcb8ff932191c1cd2d`
+- Tree: `22c32c604273682ae1ed43110d6cf2ff669efbf7`
+- Plan-ID: `85d776a83a4a42c5ea5475d1dddd450256185ff24bdc3254029ef84179dd77ec`
+- Slice: `coverage-001`
+- Material-SHA256: `a2f60ccd76efc87f52d63da73db50cd2befc56357b47197138cc1eac2febde17`
+- Envelope-SHA256: `6a18a20fa88c6ced819bc7fdadee4f4501a4df85c9a930757727efdf97896c2d`
+- Envelope-Bytes: `81837`
+- Ordered-Contributors: `(none)`
+- Diagnostic: `agy init does not prove the required disposable request-review rig`
+- Record-SHA256: `814d00f52082905f5247c99346e859fe9c78e8679f83af22a0ea24fd92d227b2`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — FAILED_TRANSPORT — 2026-09-13T01:55:53.962Z
+
+- Status: `FAILED_TRANSPORT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:58f00250840d25d0d89b371d279b1962dc5b5779c77af7c98fdd6a590461e65e|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-11c011b2356f3bca96800b85`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `7e14184e21851510dfc9f06b97d0e7785a168752f731bf1fa06d8a7091a5a04b`
+- Failure-Class: `TRANSPORT`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `63cc1775be48c7784da4b139bb0e588dc0e36829`
+- Tree: `b51d4852c04fae66a5c36468e7db338ee89d42ed`
+- Plan-ID: `e299beba9369cc8ade87ea7b755d76d5461b079aadf73895de342b1908e04c09`
+- Slice: `coverage-001`
+- Material-SHA256: `1a64e5ca5b0a23a7a933904fda4a4773dfaedbc6548512dfc564d822a9e62feb`
+- Envelope-SHA256: `fc7dcb7271ce5abcc29ef35faa2f14e13b941bc6d7cbc373dd678c576a4fd8b8`
+- Envelope-Bytes: `81840`
+- Ordered-Contributors: `(none)`
+- Diagnostic: `agy stream has an invalid step lifecycle`
+- Record-SHA256: `b2d1061df8adc764c1bf4f51aceb503a00bf97e530e316d28b032fb5d11f89a6`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:01:38.551Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-19e76515f9448ea6ee951e2d`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-001`
+- Material-SHA256: `912c0d89c31d440b6da65b59ab2a3fdff6f3de079618970cf0a393ded4be01c8`
+- Envelope-SHA256: `490f8f2e915d1cd4082f8d22eb22590ac99d219d86f192a062b81bcca6582cc9`
+- Envelope-Bytes: `81879`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-001","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["PORTABILITY.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"912c0d89c31d440b6da65b59ab2a3fdff6f3de079618970cf0a393ded4be01c8","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"PORTABILITY.md","component_kind":"frozen_source","component_byte_length":61963,"component_sha256":"8bf0513b5611364773c7453cf24d75a8d87f3d3fc6eb64c2a1160388ffdfcb9e","byte_start":0,"byte_end":57311,"fragment_sha256":"e119896dab68610b29007ff404d60f3dd76e4558ae5a5722364e51721e7c9f85","range_status":"partial"}]}`
+- Reply-SHA256: `b421cc4e3015cfe09c3d0cf564abecc0813030adedf804b3eaa331e70fb71adf`
+- Completion-Token-SHA256: `22e0716726f7c350981028607a684b9cab457833706f34ef533bab8e30c60d48`
+- Reply-UTF8-Base64: `RklORElOR1M6Ci0gVGhlIHN1cHBsaWVkIGBQT1JUQUJJTElUWS5tZGAgZnJhZ21lbnQgYWxpZ25zIHRpZ2h0bHkgd2l0aCB0aGUgZXBpc3RlbWljIHJ1bGVzIGZyb20gYGNvcmUvSU5WQVJJQU5UUy5tZGAsIHBhcnRpY3VsYXJseSB0aGUgbWFuZGF0ZSBhZ2FpbnN0IG1hbnVmYWN0dXJpbmcgYXNzdXJhbmNlIChSdWxlIDEwKS4gSXQgZXh0ZW5zaXZlbHkgZGV0YWlscyB0aGUgYWN0dWFsIG1lY2hhbmljYWwgZW5mb3JjZW1lbnQgYm91bmRhcmllcyB2ZXJzdXMgZG9jdW1lbnRhdGlvbiBkb2N0cmluZSwgYXZvaWRpbmcgYW55IGZhbHNlIG1pdGlnYXRpb24gY2xhaW1zIChlLmcuLCBleHBsaWNpdGx5IHN0YXRpbmcgdGhhdCBgZ3VhcmQtb3duZXItY29tbXMubWpzYCBpcyBhIGZhaWwtb3BlbiBzZW5zb3IgYW5kIHRoYXQgdGhlIGBwcmUtY29tbWl0YCBmbG9vciBjYW4gbGVhdmUgYSBsZWZ0b3ZlciBkZWNsYXJhdGlvbiBhbGxvd2luZyBhIGNvbW1pdCkuCi0gVGhlIGRvY3VtZW50IGNvcnJlY3RseSByZWZsZWN0cyB0aGUgYGRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZGAgY29udHJhY3QgZGV0YWlscyByZWdhcmRpbmcgdGhlIGBjb2xkLXJldmlldy1nZW1pbmkuc2hgIGdhdGUgcnVubmVyIHdyYXBwaW5nIGBhZ3lgIGFzIHRoZSBHZW1pbmkgdHJhbnNwb3J0LCBub3RpbmcgaXRzIHNhbmRib3ggdXNhZ2UsIHRoZSBmYWxsYmFjayB0byBtYW51YWwgd2ViIGV4cG9ydC9pbXBvcnQsIGFuZCB0aGUgZXhwbGljaXQgcmVmdXNhbCBvZiBkaXJlY3QgUkVTVC9BUEkga2V5cyAoYGNvcmUvUkVQT19JTlZBUklBTlRTLm1kYCBjb21wbGlhbmNlKS4gCi0gTm8gY29uY3JldGUgcmVhY2hhYmxlIGhhcm0sIHJlZ3Jlc3Npb24sIG9yIGZhbHNlbHkgY2xhaW1lZCBmaXggd2FzIGludHJvZHVjZWQgd2l0aGluIHRoZSBjaGVja2VkIHNjb3BlLiBJbmhlcml0ZWQgbGltaXRhdGlvbnMgYXJlIHRob3JvdWdobHkgbmFtZWQgYW5kIGFjY3VyYXRlbHkgY2F0ZWdvcml6ZWQuCgpWRVJESUNUOiBHTwpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMDEiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJQT1JUQUJJTElUWS5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjkxMmMwZDg5YzMxZDQ0MGI2ZGE2NWI1OWFiMmEzZmRmZjZmM2RlMDc5NjE4OTcwY2YwYTM5M2RlZDRiZTAxYzgiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjpmYWxzZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiUE9SVEFCSUxJVFkubWQiLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjYxOTYzLCJjb21wb25lbnRfc2hhMjU2IjoiOGJmMDUxM2I1NjExMzY0NzczYzc0NTNjZjI0ZDc1YThkODdmM2QzZmM2ZWI2NGMyYTExNjAzODhmZmRmY2I5ZSIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjo1NzMxMSwiZnJhZ21lbnRfc2hhMjU2IjoiZTExOTg5NmRhYjY4NjEwYjI5MDA3ZmY0MDRkNjBmM2RkNzZlNDU1OGFlNWE1NzIyMzY0ZTUxNzIxZTdjOWY4NSIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELTQyYjViNmViYTI4ODRjZTJkYmQ2ZDgxMiB8IFBJTC1JTkdFU1QtTUlERExFLWJjNGFjZjcyOGUwZDQyMTJkNGE1MDFhOCB8IFBJTC1JTkdFU1QtRU9GLTM5MzE1ZmMwZTNhNDAyYmI4MTNmMTdhNgpQSUwtRE9ORS05MzJiYWI2ZWExYWMwNWYwZTI3YzQ1MzAK`
+- Record-SHA256: `abfeec73efe0430ff35dce4d4f8bb962cca36c173ac2f76af80c9db5a37314bd`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:02:06.332Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-30e0381cbbfd30e041896069`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-002`
+- Material-SHA256: `f493b0323690724a8e9b869ec67469ec64deca7cae0bb5090ce0d7a8301b0ba5`
+- Envelope-SHA256: `fc9521730a2b0e1e90d6aeb6df9efb5e80369a2d2961540bb17dfae126997609`
+- Envelope-Bytes: `44607`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-002","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["PORTABILITY.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"f493b0323690724a8e9b869ec67469ec64deca7cae0bb5090ce0d7a8301b0ba5","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"PORTABILITY.md","component_kind":"frozen_source","component_byte_length":61963,"component_sha256":"8bf0513b5611364773c7453cf24d75a8d87f3d3fc6eb64c2a1160388ffdfcb9e","byte_start":57311,"byte_end":61963,"fragment_sha256":"55b860a073fec412f895f624b4c104902f9dddf0670980b2c302cdae1a48203f","range_status":"partial"},{"path":"PORTABILITY.md","component_kind":"per_file_diff","component_byte_length":14218,"component_sha256":"ef5c26a999115e059b60cf53748272e88678ee542fb4a6c795597cbf6dd0ee19","byte_start":0,"byte_end":117,"fragment_sha256":"4bafb5e9c03fd0fc586d1cab1a8f05f081d3882d75cbcc1edd58abd37c490482","range_status":"partial"},{"path":"PORTABILITY.md","component_kind":"per_file_diff","component_byte_length":14218,"component_sha256":"ef5c26a999115e059b60cf53748272e88678ee542fb4a6c795597cbf6dd0ee19","byte_start":117,"byte_end":14218,"fragment_sha256":"3171e276e6eb3767582055e93f7e3d6b1580e88173ae06ed14c0c3bf2a896295","range_status":"partial"}]}`
+- Reply-SHA256: `4cdb1e46a3097d5b8e95004c5e3a5089be5c70550623148227c6a0cbb638f0b3`
+- Completion-Token-SHA256: `4444feb0bdfa2ee923490afee63a35b8a496505723278fa7af1b3233b6bf1d82`
+- Reply-UTF8-Base64: `KipGaW5kaW5nczoqKgpUaGUgZGlmZiB1cGRhdGVzIHRoZSBkb2N1bWVudGF0aW9uIGluIGBQT1JUQUJJTElUWS5tZGAgcmVnYXJkaW5nIGV4dGVybmFsIHRvb2wgZGVwZW5kZW5jaWVzIGZvciBgY29sZC1yZXZpZXctZ2VtaW5pLnNoYC4gVGhlIHVwZGF0ZWQgdGV4dCBjb3JyZWN0bHkgYWxpZ25zIHdpdGggdGhlIHByb3ZpZGVkIGBkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWRgIGNvbnRyYWN0LiBJdCBjb3JyZWN0bHkgc3BlY2lmaWVzIHRoZSB1c2Ugb2YgdGhlIGBhZ3lgIENMSSBmb3IgYXV0b21hdGVkIHJldmlldyBpbiBhIGRpc3Bvc2FibGUgcmlnLCB0aGUgcHJlc2VydmF0aW9uIG9mIHRoZSBzdHJpY3QgbWFudWFsIGV4cG9ydC9pbXBvcnQgZmFsbGJhY2ssIGFuZCBleHBsaWNpdGx5IG5vdGVzIHRoYXQgaXQgbmV2ZXIgdXNlcyBhIFJFU1QvQVBJIHJvdXRlIG9yIGBHRU1JTklfQVBJX0tFWWAuIE5vIHJlZ3Jlc3Npb25zIG9yIGludmFyaWFudCB2aW9sYXRpb25zIHdlcmUgaWRlbnRpZmllZCBpbiB0aGlzIHNsaWNlLgoKVkVSRElDVDogR08KCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAwMiIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiYjFkNWI0MDIzNmVlZjMxNzBiZjZlM2Y5ODFkYzZhNmQ3NjcyZTJkMyIsImNhbmRpZGF0ZSI6IjcxMmVhYTY5MmM5OWE0MWNmYThhZTU4ZjNlMzcwOTc4OWJiOGExMDgiLCJ0cmVlIjoiYjQ2NWEzNDkxNzU3MGZkY2JlZWM2MDYzMTFmOWJjOWE4OTI0Mzg4NyIsImZpbGVzIjpbIlBPUlRBQklMSVRZLm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiZjQ5M2IwMzIzNjkwNzI0YThlOWI4NjllYzY3NDY5ZWM2NGRlY2E3Y2FlMGJiNTA5MGNlMGQ3YTgzMDFiMGJhNSIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6IlBPUlRBQklMSVRZLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo2MTk2MywiY29tcG9uZW50X3NoYTI1NiI6IjhiZjA1MTNiNTYxMTM2NDc3M2M3NDUzY2YyNGQ3NWE4ZDg3ZjNkM2ZjNmViNjRjMmExMTYwMzg4ZmZkZmNiOWUiLCJieXRlX3N0YXJ0Ijo1NzMxMSwiYnl0ZV9lbmQiOjYxOTYzLCJmcmFnbWVudF9zaGEyNTYiOiI1NWI4NjBhMDczZmVjNDEyZjg5NWY2MjRiNGMxMDQ5MDJmOWRkZGYwNjcwOTgwYjJjMzAyY2RhZTFhNDgyMDNmIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6IlBPUlRBQklMSVRZLm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNDIxOCwiY29tcG9uZW50X3NoYTI1NiI6ImVmNWMyNmE5OTkxMTVlMDU5YjYwY2Y1Mzc0ODI3MmU4ODY3OGVlNTQyZmI0YTZjNzk1NTk3Y2JmNmRkMGVlMTkiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTE3LCJmcmFnbWVudF9zaGEyNTYiOiI0YmFmYjVlOWMwM2ZkMGZjNTg2ZDFjYWIxYThmMDVmMDgxZDM4ODJkNzVjYmNjMWVkZDU4YWJkMzdjNDkwNDgyIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6IlBPUlRBQklMSVRZLm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNDIxOCwiY29tcG9uZW50X3NoYTI1NiI6ImVmNWMyNmE5OTkxMTVlMDU5YjYwY2Y1Mzc0ODI3MmU4ODY3OGVlNTQyZmI0YTZjNzk1NTk3Y2JmNmRkMGVlMTkiLCJieXRlX3N0YXJ0IjoxMTcsImJ5dGVfZW5kIjoxNDIxOCwiZnJhZ21lbnRfc2hhMjU2IjoiMzE3MWUyNzZlNmViMzc2NzU4MjA1NWU5M2Y3ZTNkNmIxNTgwZTg4MTczYWUwNmVkMTRjMGMzYmYyYTg5NjI5NSIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CgpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC0yYTk2ODQ2NGE1MTY2MTU3MzBiNTMxZmYgfCBQSUwtSU5HRVNULU1JRERMRS03YmU3ZTJlMWU3MjcyYThlZWJiMjNiMTYgfCBQSUwtSU5HRVNULUVPRi00NTQ5M2FlYzE1ZmJlYTM5OGI2MGQzYjYKClBJTC1ET05FLWE4MDY3YmQxMTA5Y2EwNmUyMmE4Y2IyNAo=`
+- Record-SHA256: `4db262e93caa7d315d29687c1c12459211662c14fcfe90e45935b12107a2b067`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:03:31.963Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-8f6d855a7bb26f4c797f9916`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-003`
+- Material-SHA256: `2125a156889b32a038c9861e8ae46e96158e49805937ad5b3909f14220de55ac`
+- Envelope-SHA256: `9858585b0a04e62e4171253758920b68143181d56d88aa43e59f1c4c8d5aecd5`
+- Envelope-Bytes: `81870`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-003","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["README.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"2125a156889b32a038c9861e8ae46e96158e49805937ad5b3909f14220de55ac","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"README.md","component_kind":"frozen_source","component_byte_length":163015,"component_sha256":"3d03e6b438b366de84557fa4df7fa4e490b48f8f42b95d44cbac48de40c87ae1","byte_start":0,"byte_end":57330,"fragment_sha256":"a962db72c030c304fa99887442d8c13586df308af9949dc1bbb274bbf13c3c1b","range_status":"partial"}]}`
+- Reply-SHA256: `44ba9f39b31218fb9ce452f9c69e3de683fb9444b29c43b51a86a070a68109ba`
+- Completion-Token-SHA256: `688fe0e72f02f1208f2af8ee840945a7dba13f74e50b5e2c653771fa38fc84a6`
+- Reply-UTF8-Base64: `RklORElOR1M6CjEuIFRoZSBgdjIuMzIuMGAgcmVsZWFzZSBub3RlIGFjY3VyYXRlbHkgcmVmbGVjdHMgdGhlIGRlc2lnbiBhbmQgY29uc3RyYWludHMgc3BlY2lmaWVkIGluIHRoZSBgZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kYCBjb250cmFjdC4gSXQgY29ycmVjdGx5IHN1bW1hcml6ZXMgdGhlIHVzZSBvZiB0aGUgYGFneWAgc3Vic2NyaXB0aW9uIHRyYW5zcG9ydCBpbiBhIGRpc3Bvc2FibGUgZW1wdHkgd29ya3NwYWNlLCB0aGUgcGlubmluZyBvZiB0aGUgZXhhY3QgdHVwbGUgYW5kIHBsYW4sIHRoZSByZWplY3Rpb24gb2YgdG9vbCBhbmQgc3ViYWdlbnQgYWN0aXZpdHksIHRoZSByZXF1aXJlbWVudCBvZiBvd25lZC1wcm9jZXNzIHRlYXJkb3duIGFuZCBwb3N0LWZsaWdodCBjaGVja3MsIGZhaWxpbmcgY2xvc2VkIG9uIGRyaWZ0IG9yIG11dGF0aW9uLCBhbmQgdGhlIGFic29sdXRlIGFic2VuY2Ugb2YgUkVTVC9BUEkgY3JlZGVudGlhbHMgb3IgYmlsbGluZy4gTm8gY29uY3JldGUgcmVhY2hhYmxlIGhhcm0sIGZhbHNlIG1pdGlnYXRpb24sIG9yIGNvbnRyYWN0IGRyaWZ0IGlzIGludHJvZHVjZWQuCjIuIFBSRUVYSVNUSU5HL05PTkJMT0NLSU5HOiBUaGUgYHYyLjYuMWAgc2VjdGlvbiBpbiB0aGUgYFJFQURNRS5tZGAgZnJhZ21lbnQgY29udGFpbnMgYSBwYXJhZ3JhcGggdW5kZXIgIkRFQ0xBUkVEIFJFU0lEVUFMUyIgdGhhdCBleHBsaWNpdGx5IHN0YXRlczogIlNpeCBjb25zdHJ1Y3Rpb25zIG9mIGl0IHdlcmUgYXR0ZW1wdGVkOyBhbGwgc2l4IGZhaWxlZCBDTE9TRUQiLiBUaGlzIGNvbnN0aXR1dGVzIHRoZSBhdXRob3IncyBhZHZvY2FjeSBhbmQgZXhwbGljaXRseSBsaXN0cyB2ZXJpZmljYXRpb24gcmVzdWx0cywgd2hpY2ggdmlvbGF0ZXMgdGhlIHZlcnkgcnVsZSBpdCBjaXRlcyBlYXJsaWVyIGluIHRoZSBub3RlIChgY29yZS9SRVZJRVcubWRgIMKnIENvbGQgcmV2aWV3OiAiZm9yYmlkcyBoYW5kaW5nIGEgcmV2aWV3ZXIgdGhlIGF1dGhvcidzIGFkdm9jYWN5IikuIEJlY2F1c2UgdGhpcyBpcyBhIHByZWV4aXN0aW5nIGluaGVyaXRlZCBsaW1pdGF0aW9uIGluIGFuIG9sZGVyIHJlbGVhc2Ugbm90ZSB0aGF0IHRoZSBjYW5kaWRhdGUgZG9lcyBub3QgZXhwb3NlLCB3b3JzZW4sIG9yIGZhbHNlbHkgY2xhaW0gdG8gZml4LCBpdCBjYW5ub3QgcHJvZHVjZSBhIE5PLUdPIGZvciB0aGlzIHNwZWNpZmljIGNoYW5nZSBzbGljZS4KClZFUkRJQ1Q6IEdPCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAwMyIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiYjFkNWI0MDIzNmVlZjMxNzBiZjZlM2Y5ODFkYzZhNmQ3NjcyZTJkMyIsImNhbmRpZGF0ZSI6IjcxMmVhYTY5MmM5OWE0MWNmYThhZTU4ZjNlMzcwOTc4OWJiOGExMDgiLCJ0cmVlIjoiYjQ2NWEzNDkxNzU3MGZkY2JlZWM2MDYzMTFmOWJjOWE4OTI0Mzg4NyIsImZpbGVzIjpbIlJFQURNRS5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjIxMjVhMTU2ODg5YjMyYTAzOGM5ODYxZThhZTQ2ZTk2MTU4ZTQ5ODA1OTM3YWQ1YjM5MDlmMTQyMjBkZTU1YWMiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjpmYWxzZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiUkVBRE1FLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNjMwMTUsImNvbXBvbmVudF9zaGEyNTYiOiIzZDAzZTZiNDM4YjM2NmRlODQ1NTdmYTRkZjdmYTRlNDkwYjQ4ZjhmNDJiOTVkNDRjYmFjNDhkZTQwYzg3YWUxIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjU3MzMwLCJmcmFnbWVudF9zaGEyNTYiOiJhOTYyZGI3MmMwMzBjMzA0ZmE5OTg4NzQ0MmQ4YzEzNTg2ZGYzMDhhZjk5NDlkYzFiYmIyNzRiYmYxM2MzYzFiIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtOGViODRjOWVlYjgyYTkyZmY2Y2IyNjVlIHwgUElMLUlOR0VTVC1NSURETEUtMWRmZWI2ODRmYmQ0YzliYmRhYTlmODIwIHwgUElMLUlOR0VTVC1FT0YtMTliNmNmMTNhYmEzNjVjYTg2OGUzMjExCgpQSUwtRE9ORS03MWNiNGI3ZjhhMGU0NWExMGM3NTRmMjMK`
+- Record-SHA256: `9250e2844018c9cb603b5ac11c667ebd4658f6d5a223a3dfdba6eda0e8e7bc53`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:07:50.664Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-44802274f800dbfdd5a10822`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-004`
+- Material-SHA256: `6b5c5bb7c8aa4b1c33b4093f7c63574ac5a39f2a0fbb362b14729034620d082b`
+- Envelope-SHA256: `092a873913c5a5b3d04f9a28308394e23a204ebe51a5f5507b707cd2d682b79f`
+- Envelope-Bytes: `81910`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-004","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["README.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"6b5c5bb7c8aa4b1c33b4093f7c63574ac5a39f2a0fbb362b14729034620d082b","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"README.md","component_kind":"frozen_source","component_byte_length":163015,"component_sha256":"3d03e6b438b366de84557fa4df7fa4e490b48f8f42b95d44cbac48de40c87ae1","byte_start":57330,"byte_end":114621,"fragment_sha256":"08555e67145fb584567794c77b1bd781bc0915a76e66995cc0ff2d545b857c1d","range_status":"partial"}]}`
+- Reply-SHA256: `1b321ef1e9bf4c5c98507ca79a3e97aefb695f4462f5085c4da887f43073fbf1`
+- Completion-Token-SHA256: `25275abb9d29dbd161dd9afa6d581a252c6696531cb9b4b08cf49a1bd35d9cf7`
+- Reply-UTF8-Base64: `KipGSU5ESU5HUzoqKgoKMS4gKipGYWlsLU9wZW4gRmFsbGJhY2sgaW4gYHNlbnNvci1zd2VlcC1vd2VkYCAoSW52YXJpYW50IDYgVmlvbGF0aW9uIGluIFVuZGVybHlpbmcgQ29kZSk6KioKICAgVGhlIHYyLjIuMSBzZWN0aW9uIG5vdGVzIHRoYXQgYSBjcmFzaCB3YXMgZml4ZWQgYnkgImRlZ3JhZGluZyBpbnN0ZWFkIG9mIGNyYXNoaW5nOiBpZiB0aGUgbW9kdWxlIGNhbm5vdCBiZSBsb2FkZWQgdGhlIHNlbnNvciBrZWVwcyBpdHMgc2tpbGwtcGF0aCBjb3ZlcmFnZS4uLiBhbmQgc3RpbGwgZXhpdHMgMC4iIFRyZWF0aW5nIGFuIHVucmVhZGFibGUgZGVwZW5kZW5jeS9pbnB1dCBieSBkZWdyYWRpbmcgYW5kIGV4aXRpbmcgMCBleHBsaWNpdGx5IGltcGxlbWVudHMgYSBmYWlsLW9wZW4gcGF0dGVybiB0byB0aGUgbW9zdCBwZXJtaXNzaXZlIHN0YXRlLiBUaGlzIHZpb2xhdGVzIEludmFyaWFudCA2ICgiRmFpbCBjbG9zZWQuIFVuZGVjbGFyZWQsIG1hbGZvcm1lZCwgc3RhbGUsIG9yIHVucmVhZGFibGUgaW5wdXQgdG8gYSBjb250cm9sIOKHkiBCTE9DSywgbmV2ZXIgcHJvY2VlZC4iKS4gU2luY2UgdGhpcyByZXZpZXcgc2NvcGUgY292ZXJzIG9ubHkgdGhlIGBSRUFETUUubWRgIHRleHQgYW5kIGxhY2tzIGV4YWN0IGBwZXJfZmlsZV9kaWZmYCB0cmFuc2l0aW9uIGV2aWRlbmNlLCB0aGlzIGNhbm5vdCBlc3RhYmxpc2ggY2hhbmdlIGF0dHJpYnV0aW9uIGhlcmUsIGJ1dCB0aGUgY29kZSBpbXBsZW1lbnRhdGlvbiBpdCBkZXNjcmliZXMgaW50cm9kdWNlcyBhIGNvbmNyZXRlIGhhcm0uCgoyLiAqKkRvcm1hbnQgQ29udHJvbHMgTWFudWZhY3R1cmVkIHZpYSBOYW1pbmcgKEludmFyaWFudCAxMCBWaW9sYXRpb24gaW4gVW5kZXJseWluZyBDb2RlKToqKgogICBUaGUgdjIuNS4wIHNlY3Rpb24gZGVzY3JpYmVzIGBndWFyZC1nYXRlLWxhZGRlci5tanNgIGFuZCBleHBsaWNpdGx5IHN0YXRlcyB0aGF0IGl0ICJuZXZlciBkZW5pZXMiLiBOYW1pbmcgYSBzY3JpcHQgd2l0aCB0aGUgYGd1YXJkLWAgcHJlZml4IHdoZW4gaXQgZG9lcyBub3QgYmluZCBvciBkZW55IGFueXRoaW5nIG1hbnVmYWN0dXJlcyBhc3N1cmFuY2Ugd2hpbGUgcmVtYWluaW5nIGRvcm1hbnQsIHZpb2xhdGluZyBJbnZhcmlhbnQgMTAgKCJBIGRvcm1hbnQgY29udHJvbCBpcyB3b3JzZSB0aGFuIG5vIGNvbnRyb2wuIEl0IG1hbnVmYWN0dXJlcyBhc3N1cmFuY2Ugd2hpbGUgYmluZGluZyBub3RoaW5nLiIpLiBUaGUgYFJFQURNRS5tZGAgdGV4dCBpcyBob25lc3QgYWJvdXQgdGhpcyBsaW1pdGF0aW9uICgidGhleSBhcmUgY2hlYXAgcHJlY2lzZWx5IGJlY2F1c2UgdGhleSBhcmUgaG9uZXN0IGFib3V0IGJlaW5nIGNoZWNrbGlzdHMiKSwgc28gdGhlIHRleHQgaXRzZWxmIGRvZXMgbm90IG1ha2UgYSBmYWxzZSBjbGFpbSwgYnV0IHRoZSBkZXNjcmliZWQgbWVjaGFuaXNtIGlzIGZsYXdlZC4KCjMuICoqVW5kZWNsYXJlZCBDb25maWd1cmF0aW9uIEZhaWxpbmcgT3BlbiAoSGlzdG9yaWNhbCBJc3N1ZSk6KioKICAgVGhlIHYyLjEuMSBzZWN0aW9uIGRvY3VtZW50cyB0aGF0IG9taXR0aW5nIGEgZmxhZyByZXNldHMgdGhlIGNvbmZpZ3VyYXRpb24gdG8gYHt9YCwgd2hpY2ggIndpZGVucyB0aGUgd3JpdGUgZ3VhcmQiIChhbiB1bmRlY2xhcmVkIGlucHV0IHJlc3VsdGluZyBpbiBhIG1vcmUgcGVybWlzc2l2ZSBzdGF0ZSwgdmlvbGF0aW5nIEludmFyaWFudCA2KS4gVGhlIHRleHQgYWNjdXJhdGVseSBhbm5vdGF0ZXMgdGhpcyBhcyBhIGhpc3RvcmljYWwgYnVnIHN1cGVyc2VkZWQgYnkgdjIuMTYuMCwgd2hlcmUgdGhlIHNjcmlwdCBub3cgcmVmdXNlcyB0aGUgcmV3cml0ZSBhbmQgZXhpdHMgbm9uemVybyAoZmFpbGluZyBjbG9zZWQpLgoKNC4gKipObyBGYWxzZSBDbGFpbXMgaW4gdGhlIERvY3VtZW50YXRpb24gKENvbXBsaWFuY2Ugd2l0aCBFcGlzdGVtaWMgUnVsZXMpOioqCiAgIFRoZSBjYW5kaWRhdGUgdGV4dCBtZXRpY3Vsb3VzbHkgYWRoZXJlcyB0byBlcGlzdGVtaWMgaG9uZXN0eS4gSXQgYWNjdXJhdGVseSBzdGF0ZXMgd2hhdCBjb250cm9scyAqY2Fubm90KiBkbyAoZS5nLiwgYGd1YXJkLW93bmVyLWNvbW1zLm1qc2AgZmFpbGluZyBvcGVuLCBzaWRlY2FycyBub3QgZ3VhcmFudGVlaW5nIGV4ZWN1dGlvbiwgdGhlIGNvbW1pdCBmbG9vciBsYWNraW5nIHNlc3Npb24gY29udGV4dCkgYW5kIHZhbGlkYXRlcyBpdHMgb3duIGNsYWltcyAobWVhc3VyaW5nIHRoZSBibGFzdCByYWRpdXMgd2l0aCBjYW5hcmllcywgZGlmZmVyZW50aWF0aW5nIGJldHdlZW4gc3BlbGxpbmdzIGFuZCBjbGFpbXMpLiBUaGUgUkVBRE1FIG1ha2VzIG5vIGZhYnJpY2F0ZWQgY2xhaW1zIG9yIGZhbHNlIG1pdGlnYXRpb25zLgoKVkVSRElDVDogR08KCklOU1BFQ1RFRCBTQ09QRToKeyJzbGljZSI6ImNvdmVyYWdlLTAwNCIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiYjFkNWI0MDIzNmVlZjMxNzBiZjZlM2Y5ODFkYzZhNmQ3NjcyZTJkMyIsImNhbmRpZGF0ZSI6IjcxMmVhYTY5MmM5OWE0MWNmYThhZTU4ZjNlMzcwOTc4OWJiOGExMDgiLCJ0cmVlIjoiYjQ2NWEzNDkxNzU3MGZkY2JlZWM2MDYzMTFmOWJjOWE4OTI0Mzg4NyIsImZpbGVzIjpbIlJFQURNRS5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjZiNWM1YmI3YzhhYTRiMWMzM2I0MDkzZjdjNjM1NzRhYzVhMzlmMmEwZmJiMzYyYjE0NzI5MDM0NjIwZDA4MmIiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjpmYWxzZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiUkVBRE1FLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNjMwMTUsImNvbXBvbmVudF9zaGEyNTYiOiIzZDAzZTZiNDM4YjM2NmRlODQ1NTdmYTRkZjdmYTRlNDkwYjQ4ZjhmNDJiOTVkNDRjYmFjNDhkZTQwYzg3YWUxIiwiYnl0ZV9zdGFydCI6NTczMzAsImJ5dGVfZW5kIjoxMTQ2MjEsImZyYWdtZW50X3NoYTI1NiI6IjA4NTU1ZTY3MTQ1ZmI1ODQ1Njc3OTRjNzdiMWJkNzgxYmMwOTE1YTc2ZTY2OTk1Y2MwZmYyZDU0NWI4NTdjMWQiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQoKSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtYzA2YTNiMTFhZTA0ZDgyZmI1MjU4NjRkIHwgUElMLUlOR0VTVC1NSURETEUtMGJiZDE2ZDdmOGYzYWUzMzg4OGE2YjJiIHwgUElMLUlOR0VTVC1FT0YtZWRjMGJmYzFlNzA3YjFkYmI0NmQ4YzJkCgpQSUwtRE9ORS00YjY1YWI3Mzg5MzE4NDA1ZWJlNmEwZDkK`
+- Record-SHA256: `be14004e38060511840b01765bc533658d550b1d5c081b7f1382ee0378c13ccc`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:08:14.487Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-6aece2371d55570ea75dfb6b`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-005`
+- Material-SHA256: `dff8c205fd6d72a9dff288b12c47f5b5f72a7e68627de085f2b68f76099de57a`
+- Envelope-SHA256: `e007678333df911f6fcb6fddb8f72938b9cedc811890d6f7ff42b54804368108`
+- Envelope-Bytes: `73775`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-005","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["README.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"dff8c205fd6d72a9dff288b12c47f5b5f72a7e68627de085f2b68f76099de57a","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"README.md","component_kind":"frozen_source","component_byte_length":163015,"component_sha256":"3d03e6b438b366de84557fa4df7fa4e490b48f8f42b95d44cbac48de40c87ae1","byte_start":114621,"byte_end":163015,"fragment_sha256":"0c67acd340e4ade9860f251ebe577b5e54f4d458ad19fc91242e9d548ad66a6f","range_status":"partial"},{"path":"README.md","component_kind":"per_file_diff","component_byte_length":11327,"component_sha256":"745112d0e28af91c8a28dd8127ed4902a885a626d99dfd4f9aaf6de0c2acb993","byte_start":0,"byte_end":97,"fragment_sha256":"78e1b604561b04be9ed8d12ef4877db97d3c28dac14ba7018416b1fba85f8da6","range_status":"partial"}]}`
+- Reply-SHA256: `12b5f52c492670c8bacace43e5782e598c0d2eb8e0ea5c5eb16471ab24d86d7c`
+- Completion-Token-SHA256: `0d749c3ec3bc1019be3a901ed35f8bef57cf64c0db76564c43cbd71ec53c497c`
+- Reply-UTF8-Base64: `RmluZGluZ3M6ClRoZSBzdXBwbGllZCBkaWZmIGZyYWdtZW50IGNvbnRhaW5zIG9ubHkgdGhlIGZpbGUgaGVhZGVyIChgZGlmZiAtLWdpdCAuLi5gKSBmb3IgYFJFQURNRS5tZGAsIHNob3dpbmcgbm8gYWRkZWQgb3IgcmVtb3ZlZCBsaW5lcyB3aXRoaW4gdGhpcyBzbGljZS4gVGhlIHNvdXJjZSBmcmFnbWVudCBjb25zaXN0cyBvZiBoaXN0b3JpY2FsIHJlbGVhc2Ugbm90ZXMgKHYxLjcgdGhyb3VnaCB2MS4xKSBhbmQgZ2VuZXJhbCBhZG9wdGlvbiBpbnN0cnVjdGlvbnMuIEJhc2VkIHN0cmljdGx5IG9uIHRoZSBwcm92aWRlZCBldmlkZW5jZSwgdGhlcmUgaXMgbm8gY29uY3JldGUgcmVhY2hhYmxlIGhhcm0gaW50cm9kdWNlZCwgd29yc2VuZWQsIG9yIGZhbHNlbHkgbWl0aWdhdGVkIGJ5IHRoZSBjYW5kaWRhdGUgY2hhbmdlIGluIHRoaXMgc2NvcGUuCgpWRVJESUNUOiBHTwpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMDUiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJSRUFETUUubWQiXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiJkZmY4YzIwNWZkNmQ3MmE5ZGZmMjg4YjEyYzQ3ZjViNWY3MmE3ZTY4NjI3ZGUwODVmMmI2OGY3NjA5OWRlNTdhIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6dHJ1ZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiUkVBRE1FLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNjMwMTUsImNvbXBvbmVudF9zaGEyNTYiOiIzZDAzZTZiNDM4YjM2NmRlODQ1NTdmYTRkZjdmYTRlNDkwYjQ4ZjhmNDJiOTVkNDRjYmFjNDhkZTQwYzg3YWUxIiwiYnl0ZV9zdGFydCI6MTE0NjIxLCJieXRlX2VuZCI6MTYzMDE1LCJmcmFnbWVudF9zaGEyNTYiOiIwYzY3YWNkMzQwZTRhZGU5ODYwZjI1MWViZTU3N2I1ZTU0ZjRkNDU4YWQxOWZjOTEyNDJlOWQ1NDhhZDY2YTZmIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6IlJFQURNRS5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTEzMjcsImNvbXBvbmVudF9zaGEyNTYiOiI3NDUxMTJkMGUyOGFmOTFjOGEyOGRkODEyN2VkNDkwMmE4ODVhNjI2ZDk5ZGZkNGY5YWFmNmRlMGMyYWNiOTkzIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjk3LCJmcmFnbWVudF9zaGEyNTYiOiI3OGUxYjYwNDU2MWIwNGJlOWVkOGQxMmVmNDg3N2RiOTdkM2MyOGRhYzE0YmE3MDE4NDE2YjFmYmE4NWY4ZGE2IiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtMjE2OGYzMDUxNDQzZjAwMzQ1ODJkMWViIHwgUElMLUlOR0VTVC1NSURETEUtMzZkMzVmOGYxZDZjODdhZjYzYmU1MTY5IHwgUElMLUlOR0VTVC1FT0YtOTVmMmIxZjg2OTNhZWE0ZWJkNmEzMzEwCgpQSUwtRE9ORS1hNTk4M2FiYTVhNDBlNjgzZWZjZTdkMzAK`
+- Record-SHA256: `07cdb8697c77847aad6f15b76de52b1ce6b50a88a90383f9162028d5e796eee1`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:08:49.223Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-a29a73a256c7db47406a2d58`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-006`
+- Material-SHA256: `98e6bbc54312f1adeb43fc9dd0e26699c4e61b7cfb6c3239c9520b43e023cc60`
+- Envelope-SHA256: `9531de14128f9467f5b066fe3bfc69f228b791b3bafd89a3b70774b3e698ce76`
+- Envelope-Bytes: `37779`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-006","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["README.md","VERSION"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"98e6bbc54312f1adeb43fc9dd0e26699c4e61b7cfb6c3239c9520b43e023cc60","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"README.md","component_kind":"per_file_diff","component_byte_length":11327,"component_sha256":"745112d0e28af91c8a28dd8127ed4902a885a626d99dfd4f9aaf6de0c2acb993","byte_start":97,"byte_end":11327,"fragment_sha256":"1860c0c061cfc4c4229bf2362a7698c9ca0a8ff0ab67f7ecfe430f16d9bcb3d4","range_status":"partial"},{"path":"VERSION","component_kind":"frozen_source","component_byte_length":7,"component_sha256":"517704bed2d40bffffbcdc705d8f7c506abc500923b022122ae19b1fc3889374","byte_start":0,"byte_end":7,"fragment_sha256":"517704bed2d40bffffbcdc705d8f7c506abc500923b022122ae19b1fc3889374","range_status":"whole"},{"path":"VERSION","component_kind":"per_file_diff","component_byte_length":117,"component_sha256":"72fb9e793fc956bb7e2bafe24cf2d60da67fd09980c1dba2765de780d740d114","byte_start":0,"byte_end":89,"fragment_sha256":"04973e03a186f43efeeaa1f07e29e0e2a5ea2a8d632755a7150a2c87e28d095a","range_status":"partial"},{"path":"VERSION","component_kind":"per_file_diff","component_byte_length":117,"component_sha256":"72fb9e793fc956bb7e2bafe24cf2d60da67fd09980c1dba2765de780d740d114","byte_start":89,"byte_end":117,"fragment_sha256":"ddfca0ffe3ed136d17898a7e35e0398fe4973ef173cfdca612328b6876827e13","range_status":"partial"}]}`
+- Reply-SHA256: `11725b7c6531ad7fb9587f643a555f569255370b687fd85d6f481b7f46043a28`
+- Completion-Token-SHA256: `eb48f73621e1cf0425b3566966db1a86311ed2012388d544d058e3b69ebfca99`
+- Reply-UTF8-Base64: `RmluZGluZ3M6ClRoZSBjaGFuZ2VzIHRvIGBSRUFETUUubWRgIGNvcnJlY3RseSByZWZsZWN0IHRoZSBgZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kYCBjb250cmFjdCwgc3VtbWFyaXppbmcgdGhlIGludHJvZHVjdGlvbiBvZiB0aGUgYXV0b21hdGVkIEdlbWluaSBzdWJzY3JpcHRpb24gdHJhbnNwb3J0IChgYWd5YCkgYW5kIHRoZSBmYWxsYmFjayBtYW51YWwgdHJhbnNwb3J0IGJlaGF2aW9yLiBUaGUgYFZFUlNJT05gIGJ1bXAgY29ycmVjdGx5IGFkdmFuY2VzIHRoZSB2ZXJzaW9uIHRvIGAyLjMyLjBgLiBObyBpbnZhcmlhbnQgdmlvbGF0aW9ucyBvciBtaXNzaW5nIGNvbnRyb2xzIHdlcmUgaWRlbnRpZmllZCB3aXRoaW4gdGhpcyBkb2N1bWVudGF0aW9uIGFuZCB2ZXJzaW9uIHNsaWNlLgoKVkVSRElDVDogR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDA2IiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMWQ1YjQwMjM2ZWVmMzE3MGJmNmUzZjk4MWRjNmE2ZDc2NzJlMmQzIiwiY2FuZGlkYXRlIjoiNzEyZWFhNjkyYzk5YTQxY2ZhOGFlNThmM2UzNzA5Nzg5YmI4YTEwOCIsInRyZWUiOiJiNDY1YTM0OTE3NTcwZmRjYmVlYzYwNjMxMWY5YmM5YTg5MjQzODg3IiwiZmlsZXMiOlsiUkVBRE1FLm1kIiwiVkVSU0lPTiJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6Ijk4ZTZiYmM1NDMxMmYxYWRlYjQzZmM5ZGQwZTI2Njk5YzRlNjFiN2NmYjZjMzIzOWM5NTIwYjQzZTAyM2NjNjAiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjp0cnVlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJSRUFETUUubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjExMzI3LCJjb21wb25lbnRfc2hhMjU2IjoiNzQ1MTEyZDBlMjhhZjkxYzhhMjhkZDgxMjdlZDQ5MDJhODg1YTYyNmQ5OWRmZDRmOWFhZjZkZTBjMmFjYjk5MyIsImJ5dGVfc3RhcnQiOjk3LCJieXRlX2VuZCI6MTEzMjcsImZyYWdtZW50X3NoYTI1NiI6IjE4NjBjMGMwNjFjZmM0YzQyMjliZjIzNjJhNzY5OGM5Y2EwYThmZjBhYjY3ZjdlY2ZlNDMwZjE2ZDliY2IzZDQiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiVkVSU0lPTiIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6NywiY29tcG9uZW50X3NoYTI1NiI6IjUxNzcwNGJlZDJkNDBiZmZmZmJjZGM3MDVkOGY3YzUwNmFiYzUwMDkyM2IwMjIxMjJhZTE5YjFmYzM4ODkzNzQiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6NywiZnJhZ21lbnRfc2hhMjU2IjoiNTE3NzA0YmVkMmQ0MGJmZmZmYmNkYzcwNWQ4ZjdjNTA2YWJjNTAwOTIzYjAyMjEyMmFlMTliMWZjMzg4OTM3NCIsInJhbmdlX3N0YXR1cyI6Indob2xlIn0seyJwYXRoIjoiVkVSU0lPTiIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTE3LCJjb21wb25lbnRfc2hhMjU2IjoiNzJmYjllNzkzZmM5NTZiYjdlMmJhZmUyNGNmMmQ2MGRhNjdmZDA5OTgwYzFkYmEyNzY1ZGU3ODBkNzQwZDExNCIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjo4OSwiZnJhZ21lbnRfc2hhMjU2IjoiMDQ5NzNlMDNhMTg2ZjQzZWZlZWFhMWYwN2UyOWUwZTJhNWVhMmE4ZDYzMjc1NWE3MTUwYTJjODdlMjhkMDk1YSIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifSx7InBhdGgiOiJWRVJTSU9OIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxMTcsImNvbXBvbmVudF9zaGEyNTYiOiI3MmZiOWU3OTNmYzk1NmJiN2UyYmFmZTI0Y2YyZDYwZGE2N2ZkMDk5ODBjMWRiYTI3NjVkZTc4MGQ3NDBkMTE0IiwiYnl0ZV9zdGFydCI6ODksImJ5dGVfZW5kIjoxMTcsImZyYWdtZW50X3NoYTI1NiI6ImRkZmNhMGZmZTNlZDEzNmQxNzg5OGE3ZTM1ZTAzOThmZTQ5NzNlZjE3M2NmZGNhNjEyMzI4YjY4NzY4MjdlMTMiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC05NTRhYmUwOTdkZDVjMzQ5YzVlOTdhOTQgfCBQSUwtSU5HRVNULU1JRERMRS00OTYyYTFhYWI1MDlhYTM2NDQ0Mjc5MzQgfCBQSUwtSU5HRVNULUVPRi1jNWI1YTI5Njc2ZTRjMTQ2NTM3M2UyYmYKClBJTC1ET05FLTc2ZTliNzZjZDA0MmZjNTU1OTMxYjFjNgo=`
+- Record-SHA256: `1e3ef91787ea0dca00ac162748540605a70418024c1a84c5338528448d5854e8`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:11:02.657Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-18cfac19045df915870f2f58`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-007`
+- Material-SHA256: `cb457b9df15f54683fc7c91e4aa933d8396b12075bdfc8c66a84a1048d8bdd84`
+- Envelope-SHA256: `56e0a3f962ef9e32ac0b9a8d0cd39b30a7ca96bf69ce231b107dd3167bb24676`
+- Envelope-Bytes: `81838`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-007","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["bin/init.mjs"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"cb457b9df15f54683fc7c91e4aa933d8396b12075bdfc8c66a84a1048d8bdd84","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"bin/init.mjs","component_kind":"frozen_source","component_byte_length":140834,"component_sha256":"a68326cd6922b7246d8e902b8a26425435307c3f95fe312b712c04f8fcbfe402","byte_start":0,"byte_end":56593,"fragment_sha256":"92ce446fa8c5e1612edb1bd789a8b6ff3ebfaa15649858f8724e64f81733364a","range_status":"partial"}]}`
+- Reply-SHA256: `db7c50032221791444c6117b03f6e640e48577176e53635e0642a860652bc32f`
+- Completion-Token-SHA256: `bec6fab5382289ce1a8c6725806a9626bd829c7e9980844de1a54caab2a0a353`
+- Reply-UTF8-Base64: `VkVSRElDVDogR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDA3IiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMWQ1YjQwMjM2ZWVmMzE3MGJmNmUzZjk4MWRjNmE2ZDc2NzJlMmQzIiwiY2FuZGlkYXRlIjoiNzEyZWFhNjkyYzk5YTQxY2ZhOGFlNThmM2UzNzA5Nzg5YmI4YTEwOCIsInRyZWUiOiJiNDY1YTM0OTE3NTcwZmRjYmVlYzYwNjMxMWY5YmM5YTg5MjQzODg3IiwiZmlsZXMiOlsiYmluL2luaXQubWpzIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiY2I0NTdiOWRmMTVmNTQ2ODNmYzdjOTFlNGFhOTMzZDgzOTZiMTIwNzViZGZjOGM2NmE4NGExMDQ4ZDhiZGQ4NCIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOmZhbHNlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJiaW4vaW5pdC5tanMiLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjE0MDgzNCwiY29tcG9uZW50X3NoYTI1NiI6ImE2ODMyNmNkNjkyMmI3MjQ2ZDhlOTAyYjhhMjY0MjU0MzUzMDdjM2Y5NWZlMzEyYjcxMmMwNGY4ZmNiZmU0MDIiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6NTY1OTMsImZyYWdtZW50X3NoYTI1NiI6IjkyY2U0NDZmYThjNWUxNjEyZWRiMWJkNzg5YThiNmZmM2ViZmFhMTU2NDk4NThmODcyNGU2NGY4MTczMzM2NGEiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC1lNDA2MzM3NTc4Y2MwMWRhODZkZDM5YjkgfCBQSUwtSU5HRVNULU1JRERMRS05MTI3Yzc4OGM2NzcwMmMwZjI1YjBiMzMgfCBQSUwtSU5HRVNULUVPRi01ZWU3YWZmNGFjNGEyZTgxMDUxNmM5ZDAKUElMLURPTkUtZDkxYjk3YWJjZjNmMWRjNjVjNDE5NGEwCg==`
+- Record-SHA256: `82992b573a1b944eec5f9c9600a2c522db44833e7853d60d6ae05b03171b31d2`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:14:43.294Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-f0033cec7e37448eee30ab8c`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-008`
+- Material-SHA256: `a0a16ad710664343d4f6fdae75efc54b9ef0aa307c7270f7fb59048a811381cc`
+- Envelope-SHA256: `33d9f968761a0dab2983568353aa6889c52b44dd41db719a5a5c7c8e95d7cea2`
+- Envelope-Bytes: `81629`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-008","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["bin/init.mjs"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"a0a16ad710664343d4f6fdae75efc54b9ef0aa307c7270f7fb59048a811381cc","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"bin/init.mjs","component_kind":"frozen_source","component_byte_length":140834,"component_sha256":"a68326cd6922b7246d8e902b8a26425435307c3f95fe312b712c04f8fcbfe402","byte_start":56593,"byte_end":113141,"fragment_sha256":"d2afbec9d72151cbd02bda938dca66390e55450fba4cbb77f40560e5d19094c1","range_status":"partial"}]}`
+- Reply-SHA256: `d7ac974e11d9d019b5a9c41f8c9046cc9850aa97474c4b81d9b9a88436cb6d73`
+- Completion-Token-SHA256: `81fc0c358fffcf66f3f811d03b0d3d92b562da9ac392fae1b57fea3359c0aa79`
+- Reply-UTF8-Base64: `RklORElOR1M6ClRoZSBgbmFtZWRTZWF0YCBleHRyYWN0aW9uIGxvZ2ljIGluIGBiaW4vaW5pdC5tanNgIGZhaWxzIG9wZW4gb24gdW5yZWFkYWJsZSBvciBtYWxmb3JtZWQgaW5wdXQuIEl0IGF0dGVtcHRzIHRvIHJlYWQgYHN1YmFnZW50X3R5cGVgIGZyb20gYC5hZ2VudHMvc2tpbGxzL2Zyb250aWVyLXJldmlldy9TS0lMTC5tZGAgdG8gdmVyaWZ5IHRoYXQgdGhlIG5hbWVkIHNlYXQgY2FycmllcyB0aGUgbG9hZC1iZWFyaW5nIGB0b29sczogW11gIGNhZ2UuIEhvd2V2ZXIsIGlmIGByZWFkRmlsZVN5bmNgIHRocm93cyBhbiBlcnJvciAoZS5nLiwgZHVlIHRvIGZpbGUgcGVybWlzc2lvbnMpIG9yIGlmIHRoZSByZWdleCBgL3N1YmFnZW50X3R5cGU6XHMqIihbQS1aYS16MC05Ll8tXSspIi9gIGZhaWxzIHRvIG1hdGNoIHZhbGlkIGJ1dCB1bnF1b3RlZCBZQU1MIChlLmcuLCBgc3ViYWdlbnRfdHlwZTogZnJvbnRpZXItcmV2aWV3YCksIHRoZSBjYXRjaCBibG9jayBhbmQgbnVsbGlzaCBjb2FsZXNjaW5nIHNpbGVudGx5IGV2YWx1YXRlIHRvIGBuYW1lZFNlYXQgPSBudWxsYC4gVGhlIHN1YnNlcXVlbnQgYGlmIChuYW1lZFNlYXQpYCBibG9jayBpcyBieXBhc3NlZCBlbnRpcmVseSwgc2tpcHBpbmcgdGhlIHNlY3VyaXR5IGNhZ2UgdmVyaWZpY2F0aW9uLiBUaGlzIHZpb2xhdGVzIHRoZSBub24tbmVnb3RpYWJsZSBpbnZhcmlhbnRzICJGYWlsIGNsb3NlZC4gVW5kZWNsYXJlZCwgbWFsZm9ybWVkLCBzdGFsZSwgb3IgdW5yZWFkYWJsZSBpbnB1dCB0byBhIGNvbnRyb2wg4oeSIEJMT0NLIiBhbmQgIkNhbm5vdCByZWFkIHlvdXIgaW5wdXQg4oeSIEFCU1RBSU4sIG5ldmVyIGdyZWVuIi4gKFJlcG9ydGVkIGFzIGEgc3Vic3RhbnRpdmUgZmluZGluZzsgYXR0cmlidXRpb24gY2Fubm90IGJlIGVzdGFibGlzaGVkIGluIHRoaXMgc291cmNlLW9ubHkgc2xpY2UsIHNvIE5PLUdPIGNhbm5vdCBiZSBpc3N1ZWQgaGVyZSkuCgpWRVJESUNUOiBHTwpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMDgiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJiaW4vaW5pdC5tanMiXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiJhMGExNmFkNzEwNjY0MzQzZDRmNmZkYWU3NWVmYzU0YjllZjBhYTMwN2M3MjcwZjdmYjU5MDQ4YTgxMTM4MWNjIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6ZmFsc2UsImZyYWdtZW50cyI6W3sicGF0aCI6ImJpbi9pbml0Lm1qcyIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTQwODM0LCJjb21wb25lbnRfc2hhMjU2IjoiYTY4MzI2Y2Q2OTIyYjcyNDZkOGU5MDJiOGEyNjQyNTQzNTMwN2MzZjk1ZmUzMTJiNzEyYzA0ZjhmY2JmZTQwMiIsImJ5dGVfc3RhcnQiOjU2NTkzLCJieXRlX2VuZCI6MTEzMTQxLCJmcmFnbWVudF9zaGEyNTYiOiJkMmFmYmVjOWQ3MjE1MWNiZDAyYmRhOTM4ZGNhNjYzOTBlNTU0NTBmYmE0Y2JiNzdmNDA1NjBlNWQxOTA5NGMxIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtYjZhNDdmMzczMWEyMTBmOTc0Yzk4ODBiIHwgUElMLUlOR0VTVC1NSURETEUtZWY2YzViNjgyMTg4M2FkYmNmODA5NTAxIHwgUElMLUlOR0VTVC1FT0YtNzc2NmVkMGJmZTg3ODBhYjc5NTUwMjJkClBJTC1ET05FLWFkMjE3MjE5Y2NiMzlmZmIyNmM2OWE3Mgo=`
+- Record-SHA256: `c6f91854a22d726bddc853dfebb8a20920f7708463ec869a82a97973fdd17b1e`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:15:18.169Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-8228b7332939d6772e3f092a`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-009`
+- Material-SHA256: `34c4256daf4bc87f66bba344d65437a6a704338bb76954a69183afa09bfeeaa0`
+- Envelope-SHA256: `a321437d63737a8b60aba9db303455b4dc38e91576442cb2b8972db482d8dd6b`
+- Envelope-Bytes: `68744`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-009","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["bin/init.mjs"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"34c4256daf4bc87f66bba344d65437a6a704338bb76954a69183afa09bfeeaa0","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"bin/init.mjs","component_kind":"frozen_source","component_byte_length":140834,"component_sha256":"a68326cd6922b7246d8e902b8a26425435307c3f95fe312b712c04f8fcbfe402","byte_start":113141,"byte_end":140834,"fragment_sha256":"a1b853dcbc5227b386ad39bf5e5ae05416a1de2a916f264edd57394320cfc1f2","range_status":"partial"},{"path":"bin/init.mjs","component_kind":"per_file_diff","component_byte_length":14590,"component_sha256":"0f2b979e83689489cfc2d83d2af3d9344b99084b3d73a0eaf17c2e3cb0843db2","byte_start":0,"byte_end":109,"fragment_sha256":"97bf72c3387005ca9bb291b3cdcd9ce05b5650230933c9439c839b849723203a","range_status":"partial"},{"path":"bin/init.mjs","component_kind":"per_file_diff","component_byte_length":14590,"component_sha256":"0f2b979e83689489cfc2d83d2af3d9344b99084b3d73a0eaf17c2e3cb0843db2","byte_start":109,"byte_end":14590,"fragment_sha256":"4e572f64b52d5ddcbfc75dcfec3d45e7740a95e2107ccba509f96cc71bd9e1ea","range_status":"partial"}]}`
+- Reply-SHA256: `673c8e7106daba3b30d72463a9c6a2a304991a5071697759cb097959c64d6836`
+- Completion-Token-SHA256: `e2e88c71a93e2fadbeb9d24429a3348e828ae1f05beb8bb5ec41f8e9f17d6652`
+- Reply-UTF8-Base64: `VGhlIHByb3ZpZGVkIGRpZmYgZm9yIGBiaW4vaW5pdC5tanNgIG9ubHkgdXBkYXRlcyBhIENMSSBzdGF0dXMgbWVzc2FnZSBvdXRwdXQgZHVyaW5nIGluc3RhbGxhdGlvbiB0byByZWZsZWN0IHRoZSBuZXcgcHJvdmlkZXItdHJhbnNwb3J0IHNlbWFudGljcyBkb2N1bWVudGVkIGluIHRoZSBgZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kYCBjb250cmFjdC4gU3BlY2lmaWNhbGx5LCBpdCBjaGFuZ2VzIHRoZSB0ZXh0IGZyb20gc3RhdGluZyB0aGF0IEdlbWluaSB1c2VzIGEgc3RyaWN0IG1hbnVhbCBoYW5kb2ZmIHRvIGFja25vd2xlZGdpbmcgdGhlIGF1dG9tYXRlZCBgYWd5YCB0cmFuc3BvcnQgd2l0aCBhIHN0cmljdCBtYW51YWwgZmFsbGJhY2sgYW5kIG5vIFJFU1Qgcm91dGVzLiBUaGlzIGNoYW5nZSBpcyBwdXJlbHkgaW5mb3JtYXRpb25hbCBhbmQgYWxpZ25zIHBlcmZlY3RseSB3aXRoIHRoZSBzdGF0ZWQgZGVzaWduIGludGVudC4gTm8gZXhlY3V0YWJsZSBsb2dpYywgY29udHJvbCBmbG93LCBvciBpbnZhcmlhbnQgZW5mb3JjZW1lbnQgaXMgYWx0ZXJlZC4KClZFUkRJQ1Q6IEdPCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAwOSIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiYjFkNWI0MDIzNmVlZjMxNzBiZjZlM2Y5ODFkYzZhNmQ3NjcyZTJkMyIsImNhbmRpZGF0ZSI6IjcxMmVhYTY5MmM5OWE0MWNmYThhZTU4ZjNlMzcwOTc4OWJiOGExMDgiLCJ0cmVlIjoiYjQ2NWEzNDkxNzU3MGZkY2JlZWM2MDYzMTFmOWJjOWE4OTI0Mzg4NyIsImZpbGVzIjpbImJpbi9pbml0Lm1qcyJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjM0YzQyNTZkYWY0YmM4N2Y2NmJiYTM0NGQ2NTQzN2E2YTcwNDMzOGJiNzY5NTRhNjkxODNhZmEwOWJmZWVhYTAiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjp0cnVlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJiaW4vaW5pdC5tanMiLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjE0MDgzNCwiY29tcG9uZW50X3NoYTI1NiI6ImE2ODMyNmNkNjkyMmI3MjQ2ZDhlOTAyYjhhMjY0MjU0MzUzMDdjM2Y5NWZlMzEyYjcxMmMwNGY4ZmNiZmU0MDIiLCJieXRlX3N0YXJ0IjoxMTMxNDEsImJ5dGVfZW5kIjoxNDA4MzQsImZyYWdtZW50X3NoYTI1NiI6ImExYjg1M2RjYmM1MjI3YjM4NmFkMzliZjVlNWFlMDU0MTZhMWRlMmE5MTZmMjY0ZWRkNTczOTQzMjBjZmMxZjIiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiYmluL2luaXQubWpzIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxNDU5MCwiY29tcG9uZW50X3NoYTI1NiI6IjBmMmI5NzllODM2ODk0ODljZmMyZDgzZDJhZjNkOTM0NGI5OTA4NGIzZDczYTBlYWYxN2MyZTNjYjA4NDNkYjIiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTA5LCJmcmFnbWVudF9zaGEyNTYiOiI5N2JmNzJjMzM4NzAwNWNhOWJiMjkxYjNjZGNkOWNlMDViNTY1MDIzMDkzM2M5NDM5YzgzOWI4NDk3MjMyMDNhIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6ImJpbi9pbml0Lm1qcyIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTQ1OTAsImNvbXBvbmVudF9zaGEyNTYiOiIwZjJiOTc5ZTgzNjg5NDg5Y2ZjMmQ4M2QyYWYzZDkzNDRiOTkwODRiM2Q3M2EwZWFmMTdjMmUzY2IwODQzZGIyIiwiYnl0ZV9zdGFydCI6MTA5LCJieXRlX2VuZCI6MTQ1OTAsImZyYWdtZW50X3NoYTI1NiI6IjRlNTcyZjY0YjUyZDVkZGNiZmM3NWRjZmVjM2Q0NWU3NzQwYTk1ZTIxMDdjY2JhNTA5Zjk2Y2M3MWJkOWUxZWEiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC0yMTliNzM5ODkyYzRhZTYwZjA1NDI1Y2QgfCBQSUwtSU5HRVNULU1JRERMRS0yMmIzOTZkNGJmNjliNzI2ZGQ4MWEyMjAgfCBQSUwtSU5HRVNULUVPRi0zNTRiZmNkZmI2NGJhMDkyMTIzZmE3N2QKUElMLURPTkUtYWMyZjQxZjE2ZDI4YzkxNTVmMTYwOGFhCg==`
+- Record-SHA256: `a4ebfa1d55a73ac7faff958c227c43d12fd2d3ec44a43a3c15a720894683e348`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — UNRESOLVED_ATTRIBUTION — 2026-09-13T03:16:51.458Z
+
+- Status: `UNRESOLVED_ATTRIBUTION`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-e3fe8cca9ef2339eac8d879f`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-010`
+- Material-SHA256: `2f7a0d1c341534b93e6ea67ae7709830f552fb1e7570ffe92cfbd10560cb4de7`
+- Envelope-SHA256: `f4ab519f4c8b0e8dfe7717e88103c7b63f47de81f224737490367a61818abb3b`
+- Envelope-Bytes: `81828`
+- Ordered-Contributors: `(none)`
+- Provider-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-010","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["core/GATES.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"2f7a0d1c341534b93e6ea67ae7709830f552fb1e7570ffe92cfbd10560cb4de7","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"core/GATES.md","component_kind":"frozen_source","component_byte_length":85971,"component_sha256":"0ae304115523683c23ea089f8014faf4f97d22486c21b592609129c2846e8de9","byte_start":0,"byte_end":57455,"fragment_sha256":"4ce21710cbffed031ef72bbb40b8df9ab03fdd697ca331534f1f5bbf5da0f5d3","range_status":"partial"}]}`
+- Reply-SHA256: `2fdb2ec586a4995d13c94d8d86d8eb5af539407b4d849580863f6efad4392df7`
+- Completion-Token-SHA256: `3817b1abf7c8213e55bfa7abf600fe1d116f1342b8622f5b7154e4c99572d08a`
+- Reply-UTF8-Base64: `RklORElOR1M6CjEuICoqQ29udHJhY3QtdnMtZGVzaWduIGRyaWZ0IChTZWxmLWNvbnRyYWRpY3Rpb24gb24gR2VtaW5pIHJvdXRpbmcpOioqIFRoZSBjYW5kaWRhdGUgY2hhbmdlIGFkZHMgZG9jdW1lbnRhdGlvbiBjbGFpbWluZyB0aGUgR2VtaW5pIHJ1bm5lciAidXNlcyBHZW1pbmkgMy4xIFBybyBIaWdoLi4uIHRvIGNvbGQtcmV2aWV3IGEgZGVzaWduIG9yIGNvZGUgY2hhbmdlc2V0IiBhbmQgcHJvdmlkZXMgYSBjb21tYW5kIGZvciBhICJDb2RlIGdhdGUiIChgYmFzaCBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCAtLWNvbnRleHQgPGRlc2lnbi5tZD5gKS4gVGhpcyBkaXJlY3RseSBjb250cmFkaWN0cyB0aGUgYmluZGluZyBPd25lciBydWxpbmcgc3RhdGVkIGVhcmxpZXIgaW4gdGhlIHNhbWUgZmlsZSAoYGNvcmUvR0FURVMubWRgIMKnIFJvdXRpbmcpIHdoaWNoIGV4cGxpY2l0bHkgY29tbWFuZHMgIkdFTUlOSSBSRVZJRVdTIERFU0lHTlMsIE5PVCBESUZGUyIsIGVzdGFibGlzaGluZyB0aGF0IEdlbWluaSBpcyAibmV2ZXIgb24gYSBjb2RlIGNoYW5nZXNldCIgYW5kIHRoYXQgdGhlIENsYXVkZSBsYW5lIGV4Y2x1c2l2ZWx5IGZpbGxzIHRoZSBjb2RlIGdhdGUgc2VhdCBmb3IgQ29kZXgtYnVpbHQgY2hhbmdlcy4KMi4gKipDb250cmFjdC12cy1kZXNpZ24gZHJpZnQgKFVuc2FuY3Rpb25lZCBmcm96ZW4tY2hlY2tvdXQgbXV0YXRpb24pOioqIFRoZSBjYW5kaWRhdGUgY2hhbmdlIHN0YXRlcyB0aGF0ICJFYWNoIGFydGlmYWN0IGlzIHJldGFpbmVkIGxvY2FsbHkgdW5kZXIgYHJlZnMvcGlsL2dhdGUtYXJ0aWZhY3RzLzxhcnRpZmFjdC1zaGE+YCIgdG8gcHJldmVudCBnYXJiYWdlIGNvbGxlY3Rpb24uIFdyaXRpbmcgYSBwZXJtYW5lbnQgR2l0IHJlZiB0byBgcmVmcy9waWwvYCBjb25zdGl0dXRlcyBhIG11dGF0aW9uIG9mIHRoZSBmcm96ZW4gY2hlY2tvdXQuIEhvd2V2ZXIsIHRoZSB0cmFuc3BvcnQgY29udHJhY3QgKGBkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWRgKSBzdHJpY3RseSByZXF1aXJlcyBjaGVja2luZyAiZW5kcG9pbnQgY2xlYW5saW5lc3MuLi4gZXhjbHVkaW5nIG9ubHkgc2FuY3Rpb25lZCBqb3VybmFsIGFuZCAuZ2VtaW5pLWdhdGUgYXJ0aWZhY3RzIiwgYW5kIGRpY3RhdGVzIHRoYXQgIkFueSBmcm96ZW4tY2hlY2tvdXQgbXV0YXRpb24gaXMgYSB0cmFuc3BvcnQgZmFpbHVyZSIuIFRoaXMgbmV3IHJldGVudGlvbiBtZWNoYW5pc20gaW50cm9kdWNlcyBhbiB1bnNhbmN0aW9uZWQgbXV0YXRpb24gdGhhdCB3aWxsIGRldGVybWluaXN0aWNhbGx5IGZhaWwgdGhlIHBvc3QtZmxpZ2h0IGNsZWFubGluZXNzIGNoZWNrIGFuZCBwZXJtYW5lbnRseSBibG9jayB0aGUgZW1pc3Npb24gb2YgdmFsaWQgcmVjZWlwdHMuCgpWRVJESUNUOiBOTy1HTwpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMTAiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJjb3JlL0dBVEVTLm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiMmY3YTBkMWMzNDE1MzRiOTNlNmVhNjdhZTc3MDk4MzBmNTUyZmIxZTc1NzBmZmU5MmNmYmQxMDU2MGNiNGRlNyIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOmZhbHNlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJjb3JlL0dBVEVTLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4NTk3MSwiY29tcG9uZW50X3NoYTI1NiI6IjBhZTMwNDExNTUyMzY4M2MyM2VhMDg5ZjgwMTRmYWY0Zjk3ZDIyNDg2YzIxYjU5MjYwOTEyOWMyODQ2ZThkZTkiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6NTc0NTUsImZyYWdtZW50X3NoYTI1NiI6IjRjZTIxNzEwY2JmZmVkMDMxZWY3MmJiYjQwYjhkZjlhYjAzZmRkNjk3Y2EzMzE1MzRmMWY1YmJmNWRhMGY1ZDMiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC0zZTcxMGViMmJlMzI1MDZkYjlmODA5NTAgfCBQSUwtSU5HRVNULU1JRERMRS03N2NjNTE0NWU4MzdlNTQ5MmQ3MzQ5ZTcgfCBQSUwtSU5HRVNULUVPRi03NDk5M2NmYWYyYTc1NDg4ZWQ1NDc2ZGMKUElMLURPTkUtZGU5ZDQ5MTUxNDdmNmJjZDE2ODAwYTBhCg==`
+- Record-SHA256: `2d3c8b06763b857dcc6958705b822c2baa676576755b8d375910d9b7dfe6313e`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:17:15.784Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-502f7c3272e498402d092c6c`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-011`
+- Material-SHA256: `873ccfc1e3469532087298dc3ee9f188945ab78f518fc534803be616aef3fc32`
+- Envelope-SHA256: `3262ab6aa331a67538dea8e41e489fff85dec5c122eb5696d3ae093677b040e8`
+- Envelope-Bytes: `53717`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-011","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["core/GATES.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"873ccfc1e3469532087298dc3ee9f188945ab78f518fc534803be616aef3fc32","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"core/GATES.md","component_kind":"frozen_source","component_byte_length":85971,"component_sha256":"0ae304115523683c23ea089f8014faf4f97d22486c21b592609129c2846e8de9","byte_start":57455,"byte_end":85971,"fragment_sha256":"e10479c7c3f01f1d3e35f0219b21c3aed9133ea060304f69c64c04503458ec6d","range_status":"partial"},{"path":"core/GATES.md","component_kind":"per_file_diff","component_byte_length":37723,"component_sha256":"1ef5109643afd0388bfec7738a02696405c9057406a67aa8652abbea436d7ed8","byte_start":0,"byte_end":113,"fragment_sha256":"9040aa982232efeb2b126c195779b7dfbc5238f835063f72bbae28304677f646","range_status":"partial"}]}`
+- Reply-SHA256: `3e912a8419a49c74ff66150ae6743e30f13b8e7ca904f739275e869b3a09cf65`
+- Completion-Token-SHA256: `b8dd11e6c6d03189263dbb9dbb5d59ea665b7fc6874366ea8df6c5fd2a746981`
+- Reply-UTF8-Base64: `VGhpcyBmcmFnbWVudCBjb250YWlucyB0aGUgZGlmZiBoZWFkZXIgZm9yIGBjb3JlL0dBVEVTLm1kYCAobm8gZnVuY3Rpb25hbCBjaGFuZ2VzIGluIHRoaXMgYnl0ZSByYW5nZSkgYW5kIGEgcG9ydGlvbiBvZiB0aGUgc291cmNlIGZpbGUgb3V0bGluaW5nIHRoZSBmcm96ZW4gR2VtaW5pIGV4YWN0LWNhbmRpZGF0ZSBnYXRlIHByb2NlZHVyZS4gVGhlIGRvY3VtZW50ZWQgcHJvY2VzcyBhY2N1cmF0ZWx5IHJlZmxlY3RzIHRoZSBhdXRvbWF0ZWQgc3Vic2NyaXB0aW9uIHRyYW5zcG9ydCBjb250cmFjdCwgaW5jbHVkaW5nIHN0cmljdCBib3VuZGluZywgaXNvbGF0ZWQgYGFneWAgZXhlY3V0aW9uLCBhbmQgYWJzZW5jZSBvZiBSRVNUL0FQSSBmYWxsYmFjay4gTm8gaGFybSBvciBpbnZhcmlhbnQgdmlvbGF0aW9uIGlzIHByZXNlbnQuCgpWRVJESUNUOiBHTwpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMTEiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJjb3JlL0dBVEVTLm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiODczY2NmYzFlMzQ2OTUzMjA4NzI5OGRjM2VlOWYxODg5NDVhYjc4ZjUxOGZjNTM0ODAzYmU2MTZhZWYzZmMzMiIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6ImNvcmUvR0FURVMubWQiLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjg1OTcxLCJjb21wb25lbnRfc2hhMjU2IjoiMGFlMzA0MTE1NTIzNjgzYzIzZWEwODlmODAxNGZhZjRmOTdkMjI0ODZjMjFiNTkyNjA5MTI5YzI4NDZlOGRlOSIsImJ5dGVfc3RhcnQiOjU3NDU1LCJieXRlX2VuZCI6ODU5NzEsImZyYWdtZW50X3NoYTI1NiI6ImUxMDQ3OWM3YzNmMDFmMWQzZTM1ZjAyMTliMjFjM2FlZDkxMzNlYTA2MDMwNGY2OWM2NGMwNDUwMzQ1OGVjNmQiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiY29yZS9HQVRFUy5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6Mzc3MjMsImNvbXBvbmVudF9zaGEyNTYiOiIxZWY1MTA5NjQzYWZkMDM4OGJmZWM3NzM4YTAyNjk2NDA1YzkwNTc0MDZhNjdhYTg2NTJhYmJlYTQzNmQ3ZWQ4IiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjExMywiZnJhZ21lbnRfc2hhMjU2IjoiOTA0MGFhOTgyMjMyZWZlYjJiMTI2YzE5NTc3OWI3ZGZiYzUyMzhmODM1MDYzZjcyYmJhZTI4MzA0Njc3ZjY0NiIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELWI3ZDQ3ODA4MDExODc2NTQ3NTI4NDIzMSB8IFBJTC1JTkdFU1QtTUlERExFLThjOTEzNWFmYWJkODVjN2MzMjRhOGY0YiB8IFBJTC1JTkdFU1QtRU9GLTk1ZmI0ZDc0OTAxYWI3NDFhNzk4MWRkYwoKUElMLURPTkUtODEwYTgwMTFlOTUwZGEzZDBiY2MxYWVmCg==`
+- Record-SHA256: `315e1d6dd4568432e783e0a1a4ca72e0c0e7a8942cd4da9c8304d90d916a06e4`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:18:14.307Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-a8d9cac626d3fa7a0c10a899`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-012`
+- Material-SHA256: `98d64f16a92d8b64274c70884670418972b051467a3003d332957afc8a7873f6`
+- Envelope-SHA256: `8f428658d4852fe9bf28f8fc73a22447e4364ef56d8ddd415b5f5b49a573cb9c`
+- Envelope-Bytes: `70588`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-012","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["core/GATES.md","core/REPO_INVARIANTS.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"98d64f16a92d8b64274c70884670418972b051467a3003d332957afc8a7873f6","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"core/GATES.md","component_kind":"per_file_diff","component_byte_length":37723,"component_sha256":"1ef5109643afd0388bfec7738a02696405c9057406a67aa8652abbea436d7ed8","byte_start":113,"byte_end":37723,"fragment_sha256":"27e8db2ae4f289630dea97823ef591bb6b44cdb674a5580149d7021e4b5daef0","range_status":"partial"},{"path":"core/REPO_INVARIANTS.md","component_kind":"frozen_source","component_byte_length":2655,"component_sha256":"f10d4d6834ea89acf242b8dd5315900ed78f0af12ca8db828a90955ebc1d82c3","byte_start":0,"byte_end":2655,"fragment_sha256":"f10d4d6834ea89acf242b8dd5315900ed78f0af12ca8db828a90955ebc1d82c3","range_status":"whole"},{"path":"core/REPO_INVARIANTS.md","component_kind":"per_file_diff","component_byte_length":3231,"component_sha256":"fb422490dab304e9345a55d513151115f33754f2d4294c94088d2a0d0d873f02","byte_start":0,"byte_end":153,"fragment_sha256":"8c79dfab3279af5812d69e1f69bf3a7aa0f727841f1a6c599e83e5a9ce268c9d","range_status":"partial"},{"path":"core/REPO_INVARIANTS.md","component_kind":"per_file_diff","component_byte_length":3231,"component_sha256":"fb422490dab304e9345a55d513151115f33754f2d4294c94088d2a0d0d873f02","byte_start":153,"byte_end":3231,"fragment_sha256":"5480672dbfb312a17f5443857978e2f142b7aa2224512088a642edcd5b487832","range_status":"partial"}]}`
+- Reply-SHA256: `aa29abbe2ee05e99c645aced408041e9de200309934efefe5f1cc42861ac44d7`
+- Completion-Token-SHA256: `a00a2aeb6d93e14ab988d13dcd5af1e44d9189003da2db9f76adfa34c5fe75c6`
+- Reply-UTF8-Base64: `RmluZGluZ3M6IFRoZSBjYW5kaWRhdGUgcHJvcGVybHkgdXBkYXRlcyB0aGUgYEdBVEVTLm1kYCBhbmQgYGNvcmUvUkVQT19JTlZBUklBTlRTLm1kYCBiaW5kaW5nIGRvY3VtZW50cyB0byByZWZsZWN0IHRoZSBleGFjdCBzZW1hbnRpY3MgcmVxdWlyZWQgYnkgdGhlIGAyMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZGAgZGVzaWduLiBJdCBjb3JyZWN0bHkgc3BlY2lmaWVzIHRoZSB0cmFuc2l0aW9uIHRvIHRoZSBhdXRvbWF0ZWQgYGFneWAgc3Vic2NyaXB0aW9uIHRyYW5zcG9ydCAod2l0aCBzdHJpY3QgbWFudWFsIGZhbGxiYWNrKSwgYW5kIGFjY3VyYXRlbHkgZG9jdW1lbnRzIHRoZSBkZXRhaWxlZCByZXF1aXJlbWVudHMgYXJvdW5kIGRpc3Bvc2FibGUgd29ya3NwYWNlcywgc3RyZWFtL3NjaGVtYSBib3VuZHMsIHNpbmdsZS1mbGlnaHQgb3duZXJzaGlwIGluY2x1ZGluZyBwcm9jZXNzLWdyb3VwIGNsb3N1cmUgYW5kIGBVTlJFU09MVkVEX1BST0NFU1NfR1JPVVBgLCBgYWd5YCBzZXR0aW5ncyBmaW5nZXJwcmludCBjaGVja3MsIGJvdW5kZWQgZGlhZ25vc3RpY3Mgb24gYWJydXB0IHBhcmVudCBsb3NzLCBhbmQgdGhlIHJlbW92YWwgb2YgdGhlIEFQSSB0cmFuc3BvcnQgcm91dGUuIFRoZSBkaWZmIG1hdGNoZXMgdGhlIGFwcHJvdmVkIGNvbnRyYWN0IGFuZCBkb2VzIG5vdCB2aW9sYXRlIGFueSBpbnZhcmlhbnQuCgpWRVJESUNUOiBHTwoKSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDEyIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMWQ1YjQwMjM2ZWVmMzE3MGJmNmUzZjk4MWRjNmE2ZDc2NzJlMmQzIiwiY2FuZGlkYXRlIjoiNzEyZWFhNjkyYzk5YTQxY2ZhOGFlNThmM2UzNzA5Nzg5YmI4YTEwOCIsInRyZWUiOiJiNDY1YTM0OTE3NTcwZmRjYmVlYzYwNjMxMWY5YmM5YTg5MjQzODg3IiwiZmlsZXMiOlsiY29yZS9HQVRFUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiOThkNjRmMTZhOTJkOGI2NDI3NGM3MDg4NDY3MDQxODk3MmIwNTE0NjdhMzAwM2QzMzI5NTdhZmM4YTc4NzNmNiIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6ImNvcmUvR0FURVMubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjM3NzIzLCJjb21wb25lbnRfc2hhMjU2IjoiMWVmNTEwOTY0M2FmZDAzODhiZmVjNzczOGEwMjY5NjQwNWM5MDU3NDA2YTY3YWE4NjUyYWJiZWE0MzZkN2VkOCIsImJ5dGVfc3RhcnQiOjExMywiYnl0ZV9lbmQiOjM3NzIzLCJmcmFnbWVudF9zaGEyNTYiOiIyN2U4ZGIyYWU0ZjI4OTYzMGRlYTk3ODIzZWY1OTFiYjZiNDRjZGI2NzRhNTU4MDE0OWQ3MDIxZTRiNWRhZWYwIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6ImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoyNjU1LCJjb21wb25lbnRfc2hhMjU2IjoiZjEwZDRkNjgzNGVhODlhY2YyNDJiOGRkNTMxNTkwMGVkNzhmMGFmMTJjYThkYjgyOGE5MDk1NWViYzFkODJjMyIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoyNjU1LCJmcmFnbWVudF9zaGEyNTYiOiJmMTBkNGQ2ODM0ZWE4OWFjZjI0MmI4ZGQ1MzE1OTAwZWQ3OGYwYWYxMmNhOGRiODI4YTkwOTU1ZWJjMWQ4MmMzIiwicmFuZ2Vfc3RhdHVzIjoid2hvbGUifSx7InBhdGgiOiJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MzIzMSwiY29tcG9uZW50X3NoYTI1NiI6ImZiNDIyNDkwZGFiMzA0ZTkzNDVhNTVkNTEzMTUxMTE1ZjMzNzU0ZjJkNDI5NGM5NDA4OGQyYTBkMGQ4NzNmMDIiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTUzLCJmcmFnbWVudF9zaGEyNTYiOiI4Yzc5ZGZhYjMyNzlhZjU4MTJkNjllMWY2OWJmM2E3YWEwZjcyNzg0MWYxYTZjNTk5ZTgzZTVhOWNlMjY4YzlkIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6ImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjozMjMxLCJjb21wb25lbnRfc2hhMjU2IjoiZmI0MjI0OTBkYWIzMDRlOTM0NWE1NWQ1MTMxNTExMTVmMzM3NTRmMmQ0Mjk0Yzk0MDg4ZDJhMGQwZDg3M2YwMiIsImJ5dGVfc3RhcnQiOjE1MywiYnl0ZV9lbmQiOjMyMzEsImZyYWdtZW50X3NoYTI1NiI6IjU0ODA2NzJkYmZiMzEyYTE3ZjU0NDM4NTc5NzhlMmYxNDJiN2FhMjIyNDUxMjA4OGE2NDJlZGNkNWI0ODc4MzIiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQoKSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtZmY1YTJjN2RjMTUzZTQzMjEwZDk2ZTBhIHwgUElMLUlOR0VTVC1NSURETEUtMjg3N2Y0NGJmNjQwOWVmNDk4NDA5MDIyIHwgUElMLUlOR0VTVC1FT0YtMTY1YzQyMGI3NDIzMDI2ODkyZDg4OThlCgpQSUwtRE9ORS0zYTExZjUxMGRjOGZkNWFhYTgyMWYyYWUK`
+- Record-SHA256: `31e49cb29ac45410c2088f5af4d572cab4830ccd809616779470fbed602cd5b0`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:18:48.193Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-502942007912cda1bccbf717`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-013`
+- Material-SHA256: `242fec046dccbf7f35ac8588f6e0718b08635d2a42e86a28c44d9271457a8700`
+- Envelope-SHA256: `54ff8fa7e59c6420e9f7d2231941fe6582edc19a1f5e31ab75a35d1f7a14691f`
+- Envelope-Bytes: `47433`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-013","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"242fec046dccbf7f35ac8588f6e0718b08635d2a42e86a28c44d9271457a8700","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md","component_kind":"frozen_source","component_byte_length":10473,"component_sha256":"feadaddf6462d6ea23490bd9cdc48cc3a9e3322cffb25ce43d35cae41cb47478","byte_start":0,"byte_end":10473,"fragment_sha256":"feadaddf6462d6ea23490bd9cdc48cc3a9e3322cffb25ce43d35cae41cb47478","range_status":"whole"},{"path":"docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md","component_kind":"per_file_diff","component_byte_length":10905,"component_sha256":"ffa0103a1ef5d3692f99339113086895d8a38b427a1effcb611e84e9a5f55286","byte_start":0,"byte_end":280,"fragment_sha256":"a9aadee26d9f7f5a07caf17d063c68a59dc15536897acefea3a0b2b7430dc29c","range_status":"partial"},{"path":"docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md","component_kind":"per_file_diff","component_byte_length":10905,"component_sha256":"ffa0103a1ef5d3692f99339113086895d8a38b427a1effcb611e84e9a5f55286","byte_start":280,"byte_end":10905,"fragment_sha256":"5dd66054e8a8c4f790af42cf96cdd6fe99a7b56d51b5d4240317f9b05c2a19c6","range_status":"partial"}]}`
+- Reply-SHA256: `fc40f24e76f53d99faa18a72613bd66e0713fa73e4193fdbef3bfdda6e0a6e71`
+- Completion-Token-SHA256: `7ef558d35c1de5793cd1cbdcd88803a0b0d2da12627a03a2f033320cf04dda2e`
+- Reply-UTF8-Base64: `VGhlIGFydGlmYWN0IGludHJvZHVjZXMgYSBjb21wcmVoZW5zaXZlIGRlc2lnbiBjb250cmFjdCBmb3IgdGhlIGF1dG9tYXRlZCBgYWd5YCBHZW1pbmkgdHJhbnNwb3J0IG1lY2hhbmlzbS4gUmV2aWV3aW5nIHRoZSBjb250cmFjdCBhZ2FpbnN0IHRoZSBwcm92aWRlZCBpbnZhcmlhbnRzIHJldmVhbHMgbm8gdmlvbGF0aW9ucy4gVGhlIGRlc2lnbiBhZGhlcmVzIHN0cmljdGx5IHRvIHRoZSBub24tbmVnb3RpYWJsZSBwcmluY2lwbGUgb2YgYSByZWFkLW9ubHkgcmV2aWV3IGNvbnRyb2wgdGhhdCBjYW5ub3QgZXhlY3V0ZSB0b29scyBvciBtdXRhdGUgZW52aXJvbm1lbnRzLiBUaGUgZG9jdW1lbnRlZCBzdHJlYW0gYm91bmRhcnkgaXMgZmFpbC1jbG9zZWQsIHJlamVjdGluZyB1bmV4cGVjdGVkIHNoYXBlcyBhbmQgYXNzZXJ0aW5nIHN0cmljdCB0dXBsZSBwcm92ZW5hbmNlLCBleGFjdCBjb25maWd1cmF0aW9uIGlkZW50aXR5LCBhbmQgY29ycmVjdCBlZmZvcnQgbGV2ZWxzLiBUaGUgcHJvdmlzaW9ucyBmb3IgZXhwbGljaXQgbWFudWFsIGZhbGxiYWNrIGZvciBoaWdoLXNlbnNpdGl2aXR5IG9wZXJhdGlvbnMgYW5kIHRoZSBhYnNvbHV0ZSBwcm9oaWJpdGlvbiBvZiBkaXJlY3QgUkVTVC9BUEkgY3JlZGVudGlhbHMgYXJlIHNhZmUgYW5kIGluIGNvbXBsaWFuY2Ugd2l0aCBleGlzdGluZyByZXBvc2l0b3J5IGd1aWRlbGluZXMuIE5vIHJlYWNoYWJsZSBoYXJtIG9yIGludmFyaWFudCBicmVhY2ggaXMgaW50cm9kdWNlZC4KClZFUkRJQ1Q6IEdPCgpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMTMiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiIyNDJmZWMwNDZkY2NiZjdmMzVhYzg1ODhmNmUwNzE4YjA4NjM1ZDJhNDJlODZhMjhjNDRkOTI3MTQ1N2E4NzAwIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6dHJ1ZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxMDQ3MywiY29tcG9uZW50X3NoYTI1NiI6ImZlYWRhZGRmNjQ2MmQ2ZWEyMzQ5MGJkOWNkYzQ4Y2MzYTllMzMyMmNmZmIyNWNlNDNkMzVjYWU0MWNiNDc0NzgiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTA0NzMsImZyYWdtZW50X3NoYTI1NiI6ImZlYWRhZGRmNjQ2MmQ2ZWEyMzQ5MGJkOWNkYzQ4Y2MzYTllMzMyMmNmZmIyNWNlNDNkMzVjYWU0MWNiNDc0NzgiLCJyYW5nZV9zdGF0dXMiOiJ3aG9sZSJ9LHsicGF0aCI6ImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTA5MDUsImNvbXBvbmVudF9zaGEyNTYiOiJmZmEwMTAzYTFlZjVkMzY5MmY5OTMzOTExMzA4Njg5NWQ4YTM4YjQyN2ExZWZmY2I2MTFlODRlOWE1ZjU1Mjg2IiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjI4MCwiZnJhZ21lbnRfc2hhMjU2IjoiYTlhYWRlZTI2ZDlmN2Y1YTA3Y2FmMTdkMDYzYzY4YTU5ZGMxNTUzNjg5N2FjZWZlYTNhMGIyYjc0MzBkYzI5YyIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifSx7InBhdGgiOiJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjEwOTA1LCJjb21wb25lbnRfc2hhMjU2IjoiZmZhMDEwM2ExZWY1ZDM2OTJmOTkzMzkxMTMwODY4OTVkOGEzOGI0MjdhMWVmZmNiNjExZTg0ZTlhNWY1NTI4NiIsImJ5dGVfc3RhcnQiOjI4MCwiYnl0ZV9lbmQiOjEwOTA1LCJmcmFnbWVudF9zaGEyNTYiOiI1ZGQ2NjA1NGU4YThjNGY3OTBhZjQyY2Y5NmNkZDZmZTk5YTdiNTZkNTFiNWQ0MjQwMzE3ZjliMDVjMmExOWM2IiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KCklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELTY5YTkyZjAwOTMzMGY1ZjNlZjFiMGM2YiB8IFBJTC1JTkdFU1QtTUlERExFLWEwMDI5MGNmZWVlOTgxNmFjYjAzZjYyOCB8IFBJTC1JTkdFU1QtRU9GLTg2OWY4YTdjNjdhYjQwNWJiMWJhNTA1OQoKUElMLURPTkUtNTU5NTM1MzMxOTU5NDAwNmUyN2JiZjA2Cg==`
+- Record-SHA256: `4e95ad93973da06853cd540e691e948cc0b230d0272aff559d3d5090400bb0f4`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:19:29.028Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-6a853a24c57fd8c3bebe9d57`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-014`
+- Material-SHA256: `d009d3c1001e7c5df532bf54b39d2499dc4a4789dfc4c6e7e95c9adc47f1f1b9`
+- Envelope-SHA256: `ddd4c97b54ed6dee83c7d2b5d1e2fe1bda9b8f460bd5ee4af4ae21aa66bdccfd`
+- Envelope-Bytes: `71915`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-014","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["docs/uncle-handoff/CODEX_ADOPTION_TICKET.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"d009d3c1001e7c5df532bf54b39d2499dc4a4789dfc4c6e7e95c9adc47f1f1b9","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"docs/uncle-handoff/CODEX_ADOPTION_TICKET.md","component_kind":"frozen_source","component_byte_length":33261,"component_sha256":"9c106ccef783a781fb837af2a1c366dfc823c262ddf23e890ca6cc7759163913","byte_start":0,"byte_end":33261,"fragment_sha256":"9c106ccef783a781fb837af2a1c366dfc823c262ddf23e890ca6cc7759163913","range_status":"whole"},{"path":"docs/uncle-handoff/CODEX_ADOPTION_TICKET.md","component_kind":"per_file_diff","component_byte_length":12244,"component_sha256":"799c2abfcc405a2b4d43ac5c6269306c56a59daf2e0f89187f797e644d1ea6aa","byte_start":0,"byte_end":233,"fragment_sha256":"70c5c8fb8d8936b91d1d3a0a97122746c4232cd051d1ae253e1e580ec00b0012","range_status":"partial"},{"path":"docs/uncle-handoff/CODEX_ADOPTION_TICKET.md","component_kind":"per_file_diff","component_byte_length":12244,"component_sha256":"799c2abfcc405a2b4d43ac5c6269306c56a59daf2e0f89187f797e644d1ea6aa","byte_start":233,"byte_end":12244,"fragment_sha256":"330ddb1e09d1b0572ed0f602aa87bd943dcf1f4e71c42e527b738db16e7b7a58","range_status":"partial"}]}`
+- Reply-SHA256: `ab7da30cde3dd39c4e181eae9d9f96e3fa12fb8d61b5d4864b3e3a29c333d33c`
+- Completion-Token-SHA256: `1cf072d6df27adf61bf38076e7b206c286e7ade8b15d6bf851adcaa5725dc0d7`
+- Reply-UTF8-Base64: `KipGaW5kaW5nczoqKgpUaGUgY2FuZGlkYXRlIHNhZmVseSB1cGRhdGVzIHRoZSBDb2RleCBhZG9wdGlvbiB0aWNrZXQgKGBDT0RFWF9BRE9QVElPTl9USUNLRVQubWRgKSB0byByZWZsZWN0IHRoZSBuZXcgYXV0b21hdGVkIGBhZ3lgIGZyb3plbi1yZXZpZXcgdHJhbnNwb3J0IGNvbnRyYWN0IGVzdGFibGlzaGVkIG9uIDIwMjYtMDktMTIuIFRoZSByZXZpc2VkIGluc3RydWN0aW9ucyBhY2N1cmF0ZWx5IGNhcHR1cmUgdGhlIHJlcXVpcmVkIGNvbnN0cmFpbnRzOgotIFRoZXkgZXhwbGljaXRseSBndWlkZSBDb2RleCB0byBwcmVmZXIgdGhlIG5ldyBhdXRvbWF0ZWQgYGFneWAgdHJhbnNwb3J0IHdoaWxlIHByZXNlcnZpbmcgbWFudWFsIGV4cG9ydC9pbXBvcnQgZm9yIGhpZ2gtc2Vuc2l0aXZpdHkgY2FzZXMuCi0gVGhleSBjb3JyZWN0bHkgYXNzZXJ0IHRoZSBwcm9oaWJpdGlvbiBvZiBBUEkvUkVTVCBjcmVkZW50aWFscyAoYEdFTUlOSV9BUElfS0VZYCkgZm9yIGJvdGggcm91dGVzLgotIFRoZXkgbWFuZGF0ZSBjaGVja2luZyB0aGUgYGFneWAgcmlnLCBpdHMgYGluaXRgIHJlcXVlc3QtcmV2aWV3IG1vZGUsIGFuZCBkdXJhYmxlIHJlY2VpcHQgdXNpbmcgYSBoYXJtbGVzcyBydW50aW1lIGNhbmFyeSwgcGVyZmVjdGx5IG1pcnJvcmluZyB0aGUgY29udHJhY3QncyByZXF1aXJlbWVudCBub3QgdG8gcmVseSBvbiBhIHBlcnNpc3RlbnQgc2V0dGluZyBmb3IgcGVybWlzc2lvbiBtb2RlIHBvc3R1cmUuIAotIFRoZSBjaGFuZ2VzIGFsaWduIHdpdGggYGNvcmUvUkVQT19JTlZBUklBTlRTLm1kYCwgd2hpY2ggYWxyZWFkeSBzdGF0ZXMgdGhhdCB0aGUgcHVibGljIGVudHJ5cG9pbnQgdXNlcyB0aGUgc3Vic2NyaXB0aW9uLW9ubHkgYGFneWAgdHJhbnNwb3J0IGFzIHRoZSBkZWZhdWx0LiAKTm8gaGFybXMsIGZhbHNlIG1pdGlnYXRpb25zLCBvciBpbnZhcmlhbnQgdmlvbGF0aW9ucyBhcmUgaW50cm9kdWNlZC4KClZFUkRJQ1Q6IEdPCgpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMTQiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6ImIxZDViNDAyMzZlZWYzMTcwYmY2ZTNmOTgxZGM2YTZkNzY3MmUyZDMiLCJjYW5kaWRhdGUiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwidHJlZSI6ImI0NjVhMzQ5MTc1NzBmZGNiZWVjNjA2MzExZjliYzlhODkyNDM4ODciLCJmaWxlcyI6WyJkb2NzL3VuY2xlLWhhbmRvZmYvQ09ERVhfQURPUFRJT05fVElDS0VULm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiZDAwOWQzYzEwMDFlN2M1ZGY1MzJiZjU0YjM5ZDI0OTlkYzRhNDc4OWRmYzRjNmU3ZTk1YzlhZGM0N2YxZjFiOSIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6ImRvY3MvdW5jbGUtaGFuZG9mZi9DT0RFWF9BRE9QVElPTl9USUNLRVQubWQiLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjMzMjYxLCJjb21wb25lbnRfc2hhMjU2IjoiOWMxMDZjY2VmNzgzYTc4MWZiODM3YWYyYTFjMzY2ZGZjODIzYzI2MmRkZjIzZTg5MGNhNmNjNzc1OTE2MzkxMyIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjozMzI2MSwiZnJhZ21lbnRfc2hhMjU2IjoiOWMxMDZjY2VmNzgzYTc4MWZiODM3YWYyYTFjMzY2ZGZjODIzYzI2MmRkZjIzZTg5MGNhNmNjNzc1OTE2MzkxMyIsInJhbmdlX3N0YXR1cyI6Indob2xlIn0seyJwYXRoIjoiZG9jcy91bmNsZS1oYW5kb2ZmL0NPREVYX0FET1BUSU9OX1RJQ0tFVC5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTIyNDQsImNvbXBvbmVudF9zaGEyNTYiOiI3OTljMmFiZmNjNDA1YTJiNGQ0M2FjNWM2MjY5MzA2YzU2YTU5ZGFmMmUwZjg5MTg3Zjc5N2U2NDRkMWVhNmFhIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjIzMywiZnJhZ21lbnRfc2hhMjU2IjoiNzBjNWM4ZmI4ZDg5MzZiOTFkMWQzYTBhOTcxMjI3NDZjNDIzMmNkMDUxZDFhZTI1M2UxZTU4MGVjMDBiMDAxMiIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifSx7InBhdGgiOiJkb2NzL3VuY2xlLWhhbmRvZmYvQ09ERVhfQURPUFRJT05fVElDS0VULm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxMjI0NCwiY29tcG9uZW50X3NoYTI1NiI6Ijc5OWMyYWJmY2M0MDVhMmI0ZDQzYWM1YzYyNjkzMDZjNTZhNTlkYWYyZTBmODkxODdmNzk3ZTY0NGQxZWE2YWEiLCJieXRlX3N0YXJ0IjoyMzMsImJ5dGVfZW5kIjoxMjI0NCwiZnJhZ21lbnRfc2hhMjU2IjoiMzMwZGRiMWUwOWQxYjA1NzJlZDBmNjAyYWE4N2JkOTQzZGNmMWY0ZTcxYzQyZTUyN2I3MzhkYjE2ZTdiN2E1OCIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CgpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC1hYzUxYjhjMzAzNmIxYzI1Y2M0NzA1N2QgfCBQSUwtSU5HRVNULU1JRERMRS02NDZmMThlMWM1MmQ3N2FhNGMzMTEyMGQgfCBQSUwtSU5HRVNULUVPRi1lNzNlMzgxNzE1NThkMzY4Y2I3MGQ2YTcKClBJTC1ET05FLTYzZDRmMmYxNTk0YzlkZjI0ZjA4NjBlOAo=`
+- Record-SHA256: `490cd12ada2c45933bc49391a546f3f85e2e6227616cffe56206499553c07a78`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:20:45.755Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-6d9381d068dba0be7f69e93c`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-015`
+- Material-SHA256: `75ecc484bf04bebf5a5cda7b69ad7dc9d5ed2d195e64d82154879abb6ebf26d5`
+- Envelope-SHA256: `b49aa02668b8a92d224ae6f6a848cfd6042db4f9da5d5621c8a2025cde827ef8`
+- Envelope-Bytes: `71275`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-015","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["docs/uncle-handoff/FACTSHEET.md","package.json"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"75ecc484bf04bebf5a5cda7b69ad7dc9d5ed2d195e64d82154879abb6ebf26d5","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"docs/uncle-handoff/FACTSHEET.md","component_kind":"frozen_source","component_byte_length":27776,"component_sha256":"0539e15e6d2b7d342e2f5f6ef15c6662a6caac91a4a3f20bc98c1e963b53f1e5","byte_start":0,"byte_end":27776,"fragment_sha256":"0539e15e6d2b7d342e2f5f6ef15c6662a6caac91a4a3f20bc98c1e963b53f1e5","range_status":"whole"},{"path":"docs/uncle-handoff/FACTSHEET.md","component_kind":"per_file_diff","component_byte_length":12356,"component_sha256":"2ee665b2da724c1a3e46842ac3efcc0772c707d78f75e4421e507b3577b8c3a9","byte_start":0,"byte_end":185,"fragment_sha256":"cbf0ff3683997de49b9d86b3db26ee1fa1765079d4df18f0f5e8a5990819a2ca","range_status":"partial"},{"path":"docs/uncle-handoff/FACTSHEET.md","component_kind":"per_file_diff","component_byte_length":12356,"component_sha256":"2ee665b2da724c1a3e46842ac3efcc0772c707d78f75e4421e507b3577b8c3a9","byte_start":185,"byte_end":12356,"fragment_sha256":"94ee1a08ccf309b1ae120afa532e6726f42bfbc50418926d0122f1c9e71ad8fe","range_status":"partial"},{"path":"package.json","component_kind":"frozen_source","component_byte_length":975,"component_sha256":"a5f353ddc1194803872a6fe0cdfc1a30dc4b0ab4b7d4d11ae6f572ef7e44819e","byte_start":0,"byte_end":975,"fragment_sha256":"a5f353ddc1194803872a6fe0cdfc1a30dc4b0ab4b7d4d11ae6f572ef7e44819e","range_status":"whole"},{"path":"package.json","component_kind":"per_file_diff","component_byte_length":1149,"component_sha256":"2d7cea8d5d2a5b5d2360a103a581ed390a616ce366ff61919b596fcce11c2282","byte_start":0,"byte_end":109,"fragment_sha256":"d865579dad9a711d344721ee93c2ef761f7a615da627b30decc9db48e7e77c11","range_status":"partial"},{"path":"package.json","component_kind":"per_file_diff","component_byte_length":1149,"component_sha256":"2d7cea8d5d2a5b5d2360a103a581ed390a616ce366ff61919b596fcce11c2282","byte_start":109,"byte_end":1149,"fragment_sha256":"4f229f387062de2277120a552343b5754ad2a6a4b69e9aad6fea2172dc249ae7","range_status":"partial"}]}`
+- Reply-SHA256: `5bdcecf2a767847040fff121c3e91094b3022626a442923ba716a8477f5b5ee0`
+- Completion-Token-SHA256: `99ef3622b7209c086b99a6d382919839537c7d6680a656ca37baa2cbd3763e19`
+- Reply-UTF8-Base64: `KipGaW5kaW5nczoqKgoxLiAqKkNvbnRyYWN0IEFsaWdubWVudDoqKiBUaGUgY2hhbmdlcyB0byBgZG9jcy91bmNsZS1oYW5kb2ZmL0ZBQ1RTSEVFVC5tZGAgY29ycmVjdGx5IHJlZmxlY3QgdGhlIHNoaWZ0IHRvIHRoZSBgYWd5YCBhdXRvbWF0ZWQgdHJhbnNwb3J0IGZvciBHZW1pbmkgcmV2aWV3cy4gSXQgYWNjdXJhdGVseSBvdXRsaW5lcyB0aGUgc3Vic2NyaXB0aW9uLW9ubHkgZGlzcG9zYWJsZSByZXF1ZXN0LXJldmlldyByaWcgYW5kIHJldGFpbnMgdGhlIHN0cmljdCBtYW51YWwgZmFsbGJhY2ssIGFsaWduaW5nIHBlcmZlY3RseSB3aXRoIHRoZSBgZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kYCBkZXNpZ24gYW5kIGBjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZGAuIEl0IHByb3Blcmx5IHJlbW92ZXMgdGhlIHByaW9yIGNsYWltIHRoYXQgdGhlIHJvdXRlICJyZXF1aXJlcyBubyBHZW1pbmkgQ0xJIiwgYXMgYGFneWAgaXMgbm93IGludm9sdmVkLCB3aGlsZSBhY2N1cmF0ZWx5IHByZXNlcnZpbmcgdGhhdCAiTmVpdGhlciByb3V0ZSBuZWVkcyBhbiBBUEkga2V5LiIKMi4gKipSZWxlYXNlIFJ1bGUgQ29tcGxpYW5jZToqKiBgcGFja2FnZS5qc29uYCBjb3JyZWN0bHkgYnVtcHMgdGhlIG1pbm9yIHZlcnNpb24gdG8gYDIuMzIuMGAsIHdoaWNoIHNhdGlzZmllcyB0aGUgcmVsZWFzZSBydWxlIGRlZmluZWQgaW4gdGhlIFQyIGF1dG9tYXRlZCB0cmFuc3BvcnQgY29udHJhY3QgYmFzZWxpbmUuCjMuICoqUFJFRVhJU1RJTkcvTk9OQkxPQ0tJTkc6KiogYEZBQ1RTSEVFVC5tZGAgY29udGFpbnMgdW4tYnVtcGVkIHJlZmVyZW5jZXMgdG8gdGhlIHByZXZpb3VzIHZlcnNpb24gYEtpdCB2Mi4zMS4wYCBpbiBpdHMgaGVhZGVyIChsaW5lIDMpIGFuZCB1bmRlciB0aGUgc3dlZXAgc2tpbGwgZGVwZW5kZW5jaWVzIChsaW5lIDMyNCkuIEJlY2F1c2UgdGhlc2UgbGluZXMgd2VyZSB1bnRvdWNoZWQgYnkgdGhlIGNhbmRpZGF0ZSwgdGhleSByZXByZXNlbnQgYW4gdW5jaGFuZ2VkIGluaGVyaXRlZCBsaW1pdGF0aW9uIGFuZCBjYW5ub3QgYWxvbmUgcHJvZHVjZSBhIE5PLUdPLCBidXQgdGhleSBzaG91bGQgYmUgYnVtcGVkIGluIGEgc3Vic2VxdWVudCBjbGVhbnVwLgoKVkVSRElDVDogR08KCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAxNSIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiYjFkNWI0MDIzNmVlZjMxNzBiZjZlM2Y5ODFkYzZhNmQ3NjcyZTJkMyIsImNhbmRpZGF0ZSI6IjcxMmVhYTY5MmM5OWE0MWNmYThhZTU4ZjNlMzcwOTc4OWJiOGExMDgiLCJ0cmVlIjoiYjQ2NWEzNDkxNzU3MGZkY2JlZWM2MDYzMTFmOWJjOWE4OTI0Mzg4NyIsImZpbGVzIjpbImRvY3MvdW5jbGUtaGFuZG9mZi9GQUNUU0hFRVQubWQiLCJwYWNrYWdlLmpzb24iXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiI3NWVjYzQ4NGJmMDRiZWJmNWE1Y2RhN2I2OWFkN2RjOWQ1ZWQyZDE5NWU2NGQ4MjE1NDg3OWFiYjZlYmYyNmQ1Iiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6dHJ1ZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiZG9jcy91bmNsZS1oYW5kb2ZmL0ZBQ1RTSEVFVC5tZCIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6Mjc3NzYsImNvbXBvbmVudF9zaGEyNTYiOiIwNTM5ZTE1ZTZkMmI3ZDM0MmUyZjVmNmVmMTVjNjY2MmE2Y2FhYzkxYTRhM2YyMGJjOThjMWU5NjNiNTNmMWU1IiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjI3Nzc2LCJmcmFnbWVudF9zaGEyNTYiOiIwNTM5ZTE1ZTZkMmI3ZDM0MmUyZjVmNmVmMTVjNjY2MmE2Y2FhYzkxYTRhM2YyMGJjOThjMWU5NjNiNTNmMWU1IiwicmFuZ2Vfc3RhdHVzIjoid2hvbGUifSx7InBhdGgiOiJkb2NzL3VuY2xlLWhhbmRvZmYvRkFDVFNIRUVULm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoxMjM1NiwiY29tcG9uZW50X3NoYTI1NiI6IjJlZTY2NWIyZGE3MjRjMWEzZTQ2ODQyYWMzZWZjYzA3NzJjNzA3ZDc4Zjc1ZTQ0MjFlNTA3YjM1NzdiOGMzYTkiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTg1LCJmcmFnbWVudF9zaGEyNTYiOiJjYmYwZmYzNjgzOTk3ZGU0OWI5ZDg2YjNkYjI2ZWUxZmExNzY1MDc5ZDRkZjE4ZjBmNWU4YTU5OTA4MTlhMmNhIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6ImRvY3MvdW5jbGUtaGFuZG9mZi9GQUNUU0hFRVQubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjEyMzU2LCJjb21wb25lbnRfc2hhMjU2IjoiMmVlNjY1YjJkYTcyNGMxYTNlNDY4NDJhYzNlZmNjMDc3MmM3MDdkNzhmNzVlNDQyMWU1MDdiMzU3N2I4YzNhOSIsImJ5dGVfc3RhcnQiOjE4NSwiYnl0ZV9lbmQiOjEyMzU2LCJmcmFnbWVudF9zaGEyNTYiOiI5NGVlMWEwOGNjZjMwOWIxYWUxMjBhZmE1MzJlNjcyNmY0MmJmYmM1MDQxODkyNmQwMTIyZjFjOWU3MWFkOGZlIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InBhY2thZ2UuanNvbiIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6OTc1LCJjb21wb25lbnRfc2hhMjU2IjoiYTVmMzUzZGRjMTE5NDgwMzg3MmE2ZmUwY2RmYzFhMzBkYzRiMGFiNGI3ZDRkMTFhZTZmNTcyZWY3ZTQ0ODE5ZSIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjo5NzUsImZyYWdtZW50X3NoYTI1NiI6ImE1ZjM1M2RkYzExOTQ4MDM4NzJhNmZlMGNkZmMxYTMwZGM0YjBhYjRiN2Q0ZDExYWU2ZjU3MmVmN2U0NDgxOWUiLCJyYW5nZV9zdGF0dXMiOiJ3aG9sZSJ9LHsicGF0aCI6InBhY2thZ2UuanNvbiIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTE0OSwiY29tcG9uZW50X3NoYTI1NiI6IjJkN2NlYThkNWQyYTViNWQyMzYwYTEwM2E1ODFlZDM5MGE2MTZjZTM2NmZmNjE5MTliNTk2ZmNjZTExYzIyODIiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6MTA5LCJmcmFnbWVudF9zaGEyNTYiOiJkODY1NTc5ZGFkOWE3MTFkMzQ0NzIxZWU5M2MyZWY3NjFmN2E2MTVkYTYyN2IzMGRlY2M5ZGI0OGU3ZTc3YzExIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InBhY2thZ2UuanNvbiIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTE0OSwiY29tcG9uZW50X3NoYTI1NiI6IjJkN2NlYThkNWQyYTViNWQyMzYwYTEwM2E1ODFlZDM5MGE2MTZjZTM2NmZmNjE5MTliNTk2ZmNjZTExYzIyODIiLCJieXRlX3N0YXJ0IjoxMDksImJ5dGVfZW5kIjoxMTQ5LCJmcmFnbWVudF9zaGEyNTYiOiI0ZjIyOWYzODcwNjJkZTIyNzcxMjBhNTUyMzQzYjU3NTRhZDJhNmE0YjY5ZTlhYWQ2ZmVhMjE3MmRjMjQ5YWU3IiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KCklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELTNjNTA1OTQ0NzU4YjQwNGZiMTZmMWUxOCB8IFBJTC1JTkdFU1QtTUlERExFLWM2ZjMxMmYwZmY5NTQxZDQ0OTM4ODVhYSB8IFBJTC1JTkdFU1QtRU9GLWRlMzgzNDZjNGQ0YzI1YjgwMDJlNjdlMAoKUElMLURPTkUtYmE3NDIzMDgzOGQ3N2E3OGIzMmI0N2ExCg==`
+- Record-SHA256: `1f209972c2aed06fe8ca6baf680112874e4444a0651348aace6ec54da3c9f58e`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — UNRESOLVED_ATTRIBUTION — 2026-09-13T03:23:21.050Z
+
+- Status: `UNRESOLVED_ATTRIBUTION`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-b7ae5628a8ceed900c5bf9a2`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-016`
+- Material-SHA256: `1921c2d375b809e3694f2382b73a2a55fc708b51aa51f988fa148877d5d29d09`
+- Envelope-SHA256: `9617890f2aadab68b40cfd308c0676f4f5303e07d6709094ecf1e74f3cd0e4a2`
+- Envelope-Bytes: `81886`
+- Ordered-Contributors: `(none)`
+- Provider-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-016","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["scripts/cold-review-gemini.sh"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"1921c2d375b809e3694f2382b73a2a55fc708b51aa51f988fa148877d5d29d09","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"scripts/cold-review-gemini.sh","component_kind":"frozen_source","component_byte_length":79794,"component_sha256":"ea7de0209da3c6fe05ced870a095ec38c0f58bd83cca68a77c18ac58d7a5d876","byte_start":0,"byte_end":55452,"fragment_sha256":"cb6e965cd9e037e68df741642d18d5aa45a09707cbc4a453ec89907d19c711d4","range_status":"partial"}]}`
+- Reply-SHA256: `e09b2ae3300f72c7f7aafda919dea42977c92b529ddd4e003c22b79e9bc7252d`
+- Completion-Token-SHA256: `6daa3aa8a6e56578269b7f9ef08d19a713bfd868115b7f024eab27af1a6a1ebf`
+- Reply-UTF8-Base64: `KipGSU5ESU5HUzoqKgpUaGlzIGNhbmRpZGF0ZSB2aW9sYXRlcyBib3RoIHBvcnRhYmxlIGJpbmRpbmcgaW52YXJpYW50cyBhbmQgdGhlIHRyYW5zcG9ydCBjb250cmFjdC4KCjEuICoqQm9vbGVhbiBDb25maWcgVHJ1dGhpbmVzcyAvIFN0dWNrIFN3aXRjaCAoSW52YXJpYW50ICMzIFZpb2xhdGlvbikqKgogICBUaGUgc2NyaXB0IGNoZWNrcyBgR0VNSU5JX0FMTE9XX0NPREVfTU9ERWAgdXNpbmcgYSBiYXNoIHN0cmluZy1lbXB0aW5lc3MgdGVzdDogYFsgLXogIiR7R0VNSU5JX0FMTE9XX0NPREVfTU9ERTotfSIgXWAuIElmIGFuIG9wZXJhdG9yIGF0dGVtcHRzIHRvIGV4cGxpY2l0bHkgZGlzYWJsZSBpdCBieSBwYXNzaW5nIGBHRU1JTklfQUxMT1dfQ09ERV9NT0RFPWZhbHNlYCBvciBgR0VNSU5JX0FMTE9XX0NPREVfTU9ERT0wYCwgdGhlIHN0cmluZyBpcyBldmFsdWF0ZWQgYXMgbm9uLWVtcHR5LiBUaGUgYC16YCBjaGVjayByZXR1cm5zIGZhbHNlLCBieXBhc3NpbmcgdGhlIGVuZm9yY2VtZW50IGJsb2NrIGFuZCBpbmNvcnJlY3RseSBhbGxvd2luZyBjb2RlIG1vZGUgdG8gZXhlY3V0ZS4gVGhpcyBkaXJlY3RseSB2aW9sYXRlcyBFcGlzdGVtaWMgUnVsZSAzOiAqIkJvb2xlYW4gY29uZmlnIHJlYWRzIHVzZSBleHBsaWNpdCBzdHJpbmcgY29tcGFyZS4uLiBORVZFUiB0cnV0aGluZXNzLiBXaGVyZSBmbGFncyBhcmUgdG9nZ2xlZCByYXRoZXIgdGhhbiBkZWxldGVkLCB0aGUgc3RyaW5nICdmYWxzZScgaXMgdHJ1dGh5IOKGkiBhIHN0dWNrIHN3aXRjaC4iKgoKMi4gKipTaW5nbGUtRmxpZ2h0IExvY2sgQnlwYXNzIC8gQ29uY3VycmVuY3kgSGF6YXJkIChDb250cmFjdCBWaW9sYXRpb24pKioKICAgSW4gYGFjcXVpcmVfc2luZ2xlX2ZsaWdodGAsIHRoZSBgTE9DS19ESVIvb3duZXJgIHJlY29yZCBzYXZlcyB0aGUgYmFzaCBwcm9jZXNzIGNvbW1hbmQgc3RyaW5nIChlLmcuLCBgYmFzaCBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaGApLiBXaGVuIHRoZSBydW5uZXIgZW50ZXJzIGEgZnJvemVuIGRpc3BhdGNoLCBpdCBwZXJmb3JtcyBgZXhlYyBub2RlICIkU0NSSVBUX0RJUi9nZW1pbmktZnJvemVuLWdhdGUubWpzImAuIFRoaXMgcHJvY2VzcyByZXBsYWNlbWVudCByZXRhaW5zIHRoZSBvcmlnaW5hbCBQSUQgYW5kIHN0YXJ0IHRpbWUsIGJ1dCBmdW5kYW1lbnRhbGx5IGFsdGVycyB0aGUgbGl2ZSBwcm9jZXNzIGNvbW1hbmQgc3RyaW5nLiBJZiBhIHNlY29uZCwgY29uY3VycmVudCBzY3JpcHQgaW52b2NhdGlvbiB0ZXN0cyB0aGlzIGxvY2ssIHRoZSBga2lsbCAtMGAgY2hlY2sgc3VjY2VlZHMsIGJ1dCB0aGUgc2FmZXR5IGNoZWNrIGBbICIkY3VycmVudF9jb21tYW5kIiA9ICIkb3duZXJfY29tbWFuZCIgXWAgZmFpbHMgKGJlY2F1c2UgYG5vZGVgIGRvZXMgbm90IG1hdGNoIGBiYXNoYCkuIEJ5cGFzc2luZyB0aGUgYGV4aXQgNGAgc2FmZXR5IGNoZWNrLCB0aGUgc2Vjb25kIHJ1bm5lciBpbmNvcnJlY3RseSBkZWR1Y2VzIHRoZSBsb2NrIGlzIHN0YWxlLCBmYWxscyB0aHJvdWdoIHRvIGByZWNvdmVyX3N0YWxlX2xvY2tgLCB2aW9sZW50bHkgcHVyZ2VzIHRoZSBhY3RpdmUgc2luZ2xlLWZsaWdodCBndWFyZCwgYW5kIHJ1bnMgY29uY3VycmVudGx5LiBUaGlzIHZpb2xhdGVzIHRoZSBjb250cmFjdCBtYW5kYXRlIHRoYXQgKiJUaGUgcHVibGljIGVudHJ5cG9pbnQgcmV0YWlucyB0aGUgZXhpc3RpbmcgcGVyLXJlcG9zaXRvcnkgc2luZ2xlLWZsaWdodCBzdXBlcnZpc29yIGlkZW50aXR5LCBwYXJlbnQtbG9zcyBoYW5kbGluZywgYW5kIHN0YWxlLW93bmVyIHJlY292ZXJ5LiIqCgpWRVJESUNUOiBOTy1HTwoKSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDE2IiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMWQ1YjQwMjM2ZWVmMzE3MGJmNmUzZjk4MWRjNmE2ZDc2NzJlMmQzIiwiY2FuZGlkYXRlIjoiNzEyZWFhNjkyYzk5YTQxY2ZhOGFlNThmM2UzNzA5Nzg5YmI4YTEwOCIsInRyZWUiOiJiNDY1YTM0OTE3NTcwZmRjYmVlYzYwNjMxMWY5YmM5YTg5MjQzODg3IiwiZmlsZXMiOlsic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiIxOTIxYzJkMzc1YjgwOWUzNjk0ZjIzODJiNzNhMmE1NWZjNzA4YjUxYWE1MWY5ODhmYTE0ODg3N2Q1ZDI5ZDA5Iiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6ZmFsc2UsImZyYWdtZW50cyI6W3sicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo3OTc5NCwiY29tcG9uZW50X3NoYTI1NiI6ImVhN2RlMDIwOWRhM2M2ZmUwNWNlZDg3MGEwOTVlYzM4YzBmNThiZDgzY2NhNjhhNzdjMThhYzU4ZDdhNWQ4NzYiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6NTU0NTIsImZyYWdtZW50X3NoYTI1NiI6ImNiNmU5NjVjZDllMDM3ZTY4ZGY3NDE2NDJkMThkNWFhNDVhMDk3MDdjYmM0YTQ1M2VjODk5MDdkMTljNzExZDQiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQoKSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtNmE0ZjIwYTBmOGZhN2EwYzUxYzE2YjIyIHwgUElMLUlOR0VTVC1NSURETEUtYjRmM2UwZGZiN2Q4M2RlZmNjNGY3Nzk4IHwgUElMLUlOR0VTVC1FT0YtMGY1MzlmZDgwOGI3MmE2YjkyMWMzYmFiCgpQSUwtRE9ORS05YzQ3ZmQyM2RiODBiM2ZjMDE1MzBkZmUK`
+- Record-SHA256: `e22775c9ae5700c3892b3e833ef595b52ad466aebc19bba0f8ee3e1e9cc36a5f`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — NO_GO — 2026-09-13T03:25:17.863Z
+
+- Status: `NO_GO`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-ae0236ac2ae1f9df8e998954`
+- Rig-ID: `agy-1.2.2-subscription-review`
+- Rig-Key: `5367206eca7a66af18a0923635a62100a353413f0a1aca34ee611243772616fa`
+- Failure-Class: `(none)`
+- Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Candidate: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Tree: `b465a34917570fdcbeec606311f9bc9a89243887`
+- Plan-ID: `7366551dd51ee2469635d6ee46e9d8666eecc781e2aa72e360143ab7ac8c49d5`
+- Slice: `coverage-017`
+- Material-SHA256: `56330e139ab8b9911e44f1699ccd270b6603b4fce572ba17d95287090c7376e1`
+- Envelope-SHA256: `6fd17a4c53ee512837fbac735cccff25932119930a044a9bb3f84f0af364bf9f`
+- Envelope-Bytes: `69273`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-017","gate_kind":"base..candidate_change","base":"b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3","candidate":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","tree":"b465a34917570fdcbeec606311f9bc9a89243887","files":["scripts/cold-review-gemini.sh"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"56330e139ab8b9911e44f1699ccd270b6603b4fce572ba17d95287090c7376e1","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"scripts/cold-review-gemini.sh","component_kind":"frozen_source","component_byte_length":79794,"component_sha256":"ea7de0209da3c6fe05ced870a095ec38c0f58bd83cca68a77c18ac58d7a5d876","byte_start":55452,"byte_end":79794,"fragment_sha256":"b55d1ea29e550bc4277bb30a4ad4b61eda1d6b8d0c9fbaeeb310144461c6b435","range_status":"partial"},{"path":"scripts/cold-review-gemini.sh","component_kind":"per_file_diff","component_byte_length":37603,"component_sha256":"bca78d875b9fcd20dbe5c288d694bc05d2b20aed692663b553c554c55361b6ba","byte_start":0,"byte_end":177,"fragment_sha256":"94d1198a6d1e6c2ecd302a654c28b4ea98b89cbe2e09a909f65145b8e0f1c8a2","range_status":"partial"},{"path":"scripts/cold-review-gemini.sh","component_kind":"per_file_diff","component_byte_length":37603,"component_sha256":"bca78d875b9fcd20dbe5c288d694bc05d2b20aed692663b553c554c55361b6ba","byte_start":177,"byte_end":17458,"fragment_sha256":"0f2bff650026b9445f5313fac77a37205a3d3c538b34a3ab08a527ba85652c6d","range_status":"partial"}]}`
+- Reply-SHA256: `f462e617ee24e55b5196afcbaa678c476554e9c9c89f891be6def738927e55df`
+- Completion-Token-SHA256: `07c3c7cd1cf3b2cc40f16858927e3890779f398e065b3de3d018407bb2019311`
+- Reply-UTF8-Base64: `MS4gQkxPQ0tFUjogYHNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoYCDigJQgQ29udHJhY3QtdnMtZGVzaWduIGRyaWZ0IC8gRmFsc2UgUHVibGljIENsYWltLiBUaGUgZGlmZiBpbnRyb2R1Y2VzIGEgcHVibGljIGNsYWltIGluIGl0cyBkb2N1bWVudGF0aW9uIHRoYXQgIkZyb3plbiBleGFjdC10dXBsZSByZXZpZXcgbm9ybWFsbHkgdXNlcyBhIHN1YnNjcmlwdGlvbi1vbmx5IGBhZ3lgIHN0cmVhbSBpbiBhbiBlbXB0eSBkaXNwb3NhYmxlIGN3ZCIuIEl0IHRoZW4gbW9kaWZpZXMgdGhlIGRpc3BhdGNoZXIgbG9naWMgdG8gYWxsb3cgZnJvemVuIGF1dG9tYXRlZCBydW5zICh2aWEgYC0tcnVuLXNsaWNlc2Agb3IgbGFja2luZyBgLS1kcnktcnVuYCkgdG8gZmFsbCB0aHJvdWdoIHRvIHRoZSBhY3R1YWwgZXhlY3V0aW9uIGJsb2NrLiBIb3dldmVyLCB0aGUgY2FuZGlkYXRlIGxlYXZlcyB0aGUgZXhlY3V0aW9uIGJsb2NrIGNvbXBsZXRlbHkgdW50b3VjaGVkLiBBcyBhIHJlc3VsdCwgdGhlIHNjcmlwdCBjb250aW51ZXMgdG8gaW52b2tlIHRoZSBsZWdhY3kgYHJ1bl9zdXBlcnZpc2VkYCBjb21tYW5kIHdoaWNoIGRpcmVjdGx5IHBhc3NlcyBgLS1hZGQtZGlyICIkVE1QRCJgIGFuZCBgLS1wcmludGAgKGFyZ3YgcHJvbXB0KS4gVGhpcyBleHBsaWNpdGx5IHZpb2xhdGVzIGl0ZW0gMiAoIk5vIHJldmlldyBtYXRlcmlhbCBtYXkgYXBwZWFyIGluIGFuIGFyZ3YgcHJvbXB0IikgYW5kIGl0ZW0gNCAoIk5ldmVyIHBhc3MgYSByZXBvc2l0b3J5IGN3ZCwgYC0tYWRkLWRpcmAsIGAtLW5ldy1wcm9qZWN0YCwgcHJvamVjdC1zZWxlY3Rpb24gb3B0aW9uLCBwcm9tcHQgYXJndiIpIG9mIHRoZSAiTm9uLW5lZ290aWFibGUgYXV0b21hdGVkIHRyYW5zcG9ydCBzaGFwZSIgaW4gYGRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZGAuIEZ1cnRoZXJtb3JlLCB0aGUgaW52b2NhdGlvbiB1c2VzIGAtLW1vZGUgcGxhbmAgcmF0aGVyIHRoYW4gZGlzYWJsaW5nIHNsYXNoIGNvbW1hbmRzLCBhbmQgaXQgZmFpbHMgdG8gc3RyZWFtIE5ESlNPTiBvciByZXF1aXJlIGByZXF1ZXN0LXJldmlld2AgcGVybWlzc2lvbnMsIGJyZWFraW5nIHRoZSBUMiBjb250cmFjdC4KCjIuIExPVzogYHNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoYCDigJQgRGVhZCBzdGF0ZSAvIHVudXNlZCB2YXJpYWJsZXMuIFRoZSBjYW5kaWRhdGUgYWRkcyBjb21tYW5kIGxpbmUgYXJndW1lbnQgcGFyc2luZyBmb3IgYC0tZ2VtaW5pLW1vZGVsYCwgYC0tYWd5LWJpbmAsIGFuZCBgLS10aW1lb3V0LXNlY29uZHNgLCBhc3NpZ25pbmcgdGhlbSB0byBgRlJPWkVOX01PREVMYCwgYEZST1pFTl9BR1lfQklOYCwgYW5kIGBGUk9aRU5fVElNRU9VVF9TRUNPTkRTYCByZXNwZWN0aXZlbHkuIEhvd2V2ZXIsIG5vbmUgb2YgdGhlc2UgdmFyaWFibGVzIGFyZSBhY3R1YWxseSB3aXJlZCB1cCB0byB0aGUgZXhlY3V0aW9uIHBhdGguIFRoZSBzY3JpcHQgY29udGludWVzIHRvIHVzZSBgTU9ERUw9IkdlbWluaSAzLjEgUHJvIChIaWdoKSJgLCByZXNvbHZlcyBgQUdZYCB2aWEgYEdFTUlOSV9BR1lfQklOYCBpbnN0ZWFkIG9mIHRoZSBhcmd1bWVudCwgYW5kIHVzZXMgYFRJTUVPVVRfU0VDT05EUz0iJHtHRU1JTklfVElNRU9VVF9TRUNPTkRTOi02MDB9ImAuCgpPdmVyYWxsIHJlYWQ6Ci0gQmxhc3QgcmFkaXVzOiBIaWdoLiBUaGUgY2hhbmdlIGV4cG9zZXMgdGhlIGF1dG9tYXRlZCBmcm96ZW4gcmV2aWV3IHBpcGVsaW5lIHRvIHRoZSBsZWdhY3kgYWdlbnQtaGFybmVzcyBpbnZvY2F0aW9uIHBhdGggdGhhdCB2aW9sYXRlcyB0aGUgc2VjdXJpdHkgY29udHJhY3QsIHBhc3NpbmcgcmV2aWV3IG1hdGVyaWFsIHZpYSBhcmd2IGFuZCBtb3VudGluZyBkaXJlY3RvcmllcyBkaXJlY3RseSBpbnRvIHRoZSBzYW5kYm94LgotIFJldmVyc2liaWxpdHk6IEVhc3kuIFRoZSBQUiBjYW4gYmUgYmxvY2tlZCwga2VlcGluZyB0aGUgYXV0b21hdGVkIHRyYW5zcG9ydCBsb2NrZWQgdW50aWwgdGhlIGFjdHVhbCBOREpTT04tc3RyZWFtIGltcGxlbWVudGF0aW9uIGlzIHdyaXR0ZW4uIAotIERvdWJsZS1jaGVjayBmaXJzdDogVmVyaWZ5IHdoZXRoZXIgdGhlIGF1dGhvciBpbnRlbmRlZCB0byBpbXBsZW1lbnQgdGhlIGNvcnJlY3QgYGFneWAgaW52b2NhdGlvbiBpbiBhIHNlcGFyYXRlIHNjcmlwdCBvciBmdW5jdGlvbiBidXQgbWlzdGFrZW5seSBtb2RpZmllZCB0aGUgZGlzcGF0Y2ggcnVsZXMgaW4gdGhpcyBmaWxlIGJlZm9yZSB0aGUgaW1wbGVtZW50YXRpb24gd2FzIHJlYWR5LgoKVkVSRElDVDogTk8tR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDE3IiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMWQ1YjQwMjM2ZWVmMzE3MGJmNmUzZjk4MWRjNmE2ZDc2NzJlMmQzIiwiY2FuZGlkYXRlIjoiNzEyZWFhNjkyYzk5YTQxY2ZhOGFlNThmM2UzNzA5Nzg5YmI4YTEwOCIsInRyZWUiOiJiNDY1YTM0OTE3NTcwZmRjYmVlYzYwNjMxMWY5YmM5YTg5MjQzODg3IiwiZmlsZXMiOlsic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiI1NjMzMGUxMzlhYjhiOTkxMWU0NGYxNjk5Y2NkMjcwYjY2MDNiNGZjZTU3MmJhMTdkOTUyODcwOTBjNzM3NmUxIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6dHJ1ZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6ImZyb3plbl9zb3VyY2UiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjc5Nzk0LCJjb21wb25lbnRfc2hhMjU2IjoiZWE3ZGUwMjA5ZGEzYzZmZTA1Y2VkODcwYTA5NWVjMzhjMGY1OGJkODNjY2E2OGE3N2MxOGFjNThkN2E1ZDg3NiIsImJ5dGVfc3RhcnQiOjU1NDUyLCJieXRlX2VuZCI6Nzk3OTQsImZyYWdtZW50X3NoYTI1NiI6ImI1NWQxZWEyOWU1NTBiYzQyNzdiYjMwYTRhZDRiNjFlZGExZDZiOGQwYzlmYmFlZWIzMTAxNDQ0NjFjNmI0MzUiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjM3NjAzLCJjb21wb25lbnRfc2hhMjU2IjoiYmNhNzhkODc1YjlmY2QyMGRiZTVjMjg4ZDY5NGJjMDVkMmIyMGFlZDY5MjY2M2I1NTNjNTU0YzU1MzYxYjZiYSIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxNzcsImZyYWdtZW50X3NoYTI1NiI6Ijk0ZDExOThhNmQxZTZjMmVjZDMwMmE2NTRjMjhiNGVhOThiODljYmUyZTA5YTkwOWY2NTE0NWI4ZTBmMWM4YTIiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjM3NjAzLCJjb21wb25lbnRfc2hhMjU2IjoiYmNhNzhkODc1YjlmY2QyMGRiZTVjMjg4ZDY5NGJjMDVkMmIyMGFlZDY5MjY2M2I1NTNjNTU0YzU1MzYxYjZiYSIsImJ5dGVfc3RhcnQiOjE3NywiYnl0ZV9lbmQiOjE3NDU4LCJmcmFnbWVudF9zaGEyNTYiOiIwZjJiZmY2NTAwMjZiOTQ0NWY1MzEzZmFjNzdhMzcyMDVhM2QzYzUzOGIzNGEzYWIwOGE1MjdiYTg1NjUyYzZkIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtMWQ2NTEzZWUyNWI5NzljZTRjNmM0YmJlIHwgUElMLUlOR0VTVC1NSURETEUtNWVkMTNmZDczNDkxMGM5ODVjN2VlMDRlIHwgUElMLUlOR0VTVC1FT0YtZGVjYmJmMmI0ZjIwNDVmYjJmMTk0NzJiClBJTC1ET05FLWU0NjNkOTljMWU1ODIyYWJjNjMxNTI5Ngo=`
+- Record-SHA256: `591bff160f080df174e96e7819933a9740dc1cfe8db6b5e7f74fdcdcfc519460`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — UNRESOLVED_ATTRIBUTION — 2026-09-13T03:46:42.955Z
+
+- Status: `UNRESOLVED_ATTRIBUTION`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-87a0ccc05032307f3681dc0b`
+- Rig-ID: `agy-restore-completion`
+- Rig-Key: `c7ff1f9eb3093c959c8ab7695045a04e145de7feba7a1eb982253a4e0369e8f9`
+- Failure-Class: `(none)`
+- Base: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Candidate: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Tree: `e4eb4101217e966232d860c5083491fc68aac3cc`
+- Plan-ID: `9fc9567adc9ab75274115301b9ccff77cae6d62addcc4578aa6144f67011ddfe`
+- Slice: `coverage-001`
+- Material-SHA256: `ed6d3e0fb2463f7839ebbf3afaeb7bb7bc496a006591f1e1366688ba00d56e31`
+- Envelope-SHA256: `6f92099b154328965bab97bf6c6074308a05ed9d7ef0481b1e344d2185c48c00`
+- Envelope-Bytes: `81828`
+- Ordered-Contributors: `(none)`
+- Provider-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-001","gate_kind":"base..candidate_change","base":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","candidate":"98a8b3d8beaa519445413a0432bf63fbe64a4022","tree":"e4eb4101217e966232d860c5083491fc68aac3cc","files":["core/GATES.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"ed6d3e0fb2463f7839ebbf3afaeb7bb7bc496a006591f1e1366688ba00d56e31","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"core/GATES.md","component_kind":"frozen_source","component_byte_length":86072,"component_sha256":"5b38edc6350d0dfd8c12264c7666e630e2e8f9aff41a90893b944512650a5c59","byte_start":0,"byte_end":57455,"fragment_sha256":"4ce21710cbffed031ef72bbb40b8df9ab03fdd697ca331534f1f5bbf5da0f5d3","range_status":"partial"}]}`
+- Reply-SHA256: `eae18767c2e81339f36fcd672295330e759737ac9e4ba2a35bd6509ab2f89270`
+- Completion-Token-SHA256: `eb83dc85df746a8680891eaefdd919a986be7e65a703579e3024b935bf65d857`
+- Reply-UTF8-Base64: `KipGSU5ESU5HUzoqKgpUaGUgYGNvcmUvR0FURVMubWRgIGFydGlmYWN0IG1ha2VzIGEgZmFsc2UgcHVibGljIGNsYWltIGJ5IGRvY3VtZW50aW5nIGEgYnJva2VuIGNvbW1hbmQgZm9yIHRoZSBHZW1pbmkgQ29kZSBnYXRlLiBJbiB0aGUgYENvbW1hbmRzYCBsaXN0LCB0aGUgbWFudWFsIGV4cGxpY2l0bHkgaW5zdHJ1Y3RzIHVzZXJzIHRvIHJ1bjoKYENvZGUgZ2F0ZTogYmFzaCBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCAtLWNvbnRleHQgPGRlc2lnbi5tZD5gCgpIb3dldmVyLCBlYXJsaWVyIGluIHRoZSBzYW1lIGRvY3VtZW50LCB0aGUgcm91dGluZyBydWxlcyBzdGF0ZSB0aGF0IGBHRU1JTklfQUxMT1dfQ09ERV9NT0RFPTFgIGlzIGEgbWFuZGF0b3J5IGVzY2FwZSBmb3IgY29kZS1tb2RlIHJ1bnMsIGFuZCB0aGF0IGBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCBzdGlsbCByZWZ1c2VzIGFuIHVucXVhbGlmaWVkIGNvZGUtbW9kZSBydW4gKHJjMilgLiBCZWNhdXNlIHRoZSBwcm92aWRlZCBjb21tYW5kIG9taXRzIHRoaXMgcmVxdWlyZWQgZW52aXJvbm1lbnQgdmFyaWFibGUsIGl0IGlzIHVucXVhbGlmaWVkIGFuZCB3aWxsIGJlIHVuY29uZGl0aW9uYWxseSByZWZ1c2VkIGJ5IHRoZSBydW5uZXIuIFRoaXMgaW50cm9kdWNlcyBjb25jcmV0ZSByZWFjaGFibGUgaGFybSBieSBpbnN0cnVjdGluZyB1c2VycyB0byB1c2UgYSBjb21tYW5kIHRoYXQgaXMgZ3VhcmFudGVlZCB0byBmYWlsLgoKVkVSRElDVDogTk8tR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAxIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwiY2FuZGlkYXRlIjoiOThhOGIzZDhiZWFhNTE5NDQ1NDEzYTA0MzJiZjYzZmJlNjRhNDAyMiIsInRyZWUiOiJlNGViNDEwMTIxN2U5NjYyMzJkODYwYzUwODM0OTFmYzY4YWFjM2NjIiwiZmlsZXMiOlsiY29yZS9HQVRFUy5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6ImVkNmQzZTBmYjI0NjNmNzgzOWViYmYzYWZhZWI3YmI3YmM0OTZhMDA2NTkxZjFlMTM2NjY4OGJhMDBkNTZlMzEiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjpmYWxzZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiY29yZS9HQVRFUy5tZCIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6ODYwNzIsImNvbXBvbmVudF9zaGEyNTYiOiI1YjM4ZWRjNjM1MGQwZGZkOGMxMjI2NGM3NjY2ZTYzMGUyZThmOWFmZjQxYTkwODkzYjk0NDUxMjY1MGE1YzU5IiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjU3NDU1LCJmcmFnbWVudF9zaGEyNTYiOiI0Y2UyMTcxMGNiZmZlZDAzMWVmNzJiYmI0MGI4ZGY5YWIwM2ZkZDY5N2NhMzMxNTM0ZjFmNWJiZjVkYTBmNWQzIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtZTYyYzc2YmQyYzM0YzQ2NzllMTJhOTcwIHwgUElMLUlOR0VTVC1NSURETEUtZDlhNTBiNjk1MDc0MjFkZTRiZmQ1N2YxIHwgUElMLUlOR0VTVC1FT0YtNWY1ZWJhY2UzMzg0N2ZjNmE2Mzc0NmIwCgpQSUwtRE9ORS05Y2QzOWExZjg3NDJjNjkwMWIyOGM1NjEK`
+- Record-SHA256: `678b4fc5d0fd1111cf50b793bfe8f515592b38691d73a18a9b7f40e1e0d1ee37`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T03:47:14.290Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-4b749398a8673436f6d4c9ec`
+- Rig-ID: `agy-restore-completion`
+- Rig-Key: `c7ff1f9eb3093c959c8ab7695045a04e145de7feba7a1eb982253a4e0369e8f9`
+- Failure-Class: `(none)`
+- Base: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Candidate: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Tree: `e4eb4101217e966232d860c5083491fc68aac3cc`
+- Plan-ID: `9fc9567adc9ab75274115301b9ccff77cae6d62addcc4578aa6144f67011ddfe`
+- Slice: `coverage-002`
+- Material-SHA256: `a3143008b8cd5b825db6dddceb25d55cf2406b45019759499401b36873eac435`
+- Envelope-SHA256: `b4b6f1f3a8929060cbd2e2e7381a2ba3e99fbc0e41a3b36f943d0546b3239b30`
+- Envelope-Bytes: `72852`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-002","gate_kind":"base..candidate_change","base":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","candidate":"98a8b3d8beaa519445413a0432bf63fbe64a4022","tree":"e4eb4101217e966232d860c5083491fc68aac3cc","files":["core/GATES.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"a3143008b8cd5b825db6dddceb25d55cf2406b45019759499401b36873eac435","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"core/GATES.md","component_kind":"frozen_source","component_byte_length":86072,"component_sha256":"5b38edc6350d0dfd8c12264c7666e630e2e8f9aff41a90893b944512650a5c59","byte_start":57455,"byte_end":86072,"fragment_sha256":"e238f485d86d07ef9d437dc860d410ebbd50f1e806b90b97793aad79b11dac3a","range_status":"partial"},{"path":"core/GATES.md","component_kind":"per_file_diff","component_byte_length":17901,"component_sha256":"f5a65f94e717211582e10ba8ca5f1549a34cfc34b57d3234b32085ea9f5d70e4","byte_start":0,"byte_end":113,"fragment_sha256":"73084471f800606f3a598c702bdec0baaadb8756441aa8268b0a2e2621752b82","range_status":"partial"},{"path":"core/GATES.md","component_kind":"per_file_diff","component_byte_length":17901,"component_sha256":"f5a65f94e717211582e10ba8ca5f1549a34cfc34b57d3234b32085ea9f5d70e4","byte_start":113,"byte_end":17901,"fragment_sha256":"e99c8a8b38bd0e5f97cb9e6d8030eb4800e2b099abb23aaa23926e64cb115252","range_status":"partial"}]}`
+- Reply-SHA256: `aa3c6b5f412ad535de0ce62a3306ce67fb772ed4633b48f275ff3378fedb8130`
+- Completion-Token-SHA256: `b325f789941ab0725239b54a735c999d51b46c1eed11e3adcd72f5d5521ab0ba`
+- Reply-UTF8-Base64: `KipGSU5ESU5HUzoqKgpUaGUgcHJvdmlkZWQgZnJhZ21lbnQgY29udGFpbnMgYSBzaW5nbGUgZGlmZiBjaGFuZ2UgaW4gYGNvcmUvR0FURVMubWRgIHVwZGF0aW5nIHRoZSBkb2N1bWVudGF0aW9uIG9mIHRoZSBwZXItcmVwb3NpdG9yeSBsb2NrLiBUaGUgZGlmZiBpbnNlcnRzIHRoZSBjbGF1c2UgYHRoZSBwdWJsaWMgQmFzaCB3cmFwcGVyIHB1Ymxpc2hlcyBhdXRvbWF0ZWQgZnJvemVuIHdvcmsgYXMgYHN1YnNjcmlwdGlvbmAgYmVmb3JlIGl0cyBOb2RlIGBleGVjYCxgLiBUaGlzIGV4YWN0bHkgbWF0Y2hlcyB0aGUgc3RhdGVkIGRlc2lnbiBpbnRlbnQgaW4gdGhlIGBkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWRgIGNvbnRyYWN0IHVuZGVyIHRoZSAiRmFpbC1jbG9zZWQgc3RyZWFtIGFuZCBwcm9jZXNzIGJvdW5kYXJ5IiBzZWN0aW9uLiBUaGUgY2hhbmdlIGZhaXRoZnVsbHkgZG9jdW1lbnRzIHRoZSBtZWNoYW5pc20gZm9yIHJlZnVzaW5nIGEgbGl2ZSBmcm96ZW4gc3Vic2NyaXB0aW9uIG9yIGRpcmVjdCBvd25lci4gTm8gZHJpZnQsIHJ1bGUgdmlvbGF0aW9ucywgb3IgY29uY3JldGUgcmVhY2hhYmxlIGhhcm1zIGFyZSBpbnRyb2R1Y2VkIGJ5IHRoaXMgY2FuZGlkYXRlIGNoYW5nZS4gCgpWRVJESUNUOiBHTwoKSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAyIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwiY2FuZGlkYXRlIjoiOThhOGIzZDhiZWFhNTE5NDQ1NDEzYTA0MzJiZjYzZmJlNjRhNDAyMiIsInRyZWUiOiJlNGViNDEwMTIxN2U5NjYyMzJkODYwYzUwODM0OTFmYzY4YWFjM2NjIiwiZmlsZXMiOlsiY29yZS9HQVRFUy5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6ImEzMTQzMDA4YjhjZDViODI1ZGI2ZGRkY2ViMjVkNTVjZjI0MDZiNDUwMTk3NTk0OTk0MDFiMzY4NzNlYWM0MzUiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjp0cnVlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJjb3JlL0dBVEVTLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4NjA3MiwiY29tcG9uZW50X3NoYTI1NiI6IjViMzhlZGM2MzUwZDBkZmQ4YzEyMjY0Yzc2NjZlNjMwZTJlOGY5YWZmNDFhOTA4OTNiOTQ0NTEyNjUwYTVjNTkiLCJieXRlX3N0YXJ0Ijo1NzQ1NSwiYnl0ZV9lbmQiOjg2MDcyLCJmcmFnbWVudF9zaGEyNTYiOiJlMjM4ZjQ4NWQ4NmQwN2VmOWQ0MzdkYzg2MGQ0MTBlYmJkNTBmMWU4MDZiOTBiOTc3OTNhYWQ3OWIxMWRhYzNhIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6ImNvcmUvR0FURVMubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjE3OTAxLCJjb21wb25lbnRfc2hhMjU2IjoiZjVhNjVmOTRlNzE3MjExNTgyZTEwYmE4Y2E1ZjE1NDlhMzRjZmMzNGI1N2QzMjM0YjMyMDg1ZWE5ZjVkNzBlNCIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxMTMsImZyYWdtZW50X3NoYTI1NiI6IjczMDg0NDcxZjgwMDYwNmYzYTU5OGM3MDJiZGVjMGJhYWFkYjg3NTY0NDFhYTgyNjhiMGEyZTI2MjE3NTJiODIiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiY29yZS9HQVRFUy5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTc5MDEsImNvbXBvbmVudF9zaGEyNTYiOiJmNWE2NWY5NGU3MTcyMTE1ODJlMTBiYThjYTVmMTU0OWEzNGNmYzM0YjU3ZDMyMzRiMzIwODVlYTlmNWQ3MGU0IiwiYnl0ZV9zdGFydCI6MTEzLCJieXRlX2VuZCI6MTc5MDEsImZyYWdtZW50X3NoYTI1NiI6ImU5OWM4YThiMzhiZDBlNWY5N2NiOWU2ZDgwMzBlYjQ4MDBlMmIwOTlhYmIyM2FhYTIzOTI2ZTY0Y2IxMTUyNTIiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQoKSU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtODY3OTgzYTllNjA2ODMzZWE3MDVlMDg3IHwgUElMLUlOR0VTVC1NSURETEUtMDVlY2FkMzE5OGJjZDJlNTFiODY2MjkwIHwgUElMLUlOR0VTVC1FT0YtOTdkNTk2NGJmYjM3ZTNkMDgzNmIyNTYxCgpQSUwtRE9ORS0zODhlYmEzODllZGE2OWNkNjcwM2Q1YWUK`
+- Record-SHA256: `608842e21c8d987e3faaef47d1e5a1d6711b0f2b80f61fe84d448bd4243774b9`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — UNRESOLVED_ATTRIBUTION — 2026-09-13T03:51:33.781Z
+
+- Status: `UNRESOLVED_ATTRIBUTION`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-ac606e7201a420a4b86a9ba2`
+- Rig-ID: `agy-restore-completion`
+- Rig-Key: `c7ff1f9eb3093c959c8ab7695045a04e145de7feba7a1eb982253a4e0369e8f9`
+- Failure-Class: `(none)`
+- Base: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Candidate: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Tree: `e4eb4101217e966232d860c5083491fc68aac3cc`
+- Plan-ID: `9fc9567adc9ab75274115301b9ccff77cae6d62addcc4578aa6144f67011ddfe`
+- Slice: `coverage-003`
+- Material-SHA256: `346bc47e97a47585f29e5aeb5decb1105835c9c1262663a92e84dc9961bbdf1c`
+- Envelope-SHA256: `5fa9adbcdbb564e94fd93c78d22845fcaa45d9060e3bdabe0c4f2e147b9a58ce`
+- Envelope-Bytes: `81856`
+- Ordered-Contributors: `(none)`
+- Provider-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-003","gate_kind":"base..candidate_change","base":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","candidate":"98a8b3d8beaa519445413a0432bf63fbe64a4022","tree":"e4eb4101217e966232d860c5083491fc68aac3cc","files":["scripts/cold-review-gemini.sh"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"346bc47e97a47585f29e5aeb5decb1105835c9c1262663a92e84dc9961bbdf1c","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"scripts/cold-review-gemini.sh","component_kind":"frozen_source","component_byte_length":81297,"component_sha256":"24231b3ecc49c7ee7a0d02f4fac08869db75091ab3d3fa285c0c5ad5e1a0b9bb","byte_start":0,"byte_end":55406,"fragment_sha256":"63e97229e8163282af6cf164d8e25b58b5075ad255a5c2a73f1c8c022321e93c","range_status":"partial"}]}`
+- Reply-SHA256: `6ae4c5e502d629546f90077f2cced9e12eef39bd9db7a975c0e95e20c93d8b2f`
+- Completion-Token-SHA256: `58119efb0808ba0676a19222f9a371ee8b9bd2617d7dd95113ef0e036c8ad42e`
+- Reply-UTF8-Base64: `KipGSU5ESU5HOiBQZXJtYW5lbnQgZGVhZGxvY2sgdnVsbmVyYWJpbGl0eSB2aWEgUElEIHJldXNlIGluIHNpbmdsZS1mbGlnaHQgbG9jayoqCioqQ0xBU1M6IE5PLUdPKiogKFZpb2xhdGVzIGNvbnRyYWN0IG1hbmRhdGU6ICJUaGUgZW50cnlwb2ludCByZXRhaW5zIHRoZSBleGlzdGluZy4uLiBzdGFsZS1vd25lciByZWNvdmVyeSIpCgpJbiBgYWNxdWlyZV9zaW5nbGVfZmxpZ2h0YCwgdGhlIGxvZ2ljIHRoYXQgdmVyaWZpZXMgd2hldGhlciBhIGxvY2sgaXMgaGVsZCBieSBhIGxpdmUgcHJvY2VzcyBjb3JyZWN0bHkgdXNlcyBgWyAiJGN1cnJlbnRfc3RhcnQiID0gIiRvd25lcl9zdGFydCIgXWAgZm9yIGxlZ2FjeSBydW5zIHRvIGRlZmVuZCBhZ2FpbnN0IFBJRCByZXVzZS4gSG93ZXZlciwgdGhlIG5ldyBicmFuY2ggZm9yIGBzdWJzY3JpcHRpb25gIChhbmQgYGRpcmVjdGApIGxvY2sgb3duZXJzIGNvbXBsZXRlbHkgb21pdHMgdGhlIHN0YXJ0LXRpbWUgY2hlY2s6CmBgYGJhc2gKICAgIGlmIGtpbGwgLTAgIiRvd25lcl9waWQiIDI+L2Rldi9udWxsOyB0aGVuCiAgICAgIG93bmVyX3BpZF9saXZlPTEKICAgICAgY3VycmVudF9zdGFydD0iJChwcyAtcCAiJG93bmVyX3BpZCIgLW8gbHN0YXJ0PSAyPi9kZXYvbnVsbCB8IHNlZCAncy9eICovLztzLyAqJC8vJykiCiAgICAgIGN1cnJlbnRfY29tbWFuZD0iJChwcyAtcCAiJG93bmVyX3BpZCIgLW8gY29tbWFuZD0gMj4vZGV2L251bGwgfCBzZWQgJ3MvXiAqLy87cy8gKiQvLycpIgogICAgICBpZiB7IFsgIiRvd25lcl9raW5kIiA9ICJkaXJlY3QiIF0gfHwgWyAiJG93bmVyX2tpbmQiID0gInN1YnNjcmlwdGlvbiIgXTsgfSAmJiBbICIkb3duZXJfcmVwbyIgPSAiJGNvbW1vbiIgXTsgdGhlbgogICAgICAgIGVjaG8gImNvbGQtcmV2aWV3LWdlbWluaTogYSBsaXZlIGZyb3plbiAkb3duZXJfa2luZCBpbnZvY2F0aW9uIG93bnMgdGhpcyByZXBvc2l0b3J5IGdhdGUgKHBpZCAkb3duZXJfcGlkKS4gV2FpdCBmb3IgaXQgdG8gcmVsZWFzZTsgZ3VhcmQ6ICRMT0NLX0RJUiIgPiYyCiAgICAgICAgZXhpdCA0CiAgICAgIGZpCmBgYApXaGlsZSBieXBhc3NpbmcgdGhlIGBvd25lcl9jb21tYW5kYCBjaGVjayBpcyBuZWNlc3NhcnkgYmVjYXVzZSBgZXhlYyBub2RlYCBjaGFuZ2VzIHRoZSBwcm9jZXNzIGNvbW1hbmQgbmFtZSwgYnlwYXNzaW5nIHRoZSBgb3duZXJfc3RhcnRgIGNoZWNrIGlzIGEgY3JpdGljYWwgZXJyb3IuIFRoZSBgZXhlY2Agc3lzY2FsbCByZXBsYWNlcyB0aGUgcHJvY2VzcyBpbWFnZSBidXQgcHJlc2VydmVzIHRoZSBPUyBwcm9jZXNzIHN0YXJ0IHRpbWUgKGBsc3RhcnRgKS4gCgoqKkNvbmNyZXRlIHJlYWNoYWJsZSBoYXJtOioqIElmIGEgZnJvemVuIHN1YnNjcmlwdGlvbiBydW5uZXIgaXMgYWJydXB0bHkgdGVybWluYXRlZCAobGVhdmluZyBhbiBvcnBoYW5lZCBsb2NrIGZpbGUpIGFuZCBpdHMgUElEIGlzIHN1YnNlcXVlbnRseSByZXVzZWQgYnkgYW4gdW5yZWxhdGVkLCBsb25nLXJ1bm5pbmcgcHJvY2VzcyBvbiB0aGUgc2FtZSBtYWNoaW5lLCBga2lsbCAtMCAiJG93bmVyX3BpZCJgIHdpbGwgc3VjY2VlZC4gQmVjYXVzZSB0aGUgYG93bmVyX3N0YXJ0YCBjaGVjayB3YXMgYnlwYXNzZWQsIHRoZSBnYXRlIHdpbGwgZmFsc2VseSBjb25jbHVkZSB0aGUgbG9jayBpcyBzdGlsbCBoZWxkIGJ5IGEgbGl2ZSBydW5uZXIgYW5kIGV4aXQgd2l0aCBzdGF0dXMgNC4gVGhpcyBwZXJtYW5lbnRseSBicmVha3MgdGhlIGNvbnRyYWN0J3Mgc3RhbGUtb3duZXIgcmVjb3ZlcnkgcmVxdWlyZW1lbnQsIHJlc3VsdGluZyBpbiBhIHBlcm1hbmVudCByZXBvc2l0b3J5IGdhdGUgZGVhZGxvY2sgdGhhdCByZXF1aXJlcyBtYW51YWwgb3BlcmF0b3IgaW50ZXJ2ZW50aW9uIHRvIGNsZWFyLiBUaGUgYHB1Ymxpc2hfc3Vic2NyaXB0aW9uX2V4ZWNfb3duZXJgIGZ1bmN0aW9uIGV4cGxpY2l0bHkgcHJlc2VydmVzIGFuZCB3cml0ZXMgYHN0YXJ0PSRzZWxmX3N0YXJ0YCBpbnRvIHRoZSBsb2NrIGZpbGUsIHNvIHRoZSBkYXRhIGlzIGF2YWlsYWJsZTsgdGhlIGBpZmAgY29uZGl0aW9uIHNpbXBseSBmYWlscyB0byB2ZXJpZnkgYFsgIiRjdXJyZW50X3N0YXJ0IiA9ICIkb3duZXJfc3RhcnQiIF1gLgoKVkVSRElDVDogTk8tR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAzIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiI3MTJlYWE2OTJjOTlhNDFjZmE4YWU1OGYzZTM3MDk3ODliYjhhMTA4IiwiY2FuZGlkYXRlIjoiOThhOGIzZDhiZWFhNTE5NDQ1NDEzYTA0MzJiZjYzZmJlNjRhNDAyMiIsInRyZWUiOiJlNGViNDEwMTIxN2U5NjYyMzJkODYwYzUwODM0OTFmYzY4YWFjM2NjIiwiZmlsZXMiOlsic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiIzNDZiYzQ3ZTk3YTQ3NTg1ZjI5ZTVhZWI1ZGVjYjExMDU4MzVjOWMxMjYyNjYzYTkyZTg0ZGM5OTYxYmJkZjFjIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6ZmFsc2UsImZyYWdtZW50cyI6W3sicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4MTI5NywiY29tcG9uZW50X3NoYTI1NiI6IjI0MjMxYjNlY2M0OWM3ZWU3YTBkMDJmNGZhYzA4ODY5ZGI3NTA5MWFiM2QzZmEyODVjMGM1YWQ1ZTFhMGI5YmIiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6NTU0MDYsImZyYWdtZW50X3NoYTI1NiI6IjYzZTk3MjI5ZTgxNjMyODJhZjZjZjE2NGQ4ZTI1YjU4YjUwNzVhZDI1NWE1YzJhNzNmMWM4YzAyMjMyMWU5M2MiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC02MWU4OGRiOGUyNTBlM2ZjMDk2ODM0YjkgfCBQSUwtSU5HRVNULU1JRERMRS0zMDcwOWMxZjcyMjlmZWRhMzNiNjE5MTQgfCBQSUwtSU5HRVNULUVPRi1mZWU3YjllM2I2N2QwZTdmMGQ2OTIwN2MKUElMLURPTkUtYTQzMzRmYmEyOWU2MzllMmJjYmI5NzYzCg==`
+- Record-SHA256: `bb48e44bd313043aeb07f1153eb48cd62dbafba48b5bd872fbcc064ef04319a9`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — NO_GO — 2026-09-13T03:54:20.816Z
+
+- Status: `NO_GO`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-4efb0b4fcb059022bd7d78b6`
+- Rig-ID: `agy-restore-completion`
+- Rig-Key: `c7ff1f9eb3093c959c8ab7695045a04e145de7feba7a1eb982253a4e0369e8f9`
+- Failure-Class: `(none)`
+- Base: `712eaa692c99a41cfa8ae58f3e3709789bb8a108`
+- Candidate: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Tree: `e4eb4101217e966232d860c5083491fc68aac3cc`
+- Plan-ID: `9fc9567adc9ab75274115301b9ccff77cae6d62addcc4578aa6144f67011ddfe`
+- Slice: `coverage-004`
+- Material-SHA256: `45401abbe80342585fdbdbb9accd211d4e2f00e7835a33cc803b550d3bc96ca2`
+- Envelope-SHA256: `1ca8f8e8b77e140a164b768055347ba4e8e807f177abeb269d489e68b51797ee`
+- Envelope-Bytes: `77985`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-004","gate_kind":"base..candidate_change","base":"712eaa692c99a41cfa8ae58f3e3709789bb8a108","candidate":"98a8b3d8beaa519445413a0432bf63fbe64a4022","tree":"e4eb4101217e966232d860c5083491fc68aac3cc","files":["scripts/cold-review-gemini.sh"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"45401abbe80342585fdbdbb9accd211d4e2f00e7835a33cc803b550d3bc96ca2","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"scripts/cold-review-gemini.sh","component_kind":"frozen_source","component_byte_length":81297,"component_sha256":"24231b3ecc49c7ee7a0d02f4fac08869db75091ab3d3fa285c0c5ad5e1a0b9bb","byte_start":55406,"byte_end":81297,"fragment_sha256":"fb39b56e18fffb1cc94dc9159719dc9b9f575b8305e5eb220902c5e9fa42ea62","range_status":"partial"},{"path":"scripts/cold-review-gemini.sh","component_kind":"per_file_diff","component_byte_length":32340,"component_sha256":"e8e509e2fd40c11d3bc72f890fbe34b427556bd5bf82a12575c5327c4ec0284b","byte_start":0,"byte_end":177,"fragment_sha256":"71239a83fb873eb12260d10d693ee8c7f9e4da5b3650a075f00cac73979bfe67","range_status":"partial"},{"path":"scripts/cold-review-gemini.sh","component_kind":"per_file_diff","component_byte_length":32340,"component_sha256":"e8e509e2fd40c11d3bc72f890fbe34b427556bd5bf82a12575c5327c4ec0284b","byte_start":177,"byte_end":23980,"fragment_sha256":"b5b58ad5e2265aa8493aab725adef74fbafaab67bd3391b76eea903595d27d09","range_status":"partial"}]}`
+- Reply-SHA256: `e273eef03d94d2e7c7cb843e14fa681ccd4ad6bcd8d2a9b87397833b328a5088`
+- Completion-Token-SHA256: `14e108df243f1cfb571e453669ba4408ba84b82b0a975314c148ea05c34f3b4c`
+- Reply-UTF8-Base64: `SU5HRVNUSU9OIFBST09GOiBQSUwtSU5HRVNULUhFQUQtMjMyNDM3ZmJmNmZlNDY5NmUwOTc3MDI3IHwgUElMLUlOR0VTVC1NSURETEUtNThlYmQ5YWM3NGRlOWY3NWFiZDEzZjUzIHwgUElMLUlOR0VTVC1FT0YtYjM1ZDJmY2UzNDkxY2YyMTZkMGFkYTNhCgoxLiBCTE9DS0VSIChJbnZhcmlhbnQgVmlvbGF0aW9uOiBUcnV0aGluZXNzIC8gQm9vbGVhbiBDb25maWcgUmVhZHMpCkZpbGU6IGBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaGAgKGluIGBpc19hdXRvbWF0ZWRfZnJvemVuX3J1bigpYCkKV2h5IGl0IG1hdHRlcnM6IFRoZSBpbnZhcmlhbnQgbWFuZGF0ZXMgIkJvb2xlYW4gY29uZmlnIHJlYWRzIHVzZSBleHBsaWNpdCBzdHJpbmcgY29tcGFyZSAuLi4gTkVWRVIgdHJ1dGhpbmVzcy4iIFZhcmlhYmxlcyBsaWtlIGBHRU5FUkFURV9TTElDRV9QTEFOYCwgYEhBTkRPRkZfRVhQT1JUYCwgYW5kIGBIQU5ET0ZGX0lNUE9SVGAgYXJlIGluaXRpYWxpemVkIHRvIGAiMCJgIChmYWxzZSkuIFRoZSBjaGVjayBgWyAteiAiJEdFTkVSQVRFX1NMSUNFX1BMQU4kSEFORE9GRl9FWFBPUlQkSEFORE9GRl9JTVBPUlQiIF1gIGNvbmNhdGVuYXRlcyB0aGVtIChlLmcuIGAiMDAwImApIGFuZCB1c2VzIGAtemAsIHdoaWNoIGNoZWNrcyBmb3IgYW4gZW1wdHkgc3RyaW5nLiBTaW5jZSBgIjAwMCJgIGlzIG5vdCBlbXB0eSwgdGhpcyBjaGVjayBhbHdheXMgZmFpbHMsIGNvbXBsZXRlbHkgZGlzYWJsaW5nIHRoZSBgc3Vic2NyaXB0aW9uYCBpZGVudGl0eSBsb2dpYyBhbmQgaW5jb3JyZWN0bHkgY2xhc3NpZnlpbmcgYXV0b21hdGVkIHJ1bnMgYXMgYG1hbnVhbC1oYW5kb2ZmYC4KQ29uZmlybWluZyBjaGVjazogUnVuIGBHRU5FUkFURV9TTElDRV9QTEFOPTAgSEFORE9GRl9FWFBPUlQ9MCBIQU5ET0ZGX0lNUE9SVD0wOyBbIC16ICIkR0VORVJBVEVfU0xJQ0VfUExBTiRIQU5ET0ZGX0VYUE9SVCRIQU5ET0ZGX0lNUE9SVCIgXSAmJiBlY2hvIGVtcHR5IHx8IGVjaG8gbm90X2VtcHR5YC4gSXQgb3V0cHV0cyBgbm90X2VtcHR5YC4KCjIuIEhJR0ggKEludmFyaWFudCBWaW9sYXRpb246IFJlYWNoYWJpbGl0eSAvIERlYWQgQ29kZSAmIE92ZXItYWJvcnQgT3JwaGFuaW5nIFN0YXRlKQpGaWxlOiBgc2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2hgIChpbiBgcHVibGlzaF9zdWJzY3JpcHRpb25fZXhlY19vd25lcigpYCkKV2h5IGl0IG1hdHRlcnM6IFRoZSBmdW5jdGlvbiBpcyBuZXdseSBhZGRlZCBidXQgbmV2ZXIgY2FsbGVkIGFueXdoZXJlIGluIHRoZSBzY3JpcHQsIHZpb2xhdGluZyBJbnZhcmlhbnQgIzkgKCJDaGVjayBSRUFDSEFCSUxJVFkgYmVmb3JlIGhhcmRlbmluZy4uLiBEZWFkIGNvZGUgc2hvdWxkIGJlIGRlbGV0ZWQiKS4gRnVydGhlcm1vcmUsIGlmIGl0IHdlcmUgcmVhY2hlZCwgaXQgY29tbWl0cyBhIGRlc3RydWN0aXZlIHdyaXRlIChgPiAiJG93bmVyX3RtcCJgIGFuZCBgbXYgIiRvd25lcl90bXAiICIkTE9DS19ESVIvb3duZXIiYCkgdGhhdCBvdmVyd3JpdGVzIHRoZSBlbnRpcmUgbG9jayBmaWxlLiBUaGlzIGRyb3BzIHRoZSBgc3VwZXJ2aXNvcl9zdGF0ZWAgYW5kIGBzdXBlcnZpc29yX3BpZGAgZmllbGRzIGVudGlyZWx5LCB2aW9sYXRpbmcgdGhlIGNvbnRyYWN0J3MgIkZhaWwtY2xvc2VkIHN0cmVhbSBhbmQgcHJvY2VzcyBib3VuZGFyeSIgd2hpY2ggcmVsaWVzIG9uIHRoZSBgVU5SRVNPTFZFRF9QUk9DRVNTX0dST1VQYCBzdGF0ZSBmb3Igc3RhbGUgcmVjb3ZlcnkuCkNvbmZpcm1pbmcgY2hlY2s6IFNlYXJjaCB0aGUgZmlsZSBmb3IgaW52b2NhdGlvbnMgb2YgYHB1Ymxpc2hfc3Vic2NyaXB0aW9uX2V4ZWNfb3duZXJgOyB0aGVyZSBhcmUgbm9uZS4gT2JzZXJ2ZSB0aGF0IGA+YCBpcyB1c2VkIGZvciB3cml0aW5nIHRvIGAkb3duZXJfdG1wYCwgY29tcGxldGVseSByZXBsYWNpbmcgdGhlIGxvY2sgZmlsZSBjb250ZW50cyB3aXRob3V0IHByZXNlcnZpbmcgZXhpc3RpbmcgZmllbGRzLgoKT3ZlcmFsbCByZWFkOgpCbGFzdCByYWRpdXM6IFRoZSBgaXNfYXV0b21hdGVkX2Zyb3plbl9ydW5gIGJ1ZyBzaWxlbnRseSBhbHRlcnMgdGhlIHNpbmdsZS1mbGlnaHQgbG9ja2luZyBpZGVudGl0eSBmb3IgYWxsIGF1dG9tYXRlZCBydW5zLCBieXBhc3NpbmcgdGhlIHN0cmljdCBzdWJzY3JpcHRpb24gb3ZlcmxhcCBndWFyZHMuIFRoZSBkZWFkIGNvZGUgZnVuY3Rpb24gcG9zZXMgYSBzZXZlcmUgcmlzayBvZiBsb2NraW5nIHN1YnN5c3RlbSBjb3JydXB0aW9uIGlmIGV2ZXIgaW52b2tlZC4KUmV2ZXJzaWJpbGl0eTogSGlnaC4gQm90aCBhcmUgbG9jYWwgc2NyaXB0IGZ1bmN0aW9ucyB0aGF0IGNhbiBiZSBjb3JyZWN0ZWQgb3IgcmVtb3ZlZCBpbW1lZGlhdGVseS4KRG91YmxlLWNoZWNrIGZpcnN0OiBEZWxldGUgdGhlIGRlYWQgY29kZSBmdW5jdGlvbiBgcHVibGlzaF9zdWJzY3JpcHRpb25fZXhlY19vd25lcmAgZW50aXJlbHksIGFuZCBmaXggYGlzX2F1dG9tYXRlZF9mcm96ZW5fcnVuYCB0byB1c2UgZXhwbGljaXQgYm9vbGVhbiBjb21wYXJpc29ucyAoZS5nLiBgWyAiJEdFTkVSQVRFX1NMSUNFX1BMQU4iICE9ICIxIiBdYCkuCgpWRVJESUNUOiBOTy1HTwpJTlNQRUNURUQgU0NPUEU6IHsic2xpY2UiOiJjb3ZlcmFnZS0wMDQiLCJnYXRlX2tpbmQiOiJiYXNlLi5jYW5kaWRhdGVfY2hhbmdlIiwiYmFzZSI6IjcxMmVhYTY5MmM5OWE0MWNmYThhZTU4ZjNlMzcwOTc4OWJiOGExMDgiLCJjYW5kaWRhdGUiOiI5OGE4YjNkOGJlYWE1MTk0NDU0MTNhMDQzMmJmNjNmYmU2NGE0MDIyIiwidHJlZSI6ImU0ZWI0MTAxMjE3ZTk2NjIzMmQ4NjBjNTA4MzQ5MWZjNjhhYWMzY2MiLCJmaWxlcyI6WyJzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjQ1NDAxYWJiZTgwMzQyNTg1ZmRiZGJiOWFjY2QyMTFkNGUyZjAwZTc4MzVhMzNjYzgwM2I1NTBkM2JjOTZjYTIiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjp0cnVlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6ODEyOTcsImNvbXBvbmVudF9zaGEyNTYiOiIyNDIzMWIzZWNjNDljN2VlN2EwZDAyZjRmYWMwODg2OWRiNzUwOTFhYjNkM2ZhMjg1YzBjNWFkNWUxYTBiOWJiIiwiYnl0ZV9zdGFydCI6NTU0MDYsImJ5dGVfZW5kIjo4MTI5NywiZnJhZ21lbnRfc2hhMjU2IjoiZmIzOWI1NmUxOGZmZmIxY2M5NGRjOTE1OTcxOWRjOWI5ZjU3NWI4MzA1ZTVlYjIyMDkwMmM1ZTlmYTQyZWE2MiIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifSx7InBhdGgiOiJzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MzIzNDAsImNvbXBvbmVudF9zaGEyNTYiOiJlOGU1MDllMmZkNDBjMTFkM2JjNzJmODkwZmJlMzRiNDI3NTU2YmQ1YmY4MmExMjU3NWM1MzI3YzRlYzAyODRiIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjE3NywiZnJhZ21lbnRfc2hhMjU2IjoiNzEyMzlhODNmYjg3M2ViMTIyNjBkMTBkNjkzZWU4YzdmOWU0ZGE1YjM2NTBhMDc1ZjAwY2FjNzM5NzliZmU2NyIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifSx7InBhdGgiOiJzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MzIzNDAsImNvbXBvbmVudF9zaGEyNTYiOiJlOGU1MDllMmZkNDBjMTFkM2JjNzJmODkwZmJlMzRiNDI3NTU2YmQ1YmY4MmExMjU3NWM1MzI3YzRlYzAyODRiIiwiYnl0ZV9zdGFydCI6MTc3LCJieXRlX2VuZCI6MjM5ODAsImZyYWdtZW50X3NoYTI1NiI6ImI1YjU4YWQ1ZTIyNjVhYTg0OTNhYWI3MjVhZGVmNzRmYmFmYWFiNjdiZDMzOTFiNzZlZWE5MDM1OTVkMjdkMDkiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpQSUwtRE9ORS1kOTg4ZTczNGM2ZGRiZmVhYTIyYzNjNzIK`
+- Record-SHA256: `bcf6e32ed808eb3af22a359b4905c978fe85425f97c212263b74ef009b23858e`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T04:24:14.683Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-ead2b7da9c0d42594d7cc3b8`
+- Rig-ID: `agy-owner-identity-final`
+- Rig-Key: `467b71377a57ac30c64e13ff17cb70bed71681726f85737d743868076a8ad621`
+- Failure-Class: `(none)`
+- Base: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Candidate: `65bf8058eedc94e0cacdb2df6785a2c4e5711fbd`
+- Tree: `5aef3bd965cad971aa12552103be1336aa9ee533`
+- Plan-ID: `04be464aafadd00244b53155ead8140aa27c99def4226dfb46b2f8e8b2354d05`
+- Slice: `coverage-001`
+- Material-SHA256: `920f6f8a5d45c55295dbf16b76bf266259b86662e47ec6d2896f04c3257d2b71`
+- Envelope-SHA256: `ea3f0208346831e96fed7ddcec7895ba8e8b799825af0273fb6ae58b82af7d01`
+- Envelope-Bytes: `81828`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-001","gate_kind":"base..candidate_change","base":"98a8b3d8beaa519445413a0432bf63fbe64a4022","candidate":"65bf8058eedc94e0cacdb2df6785a2c4e5711fbd","tree":"5aef3bd965cad971aa12552103be1336aa9ee533","files":["core/GATES.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"920f6f8a5d45c55295dbf16b76bf266259b86662e47ec6d2896f04c3257d2b71","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"core/GATES.md","component_kind":"frozen_source","component_byte_length":86136,"component_sha256":"7cd005bcfdd10cd95991a476f0649ad9a35a9a0a50833bddf1e9ac5b605d9f60","byte_start":0,"byte_end":57455,"fragment_sha256":"4ce21710cbffed031ef72bbb40b8df9ab03fdd697ca331534f1f5bbf5da0f5d3","range_status":"partial"}]}`
+- Reply-SHA256: `f32f95e5707fe5bf4801f93cf40f0dd8e0018eb5600597b1e38a5045cbb3d294`
+- Completion-Token-SHA256: `45e30ae7d4d3cb93bef1c4c7ec82a0ed7414a4f389e4cff15e484047fb0bb779`
+- Reply-UTF8-Base64: `RmluZGluZ3M6ClRoZSBzdXBwbGllZCBhcnRpZmFjdCBmcmFnbWVudCBmb3IgYGNvcmUvR0FURVMubWRgIGlzIGEgcmlnb3JvdXNseSBjb25zdHJ1Y3RlZCByZWZlcmVuY2UgbWFudWFsIHRoYXQgZG9jdW1lbnRzIHByb3ZlbiBjb250cm9scyBhZ2FpbnN0IEFJIGFnZW50IGRyaWZ0LCBibGluZG5lc3MsIGFuZCBzaWxlbnQgZmFpbHVyZSBtb2Rlcy4gVGhlIGluc3RydWN0aW9ucyBhbmQgYXJjaGl0ZWN0dXJlcyBkZXNjcmliZWQgc3RyaWN0bHkgYWRoZXJlIHRvIHRoZSBub24tbmVnb3RpYWJsZSBpbnZhcmlhbnRzIGFuZCB0aGUgR2VtaW5pIGBhZ3lgIGF1dG9tYXRlZCB0cmFuc3BvcnQgY29udHJhY3Q6CjEuICoqTWl0aWdhdGlvbnMgYXJlIHNvdW5kOioqIFRoZSBwcm90ZWN0aW9ucyBhZ2FpbnN0IHNpbGVudCBhZ2VudCBmYWlsdXJlcyAoZS5nLiwgZmFpbC1jbG9zZWQgd3JhcHBlcnMgd2l0aCBgLXRgIHRpbWVvdXRzLCBgPC9kZXYvbnVsbGAgc3RkaW4gY2xvc3VyZSwgZXhwbGljaXQgYC1jIHNhbmRib3hfbW9kZT1yZWFkLW9ubHlgIG9uIHdhcm0gcmVzdW1lcywgYW5kIHRoZSBkZXRlcm1pbmlzdGljIGBjbGF1ZGVgIHNoaW0gdGhhdCBleGl0cyA5NyB0byBwcmV2ZW50IGNvbXBhbmlvbiBoaWphY2tpbmcpIGFyZSBsb2dpY2FsbHkgY29ycmVjdCBhbmQgYXZvaWQgZmFsc2UtcG9zaXRpdmUgY2hlY2tzLgoyLiAqKkludGVsbGlnZW5jZS1vcmRlcmluZyBpcyBwcmVzZXJ2ZWQ6KiogVGhlIG1lY2hhbmljYWwgdmVyaWZpY2F0aW9uIG9mIHRoZSBjb21wbGV0aW9uIHRva2VuIHN0cmljdGx5IGNoZWNrcyBmb3IgcHJlc2VuY2UgcmF0aGVyIHRoYW4gZXhhY3QtbGluZSBtYXRjaGluZywgbGVhdmluZyB0aGUgc2VtYW50aWMganVkZ21lbnQgb2YgdGhlIHZlcmRpY3QgdG8gdGhlIGh1bWFuIHJldmlld2VyLiAKMy4gKipDb250cmFjdCBjb21wbGlhbmNlOioqIFRoZSBkb2N1bWVudGVkIEdlbWluaSBwaXBlbGluZSBhY2N1cmF0ZWx5IHJlZmxlY3RzIHRoZSByZWFkLW9ubHksIGV4YWN0LWN3ZCwgYW5kIHNuYXBzaG90IHJlcXVpcmVtZW50cyBvZiB0aGUgYGFneWAgdHJhbnNwb3J0IGNvbnRyYWN0LiBUaGUgZGVtb3Rpb24gb2YgYEdFTUlOSV9BTExPV19DT0RFX01PREVgIHRvIGFuIGV4cGxpY2l0IGVzY2FwZSBjb3JyZWN0bHkgYm91bmRzIHRoZSBkb2N1bWVudGVkID44MCBLaUIgcGF5bG9hZCBpbmdlc3Rpb24gZmFpbHVyZSwgYWRoZXJpbmcgdG8gdGhlIGZhaWwtY2xvc2VkIGludmFyaWFudC4KCk5vIGZhbHNlIG1pdGlnYXRpb25zLCBydWxlIHZpb2xhdGlvbnMsIG9yIGNvbmNyZXRlIHJlYWNoYWJsZSBoYXJtcyB3ZXJlIGlkZW50aWZpZWQuCgpWRVJESUNUOiBHTwoKSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAxIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiI5OGE4YjNkOGJlYWE1MTk0NDU0MTNhMDQzMmJmNjNmYmU2NGE0MDIyIiwiY2FuZGlkYXRlIjoiNjViZjgwNThlZWRjOTRlMGNhY2RiMmRmNjc4NWEyYzRlNTcxMWZiZCIsInRyZWUiOiI1YWVmM2JkOTY1Y2FkOTcxYWExMjU1MjEwM2JlMTMzNmFhOWVlNTMzIiwiZmlsZXMiOlsiY29yZS9HQVRFUy5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjkyMGY2ZjhhNWQ0NWM1NTI5NWRiZjE2Yjc2YmYyNjYyNTliODY2NjJlNDdlYzZkMjg5NmYwNGMzMjU3ZDJiNzEiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjpmYWxzZSwiZnJhZ21lbnRzIjpbeyJwYXRoIjoiY29yZS9HQVRFUy5tZCIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6ODYxMzYsImNvbXBvbmVudF9zaGEyNTYiOiI3Y2QwMDViY2ZkZDEwY2Q5NTk5MWE0NzZmMDY0OWFkOWEzNWE5YTBhNTA4MzNiZGRmMWU5YWM1YjYwNWQ5ZjYwIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjU3NDU1LCJmcmFnbWVudF9zaGEyNTYiOiI0Y2UyMTcxMGNiZmZlZDAzMWVmNzJiYmI0MGI4ZGY5YWIwM2ZkZDY5N2NhMzMxNTM0ZjFmNWJiZjVkYTBmNWQzIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9XX0KCklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELWZhZGE3Mjc0ZDg5ZWU0Yzk4NWM1YTZlYSB8IFBJTC1JTkdFU1QtTUlERExFLWUwYWVmNzZjYWUzMThmMzg5ZGIwYTU5OSB8IFBJTC1JTkdFU1QtRU9GLTY5M2RkODM5OWY4OGI0M2Y4NmM3ZWRjNAoKUElMLURPTkUtZmFlMjU3YzkzNTBhNjFlN2FiYzA3MDJhCg==`
+- Record-SHA256: `e554353576bb0ad9aa038cbf89d13c931463c3d07de520f2796de7ece1e10796`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T04:24:53.313Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-7ed79b6559b71932ab604d2b`
+- Rig-ID: `agy-owner-identity-final`
+- Rig-Key: `467b71377a57ac30c64e13ff17cb70bed71681726f85737d743868076a8ad621`
+- Failure-Class: `(none)`
+- Base: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Candidate: `65bf8058eedc94e0cacdb2df6785a2c4e5711fbd`
+- Tree: `5aef3bd965cad971aa12552103be1336aa9ee533`
+- Plan-ID: `04be464aafadd00244b53155ead8140aa27c99def4226dfb46b2f8e8b2354d05`
+- Slice: `coverage-002`
+- Material-SHA256: `1c5f133fb0a8721c082d6ebd6ccd5662a1dfad447c485607623e4b4359ae054c`
+- Envelope-SHA256: `def2a2a7df269d5ae69189c5d0f964b59744d13ea5f50ef4f5f3bbd461a37796`
+- Envelope-Bytes: `73081`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-002","gate_kind":"base..candidate_change","base":"98a8b3d8beaa519445413a0432bf63fbe64a4022","candidate":"65bf8058eedc94e0cacdb2df6785a2c4e5711fbd","tree":"5aef3bd965cad971aa12552103be1336aa9ee533","files":["core/GATES.md"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"1c5f133fb0a8721c082d6ebd6ccd5662a1dfad447c485607623e4b4359ae054c","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"core/GATES.md","component_kind":"frozen_source","component_byte_length":86136,"component_sha256":"7cd005bcfdd10cd95991a476f0649ad9a35a9a0a50833bddf1e9ac5b605d9f60","byte_start":57455,"byte_end":86136,"fragment_sha256":"ef846084e17baa3b836655b716cbca1faaf6e23d743cb7e6bd58498884d8fe0f","range_status":"partial"},{"path":"core/GATES.md","component_kind":"per_file_diff","component_byte_length":18066,"component_sha256":"2ee5e3471a1099bb59ddfd04c72da5d80533f895c76f71caed0fe9c09f84a07b","byte_start":0,"byte_end":113,"fragment_sha256":"248af1aa38617c2c5a913c92e186b2e87b9e23a2a24d5e9c5277505a38a22be0","range_status":"partial"},{"path":"core/GATES.md","component_kind":"per_file_diff","component_byte_length":18066,"component_sha256":"2ee5e3471a1099bb59ddfd04c72da5d80533f895c76f71caed0fe9c09f84a07b","byte_start":113,"byte_end":18066,"fragment_sha256":"27583ee2a8d73df14b64e92e39cd86cf4389d3f9186f53cb219983a5a21647d1","range_status":"partial"}]}`
+- Reply-SHA256: `bb40f5066c7a719d8e3ec39961c12352d63a4510b94d75f8923092808492486b`
+- Completion-Token-SHA256: `3f1645d02d10eccc1ef4f7e5725a60b9a412922cad8466dd1cd6d5b067f1618d`
+- Reply-UTF8-Base64: `RmluZGluZ3M6IFRoZSBhcnRpZmFjdCB1cGRhdGVzIGBjb3JlL0dBVEVTLm1kYCB0byBhY2N1cmF0ZWx5IHJlZmxlY3QgdGhlIHN1cGVydmlzb3IgaWRlbnRpdHkgcnVsZXMgZGVmaW5lZCBpbiB0aGUgcHJvdmlkZWQgY29udHJhY3QgYGRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZGAuIFNwZWNpZmljYWxseSwgaXQgYWxpZ25zIHRoZSBkb2N1bWVudGF0aW9uIHRvIHN0YXRlIHRoYXQgdGhlIEJhc2ggd3JhcHBlciByZWZ1c2VzIHN1YnNjcmlwdGlvbnMgb25seSB3aGVuIFBJRCwgbm9uZW1wdHkgc3RhcnQgc3RhbXAsIGFuZCBjb21tb24tZGlyZWN0b3J5IGlkZW50aXR5IG1hdGNoLCBhbmQgdGhhdCBkaXJlY3Qgb3duZXJzaGlwIHJlbWFpbnMgUElEL2NvbW1vbi1ib3VuZCB1bnRpbCBpdHMgcmVjb3JkcyBjYXJyeSBhIHN0YXJ0IHN0YW1wLiBObyBpbnZhcmlhbnRzIGFyZSB2aW9sYXRlZCBhbmQgdGhlIGNoYW5nZSBhY2N1cmF0ZWx5IGltcGxlbWVudHMgdGhlIHN0YXRlZCBkZXNpZ24gaW50ZW50LgoKVkVSRElDVDogR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAyIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiI5OGE4YjNkOGJlYWE1MTk0NDU0MTNhMDQzMmJmNjNmYmU2NGE0MDIyIiwiY2FuZGlkYXRlIjoiNjViZjgwNThlZWRjOTRlMGNhY2RiMmRmNjc4NWEyYzRlNTcxMWZiZCIsInRyZWUiOiI1YWVmM2JkOTY1Y2FkOTcxYWExMjU1MjEwM2JlMTMzNmFhOWVlNTMzIiwiZmlsZXMiOlsiY29yZS9HQVRFUy5tZCJdLCJjb250cmFjdF9jb250ZXh0IjpbImRvY3Mvam91cm5hbC8yMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZCJdLCJpbnZhcmlhbnRzIjpbImNvcmUvSU5WQVJJQU5UUy5tZCIsImNvcmUvUkVQT19JTlZBUklBTlRTLm1kIl0sIm1hdGVyaWFsX3NoYTI1NiI6IjFjNWYxMzNmYjBhODcyMWMwODJkNmViZDZjY2Q1NjYyYTFkZmFkNDQ3YzQ4NTYwNzYyM2U0YjQzNTlhZTA1NGMiLCJzbGljZV9raW5kIjoiY292ZXJhZ2UiLCJtYXRlcmlhbF9tb2RlIjoidmVyaWZpZWRfZnJhZ21lbnRzIiwiZXhhY3RfcGVyX2ZpbGVfZGlmZl90cmFuc2l0aW9uX2V2aWRlbmNlIjp0cnVlLCJmcmFnbWVudHMiOlt7InBhdGgiOiJjb3JlL0dBVEVTLm1kIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4NjEzNiwiY29tcG9uZW50X3NoYTI1NiI6IjdjZDAwNWJjZmRkMTBjZDk1OTkxYTQ3NmYwNjQ5YWQ5YTM1YTlhMGE1MDgzM2JkZGYxZTlhYzViNjA1ZDlmNjAiLCJieXRlX3N0YXJ0Ijo1NzQ1NSwiYnl0ZV9lbmQiOjg2MTM2LCJmcmFnbWVudF9zaGEyNTYiOiJlZjg0NjA4NGUxN2JhYTNiODM2NjU1YjcxNmNiY2ExZmFhZjZlMjNkNzQzY2I3ZTZiZDU4NDk4ODg0ZDhmZTBmIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6ImNvcmUvR0FURVMubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjE4MDY2LCJjb21wb25lbnRfc2hhMjU2IjoiMmVlNWUzNDcxYTEwOTliYjU5ZGRmZDA0YzcyZGE1ZDgwNTMzZjg5NWM3NmY3MWNhZWQwZmU5YzA5Zjg0YTA3YiIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxMTMsImZyYWdtZW50X3NoYTI1NiI6IjI0OGFmMWFhMzg2MTdjMmM1YTkxM2M5MmUxODZiMmU4N2I5ZTIzYTJhMjRkNWU5YzUyNzc1MDVhMzhhMjJiZTAiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiY29yZS9HQVRFUy5tZCIsImNvbXBvbmVudF9raW5kIjoicGVyX2ZpbGVfZGlmZiIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTgwNjYsImNvbXBvbmVudF9zaGEyNTYiOiIyZWU1ZTM0NzFhMTA5OWJiNTlkZGZkMDRjNzJkYTVkODA1MzNmODk1Yzc2ZjcxY2FlZDBmZTljMDlmODRhMDdiIiwiYnl0ZV9zdGFydCI6MTEzLCJieXRlX2VuZCI6MTgwNjYsImZyYWdtZW50X3NoYTI1NiI6IjI3NTgzZWUyYThkNzNkZjE0YjY0ZTkyZTM5Y2Q4NmNmNDM4OWQzZjkxODZmNTNjYjIxOTk4M2E1YTIxNjQ3ZDEiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC1mN2E4MTg1NjY5ZGJkOTliZTBiOWFmYTAgfCBQSUwtSU5HRVNULU1JRERMRS05OWZhODNhMDc1NmExMTllNWZhYjc3M2YgfCBQSUwtSU5HRVNULUVPRi04YjNiZDFkM2Y3MTUzMjFmZGVmMmZhOWMKUElMLURPTkUtZGFkOWZiNzA4YWI5YjljM2FlMGMxNTJmCg==`
+- Record-SHA256: `a5152372771edadb43f71b3b5b465720138a3eb545a5b22b795d0f9d39a8de39`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-13T04:25:42.480Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-e069797b5799870e365eb018`
+- Rig-ID: `agy-owner-identity-final`
+- Rig-Key: `467b71377a57ac30c64e13ff17cb70bed71681726f85737d743868076a8ad621`
+- Failure-Class: `(none)`
+- Base: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Candidate: `65bf8058eedc94e0cacdb2df6785a2c4e5711fbd`
+- Tree: `5aef3bd965cad971aa12552103be1336aa9ee533`
+- Plan-ID: `04be464aafadd00244b53155ead8140aa27c99def4226dfb46b2f8e8b2354d05`
+- Slice: `coverage-003`
+- Material-SHA256: `1a5b95062dc7270c5ce1baf01ff974723669a723421dfaff3d6c2e82ca01d7d2`
+- Envelope-SHA256: `9323aba1bc77e94947c62fb93dc437fec52300968c9609bc2365886c29327e31`
+- Envelope-Bytes: `81914`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-003","gate_kind":"base..candidate_change","base":"98a8b3d8beaa519445413a0432bf63fbe64a4022","candidate":"65bf8058eedc94e0cacdb2df6785a2c4e5711fbd","tree":"5aef3bd965cad971aa12552103be1336aa9ee533","files":["scripts/cold-review-gemini.sh"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"1a5b95062dc7270c5ce1baf01ff974723669a723421dfaff3d6c2e82ca01d7d2","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":false,"fragments":[{"path":"scripts/cold-review-gemini.sh","component_kind":"frozen_source","component_byte_length":81588,"component_sha256":"fe921e48b5e23565c1335f3cccf4834fed240e0947eaa2632bbc5b54ff5099ed","byte_start":0,"byte_end":55461,"fragment_sha256":"36e96c6cf22067b9d985467168588113f600f47ff9c0c44380c220ca12da8f28","range_status":"partial"}]}`
+- Reply-SHA256: `829b2f15ee1989845f92b089c2c384c4ff7034f36e0fa03e3c91ee3ac6c4c9e2`
+- Completion-Token-SHA256: `cddaa682a3ded017cb8ec6e72d007ed8babee079ea5f41d962ef332b44a97d62`
+- Reply-UTF8-Base64: `RklORElOR1M6Ci0gVGhlIGBjb2xkLXJldmlldy1nZW1pbmkuc2hgIHNjcmlwdCBjb3JyZWN0bHkgaGFuZGxlcyBwYXJhbWV0ZXIgcGFyc2luZywgZW52aXJvbm1lbnQgc25hcHNob3R0aW5nLCBzaW5nbGUtZmxpZ2h0IGxvY2tpbmcsIGFuZCBhcmd1bWVudCBkZWxlZ2F0aW9uIGZvciB0aGUgYXV0b21hdGVkIEdlbWluaSB0cmFuc3BvcnQgY29udHJhY3QgYXMgc3BlY2lmaWVkIGluIGAyMDI2LTA5LTEyLWdlbWluaS1hZ3ktYXV0b21hdGVkLXRyYW5zcG9ydC1jb250cmFjdC5tZGAuCi0gUFJFRVhJU1RJTkcgLyBOT05CTE9DS0lORzogSW4gYGFjcXVpcmVfc2luZ2xlX2ZsaWdodCgpYCwgdGhlIGxpdmVuZXNzIGNoZWNrIGZvciBgb3duZXJfa2luZD0iZGlyZWN0ImAgZmFpbHMgdG8gdmVyaWZ5IGBbICIkY3VycmVudF9zdGFydCIgPSAiJG93bmVyX3N0YXJ0IiBdYCAodW5saWtlIHRoZSBjaGVjayBmb3IgYHN1YnNjcmlwdGlvbmAgb3IgdGhlIGdlbmVyYWwgZmFsbGJhY2sgY2hlY2spLiBUaGlzIGNvdWxkIGxlYWQgdG8gYSBmYWxzZS1wb3NpdGl2ZSBsb2NrIGNvbGxpc2lvbiBpZiBhIGRpcmVjdC1tb2RlIHN1cGVydmlzb3IgUElEIGlzIHJlY3ljbGVkIGJ5IGFuIHVucmVsYXRlZCBwcm9jZXNzLgotIFBSRUVYSVNUSU5HIC8gTk9OQkxPQ0tJTkc6IGBTVVBFUlZJU09SX1BJRGAgaXMgcmVmZXJlbmNlZCBhbmQgY29uZGl0aW9uYWxseSBzZW50IGEgc2lnbmFsIGluIGBjbGVhbnVwKClgIGFuZCBgb25fc2lnbmFsKClgLCBidXQgaXMgbmV2ZXIgYXNzaWduZWQgd2l0aGluIHRoaXMgc2xpY2Ugb2YgdGhlIGJhc2ggc2NyaXB0IChpdCBkZWZhdWx0cyB0byBlbXB0eSBhbmQgaXMgaGFuZGxlZCBzYWZlbHkpLgoKVkVSRElDVDogR08KSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAzIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiI5OGE4YjNkOGJlYWE1MTk0NDU0MTNhMDQzMmJmNjNmYmU2NGE0MDIyIiwiY2FuZGlkYXRlIjoiNjViZjgwNThlZWRjOTRlMGNhY2RiMmRmNjc4NWEyYzRlNTcxMWZiZCIsInRyZWUiOiI1YWVmM2JkOTY1Y2FkOTcxYWExMjU1MjEwM2JlMTMzNmFhOWVlNTMzIiwiZmlsZXMiOlsic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giXSwiY29udHJhY3RfY29udGV4dCI6WyJkb2NzL2pvdXJuYWwvMjAyNi0wOS0xMi1nZW1pbmktYWd5LWF1dG9tYXRlZC10cmFuc3BvcnQtY29udHJhY3QubWQiXSwiaW52YXJpYW50cyI6WyJjb3JlL0lOVkFSSUFOVFMubWQiLCJjb3JlL1JFUE9fSU5WQVJJQU5UUy5tZCJdLCJtYXRlcmlhbF9zaGEyNTYiOiIxYTViOTUwNjJkYzcyNzBjNWNlMWJhZjAxZmY5NzQ3MjM2NjlhNzIzNDIxZGZhZmYzZDZjMmU4MmNhMDFkN2QyIiwic2xpY2Vfa2luZCI6ImNvdmVyYWdlIiwibWF0ZXJpYWxfbW9kZSI6InZlcmlmaWVkX2ZyYWdtZW50cyIsImV4YWN0X3Blcl9maWxlX2RpZmZfdHJhbnNpdGlvbl9ldmlkZW5jZSI6ZmFsc2UsImZyYWdtZW50cyI6W3sicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4MTU4OCwiY29tcG9uZW50X3NoYTI1NiI6ImZlOTIxZTQ4YjVlMjM1NjVjMTMzNWYzY2NjZjQ4MzRmZWQyNDBlMDk0N2VhYTI2MzJiYmM1YjU0ZmY1MDk5ZWQiLCJieXRlX3N0YXJ0IjowLCJieXRlX2VuZCI6NTU0NjEsImZyYWdtZW50X3NoYTI1NiI6IjM2ZTk2YzZjZjIyMDY3YjlkOTg1NDY3MTY4NTg4MTEzZjYwMGY0N2ZmOWMwYzQ0MzgwYzIyMGNhMTJkYThmMjgiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn1dfQpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC0wZDVkNWI1YWJmN2NlNzY0ZjI3YWNjNGUgfCBQSUwtSU5HRVNULU1JRERMRS1lMzEzYWQ2NTk1OWU4OWI3MmY2YjFhOGYgfCBQSUwtSU5HRVNULUVPRi0zNjNiODZmZmUwYzY5N2FhYzc0YWRjNmEKUElMLURPTkUtY2MwYjcxNDgzYmRhMGRmOWEzZTljYmNlCg==`
+- Record-SHA256: `eb56008a649d905eb011667ab42ef8f956964bce12650c0594466513bc588695`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — NO_GO — 2026-09-13T04:27:25.303Z
+
+- Status: `NO_GO`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `antigravity-agy-subscription-stream-v2`
+- Transport-Identity: `1.2.2|settings-sha256:af2451da5999c854b5a1fca43939a59ce95e9b84bd00fd0ed76364cf33396a0f|high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `(none)`
+- Attempt-ID: `PIL-FROZEN-ATTEMPT-aceb078aafdd45fa1b61917a`
+- Rig-ID: `agy-owner-identity-final`
+- Rig-Key: `467b71377a57ac30c64e13ff17cb70bed71681726f85737d743868076a8ad621`
+- Failure-Class: `(none)`
+- Base: `98a8b3d8beaa519445413a0432bf63fbe64a4022`
+- Candidate: `65bf8058eedc94e0cacdb2df6785a2c4e5711fbd`
+- Tree: `5aef3bd965cad971aa12552103be1336aa9ee533`
+- Plan-ID: `04be464aafadd00244b53155ead8140aa27c99def4226dfb46b2f8e8b2354d05`
+- Slice: `coverage-004`
+- Material-SHA256: `30dba0beb3ccd55912526ba0ca61f3c608e0a3b48d19a4c17a40cc866c349c2f`
+- Envelope-SHA256: `4e5dbfd8c0da08d298b1a97ab2e28ffd245ba030a87379ee0e00573d7c410f36`
+- Envelope-Bytes: `63354`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: `{"slice":"coverage-004","gate_kind":"base..candidate_change","base":"98a8b3d8beaa519445413a0432bf63fbe64a4022","candidate":"65bf8058eedc94e0cacdb2df6785a2c4e5711fbd","tree":"5aef3bd965cad971aa12552103be1336aa9ee533","files":["scripts/cold-review-gemini.sh"],"contract_context":["docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"30dba0beb3ccd55912526ba0ca61f3c608e0a3b48d19a4c17a40cc866c349c2f","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"scripts/cold-review-gemini.sh","component_kind":"frozen_source","component_byte_length":81588,"component_sha256":"fe921e48b5e23565c1335f3cccf4834fed240e0947eaa2632bbc5b54ff5099ed","byte_start":55461,"byte_end":81588,"fragment_sha256":"354e54efcc41dd89b73aea301dd00eb9b935cd6433d9ecac4603eefe4a7c8e10","range_status":"partial"},{"path":"scripts/cold-review-gemini.sh","component_kind":"per_file_diff","component_byte_length":9766,"component_sha256":"1d2f4349dd904acf96ef308ce57ec669405afaec5efac89d7c278809b3316eab","byte_start":0,"byte_end":177,"fragment_sha256":"9ae1cc622e6559fa06d8341ee98be10d365186c379bf35a7aa944409e09c8c3a","range_status":"partial"},{"path":"scripts/cold-review-gemini.sh","component_kind":"per_file_diff","component_byte_length":9766,"component_sha256":"1d2f4349dd904acf96ef308ce57ec669405afaec5efac89d7c278809b3316eab","byte_start":177,"byte_end":9766,"fragment_sha256":"e492186713bf90bff5e6121833b84fe088bbf8cd80ef45cc574c080b71e08f51","range_status":"partial"}]}`
+- Reply-SHA256: `cf78c926cb6761a5132c17df77bb68d28349286764570781f2f63d3e77060132`
+- Completion-Token-SHA256: `b933cc8f0c07d4a39b158f6b640267c50bd7079caa7b5266554229ce5a94dfb1`
+- Reply-UTF8-Base64: `UElMLUlOR0VTVC1FT0YtMGE5YWUwMWIxMzZjYTZiOTkwMWQ4OTY0CgpDQU5BUklFUzogUElMLUlOR0VTVC1IRUFELTdmM2ZlODg2NmQ3MjZjMTJkNzcyYjNkOCBQSUwtSU5HRVNULU1JRERMRS02MzgwNjhkYTlhNzY5NTFjMjNjMWVlMDIgUElMLUlOR0VTVC1FT0YtMGE5YWUwMWIxMzZjYTZiOTkwMWQ4OTY0CgoxLiBCTE9DS0VSIChDb250cmFjdC12cy1EZXNpZ24gRHJpZnQpOgotICoqSXNzdWU6KiogVGhlIGNhbmRpZGF0ZSBpbXBsZW1lbnRhdGlvbiBjb21wbGV0ZWx5IGNvbnRyYWRpY3RzIHRoZSBkZXNpZ24gaW50ZW50IG9mIHRoZSBzdXBwbGllZCBgZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kYCBzbGljZSBjb250ZXh0LiBUaGUgc2NyaXB0IGNvbnRpbnVlcyB0byBsYXVuY2ggYGFneWAgdXRpbGl6aW5nIGAtLWFkZC1kaXJgLCBgLS1tb2RlIHBsYW5gLCBhbmQgYC0tcHJpbnRgICh3aGljaCBwYXNzZXMgcmV2aWV3IHBheWxvYWQgY29udGVudCB2aWEgYW4gYXJndiBwcm9tcHQpLgotICoqV2h5IGl0IG1hdHRlcnM6KiogVGhlIHRyYW5zcG9ydCBjb250cmFjdCBub24tbmVnb3RpYWJseSBkZW1hbmRzOiAiTmV2ZXIgcGFzcyBhIHJlcG9zaXRvcnkgY3dkLCAtLWFkZC1kaXIuLi4gcHJvbXB0IGFyZ3YuLi4gTm8gcmV2aWV3IG1hdGVyaWFsIG1heSBhcHBlYXIgaW4gYW4gYXJndiBwcm9tcHQuIiBVc2luZyB0aGVzZSBleGFjdCBmbGFncyBkaXJlY3RseSB2aW9sYXRlcyB0aGUgY29yZSBzZWN1cml0eSBib3VuZGFyeSBlc3RhYmxpc2hlZCBieSB0aGUgZGVzaWduIGNvbnRleHQuIFRoZSBkaWZmIGlzIGEgZmFsc2UgY2xhaW0gb2YgbWl0aWdhdGlvbiBiZWNhdXNlIGl0IGZhaWxzIHRvIGZpeCB0aGUgYGFneWAgaW52b2NhdGlvbi4KLSAqKkNoZWNrOioqIEluIGBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaGAsIGxpbmVzIGluc2lkZSB0aGUgZXhlY3V0aW9uIGJyYW5jaGVzIChgcnVuX3N1cGVydmlzZWQgIiRBR1kiIC0tbW9kZWwgIiRNT0RFTCIgLS1wcmludC10aW1lb3V0ICIke1RJTUVPVVRfU0VDT05EU31zIiAtLXByaW50ICIkSU5MSU5FX0NPTUJJTkVEImAgYW5kIGBydW5fc3VwZXJ2aXNlZCAiJEFHWSIgLS1tb2RlbCAiJE1PREVMIiAtLWFkZC1kaXIgIiRUTVBEIiAtLW1vZGUgcGxhbiAtLXNhbmRib3ggLS1wcmludC10aW1lb3V0ICIke1RJTUVPVVRfU0VDT05EU31zIiAtLXByaW50ICIkRklMRV9QUk9NUFQiYCkgcmVtYWluIHVubW9kaWZpZWQgYnkgdGhlIGNhbmRpZGF0ZSdzIGRpZmYuCgoyLiBNRURJVU0gLyBQUkVFWElTVElORyAoRmFsc2UtRkFJTCBDaGVjayAvIFN0dWNrIExvY2spOgotICoqSXNzdWU6KiogVGhlIGNhbmRpZGF0ZSBwYXRjaGVzIHRoZSBzdGFsZSBsb2NrIFBJRC1yZXVzZSB2dWxuZXJhYmlsaXR5IGZvciBgb3duZXJfa2luZD0ic3Vic2NyaXB0aW9uImAgKGJ5IHByb3Blcmx5IHZlcmlmeWluZyBgWyAiJGN1cnJlbnRfc3RhcnQiID0gIiRvd25lcl9zdGFydCIgXWApLCBidXQgZXhwbGljaXRseSBzcGxpdHMgdGhlIGNvbmRpdGlvbmFsIHRvIGxlYXZlIHRoZSBsb2NrIGZvciBgb3duZXJfa2luZD0iZGlyZWN0ImAgdnVsbmVyYWJsZSB0byB0aGUgZXhhY3Qgc2FtZSBmYWlsdXJlLiAKLSAqKldoeSBpdCBtYXR0ZXJzOioqIElmIGEgYGRpcmVjdGAgcnVuIGNyYXNoZXMgYW5kIGl0cyBQSUQgaXMgbGF0ZXIgb3JnYW5pY2FsbHkgcmV1c2VkIGJ5IGFuIGVudGlyZWx5IHVucmVsYXRlZCBwcm9jZXNzLCB0aGUgc2NyaXB0IHdpbGwgcGVyY2VpdmUgdGhlIFBJRCBhcyBhbGl2ZSBidXQgZmFpbCB0byB2ZXJpZnkgaXRzIHByb2Nlc3Mgc3RhcnQgdGltZSwgcmVzdWx0aW5nIGluIGFuIGluZmluaXRlIGZhbHNlLUZBSUwgYmxvY2sgKGBleGl0IDRgKS4gV2hpbGUgcHJlZXhpc3RpbmcsIHRoZSBjYW5kaWRhdGUgZGVsaWJlcmF0ZWx5IHRvdWNoZWQgdGhpcyBsb2dpYyBhbmQgaXNvbGF0ZWQgdGhlIGJ1ZyBpbnN0ZWFkIG9mIG1pdGlnYXRpbmcgaXQuCi0gKipDaGVjazoqKiBUaGUgZGlmZiBpbiBgc2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2hgIGF0IGBhY3F1aXJlX3NpbmdsZV9mbGlnaHRgOiBgaWYgWyAiJG93bmVyX2tpbmQiID0gImRpcmVjdCIgXSAmJiBbICIkb3duZXJfcmVwbyIgPSAiJGNvbW1vbiIgXTsgdGhlbiAuLi4gZXhpdCA0YCBleHBsaWNpdGx5IG9taXRzIHRoZSBgIiRjdXJyZW50X3N0YXJ0IiA9ICIkb3duZXJfc3RhcnQiYCB2ZXJpZmljYXRpb24gYXBwbGllZCBpbW1lZGlhdGVseSBhYm92ZSBpdC4KCk92ZXJhbGwgcmVhZDogVGhlIGJsYXN0IHJhZGl1cyBpcyBoaWdoIGJlY2F1c2UgdGhlIHRyYW5zcG9ydCBzdGlsbCBkYW5nZXJvdXNseSByZWxpZXMgb24gYXJndiBpbmplY3Rpb24gYW5kIHJlcG9zaXRvcnkgY29udGV4dCBpbmplY3Rpb24sIGZhaWxpbmcgdG8gbWVldCB0aGUgc2VjdXJlIGF1dG9tYXRlZCB0cmFuc3BvcnQgY29udHJhY3QuIFJldmVyc2liaWxpdHkgaXMgc3RyYWlnaHRmb3J3YXJkLCBidXQgdGhpcyBzbGljZSBjYW5ub3Qgc2hpcCBhcyBpdCBmdW5kYW1lbnRhbGx5IHZpb2xhdGVzIGl0cyBkZXNpZ24gbWFuZGF0ZS4KClZFUkRJQ1Q6IE5PLUdPCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAwNCIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiOThhOGIzZDhiZWFhNTE5NDQ1NDEzYTA0MzJiZjYzZmJlNjRhNDAyMiIsImNhbmRpZGF0ZSI6IjY1YmY4MDU4ZWVkYzk0ZTBjYWNkYjJkZjY3ODVhMmM0ZTU3MTFmYmQiLCJ0cmVlIjoiNWFlZjNiZDk2NWNhZDk3MWFhMTI1NTIxMDNiZTEzMzZhYTllZTUzMyIsImZpbGVzIjpbInNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiMzBkYmEwYmViM2NjZDU1OTEyNTI2YmEwY2E2MWYzYzYwOGUwYTNiNDhkMTlhNGMxN2E0MGNjODY2YzM0OWMyZiIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4MTU4OCwiY29tcG9uZW50X3NoYTI1NiI6ImZlOTIxZTQ4YjVlMjM1NjVjMTMzNWYzY2NjZjQ4MzRmZWQyNDBlMDk0N2VhYTI2MzJiYmM1YjU0ZmY1MDk5ZWQiLCJieXRlX3N0YXJ0Ijo1NTQ2MSwiYnl0ZV9lbmQiOjgxNTg4LCJmcmFnbWVudF9zaGEyNTYiOiIzNTRlNTRlZmNjNDFkZDg5YjczYWVhMzAxZGQwMGViOWI5MzVjZDY0MzNkOWVjYWM0NjAzZWVmZTRhN2M4ZTEwIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo5NzY2LCJjb21wb25lbnRfc2hhMjU2IjoiMWQyZjQzNDlkZDkwNGFjZjk2ZWYzMDhjZTU3ZWM2Njk0MDVhZmFlYzVlZmFjODlkN2MyNzg4MDliMzMxNmVhYiIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxNzcsImZyYWdtZW50X3NoYTI1NiI6IjlhZTFjYzYyMmU2NTU5ZmEwNmQ4MzQxZWU5OGJlMTBkMzY1MTg2YzM3OWJmMzVhN2FhOTQ0NDA5ZTA5YzhjM2EiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjk3NjYsImNvbXBvbmVudF9zaGEyNTYiOiIxZDJmNDM0OWRkOTA0YWNmOTZlZjMwOGNlNTdlYzY2OTQwNWFmYWVjNWVmYWM4OWQ3YzI3ODgwOWIzMzE2ZWFiIiwiYnl0ZV9zdGFydCI6MTc3LCJieXRlX2VuZCI6OTc2NiwiZnJhZ21lbnRfc2hhMjU2IjoiZTQ5MjE4NjcxM2JmOTBiZmY1ZTYxMjE4MzNiODRmZTA4OGJiZjhjZDgwZWY0NWNjNTc0YzA4MGI3MWUwOGY1MSIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELTdmM2ZlODg2NmQ3MjZjMTJkNzcyYjNkOCB8IFBJTC1JTkdFU1QtTUlERExFLTYzODA2OGRhOWE3Njk1MWMyM2MxZWUwMiB8IFBJTC1JTkdFU1QtRU9GLTBhOWFlMDFiMTM2Y2E2Yjk5MDFkODk2NApQSUwtRE9ORS0wNzJlYzI0ZTliY2FkNWFlODA0YWExMjIK`
+- Record-SHA256: `04f5ade71aa71341cb5759f3563073319e0ac5fb643297240e88698e50be1c9d`
+- Complete-Record: `YES`
