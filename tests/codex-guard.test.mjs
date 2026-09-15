@@ -577,7 +577,14 @@ test("the arming probe ABSTAINS rather than passing when it cannot answer the qu
     const missing = spawnSync("node", [probe, dir], { encoding: "utf8" });
     assert.equal(missing.status, 2, "absent registration ⇒ exit 2, never 0");
     assert.match(missing.stdout, /NOT INSTALLED/);
-    assert.match(missing.stdout, /node bin\/init\.mjs/, "…and says how to install it");
+    assert.match(missing.stdout, /Initialize from your workflow-kit source checkout/,
+      "…and says where the initializer exists");
+    assert.ok(missing.stdout.includes(`bin/init.mjs with --target ${dir}`),
+      "…and keeps the exact missing-registration target");
+    assert.match(missing.stdout, /documented\/original initializer arguments/,
+      "…and tells the adopter to reuse its original initialization arguments");
+    assert.doesNotMatch(missing.stdout, /node bin\/init\.mjs --target/,
+      "…and never prescribes a nonexistent adopter-local initializer");
 
     // The adopter registered hooks THEMSELVES in config.toml, so the kit wrote no hooks.json. Saying
     // only "absent" here sends them to re-run init, which will decline again for the same reason.
@@ -1255,6 +1262,7 @@ test("the arming check tells the kit SOURCE tree it is not adopted, and still te
   const run = (dir) => spawnSync(process.execPath, [probe, dir], { encoding: "utf8", env: { ...process.env, PATH: path.join(dir, "no-codex") } });
   const kitLike = mkdtempSync(path.join(os.tmpdir(), "kit-source-like-"));
   const adopter = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-nohooks-"));
+  const ownHooks = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-own-hooks-"));
   const decoy = mkdtempSync(path.join(os.tmpdir(), "kit-decoy-"));
   const ownInstaller = mkdtempSync(path.join(os.tmpdir(), "kit-adopter-own-installer-"));
   try {
@@ -1267,6 +1275,8 @@ test("the arming check tells the kit SOURCE tree it is not adopted, and still te
     writeFileSync(path.join(ownInstaller, "package.json"), JSON.stringify({ name: "their-app" }));
     // An adopter's floor lives at .githooks/ and it has no bin/init.mjs — and a lone match is not the kit.
     mkdirSync(path.join(adopter, ".githooks"), { recursive: true }); writeFileSync(path.join(adopter, ".githooks", "pre-commit"), "#!/usr/bin/env node\n");
+    mkdirSync(path.join(ownHooks, ".codex"), { recursive: true });
+    writeFileSync(path.join(ownHooks, ".codex", "config.toml"), 'hooks = "./their-hooks.json"\n');
     mkdirSync(path.join(decoy, "bin", "init.mjs"), { recursive: true }); mkdirSync(path.join(decoy, "githooks"), { recursive: true });
     writeFileSync(path.join(decoy, "githooks", "pre-commit"), "x\n"); writeFileSync(path.join(decoy, "package.json"), JSON.stringify({ name: "workflow-kit" }));
     assert.equal(isKitSourceTree(KIT), true, "the real kit tree is recognised");
@@ -1287,8 +1297,17 @@ test("the arming check tells the kit SOURCE tree it is not adopted, and still te
       const r = run(dir);
       assert.equal(r.status, 2, r.stdout);
       assert.match(r.stdout, /^NOT INSTALLED — \.codex\/hooks\.json is absent in /m);
-      assert.match(r.stdout, /Run: node bin\/init\.mjs --target /, "an adopter still gets the init remedy");
+      assert.match(r.stdout, /Initialize from your workflow-kit source checkout/, "the remedy identifies where the initializer exists");
+      assert.ok(r.stdout.includes(`bin/init.mjs with --target ${dir}`), "the remedy preserves the exact adopter target");
+      assert.match(r.stdout, /documented\/original initializer arguments/, "the remedy tells the adopter to reuse its recorded arguments");
+      assert.doesNotMatch(r.stdout, /Run: node bin\/init\.mjs --target /, "the nonexistent adopter-local initializer is never prescribed");
       assert.doesNotMatch(r.stdout, /BY DESIGN/);
     }
-  } finally { for (const d of [kitLike, adopter, decoy, ownInstaller]) rmSync(d, { recursive: true, force: true }); }
+    const own = run(ownHooks);
+    assert.equal(own.status, 2, own.stdout);
+    assert.match(own.stdout, /Your \.codex\/config\.toml declares hooks ITSELF/,
+      "an adopter-owned hooks registration retains its existing abstain branch");
+    assert.doesNotMatch(own.stdout, /workflow-kit source checkout/,
+      "an adopter-owned hooks registration does not receive the initializer remedy");
+  } finally { for (const d of [kitLike, adopter, ownHooks, decoy, ownInstaller]) rmSync(d, { recursive: true, force: true }); }
 });

@@ -170,7 +170,8 @@ function main() {
       console.log(`  Your .codex/config.toml declares hooks ITSELF, so the kit did not add a second`);
       console.log(`  registration. Those hooks are yours: this check cannot speak for them.`);
     } else {
-      console.log(`  Run: node bin/init.mjs --target ${repo}   (then grant trust — see below)`);
+      console.log(`  Initialize from your workflow-kit source checkout: run its bin/init.mjs with --target ${repo}.`);
+      console.log(`  Reuse this adopter's documented/original initializer arguments (then grant trust — see below).`);
     }
     process.exit(2);
   }
