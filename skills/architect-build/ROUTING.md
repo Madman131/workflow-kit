@@ -21,9 +21,11 @@ separately from pending recommendations; current phase/CHIP; unresolved decision
 and reconciliation owed. Locate an existing architecture/current-state record first; otherwise create one
 through the repository's normal docs/state convention and record its exact path. Record both task locators.
 
-Recovery does not promote pending advice, create a second PM, or block independent authorized work. It
-holds only a dependent decision whose current authority cannot be established. Without task creation or
-cross-session transport, emit the approved-baseline handoff and use file-only equivalents.
+Recovery does not promote pending advice, create a replacement or acting architect, create a second PM,
+or block independent authorized work. It preserves approved context through the durable record and
+file-only continuity, holding only a dependent decision whose current authority cannot be established.
+Without task creation or cross-session transport, emit the approved-baseline handoff and use file-only
+equivalents.
 
 ## Quiet continuity and persistent triggers
 

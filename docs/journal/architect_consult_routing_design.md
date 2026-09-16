@@ -111,10 +111,11 @@ their file-only equivalents; approved baseline and source pointers; accepted dec
 pending recommendations; current phase/CHIP; unresolved decisions; last alignment check; and any
 reconciliation owed. `/architect-build` inspects that record before creating a task. It establishes an
 architect during planning, reuses an existing architect when its identity and approved baseline are
-current, or recovers a file-based architect from the record and current evidence. Recovery never promotes
-pending advice to an approved decision or creates a second PM chain. It holds only dependent decisions
-whose current authority cannot be established, while independent authorized work continues. The PM records
-later dispositions/outcomes and reconciles them at the next meaningful checkpoint.
+current, or reconstructs file-only continuity from the record and current evidence. Recovery never
+promotes pending advice to an approved decision, creates a replacement or acting architect, or creates a
+second PM chain. It holds only dependent decisions whose current authority cannot be established, while
+independent authorized work continues. The PM records later dispositions/outcomes and reconciles them at
+the next meaningful checkpoint.
 
 ### Authority, fallback, and portability
 
@@ -142,7 +143,7 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 | `skills/orchestrate/SKILL.md` | A short operational pointer to the core rule, durable baseline/latest-decision record, and degraded reconciliation practice. |
 | `skills/architect-build/SKILL.md` | Establish, reuse, or recover the persistent architect; maintain the durable record; produce the approved-baseline handoff to a separate PM; point to the core routing rule. |
 | `skill-shims/claude/architect-build.md` and `skill-shims/codex/architect-build.md` | Discover the one canonical companion-skill body in each harness. |
-| Existing user-skill sync surface, package scripts, and focused tests as proven necessary | Keep the new companion available beside `/orchestrate` without generic-renaming churn; pin one-home, lifecycle, installation, parity, and no duplicate budget/transport claims. |
+| Existing repository adoption mechanism and focused tests | Discover and install the companion body, reference layer, and both harness shims through `bin/init.mjs`; no user-global architecture sync surface is added. |
 
 **Explicit cuts from the source proposal:**
 

@@ -10,11 +10,8 @@ changes, and a due five-active-workday alignment check consult the architect; an
 checkpoint combines only when the persistent architect independently meets the existing process-review
 eligibility and freshness rules.
 
-The skill installs automatically through the existing dual-harness discovery mechanism. The established
-`sync:orchestrate-user` command remains `/orchestrate`-only. To install or check the complete architecture
-pair in both user copies, use `npm run sync:architect-build-user` or `npm run check:architect-build-user`.
-That explicit install preserves an existing `/architect-build` by default; use `--force` only to take over
-or update it. Existing adopters need `init --force` to update shipped `[P]` files.
+The skill installs automatically through the existing dual-harness repository-adoption discovery mechanism.
+Existing adopters need `init --force` to update shipped `[P]` files.
 
 ## What's new in v2.32.1 — hook trust is keyed to the registration, and three kit defects
 

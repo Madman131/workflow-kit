@@ -31,10 +31,10 @@ unresolved decisions, last alignment check, and reconciliation owed.
   baseline before handing it to a separate `/orchestrate` PM.
 - **Reuse:** retain an identified architect only when its baseline is current. Reconcile any pending
   recommendations before treating them as decisions.
-- **Recover:** inspect the record and current evidence before creating a replacement. Reconstruct from
-  the approved baseline and accepted decisions; identify missing rationale honestly. Never create a
-  second PM chain, promote advice to approval, or block independent authorized work. Hold only a
-  decision whose current authority cannot be established.
+- **Recover:** inspect the record and current evidence; preserve approved context through the durable
+  record and file-only continuity. Never create a replacement or acting architect, a second PM chain,
+  or an approval from advice. Continue independent authorized work and hold only a decision whose current
+  authority cannot be established.
 
 The handoff gives the PM the approved baseline, durable-record location, architect locator or file-only
 equivalent, current phase/CHIP, open decisions, and the next intended milestone. It does not authorize a

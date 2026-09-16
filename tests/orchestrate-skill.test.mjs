@@ -313,6 +313,7 @@ test("architect-build routing keeps packet currency, quiet boundaries, fourth-ga
   pin(routing, "Every persistent-architect packet carries, or explicitly consults in the durable record, the approved\nbaseline, latest accepted decisions, and last alignment check.", "persistent packet currency");
   pin(routing, "Below-trigger questions\ndo not contact the persistent architect unless an existing gate independently requires its own seat.", "quiet current-chip boundary");
   pin(routing, "persistent architect independently satisfies every existing process-review eligibility and freshness\nrequirement.", "combined fourth-gate eligibility");
+  pin(routing, "Recovery does not promote pending advice, create a replacement or acting architect, create a second PM,", "recovery preserves one architect chain");
   pin(routing, "When the persistent architect is unavailable, do not create an acting architect.", "unavailable architect does not mint a replacement chain");
 });
 
