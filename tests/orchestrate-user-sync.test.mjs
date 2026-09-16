@@ -7,7 +7,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  ARCHITECT_BUILD_FILES, ARCHITECT_BUILD_SOURCE, compareArchitectBuildInstalled,
   DEFAULT_SOURCE, ORCHESTRATE_FILES, compareInstalled, installOrchestrate,
 } from "../scripts/sync-user-orchestrate-skill.mjs";
 
@@ -55,14 +54,12 @@ test("a symlinked target or package member fails closed", () => {
   } finally { g.cleanup(); }
 });
 
-test("the historic default stays orchestrate-only; the explicit architecture pair requires all four copies", () => {
+test("with no --target the CLI installs and checks BOTH the Codex and the Claude user copy", () => {
   const f = fixture();
   const env = { ...process.env, HOME: f.root, USERPROFILE: f.root };
   const agents = path.join(f.root, ".agents", "skills", "orchestrate");
   const claude = path.join(f.root, ".claude", "skills", "orchestrate");
-  const architectAgents = path.join(f.root, ".agents", "skills", "architect-build");
-  const architectClaude = path.join(f.root, ".claude", "skills", "architect-build");
-  const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env });
+  const run = (flag) => spawnSync(process.execPath, [CLI, flag], { encoding: "utf8", env });
   try {
     // Nothing installed: check fails closed rather than passing on an empty set.
     assert.equal(run("--check").status, 1);
@@ -70,49 +67,14 @@ test("the historic default stays orchestrate-only; the explicit architecture pai
     for (const dir of [agents, claude]) {
       assert.deepEqual(compareInstalled({ target: dir }), { ok: true, drift: [] }, dir);
     }
-    assert.equal(run("--check").status, 0, "the historic check stays /orchestrate-only");
-    assert.equal(run("--check", "--architecture-pair").status, 1, "the explicit pair fails closed while architect-build is absent");
-    assert.equal(run("--install", "--architecture-pair").status, 0);
-    for (const dir of [architectAgents, architectClaude]) {
-      assert.deepEqual(compareArchitectBuildInstalled({ target: dir }), { ok: true, drift: [] }, dir);
-      assert.deepEqual(readFileSync(path.join(dir, "SKILL.md")), readFileSync(path.join(ARCHITECT_BUILD_SOURCE, "SKILL.md")));
-    }
     // The defect this pins: a stale Claude copy behind an in-sync Codex copy read green.
     writeFileSync(path.join(claude, "SKILL.md"), "stale\n");
-    const stale = run("--check", "--architecture-pair");
+    const stale = run("--check");
     assert.equal(stale.status, 1);
     assert.match(stale.stderr, /\.claude.*SKILL\.md/);
-    writeFileSync(path.join(architectAgents, "SKILL.md"), "stale\n");
-    const architectStale = run("--check", "--architecture-pair");
-    assert.equal(architectStale.status, 1);
-    assert.match(architectStale.stderr, /architect-build.*\.agents.*SKILL\.md/);
-    writeFileSync(path.join(architectAgents, "SKILL.md"), readFileSync(path.join(ARCHITECT_BUILD_SOURCE, "SKILL.md")));
     // A copy that was never installed is absent, not stale.
     rmSync(claude, { recursive: true, force: true });
-    assert.equal(run("--check").status, 0, "historic /orchestrate check permits a never-installed sibling");
-    assert.equal(run("--check", "--architecture-pair").status, 1, "pair parity rejects the crossed orchestrate/architect harness installs");
-  } finally { f.cleanup(); }
-});
-
-test("architect-build sync exposes the complete canonical body", () => {
-  assert.deepEqual(ARCHITECT_BUILD_FILES, ["SKILL.md", "ROUTING.md"]);
-  assert.ok(readFileSync(path.join(ARCHITECT_BUILD_SOURCE, "SKILL.md"), "utf8").includes("/architect-build"));
-  assert.ok(readFileSync(path.join(ARCHITECT_BUILD_SOURCE, "ROUTING.md"), "utf8").includes("persistent architect"));
-});
-
-test("architecture-pair install preserves a pre-existing architect-build until an explicit force", () => {
-  const f = fixture();
-  const env = { ...process.env, HOME: f.root, USERPROFILE: f.root };
-  const preexisting = path.join(f.root, ".agents", "skills", "architect-build", "SKILL.md");
-  try {
-    mkdirSync(path.dirname(preexisting), { recursive: true });
-    writeFileSync(preexisting, "user-owned architect skill\n");
-    const blocked = spawnSync(process.execPath, [CLI, "--install", "--architecture-pair"], { encoding: "utf8", env });
-    assert.equal(blocked.status, 2);
-    assert.match(blocked.stderr, /refusing to replace existing architect-build/);
-    assert.equal(readFileSync(preexisting, "utf8"), "user-owned architect skill\n");
-    assert.equal(spawnSync(process.execPath, [CLI, "--install", "--architecture-pair", "--force"], { encoding: "utf8", env }).status, 0);
-    assert.deepEqual(compareArchitectBuildInstalled({ target: path.dirname(preexisting) }), { ok: true, drift: [] });
+    assert.equal(run("--check").status, 0);
   } finally { f.cleanup(); }
 });
 

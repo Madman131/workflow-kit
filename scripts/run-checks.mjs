@@ -35,14 +35,13 @@ const RUNGS = [
   { name: "kit control suite", argv: ["--test", ...testFiles] },
 ];
 // User-install parity is environment-owned, so clean CI hosts stay hermetic. On a developer host
-// where either architecture skill is installed, however, leaving this optional recreated the exact
-// split this check exists to detect: the source suite was green while the command agents actually
-// loaded were stale. Presence makes pair parity a required local rung.
-const userArchitectureSkills = [".agents", ".claude"].flatMap((d) =>
-  ["orchestrate", "architect-build"].map((skill) => path.join(os.homedir(), d, "skills", skill)));
+// where /orchestrate is installed, however, leaving this optional recreated the exact split this
+// check exists to detect: the source suite was green while the command agents actually loaded was
+// stale. Presence makes parity a required local rung.
+const userOrchestrates = [".agents", ".claude"].map((d) => path.join(os.homedir(), d, "skills", "orchestrate"));
 const syncScript = path.join(KIT, "scripts", "sync-user-orchestrate-skill.mjs");
-if (userArchitectureSkills.some((d) => existsSync(d)) && existsSync(syncScript)) {
-  RUNGS.push({ name: "architecture skill user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check", "--architecture-pair"] });
+if (userOrchestrates.some((d) => existsSync(d)) && existsSync(syncScript)) {
+  RUNGS.push({ name: "orchestrate user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check"] });
 }
 
 const failed = [];
