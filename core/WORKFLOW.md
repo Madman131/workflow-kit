@@ -65,14 +65,20 @@ declaration below.
 
 ### Architectural consult routing
 
-`/architect-build` establishes, reuses, or recovers a persistent architect and hands its approved
-baseline to a separate `/orchestrate` PM. The architect is advisory and preserves program fit; the PM
-is the sole execution command chain. Before creating or reusing either task, inspect the durable record:
+When the Owner instructs a launch, `/architect-build` establishes, reuses, or recovers a persistent
+architect and, after baseline approval, creates or connects a separate `/orchestrate` PM. The architect
+is advisory and preserves program fit; the PM is the sole execution command chain. Before creating or
+reusing either task, inspect the durable record:
 program/repository identity; architect and active-PM locator or file-only equivalents; approved baseline
 and source pointers; accepted decisions separately from pending recommendations; current phase/CHIP;
 unresolved decisions; last alignment check; and reconciliation owed. Recovery never promotes pending
 advice, creates a second PM, or blocks independent authorized work; it holds only a dependent decision
 whose current authority cannot be established.
+
+Locate the repository's existing architecture/current-state record first. If none carries those fields,
+create one using the repository's normal docs/state convention and record its exact path. Record both task
+locators. Without an Owner launch instruction, do not create either task. Without task creation or
+cross-session transport, emit the approved-baseline handoff and use the file-only equivalents instead.
 
 Routine CHIP progress updates that record without contacting the architect. Consult the architect at
 program inception/baseline, terminal STOP, a material pivot, foundation/ownership/authority or major

@@ -12,11 +12,18 @@ Use for a substantial program that needs one continuing architectural view while
 CHIPS. The architect advises on program fit; `/orchestrate` owns worker dispatch, implementation,
 reviews, tests, integration, and all execution authority already granted by the method.
 
+Create or connect tasks only when the Owner has instructed a launch. If the harness supports task
+creation, establish/reuse the architect first and, after baseline approval, create/connect the separate
+`/orchestrate` PM; record both locators. If it does not, emit the approved-baseline handoff and use
+file-only equivalents. Never duplicate an established architect or PM.
+
 ## Establish, reuse, or recover
 
-First inspect the durable record. It names the program/repository, architect and active-PM locator (or
-file-only equivalents), approved baseline/source pointers, accepted decisions distinct from pending
-recommendations, current phase/CHIP, unresolved decisions, last alignment check, and reconciliation owed.
+First locate the repository's existing architecture/current-state record. If none can carry the required
+fields, create one using the repository's normal docs/state convention and record its exact path. It names
+the program/repository, architect and active-PM locator (or file-only equivalents), approved
+baseline/source pointers, accepted decisions distinct from pending recommendations, current phase/CHIP,
+unresolved decisions, last alignment check, and reconciliation owed.
 
 - **Establish:** use the planning task as architect when practical. Record the intended outcomes,
   acceptance evidence, boundaries, interfaces, constraints, accepted decisions and reasons, rejected
