@@ -43,7 +43,8 @@ decisions, and next milestone. It does not authorize new scope, push, deployment
 The PM records routine CHIP progress, dispositions, outcomes, and evidence in the durable record without
 contacting the architect. Consult only at program inception/baseline, terminal STOP, a material pivot,
 foundation/ownership/authority or major sequencing change, a meaningful milestone or planned phase
-boundary, or a due five-active-workday alignment review. Every persistent packet carries, or explicitly
+boundary, a due five-active-workday alignment review, or an unresolved in-envelope program decision or
+concrete PM authority, safety, or evidence conflict requiring Principal direction. Every persistent packet carries, or explicitly
 consults in that record, the approved baseline, latest accepted decisions, and last alignment check. The
 reference layer has the exact material test, ordinary-consult boundary, combined fourth-gate rule, and
 degraded fallback; those rules have one authoritative home.

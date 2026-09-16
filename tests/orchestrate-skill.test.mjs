@@ -317,6 +317,9 @@ test("architect-build routing keeps delegated authority, quiet boundaries, fourt
   pin(routing, "In file-only mode, a launch emits the same handoff through file-only\nequivalents. Without launch, preserve planning continuity only.", "launch gates file-only handoff");
   pin(routing, "Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, accepted\ndecisions, and alignment check.", "persistent packet currency and delegation provenance");
   pin(routing, "Below-trigger questions\ndo not contact the persistent architect unless an existing gate independently requires its own seat.", "quiet current-chip boundary");
+  const principalDirectionTrigger = "unresolved in-envelope program decision or concrete PM authority, safety, or evidence conflict requiring Principal direction";
+  pin(skill, principalDirectionTrigger, "the PM has a durable contact trigger for an uncovered in-envelope decision or concrete conflict");
+  pin(routing, principalDirectionTrigger, "the authoritative routing layer cannot drop the Principal-direction trigger");
   pin(routing, "persistent architect independently satisfies every existing process-review eligibility and freshness\nrequirement.", "combined fourth-gate eligibility");
   pin(routing, "Recovery does not promote advice, create an acting architect or second PM, or block covered work.", "recovery preserves one architect chain");
   pin(routing, "With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for", "delegated Principal owns program continuity");

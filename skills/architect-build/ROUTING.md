@@ -34,7 +34,8 @@ approved-baseline handoff.
 Routine CHIP progress updates the durable record without contacting the persistent architect. Consult that
 architect only at program inception/baseline, terminal STOP, a material pivot, foundation/ownership/
 authority or major sequencing change, a meaningful milestone or planned phase boundary, or the first safe
-checkpoint after five active workdays since the last alignment review. Material changes accepted outcomes,
+checkpoint after five active workdays since the last alignment review, or an unresolved in-envelope program
+decision or concrete PM authority, safety, or evidence conflict requiring Principal direction. Material changes accepted outcomes,
 acceptance criteria, foundation, ownership, dependency order, authority, or budget. Quiet means no routine
 polling/status messages or repeated review of one unresolved decision; it never suppresses a due alignment
 review. Coalesce a due alignment review with another qualifying checkpoint.

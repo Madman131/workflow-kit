@@ -397,17 +397,17 @@ assert_eq "$AG_CONSULT_SHA" "$(shasum "$AG_CONSULT" | awk '{print $1}')" "re-run
 assert_eq "$AGENTS_SHA1" "$(shasum "$ADOPTER/AGENTS.md" | awk '{print $1}')" "AGENTS.md unchanged on re-run"
 
 echo
-echo "(commands failure-isolation) a blocked user-global Codex write must NOT abort the repo-local adopt"
+echo "(commands failure-isolation) a blocked user-global Codex write must fail while completing repo-local controls"
 # The Codex prompt is the ONE out-of-repo write. Point it at a path blocked by a regular FILE (so the
-# ensureDir mkdir throws): init must WARN-and-continue, still install the repo-local Claude command +
-# AGENTS pointer, and exit 0. If the try/catch around that write regressed, init would abort here.
+# ensureDir mkdir throws): the mechanism failure must make init nonzero without suppressing the
+# repo-local Claude command or AGENTS pointer. The blocked path must receive no prompt.
 FRESH="$WORK/fresh"; git init -q "$FRESH"; git -C "$FRESH" config user.email a@a; git -C "$FRESH" config user.name a
 touch "$WORK/codex-blocker"
 if node "$KIT/bin/init.mjs" --target "$FRESH" --repo-name fresh \
      --remote-url git@github.com:you/fresh.git --codex-prompts-dir "$WORK/codex-blocker" >/dev/null 2>&1; then
-  ok "blocked Codex write: init still exits 0 (repo-local adopt not aborted)"
+  bad "blocked Codex write exited 0 — mechanism failure was hidden"
 else
-  bad "blocked Codex write ABORTED init — failure isolation regressed"
+  ok "blocked Codex write: init exits nonzero while repo-local controls complete"
 fi
 [ -f "$FRESH/.claude/commands/thread-restart.md" ] && ok "blocked Codex write: repo-local Claude command STILL installed" || bad "Claude command missing after a blocked Codex write"
 assert_eq "1" "$(grep -c 'workflow-kit:thread-restart-pointer' "$FRESH/AGENTS.md")" "blocked Codex write: AGENTS pointer STILL appended"
