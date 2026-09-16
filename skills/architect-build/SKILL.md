@@ -12,10 +12,11 @@ Use for a substantial program that needs one continuing architectural view while
 CHIPS. The architect advises on program fit; `/orchestrate` owns worker dispatch, implementation,
 reviews, tests, integration, and all execution authority already granted by the method.
 
-Create or connect tasks only when the Owner has instructed a launch. If the harness supports task
-creation, establish/reuse the architect first and, after baseline approval, create/connect the separate
-`/orchestrate` PM; record both locators. If it does not, emit the approved-baseline handoff and use
-file-only equivalents. Never duplicate an established architect or PM.
+Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If the
+harness supports task creation, establish/reuse the architect first and, after baseline approval,
+create/connect the separate PM; record both locators. In file-only mode, a launch emits that handoff using
+file-only equivalents. Without launch, preserve planning continuity only. Existing authorized execution
+does not need a renewed launch. Never duplicate an established architect or PM.
 
 ## Establish, reuse, or recover
 
@@ -36,9 +37,9 @@ unresolved decisions, last alignment check, and reconciliation owed.
   or an approval from advice. Continue independent authorized work and hold only a decision whose current
   authority cannot be established.
 
-The handoff gives the PM the approved baseline, durable-record location, architect locator or file-only
-equivalent, current phase/CHIP, open decisions, and the next intended milestone. It does not authorize a
-new scope, tier, push, deployment, or live write.
+The launch handoff gives the PM the approved baseline, durable-record location, architect locator or
+file-only equivalent, current phase/CHIP, open decisions, and the next intended milestone. It does not
+authorize a new scope, tier, push, deployment, or live write.
 
 ## Keep continuity without spending a consult
 

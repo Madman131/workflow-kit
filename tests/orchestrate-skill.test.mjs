@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BODY = path.join(KIT, "skills", "orchestrate", "SKILL.md");
+const ARCHITECT_SKILL = path.join(KIT, "skills", "architect-build", "SKILL.md");
 const ARCHITECT_ROUTING = path.join(KIT, "skills", "architect-build", "ROUTING.md");
 
 // Whitespace-flatten before matching: a phrase that WRAPS a line is present to a reader and absent
@@ -309,7 +310,11 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
 // ── (2) the reference layers, and the enumerations that must agree with the tree ────────────────
 
 test("architect-build routing keeps packet currency, quiet boundaries, fourth-gate eligibility, and one architect", () => {
+  const skill = readFileSync(ARCHITECT_SKILL, "utf8");
   const routing = readFileSync(ARCHITECT_ROUTING, "utf8");
+  pin(skill, "Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff.", "launch gates every PM activation and handoff");
+  pin(skill, "Without launch, preserve planning continuity only. Existing authorized execution\ndoes not need a renewed launch.", "no-launch file-only boundary");
+  pin(routing, "In file-only mode, a launch emits the same handoff through file-only\nequivalents. Without launch, preserve planning continuity only.", "launch gates file-only handoff");
   pin(routing, "Every persistent-architect packet carries, or explicitly consults in the durable record, the approved\nbaseline, latest accepted decisions, and last alignment check.", "persistent packet currency");
   pin(routing, "Below-trigger questions\ndo not contact the persistent architect unless an existing gate independently requires its own seat.", "quiet current-chip boundary");
   pin(routing, "persistent architect independently satisfies every existing process-review eligibility and freshness\nrequirement.", "combined fourth-gate eligibility");

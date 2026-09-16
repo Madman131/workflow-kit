@@ -13,19 +13,22 @@ compact invocation body.
 
 ## Establish, reuse, and recover
 
-Only an Owner launch instruction may create or connect tasks. `/architect-build` establishes, reuses, or
-recovers a persistent architect and, after baseline approval, creates or connects a separate `/orchestrate`
-PM. Inspect the durable record before either action. It names the program/repository; architect and active
-PM locator or file-only equivalents; approved baseline and source pointers; latest accepted decisions
-separately from pending recommendations; current phase/CHIP; unresolved decisions; last alignment check;
-and reconciliation owed. Locate an existing architecture/current-state record first; otherwise create one
-through the repository's normal docs/state convention and record its exact path. Record both task locators.
+Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. On launch,
+`/architect-build` establishes, reuses, or recovers a persistent architect and, after baseline approval,
+creates or connects a separate PM. In file-only mode, a launch emits the same handoff through file-only
+equivalents. Without launch, preserve planning continuity only. Existing authorized execution does not need
+a renewed launch. Inspect the durable record before either action. It names the program/repository;
+architect and active PM locator or file-only equivalents; approved baseline and source pointers; latest
+accepted decisions separately from pending recommendations; current phase/CHIP; unresolved decisions; last
+alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
+otherwise create one through the repository's normal docs/state convention and record its exact path.
+Record both task locators.
 
 Recovery does not promote pending advice, create a replacement or acting architect, create a second PM,
 or block independent authorized work. It preserves approved context through the durable record and
 file-only continuity, holding only a dependent decision whose current authority cannot be established.
-Without task creation or cross-session transport, emit the approved-baseline handoff and use file-only
-equivalents.
+Without task creation or cross-session transport, a launch uses file-only equivalents for the
+approved-baseline handoff.
 
 ## Quiet continuity and persistent triggers
 
