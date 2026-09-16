@@ -50,10 +50,11 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    not happen: waiting on one, you keep building everything it does not touch and you seat nothing
    that depends on it. Timing out an Owner rung is self-authorisation wearing initiative's clothes,
    and the gate it skips is the one whose whole reason is that the call is not yours.
-   **For a delegated program, cite the Principal decision/record and its limits; it binds execution but
-   never supplies Owner GO. Name target-repo Owner reservations, including merge/push GO, material intent
-   or risk, live WRITE-GO, credentials, terminal exception and budget exceptions; all route THROUGH PM.**
-   **Give the orchestrator-facing
+   **Name the TARGET REPO's reserved calls, with these five as examples — merge/push
+   GO · intent or risk acceptance · tier ratification · core-doc wording sign-off · and the named
+   WRITE-GO for each prod write, which a push-GO never covers — and say that even those route THROUGH
+   the orchestrator, who relays**; the write-GO is the one whose omission routes a live production
+   write. **Give the orchestrator-facing
    labels (`CONSULT:` / `RULING NEEDED:`). The generated `core/OWNER_COMMS.md` rule 8 is the sole
    source for Owner-facing labels and form; do not duplicate its list in this portable brief.
 8. **Accumulated corrections** — the rulings and lessons this chip inherits, especially any that

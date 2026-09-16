@@ -309,19 +309,17 @@ test("the README/PORTABILITY mirrors carry no claim the body has already retract
 
 // ── (2) the reference layers, and the enumerations that must agree with the tree ────────────────
 
-test("architect-build routing keeps delegated authority, quiet boundaries, fourth-gate eligibility, and one architect", () => {
+test("architect-build routing keeps packet currency, quiet boundaries, fourth-gate eligibility, and one architect", () => {
   const skill = readFileSync(ARCHITECT_SKILL, "utf8");
   const routing = readFileSync(ARCHITECT_ROUTING, "utf8");
   pin(skill, "Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff.", "launch gates every PM activation and handoff");
   pin(skill, "Without launch, preserve planning continuity only. Existing authorized execution\ndoes not need a renewed launch.", "no-launch file-only boundary");
   pin(routing, "In file-only mode, a launch emits the same handoff through file-only\nequivalents. Without launch, preserve planning continuity only.", "launch gates file-only handoff");
-  pin(routing, "Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, accepted\ndecisions, and alignment check.", "persistent packet currency and delegation provenance");
+  pin(routing, "Every persistent-architect packet carries, or explicitly consults in the durable record, the approved\nbaseline, latest accepted decisions, and last alignment check.", "persistent packet currency");
   pin(routing, "Below-trigger questions\ndo not contact the persistent architect unless an existing gate independently requires its own seat.", "quiet current-chip boundary");
   pin(routing, "persistent architect independently satisfies every existing process-review eligibility and freshness\nrequirement.", "combined fourth-gate eligibility");
-  pin(routing, "Recovery does not promote advice, create an acting architect or second PM, or block covered work.", "recovery preserves one architect chain");
-  pin(routing, "With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for", "delegated Principal owns program continuity");
-  pin(routing, "Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;", "Owner reservations remain explicit");
-  pin(routing, "When Principal is unavailable, do not create an acting architect.", "unavailable architect does not mint a replacement chain");
+  pin(routing, "Recovery does not promote pending advice, create a replacement or acting architect, create a second PM,", "recovery preserves one architect chain");
+  pin(routing, "When the persistent architect is unavailable, do not create an acting architect.", "unavailable architect does not mint a replacement chain");
 });
 
 // The list below is the tree's, not a habit: it was ["CHIP_BRIEF.md", "PROTOCOLS.md"] while a THIRD
@@ -459,11 +457,9 @@ test("the pin helper reports a DEAD pin instead of passing it", () => {
 test("reserved decisions route through the PM without a portable mirror", () => {
   const body = readFileSync(BODY, "utf8");
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
-  assert.match(body, /Owner alone decides product intent\/risk, material scope\/budget,\s+credentials/,
-    "§ Routing names the Owner-only boundary without treating Principal delegation as a release waiver");
-  assert.match(body, /Principal decides nonreserved in-envelope program questions/,
-    "§ Routing makes delegated program direction binding rather than advisory");
-  assert.match(body, /A chip routes\s+those calls through PM using `CONSULT:` or `RULING NEEDED:`/,
+  assert.match(body, /Only the Owner decides critical design\/intent\/risk, material scope\/budget, credentials/,
+    "§ Routing names the Owner-only boundary without inventing a closed adopter list");
+  assert.match(body, /A chip routes those calls to the PM using `CONSULT:` or `RULING NEEDED:`/,
     "§ Routing keeps chip-to-PM consultation distinct from Owner-facing form");
   assert.match(body, /core\/OWNER_COMMS\.md` rule 8, not mirrored here/,
     "§ Routing points to the canonical generated Owner-facing source");

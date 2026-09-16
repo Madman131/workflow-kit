@@ -30,9 +30,8 @@ work.**
 
 ## 0.1 THE TIER IS SET, NOT DERIVED
 
-**The tier is set in the brief at spawn and Owner-ratified before any T2/T3 gate, unless recorded
-Project-Principal delegation covers an in-plan tier.** The worker verifies it; lowering or live
-reversibility still needs Owner confirmation.
+**The tier is set in the brief at spawn and Owner-ratified before any T2/T3 gate.** The worker
+verifies the artifact matches and never re-derives it; the proposal is not the ratification.
 
 **One escalation path, and only one:** if the artifact stops matching its declared tier — a prose chip
 that grows control code, **or one that stays the same class while gaining a gate, emit or stop
@@ -47,8 +46,9 @@ half or not at all (§ 0.2). Report to
 **the orchestrator**, not the Owner: give the stop condition that fired, the artifact it fired on,
 options with costs, and a recommendation. **A mis-tier is not discharged by reporting it: the target
 repo's rung is *"escalate and RESTART the required gates"* (`core/WORKFLOW.md` § Gate), so the gates
-already run at the wrong tier do not count.** **Routing, including delegated Principal decisions and Owner
-reservations, is `.agents/skills/orchestrate/SKILL.md` § Routing — do not copy its list here.**
+already run at the wrong tier do not count.** **Which decisions are the Owner's, and how even those route
+through the orchestrator, is `.agents/skills/orchestrate/SKILL.md` § Routing — do not carry a second
+copy of that list here, and do not assume it is shorter than it is.**
 
 | Tier | What it is |
 |---|---|
