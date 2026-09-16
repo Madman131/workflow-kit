@@ -42,7 +42,7 @@ const userArchitectureSkills = [".agents", ".claude"].flatMap((d) =>
   ["orchestrate", "architect-build"].map((skill) => path.join(os.homedir(), d, "skills", skill)));
 const syncScript = path.join(KIT, "scripts", "sync-user-orchestrate-skill.mjs");
 if (userArchitectureSkills.some((d) => existsSync(d)) && existsSync(syncScript)) {
-  RUNGS.push({ name: "architecture skill user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check"] });
+  RUNGS.push({ name: "architecture skill user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check", "--architecture-pair"] });
 }
 
 const failed = [];
