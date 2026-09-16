@@ -1,7 +1,8 @@
-# Architect project-principal routing — pre-implementation T2 brief
+# Architect project-principal routing — T2 design contract
 
-**Status:** pre-implementation design; no doctrine, skill, template, test, controller, or scheduler
-has changed. This supersedes the earlier advisory-architect proposal.
+**Status:** design contract; implementation is under final review. The original pre-code base, receipt,
+and source-packet provenance below remain historical evidence; that receipt did not review code. This
+supersedes the earlier advisory-architect proposal.
 **Source packet:** `/private/tmp/workflow-kit-architect-consult-policy/`, SHA-256 verified on
 2026-09-16. The packet informs this design; it is not adopted wording.
 **Candidate base:** `b091afce029a025b6df6d14198f6acb438e060a9`.
@@ -11,8 +12,9 @@ has changed. This supersedes the earlier advisory-architect proposal.
 The Owner requested this as a **T2 core-document/gate-policy** change. It changes text agents will
 follow when selecting a consult, including a gate checkpoint, so it is FULL T2 under
 `core/WORKFLOW.md` § Steer, “Core-document amendments are never T0.” That clause requires a panel,
-Owner wording sign-off, and an adversarial walk-through for gate machinery. The same section requires
-the T2 pre-code contract lens before code exists; this brief is that contract, not a discharged gate.
+wording approval under recorded authority, and an adversarial walk-through for gate machinery. The same
+section requires the T2 pre-code contract lens before code exists; this brief is that contract, and its
+receipt covers the contract rather than implementation.
 
 **Intent:** establish one persistent **Architect / Project Principal** as the Owner's delegated general
 contractor. It holds the approved blueprint/endpoints/acceptance evidence, drives the project through
@@ -20,7 +22,7 @@ completion, directs a separate `/orchestrate` PM, and makes bounded nonreserved 
 remains the sole execution and worker-command chain; the Builder retains protected source authoring. The
 Principal is not a second PM, scheduler, or implementation lane.
 
-**Done:** a future implementation makes the destination decision unambiguous, establishes a clean
+**Done:** the implementation under final review makes the destination decision unambiguous, establishes a clean
 architect-to-PM handoff, and preserves the existing fourth-gate and frontier-budget rules. It keeps
 architectural continuity in a durable record, lets routine CHIP progress proceed without contacting either
 Principal or Owner, and routes nonroutine program decisions to the Principal. It supports an
@@ -30,14 +32,15 @@ Principal or second PM is minted. Program-specific task names and model bindings
 **Proof required before the implementation is accepted:**
 
 1. Core-document T2 rungs enumerated by citation from `core/WORKFLOW.md` § Steer and § Gate;
-   pre-code cross-family contract lens, cold panel, cross-family lens where available, Owner wording
-   sign-off, and the required adversarial walk-through all have receipts.
+   pre-code cross-family contract lens, cold panel, cross-family lens where available, wording approval
+   under recorded authority, and the required adversarial walk-through all have receipts.
 2. Static checks and focused tests prove that the one-home rule is represented once, the companion
    skill and both harness shims install and resolve, pointers do not contradict the core rule, no
    second discretionary frontier firing is introduced, and no text implies transport, automation, or
    authority that does not exist.
-3. A reviewer can trace each routing example below to its required fresh response or responses and confirm that neither
-   destination authorizes implementation, a push, deployment, a live write, or a tier change.
+3. A reviewer can trace each routing example below to its required fresh response or responses and confirm that
+   advice alone authorizes neither execution nor a tier change; a recorded Principal directive may authorize
+   ordinary in-envelope execution, tier, or wording through the PM, while Owner-reserved actions stay reserved.
 4. A reviewer can trace establishment, reuse, and recovery to one durable record and confirm that a
    restart neither creates a duplicate architect/PM nor treats a pending recommendation as an approved
    decision.
@@ -124,10 +127,13 @@ the next meaningful checkpoint.
 The Owner retains initial intent/outcomes/acceptance/baseline/launch; material intent, outcome, scope, or
 budget changes; truly critical product decisions; credentials; destructive/irreversible acts; explicit risk
 acceptance; exact push/deploy/publication and production/live/external-write GOs; and the terminal
-exhausted-surface completion exception. The Principal decides in-baseline tier, topology, model/seat,
-gate-routing, ordinary successor/worker-continuation, sequencing, and bounded private external-gate
-transmission. The PM automatically performs routine reversible baseline work and executes valid Principal
-directives, but holds only the conflicting/uncovered dependency.
+exhausted-surface completion exception. The Principal is the Owner's project agent/general contractor: it
+directs and completes all ordinary in-scope completion work through the PM. Local source edits, tests,
+repairs, reviews, authorized packets, commits, and eligible local integration illustrate that authority;
+they are not an allowlist. It decides in-baseline tier, topology, model/seat, gate-routing, ordinary
+successor/worker-continuation, sequencing, and bounded private external-gate transmission. The PM
+automatically performs routine reversible baseline work and executes valid Principal directives, but holds
+only the conflicting/uncovered dependency.
 
 No generic permit/controller subsystem is added. The only demonstrated controller mismatch is a review-seat
 substitution that accepts only `owner_evidence`. `seat.substitution.architect_evidence` is its narrow,
@@ -201,4 +207,6 @@ Stop and return to the Owner before implementation if the proposed text requires
 transport mechanism, scheduler/controller beyond the demonstrated substitution receipt, a second review
 seat, or a change to the existing frontier budget. Stop if core and skill wording cannot be made one-home-per-rule,
 or if any gate finding shows an implementer could use the text to bypass a required review or Owner
-boundary. This brief itself authorizes neither implementation nor publication.
+boundary. This record itself grants no publication GO: advice alone grants no execution or tier authority;
+a recorded Principal directive may authorize ordinary in-envelope execution, tier, or wording through the
+PM, while Owner-reserved actions remain reserved.

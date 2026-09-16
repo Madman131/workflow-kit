@@ -173,6 +173,7 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
   const orchestrate = read("skills/orchestrate/SKILL.md");
   const portability = read("PORTABILITY.md");
   const readme = raw("core/README.md");
+  const architectDesign = raw("docs/journal/architect_consult_routing_design.md");
   const claudeCloseout = raw("skill-shims/claude/closeout.md");
   const claudeOrchestrate = raw("skill-shims/claude/orchestrate.md");
   const codexCloseout = raw("skill-shims/codex/closeout.md");
@@ -199,6 +200,20 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
     "the tier summary cannot narrow the universal remote-publication GO to code pushes");
   assert.doesNotMatch(workflow, /wording sign-off also stands as its push-GO/,
     "core-document wording sign-off is never equivalent to a remote-publication GO");
+  assert.match(workflow, /Builder proposes tier; \*\*Owner's Principal\/general contractor directs\/completes all ordinary in-scope completion work through PM and approves tier\/wording; otherwise Owner ratifies/,
+    "tier classification grants the Principal completion authority while keeping Builder proposal distinct");
+  assert.match(workflow, /Owner retains critical intent, material scope\/budget\/access\/accepted-risk decisions, irrevocable deletion, exact push\/deploy\/live\/external-write GO/,
+    "Owner retains the exact reserved decisions without reclaiming ordinary review approval");
+  assert.doesNotMatch(workflow, /review\/publication GO/,
+    "the superseded combined Owner review/publication reservation cannot return");
+  assert.match(readme, /classify \(Builder proposes → ratification under WORKFLOW § Steer\)/,
+    "the live pipeline map defers ratification to WORKFLOW's authority rule");
+  assert.match(architectDesign, /implementation is under final review[\s\S]*receipt did not review code/,
+    "the design record preserves the pre-code receipt without claiming it reviewed implementation");
+  assert.match(architectDesign, /advice alone authorizes neither execution nor a tier change; a recorded Principal directive may authorize[\s\S]*ordinary in-envelope execution, tier, or wording through the PM/,
+    "the design distinguishes advisory input from recorded Principal in-envelope authority");
+  assert.match(architectDesign, /Principal is the Owner's project agent\/general contractor:[\s\S]*all ordinary in-scope completion work through the PM[\s\S]*not an allowlist/,
+    "the design makes the Principal's completion authority broad while keeping examples illustrative");
   assert.match(hookPrinted, /Every remote push or publication requires a fresh Owner GO for the exact head and target, regardless of tier or file type/,
     "the actual decision-time ladder must emit the universal remote-publication boundary");
   assert.doesNotMatch(hookPrinted, /Any push containing code additionally requires/,
@@ -444,8 +459,8 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
   assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ wording approval under above authority/);
-  assert.match(w, /recorded Principal delegation may approve ordinary in-plan tier\/wording; otherwise Owner ratifies/);
-  assert.match(w, /Owner retains intent, material scope\/budget\/risk, delegation limits\/reservations, review\/publication GO/);
+  assert.match(w, /Owner's Principal\/general contractor directs\/completes all ordinary in-scope completion work through PM and approves tier\/wording; otherwise Owner ratifies/);
+  assert.match(w, /Owner retains critical intent, material scope\/budget\/access\/accepted-risk decisions, irrevocable deletion, exact push\/deploy\/live\/external-write GO/);
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
   // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
   // HARD. Pinned in the amended test above — this older pin named the retired sentence.
