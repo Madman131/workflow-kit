@@ -480,9 +480,9 @@ function copyGuarded(src, dst, force, mechanism = true) {
   copyFileSync(src, dst);
   return "written";
 }
-// The gate-machinery skill set — doctrine an agent EXECUTES, upgraded with the kit. The personal
+// The execution-method skill set — doctrine an agent EXECUTES, upgraded with the kit. The personal
 // skills stay adopter-owned.
-const MECHANISM_SKILLS = new Set(["orchestrate", "frontier-review"]);
+const MECHANISM_SKILLS = new Set(["architect-build", "orchestrate", "frontier-review"]);
 
 // core/ files the [G] template table GENERATES (step 7). copyTree must never ship a kit-local copy
 // of one of these: a [G] doc names THIS repo's bindings and people, and copying one repo's into

@@ -754,6 +754,29 @@ test("init installs the dual-lane skills: one shared body, a shim per harness, i
   } finally { cleanup(); }
 });
 
+test("architect-build is a mechanism skill: a plain rerun names stale body and both shims", () => {
+  const { dir, codexDir, cleanup } = adopt();
+  try {
+    const body = path.join(dir, ".agents", "skills", "architect-build", "SKILL.md");
+    const claudeShim = path.join(dir, ".claude", "skills", "architect-build", "SKILL.md");
+    const codexShim = path.join(codexDir, "architect-build.md");
+    const edited = {};
+    for (const p of [body, claudeShim, codexShim]) {
+      edited[p] = readFileSync(p, "utf8") + "\n<!-- drift -->\n";
+      writeFileSync(p, edited[p]);
+    }
+    const rerun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(rerun.status, 1, "a plain rerun with stale architect-build mechanism files fails");
+    const output = rerun.stdout + rerun.stderr;
+    for (const p of [body, claudeShim, codexShim]) {
+      assert.match(output, new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${p} is named as stale`);
+      assert.equal(readFileSync(p, "utf8"), edited[p], `${p} remains untouched without --force`);
+    }
+    assert.equal((output.match(/KEPT BUT STALE/g) || []).length, 3, "all three architect-build mechanism files are detected");
+  } finally { cleanup(); }
+});
+
 test("init installs the frontier-review skill + reviewer agents; the tools: [] cage survives verbatim", () => {
   const { dir, codexDir, run, cleanup } = adopt();
   try {
