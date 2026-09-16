@@ -18,15 +18,14 @@ Only an Owner launch instruction may activate a `/orchestrate` PM or emit an exe
 creates or connects a separate PM. In file-only mode, a launch emits the same handoff through file-only
 equivalents. Without launch, preserve planning continuity only. Existing authorized execution does not need
 a renewed launch. Inspect the durable record before either action. It names the program/repository;
-architect and active PM locator or file-only equivalents; approved baseline and source pointers; latest
-accepted decisions separately from pending recommendations; current phase/CHIP; unresolved decisions; last
-alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
+architect and active PM locator or file-only equivalents; Owner delegation/limits; approved baseline and
+source pointers; accepted decisions separately from pending advice; current phase/CHIP; unresolved
+decisions; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
 otherwise create one through the repository's normal docs/state convention and record its exact path.
 Record both task locators.
 
-Recovery does not promote pending advice, create a replacement or acting architect, create a second PM,
-or block independent authorized work. It preserves approved context through the durable record and
-file-only continuity, holding only a dependent decision whose current authority cannot be established.
+Recovery does not promote advice, create an acting architect or second PM, or block covered work. It
+preserves context through the durable record and file-only continuity, holding only a dependent decision.
 Without task creation or cross-session transport, a launch uses file-only equivalents for the
 approved-baseline handoff.
 
@@ -42,10 +41,10 @@ review. Coalesce a due alignment review with another qualifying checkpoint.
 
 ## Packets, ordinary consults, and fourth-gate overlap
 
-Every persistent-architect packet carries, or explicitly consults in the durable record, the approved
-baseline, latest accepted decisions, and last alignment check. It also names the question, scope, evidence,
-alternatives, risks, and either an exact Owner-reserved decision or `none — PM disposition within existing
-authority`. The PM records adopt/adapt/decline, reason, outcome, and next evidence.
+Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, accepted
+decisions, and alignment check. It names question, scope, evidence, alternatives, risks, and any exact
+Owner boundary. PM records advice as adopt/adapt/decline; a delegated decision as acknowledged/executing/
+completed or a concrete safety, gate, or evidence conflict.
 
 An ordinary bounded current-CHIP question stays with the active in-thread consult. Below-trigger questions
 do not contact the persistent architect unless an existing gate independently requires its own seat.
@@ -60,13 +59,20 @@ obligations only through that existing procedure.
 
 ## Authority and unavailable architect
 
-The architect is advisory and never authorizes implementation, tier, push, deployment, or live write; the
-PM remains the sole execution command chain. In file-only mode the durable record, file brief, and consult
-entry preserve continuity.
+With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for
+blueprint, acceptance, continuity and closeout; it decides nonreserved questions within approved outcome,
+baseline, access, risk and budget and its decisions bind PM. Examples—never an allowlist—include in-plan
+direction, sequencing, local topology/reconciliation, eligible model/seat choice, in-plan tier/wording,
+and bounded approved-provider review routing. PM is sole execution chain, proceeds automatically on
+covered work, and returns a concrete conflict rather than silently declining.
 
-When the persistent architect is unavailable, do not create an acting architect. Continue independent
-authorized work and hold only the dependent decision. An existing gate review keeps its own obligation; an
-existing defined consult may be advisory input but is neither a replacement architect nor a discharge of
-persistent continuity. Reconcile the durable record, PM disposition, and outcomes with the persistent
-architect at the next meaningful checkpoint. No scheduler, controller, transport, polling service, new
-seat, or program-specific model binding is implied.
+Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;
+credentials; destructive/irreversible acts; max/ultra, second frontier firing and cap increases; terminal
+exception/waiver; exact push/deploy/publication; and live/external-write GO. Review transmission is a
+private frozen packet with redacted necessary context, never publication, messaging, live data, secrets, or
+unrelated export. Principal evidence is not Owner evidence or a review verdict.
+
+When Principal is unavailable, do not create an acting architect. Continue covered work and recorded
+decisions; hold only a new dependent decision. A gate review keeps its own obligation; ordinary consult is
+evidence, not replacement authority. Reconcile at the next checkpoint. No scheduler, controller,
+transport, polling service, new seat, or model binding is implied.

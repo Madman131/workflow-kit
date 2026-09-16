@@ -279,7 +279,7 @@ more of the leaned-on family than it did; the verdict records the active binding
   costs less.)*
 - **The rare cell inherits Steer's classification — it is not a fresh judgment at gate time.** Whether
   a change is "irreversible / money / auth" is the *tier* decision (`core/WORKFLOW.md` § Steer +
-  Owner ratification), so the strong-gate cell cannot be dodged by re-labelling at the gate; a
+  its Owner/eligible-Principal ratification), so the strong-gate cell cannot be dodged by re-labelling at the gate; a
   mis-set tier is caught upstream where it is already governed.
 - **This policy sets the CROSS-FAMILY GATE seat's model·effort, not the same-family cold panel.** The
   blind cold panel (`core/BINDINGS.md` § Roles) is the same-family spine, a distinct seat; whether *it*
