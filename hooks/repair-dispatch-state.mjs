@@ -524,15 +524,22 @@ function panelGitEvidence(projectRoot, baseRef, baseCommit, frozenCommit,
   } catch { return null; }
 }
 
+// Family labels are recorded exactly as supplied, but comparisons are semantic: surrounding
+// whitespace and case cannot mint a second family or defeat a planned substitution binding.
+function familyIdentity(value) {
+  return text(value, 120) ? value.trim().toLowerCase() : null;
+}
+
 function expectedSeatShape(seat, changedPaths) {
   if (!plain(seat) || !text(seat.seat_id, 120) || !text(seat.role, 120) ||
-      !text(seat.family, 120) || !["free", "folded"].includes(seat.pass_type)) return false;
+      !familyIdentity(seat.family) || !["free", "folded"].includes(seat.pass_type)) return false;
   const paths = sortedPaths(seat.paths);
   if (!paths || paths.some((entry) => !changedPaths.includes(entry))) return false;
   if (seat.substitution === undefined || seat.substitution === null) return true;
   const substitution = seat.substitution;
-  if (!plain(substitution) || substitution.replaced_family !== seat.family ||
-      !text(substitution.actual_family, 120) || substitution.actual_family === seat.family ||
+  if (!plain(substitution) || familyIdentity(substitution.replaced_family) !== familyIdentity(seat.family) ||
+      !familyIdentity(substitution.actual_family) ||
+      familyIdentity(substitution.actual_family) === familyIdentity(seat.family) ||
       !["full", "one-family", "same-family-only"].includes(substitution.decorrelation_level)) return false;
   // Owner evidence preserves the legacy exceptional path. Architect evidence is a deliberately
   // narrow documentary record: it binds an ordinary reviewer replacement, but cannot turn a
@@ -540,12 +547,13 @@ function expectedSeatShape(seat, changedPaths) {
   const ownerAuthorized = text(substitution.owner_evidence, 1000) &&
     substitution.architect_evidence === undefined;
   const evidence = substitution.architect_evidence;
-  const architectAuthorized = substitution.owner_evidence === undefined && seat.role !== "free" &&
+  const architectAuthorized = substitution.owner_evidence === undefined && seat.role === "external" &&
     substitution.decorrelation_level !== "same-family-only" && text(substitution.provider, 120) &&
     text(substitution.model, 200) && plain(evidence) && text(evidence.authority_record, 500) &&
     text(evidence.decision_id, 200) && evidence.scope === "review-seat-substitution" &&
-    evidence.seat_id === seat.seat_id && evidence.replaced_family === seat.family &&
-    evidence.actual_family === substitution.actual_family &&
+    evidence.seat_id === seat.seat_id &&
+    familyIdentity(evidence.replaced_family) === familyIdentity(seat.family) &&
+    familyIdentity(evidence.actual_family) === familyIdentity(substitution.actual_family) &&
     evidence.decorrelation_level === substitution.decorrelation_level &&
     evidence.provider === substitution.provider && evidence.model === substitution.model;
   return ownerAuthorized || architectAuthorized;
@@ -553,7 +561,7 @@ function expectedSeatShape(seat, changedPaths) {
 
 function receivedSeatShape(received) {
   return plain(received) && text(received.seat_id, 120) && text(received.role, 120) &&
-    text(received.family, 120) && ["free", "folded"].includes(received.pass_type) &&
+    familyIdentity(received.family) && ["free", "folded"].includes(received.pass_type) &&
     Boolean(sortedPaths(received.inspected_paths)) && GIT_SHA.test(received.reviewed_commit || "") &&
     GIT_SHA.test(received.reviewed_tree || "") && ["GO", "NO-GO"].includes(received.verdict) &&
     Array.isArray(received.raw_finding_ids) && received.raw_finding_ids.length <= 100 &&
@@ -585,7 +593,7 @@ function expectedPanelShape(tier, seats, changedPaths) {
   // the floor counts DISTINCT values case-insensitively (substitution's actual family where
   // present); it never recognises brands. Exactly ONE seat may hold the free role.
   const families = new Set(seats.map((seat) =>
-    String(seat.substitution?.actual_family || seat.family).toLowerCase()));
+    familyIdentity(seat.substitution?.actual_family || seat.family)));
   const sameFamilyAuthorized = seats.some((seat) =>
     seat.substitution?.decorrelation_level === "same-family-only" &&
     text(seat.substitution?.owner_evidence, 1000) && seat.substitution?.architect_evidence === undefined);
@@ -598,8 +606,9 @@ function expectedPanelShape(tier, seats, changedPaths) {
 
 function receivedSeatMatches(expected, received, commit, tree) {
   const allowedFamily = expected.substitution?.actual_family || expected.family;
+  const principalSubstitution = plain(expected.substitution?.architect_evidence);
   return plain(received) && received.seat_id === expected.seat_id && received.role === expected.role &&
-    received.family === allowedFamily && received.pass_type === expected.pass_type &&
+    familyIdentity(received.family) === familyIdentity(allowedFamily) && received.pass_type === expected.pass_type &&
     same(received.inspected_paths, expected.paths) && received.reviewed_commit === commit &&
     received.reviewed_tree === tree && ["GO", "NO-GO"].includes(received.verdict) &&
     Array.isArray(received.raw_finding_ids) && received.raw_finding_ids.length <= 100 &&
@@ -609,7 +618,9 @@ function receivedSeatMatches(expected, received, commit, tree) {
     text(received.artifact_receipt, 500) && ID64.test(received.artifact_sha256 || "") &&
     (typeof received.pre_loaded === "boolean" || text(received.pre_loaded, 500)) &&
     ["candidate-only", "folded-history"].includes(received.packet_scope) &&
-    (received.pass_type !== "free" || received.packet_scope === "candidate-only");
+    (received.pass_type !== "free" || received.packet_scope === "candidate-only") &&
+    (!principalSubstitution || (text(received.provider, 120) && text(received.model, 200) &&
+      received.provider === expected.substitution.provider && received.model === expected.substitution.model));
 }
 
 function aggregatePanelComplete(open, close) {

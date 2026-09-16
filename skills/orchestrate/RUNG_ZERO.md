@@ -30,8 +30,8 @@ work.**
 
 ## 0.1 THE TIER IS SET, NOT DERIVED
 
-**The tier is set in the brief at spawn and Owner-ratified before any T2/T3 gate, unless recorded
-Project-Principal delegation covers an in-plan tier.** The worker verifies it; lowering or live
+**The tier is set in the brief at spawn under recorded Principal delegation for ordinary in-plan tier/
+wording, otherwise Owner-ratified before any T2/T3 gate.** The worker verifies it; lowering or live
 reversibility still needs Owner confirmation.
 
 **One escalation path, and only one:** if the artifact stops matching its declared tier — a prose chip
@@ -148,7 +148,7 @@ resolves to different text while you were fully compliant.
 
 **Enumerate against the artifact's CLASS and file set, not the tier row alone.** The rung most often
 missed is the one a general tier row does not mention because **a narrower clause elsewhere adds it** —
-a core-document amendment's Owner wording sign-off, or a single seat's cross-family requirement losing
+a core-document amendment's wording approval under its recorded authority, or a single seat's cross-family requirement losing
 its escape on `core/` files.
 
 *Incident: a mandated adversarial walk-through went unrun for three rounds; the first time a seat

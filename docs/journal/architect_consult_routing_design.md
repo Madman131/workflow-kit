@@ -134,15 +134,17 @@ substitution that accepts only `owner_evidence`. `seat.substitution.architect_ev
 mutually exclusive alternative: it requires `authority_record`, `decision_id`, literal
 `scope:"review-seat-substitution"`, and exact `seat_id`, `replaced_family`, `actual_family`,
 `decorrelation_level`, `provider`, and `model` bindings. It is documentary provenance, not authenticated
-identity or Owner evidence. It is valid only for an eligible non-spine substitute that preserves the
-required family floor: architect evidence rejects `same-family-only` and an all-one-family roster. Legacy
+identity or Owner evidence. It is valid only for an eligible external/cross-family substitute that preserves the
+required family floor: the free and `angle:*` Builder-family seats never accept architect evidence, and it
+rejects `same-family-only` and an all-one-family roster. Planned and observed provider/model tuples bind at
+close for this Principal-only path. Legacy
 Owner evidence remains compatible with the existing expressly Owner-authorized reduction. Existing role,
 family, effort, scope, packet, decorrelation, and budget checks remain. Terminal child/close,
 `owner_decision`, gate waiver, Owner extension, release, deployment, publication, and live writes never
 read architect evidence.
 
 If the Principal is unavailable, do not mint an acting architect. Continue independent authorized work and
-execute still-valid recorded decisions; hold only a decision not covered by a decision. An existing defined consult
+execute still-valid recorded decisions; hold only the dependent action whose authority is unresolved. An existing defined consult
 is evidence, neither replacement Principal nor discharge of continuity; an existing gate keeps its own
 obligation. Later reconcile the record, PM disposition, and outcomes with the persistent Principal. If an
 active consult is unavailable when a gate requires it, existing fail-closed gate rules apply.

@@ -372,6 +372,11 @@ exact carry accepts, 2601 refuses on shape under the unified spelling; the 1300-
 STOP carry accepts (M49), and the old 1200 cap did worse than refuse: it made a recorded
 1300-id row unreadable, failing the whole ledger (M49's disabled arm).
 
+**M56** Principal review-seat substitution: only the external seat may carry it; family identity is
+trimmed/case-folded for every comparison while recorded bytes remain intact; observed provider/model
+must be nonblank and exactly match the planned tuple at close. Builder-family free/angle seats,
+semantic one-family rosters, mismatched evidence, and missing/mismatched runtime tuples refuse.
+
 Regression rows from the predecessor evidence (behavioral): empty-seat-plus-PM-blocker closes
 STOP, never GO · a dead worker is replaced only by an Owner-evidenced handoff that revokes the
 old session · a declared two-child split admits both exact children and refuses an undeclared

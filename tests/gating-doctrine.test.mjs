@@ -443,7 +443,9 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
-  assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ Owner wording sign-off/);
+  assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ wording approval under above authority/);
+  assert.match(w, /recorded Principal delegation may approve ordinary in-plan tier\/wording; otherwise Owner ratifies/);
+  assert.match(w, /Owner retains intent, material scope\/budget\/risk, delegation limits\/reservations, review\/publication GO/);
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
   // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
   // HARD. Pinned in the amended test above — this older pin named the retired sentence.
