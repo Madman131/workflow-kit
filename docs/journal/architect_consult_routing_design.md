@@ -130,12 +130,16 @@ transmission. The PM automatically performs routine reversible baseline work and
 directives, but holds only the conflicting/uncovered dependency.
 
 No generic permit/controller subsystem is added. The only demonstrated controller mismatch is a review-seat
-substitution that accepts only `owner_evidence`. It gains a narrow typed `architect_evidence` alternative:
-authority reference, decision id, scope/provider/model binding, and an explicit marker that it is not Owner
-evidence. It is valid only for an eligible non-spine review substitution and retains the existing role,
-family, effort, scope, packet, decorrelation, and budget checks. Terminal continuation/close, gate waiver,
-Owner extension, release, deployment, publication, and live writes never accept it. Documentary decisions
-are not authenticated identity proofs and do not invent expiry or numeric budgets.
+substitution that accepts only `owner_evidence`. `seat.substitution.architect_evidence` is its narrow,
+mutually exclusive alternative: it requires `authority_record`, `decision_id`, literal
+`scope:"review-seat-substitution"`, and exact `seat_id`, `replaced_family`, `actual_family`,
+`decorrelation_level`, `provider`, and `model` bindings. It is documentary provenance, not authenticated
+identity or Owner evidence. It is valid only for an eligible non-spine substitute that preserves the
+required family floor: architect evidence rejects `same-family-only` and an all-one-family roster. Legacy
+Owner evidence remains compatible with the existing expressly Owner-authorized reduction. Existing role,
+family, effort, scope, packet, decorrelation, and budget checks remain. Terminal child/close,
+`owner_decision`, gate waiver, Owner extension, release, deployment, publication, and live writes never
+read architect evidence.
 
 If the Principal is unavailable, do not mint an acting architect. Continue independent authorized work and
 execute still-valid recorded decisions; hold only a decision not covered by a decision. An existing defined consult
@@ -180,6 +184,10 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 | Routine CHIP progress is recorded with no material trigger or meaningful milestone. | Update the durable record without contacting the architect. |
 | The persistent architect is unavailable at the first safe checkpoint after five active workdays. | Continue independent authorized work, hold only the dependent decision, and reconcile the record and outcome with the persistent architect when available; do not create a replacement architect. |
 | A Principal decides an in-envelope implementation direction or eligible substitution. | PM records `acknowledged/executing/completed` and executes through normal gates; it returns any concrete safeguard conflict rather than silently declining. |
+| Architect evidence is missing, has forged scope, or binds the wrong seat, model, family, or provider. | Refuse the substitution; provenance must match the exact planned replacement. |
+| Architect-only evidence would make the roster `same-family-only` or all one family. | Refuse it; preserving the independent family floor is not delegated risk acceptance. |
+| A terminal child, `owner_decision`, waiver, release, or live action carries architect evidence. | Refuse it; those paths continue to require their existing Owner evidence/GO. |
+| A legacy eligible substitution carries valid `owner_evidence`. | Preserve its existing compatibility, including the explicitly Owner-authorized reduction. |
 | A Principal proposes an outcome/scope/risk, live behavior, or publication change. | Stop at the Owner boundary; Principal authority does not cross it. |
 | A degraded adopter has no cross-session message transport. | Preserve the common packet and disposition in the durable record/file brief; do not imply a scheduler or automatic handoff. |
 | A repair round attempts to count a persistent response and an active consult as two frontier firings. | Use one combined response where overlap is present; do not spend or duplicate discretionary frontier budget, add a batch, or grant authority. |
