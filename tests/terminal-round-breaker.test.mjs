@@ -179,6 +179,94 @@ function derive(ctx, task = "task-1") {
   return deriveAggregateRepairState(loaded.aggregate_events, task, { standardEvents: loaded.events });
 }
 
+test("M54: a Project Principal can bind one non-spine reviewer replacement, never the family-floor or Owner paths", () => {
+  const principalSubstitution = (seat, actualFamily = "gemini", level = "full") => ({
+    replaced_family: seat.family, actual_family: actualFamily, decorrelation_level: level,
+    provider: "google", model: "gemini-3.1-pro-high",
+    architect_evidence: {
+      authority_record: "program-record:principal-1", decision_id: "principal-seat-1",
+      scope: "review-seat-substitution", seat_id: seat.seat_id, replaced_family: seat.family,
+      actual_family: actualFamily, decorrelation_level: level,
+      provider: "google", model: "gemini-3.1-pro-high",
+    },
+  });
+  const attempt = (change) => {
+    const ctx = repo();
+    try {
+      const candidate = commit(ctx.dir, 54);
+      const seats = expectedSeats(candidate.paths);
+      change(seats, principalSubstitution);
+      return recordAggregatePanelOpen({
+        type: "aggregate_v2", kind: "panel_open", task_id: "task-54", changeset_id: "cs-54", round: 1,
+        phase: "repair_round", tier: "T2", frozen_commit: candidate.commit, frozen_tree: candidate.tree,
+        base_ref: "origin/main", base_commit: ctx.base, expected_seats: seats,
+        incoming_dispatch_event_id: null, incoming_worker_event_id: null,
+        child_continuation_event_id: null, legacy_handoff_event_id: null,
+      }, options(ctx.dir));
+    } finally { ctx.cleanup(); }
+  };
+  const replaceExternal = (seats, substitution) => {
+    const seat = seats.find((entry) => entry.seat_id === "external");
+    seat.substitution = substitution(seat);
+    return seat;
+  };
+
+  assert.equal(attempt((seats, substitution) => replaceExternal(seats, substitution)).ok, true,
+    "a fully bound principal record can replace an eligible non-spine reviewer while two families remain");
+
+  for (const [name, mutate] of [
+    ["missing authority record", (seat) => delete seat.substitution.architect_evidence.authority_record],
+    ["forged scope", (seat) => { seat.substitution.architect_evidence.scope = "release"; }],
+    ["wrong seat", (seat) => { seat.substitution.architect_evidence.seat_id = "free"; }],
+    ["wrong family", (seat) => { seat.substitution.architect_evidence.actual_family = "claude"; }],
+    ["wrong decorrelation", (seat) => { seat.substitution.architect_evidence.decorrelation_level = "one-family"; }],
+    ["wrong provider", (seat) => { seat.substitution.architect_evidence.provider = "other"; }],
+    ["wrong model", (seat) => { seat.substitution.architect_evidence.model = "other"; }],
+    ["mixed Owner and principal evidence", (seat) => { seat.substitution.owner_evidence = "Owner"; }],
+  ]) {
+    const result = attempt((seats, substitution) => mutate(replaceExternal(seats, substitution)));
+    assert.equal(result.ok, false, `${name} cannot mint a principal substitution`);
+  }
+
+  assert.equal(attempt((seats, substitution) => {
+    const seat = seats.find((entry) => entry.seat_id === "free");
+    seat.substitution = substitution(seat);
+  }).ok, false, "the spine/free reviewer cannot be delegated away");
+  assert.equal(attempt((seats, substitution) => {
+    replaceExternal(seats, (seat) => substitution(seat, "gemini", "same-family-only"));
+  }).ok, false, "a principal cannot authorize a same-family-only reduction");
+  assert.equal(attempt((seats, substitution) => {
+    replaceExternal(seats, (seat) => substitution(seat, "codex", "one-family"));
+  }).ok, false, "a principal cannot open an all-one-family roster");
+  assert.equal(attempt((seats) => {
+    const seat = seats.find((entry) => entry.seat_id === "external");
+    seat.substitution = { replaced_family: seat.family, actual_family: "codex",
+      decorrelation_level: "same-family-only", owner_evidence: "Owner-approved reduced review" };
+  }).ok, true, "legacy Owner-evidenced same-family reduction remains compatible");
+});
+
+test("M55: architect evidence cannot replace Owner evidence on terminal child continuation", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 55);
+    const panel = openPanel(ctx, 1, candidate);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const closed = closePanel(ctx, panel, candidate, ["F55"]);
+    const stopped = decide(ctx, closed, { accepted: ["F55"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    const continuation = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: stopped.event_id, trigger_ids: ["F55"],
+      continuation_kind: "new_changeset", architect_evidence: { scope: "review-seat-substitution" },
+      children: [{ task_id: "child-55", changeset_id: "child-55-cs", tier: "T2",
+        budget: "one bounded child", authorized_paths: ["src/x.mjs"] }],
+    }, options(ctx.dir));
+    assert.equal(continuation.ok, false,
+      "terminal continuation still requires actual Owner evidence, never principal review evidence");
+  } finally { ctx.cleanup(); }
+});
+
 test("LE1: an active aggregate program's write OUTSIDE its authorized set REFUSES — never not-repair-write", async () => {
   const ctx = repo();
   const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));

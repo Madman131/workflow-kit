@@ -1,3 +1,5 @@
+<!-- 2026-09-16 bounded follow-up: the frozen-receipt replay parser splits only on `## Gemini frozen gate attempt`; legacy `## Gemini gate attempt` entries placed after a frozen receipt are therefore absorbed into that frozen parser block. Reproducer: place either header format after a valid frozen receipt and run a strict manual handoff import. These three legacy entries were relocated byte-for-byte into the existing legacy preamble; their statuses, verdicts, and release fields are unchanged. No generic migration or repair loop is authorized. -->
+
 
 ## Gemini gate attempt — PASS_VERDICT — 2026-08-24T16:34:57Z
 
@@ -2237,6 +2239,192 @@
     
     PIL-DONE-fa2f221109674db068974eea
 
+## Gemini gate attempt — PASS_VERDICT — 2026-09-12T15:56:00Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789228441-39190-1933524459`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=18436; instrumented_payload=18538; inline_combined=22355; file=18611
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/2026-09-12-execution-profile-contract.md
+- HEAD: `3c931c07a464648442a8bc487d08bc046e634062`
+- Artifact-Base: `6178c1de4ebcf94df626de5666dcf803c195054a`
+- Artifact-SHA: `3c931c07a464648442a8bc487d08bc046e634062`
+- Artifact-Ref: `refs/pil/gate-artifacts/3c931c07a464648442a8bc487d08bc046e634062`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+- Start: 2026-09-12T15:54:01Z
+- End: 2026-09-12T15:56:00Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-c85ad49d3ba45e815474bc0d
+    CANARIES: PIL-INGEST-01023830f630 PIL-INGEST-02459235dd3a
+    
+    Here is the cross-family audit of the proposed execution profile contract. 
+    
+    1. [BLOCKER] INTER-SECTION CONTRADICTION / MECHANISM CORRECTNESS
+    - **Section:** "Model roles and continuity"
+    - **Concrete failure scenario:** The design strictly isolates the Builder's context: "Raw T2/T3/live-path source and decisive facts remain in that Builder's own context." However, the immediate next sentence dictates: "The PM independently inspects actual changes and decisive evidence; a worker summary alone cannot discharge that responsibility." 
+    - **Why it matters:** This defines a physical paradox. The PM (Sol) is legally bound to inspect the "actual changes" (raw diffs/source) to fulfill its gating duty, but is explicitly forbidden from accessing the Builder's context where those raw changes reside, and cannot rely on a summary. The workflow will either permanently deadlock (PM blocked from seeing the required input) or silently fail-open (PM hallucinates an approval without actually seeing the diff).
+    - **Fix:** Clarify the context boundary. Either specify a deterministic extraction tool that bridges exact read-only diffs to the PM's context, or relax the Builder's context isolation to permit the PM direct read access to the raw source.
+    
+    2. [HIGH] INVARIANT VIOLATION (Epistemic Rule 1) / VACUOUS CONTROL
+    - **Section:** "Falsifiable acceptance evidence" (#7) vs "Finite controller and one completion exception"
+    - **Concrete failure scenario:** The design dictates an exception only occurs "After terminal Round 4 STOP". Thus, the parent is exactly Round 4. The exception is granted "exactly one repair batch" (making its ordinal Round 5). Yet, Section 7 mandates: "an exception whose next ordinal is divisible by four still requires the checkpoint."
+    - **Why it matters:** A child exception born at Round 5 that gets exactly 1 batch will transition to Round 6. Neither 5 nor 6 is divisible by 4. This modulo-4 checkpoint rule for exceptions is mathematically unreachable. It violates Epistemic Rule 1 by manufacturing false assurance of a safety bound (the checkpoint) that can never execute in practice.
+    - **Fix:** Remove the modulo-4 checkpoint rule for exceptions, as their fixed 1-batch limit prevents them from ever reaching a cumulative boundary. 
+    
+    3. [HIGH] COMPLETENESS GAP / PERMANENT STATE ORPHANING (DEADLOCK)
+    - **Section:** "Finite controller and one completion exception" & "Falsifiable acceptance evidence" (#6)
+    - **Concrete failure scenario:** If the 1-batch completion exception fails to fix the defect, the design dictates a hard "stop". It explicitly refuses a "second repair batch," a "repeat child," a "child of an exception," or a "refreeze-as-new-budget." It also explicitly bans the PM from classifying the "same unfinished repair as new scope". 
+    - **Why it matters:** The system provides literally zero legal state transitions to ever fix the remaining defect. The parent is permanently closed ("terminal Round 4 STOP"), the exception is exhausted, and the new scope route is banned. The partially-repaired worktree is permanently orphaned in a deadlocked state, with no Owner escalation path to salvage the work.
+    - **Fix:** Define an explicit, deterministic Owner-level escape hatch (e.g., the Owner manually authorizes a "Round 4 reset" or manually blesses the unfinished state as a new parent root) to recover from an exhausted exception.
+    
+    4. [MEDIUM] CONCURRENCY / MULTI-STEP WRITE ORPHANING
+    - **Section:** "Routine authority and Owner boundaries"
+    - **Concrete failure scenario:** The PM's allowed routine workflow includes a non-transactional sequence of mutations and network calls: "run tests, make local commits and eligible local integrations, prepare Gemini slices/packets... adjudicate findings and dispatch allowed repair batches."
+    - **Why it matters:** If the PM's process crashes or the network transport fails *after* making local commits/integrations but *before* successfully dispatching the repair batch, the local worktree is left in a dirty, mutated state. The design states "failed transmissions do not add rounds" but fails to mandate cleaning up the local state.
+    - **Fix:** Mandate that PM local mutations occur in a transactional scratch worktree, or require an explicit rollback of local commits to the parent's frozen state upon a failed downstream dispatch.
+    
+    **Highest-risk thing to resolve first:** The physical paradox in Finding 1. You cannot legally obligate the PM to perform an independent inspection of code changes while simultaneously denying it access to the very context where those raw changes reside.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+    
+    PIL-DONE-9f8f152d54573d9ea2bc2872
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-12T15:59:21Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789228681-14340-127443083`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=18793; instrumented_payload=18895; inline_combined=22712; file=18968
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/2026-09-12-execution-profile-contract.md
+- HEAD: `eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
+- Artifact-Base: `6178c1de4ebcf94df626de5666dcf803c195054a`
+- Artifact-SHA: `eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
+- Artifact-Ref: `refs/pil/gate-artifacts/eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+- Start: 2026-09-12T15:58:01Z
+- End: 2026-09-12T15:59:21Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-9efd127197cacf2635ee1cfe
+    CANARIES: PIL-INGEST-01a2f833d179 PIL-INGEST-0265c9841685
+    
+    **1. BLOCKER: INVARIANT VIOLATION / MECHANISM CORRECTNESS**
+    - **§ Section**: § Finite controller and one completion exception
+    - **Concrete failure scenario**: The design creates a "completion exception" bypass contingent on Owner approval, but explicitly admits that "Controls validate records and mechanical bounds, not the truth of semantic declarations or the identity behind human approval evidence." A compromised or hallucinating PM (Sol) can autonomously write a record asserting "Owner approved" to bypass the gate.
+    - **Why it matters**: Violates Epistemic Rule 2 ("A prompt is not a control... Make outputs checkable") and Invariant 2 ("Exact provenance"). By stripping the gate of identity verification, the PM can forge Owner approval, entirely neutralizing the Owner's boundary authority and autonomously evading the 4-round limit.
+    - **Fix**: Require the mechanical gate to validate an unforgeable, cryptographically secure receipt (e.g., authenticated API state transition, signed token) to prove the human Owner authorized the exception, rather than trusting PM-generated text records.
+    
+    **2. HIGH: INTER-SECTION CONTRADICTION**
+    - **§ Section**: § Model roles and continuity vs. § Routine authority and Owner boundaries
+    - **Concrete failure scenario**: In "Model roles and continuity", the PM is strictly restricted to "direct read-only access to the shared source". In the very next section ("Routine authority and Owner boundaries"), the PM is authorized to "make local commits and eligible local integrations".
+    - **Why it matters**: If the PM's environment enforces the stated read-only invariant, it will crash when attempting its authorized local commits, deadlocking the workflow. If it is granted write access to commit, the security invariant is broken, allowing the PM to silently rewrite raw T2/T3 source without the Terra Builder's involvement.
+    - **Fix**: Reconcile permissions. Either restrict the PM from making commits (delegating them entirely to the Terra Builder), or provide the PM a tightly constrained Git-only interface for commits while preserving strict read-only access to the raw file system.
+    
+    **3. HIGH: MECHANISM CORRECTNESS / COMPLETENESS (FRONTIER BYPASS)**
+    - **§ Section**: § Falsifiable acceptance evidence (Bullet 7) & § Finite controller and one completion exception
+    - **Concrete failure scenario**: Checkpoints are enforced "at each cumulative multiple of four". An exception launched after a terminal Round 4 performs its single repair at ordinal 5, and its final review at ordinal 6. Since 6 is not a multiple of 4, the exception's final review skips the frontier checkpoint.
+    - **Why it matters**: The exception is designed to fix "surviving concrete harm". Bypassing the frontier checkpoint on ordinal 6 means the cheaper PM model (Sol) makes the final semantic decision on a critical repair without frontier oversight. This violates Invariant 1 (Intelligence-ordering).
+    - **Fix**: Explicitly require that the completion exception's final review unconditionally triggers a mandatory frontier checkpoint, or enforce that *any* terminal review triggers the gate, regardless of the cumulative ordinal math.
+    
+    **4. MEDIUM: COMPLETENESS GAPS**
+    - **§ Section**: § Finite controller and one completion exception
+    - **Concrete failure scenario**: If the single completion exception fails, the rules dictate to "stop" with "No automatic repeated exception". The only allowed path forward is for "genuinely new... successor scope".
+    - **Why it matters**: If the exception fails to fix the defect, the branch is permanently deadlocked. The PM is forbidden from relabeling the unfinished repair as "new scope", and no other repair mechanism is legally allowed for that parent. The Owner has no structured mechanism to salvage the branch without falsifying the intent.
+    - **Fix**: Define a formal escalation or hard-reset path for a failed completion exception. Allow the Owner to explicitly authorize a new parent plan specifically to rescue the failed state, rather than forcing them to abandon the branch or lie about "new scope".
+    
+    **HIGHEST-RISK TO RESOLVE FIRST:**
+    The complete inability of the mechanical gate to verify the human identity behind the approval (Finding 1), which renders the Owner's boundary functionally non-existent and allows the PM to forge authorization for the exception.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
+    PIL-DONE-5d792c73c0381c7bf3dd2924
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-12T20:04:51Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789243366-83852-733632086`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=17200; instrumented_payload=17302; inline_combined=21119; file=17375
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md
+- HEAD: `8b17fa9d96961683feffe92f6a54729a255a1f1b`
+- Artifact-Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
+- Artifact-SHA: `8b17fa9d96961683feffe92f6a54729a255a1f1b`
+- Artifact-Ref: `refs/pil/gate-artifacts/8b17fa9d96961683feffe92f6a54729a255a1f1b`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md, core/INVARIANTS.md
+- Start: 2026-09-12T20:02:46Z
+- End: 2026-09-12T20:04:51Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-1fbe14e63460d767672bd9aa
+    CANARIES: PIL-INGEST-01fcc6e10435 PIL-INGEST-02fa74440a25
+    
+    The design for the automated frozen Gemini subscription transport has severe structural flaws relating to how it verifies the repository and handles process teardown. It introduces major False-FAIL traps and TOCTOU vulnerabilities by operating on the live tree instead of a scratch copy.
+    
+    ### 1. BLOCKER: Invariant Violation (Epistemic Rule #6) — Moving Tree & False-FAIL Trap
+    **§ Section:** `Non-negotiable automated transport shape` & `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The design mandates taking a "deterministic pre-launch repository-state baseline" and comparing it after the run, explicitly excluding only the sanctioned journal. Because `agy` can take minutes to stream a response, any concurrent, legitimate developer activity in the live repository (e.g., saving a file, a background compile, an IDE updating its index) will mutate the tree. The post-run comparison will detect this and hard-fail the review.
+    **Why it matters:** This violates Epistemic Rule #6 ("Reviewers judge a pinned revision, not a moving tree... Run controls on a scratch copy") and creates a massive False-FAIL check on legitimate data. It penalizes users for not sitting idle during a background review.
+    **Fix:** Remove the whole-repository state comparison. Run the review against a frozen scratch copy of the exact tuple. A scratch copy trivially prevents the LLM from mutating the real repo and guarantees a pinned revision without false-failing on the user's independent git activity.
+    
+    ### 2. HIGH: Mechanism Correctness — Validate-at-X-but-stamp-at-Y (TOCTOU)
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The runner parses the NDJSON stream and processes the `final-result` verdict from `agy`. However, the repository-state baseline comparison and tuple re-check occur in the "always-executed owned teardown path". If the runner writes the durable receipt upon receiving the successful `final-result` packet but *before* teardown completes, a mutating or escaping `agy` run will successfully stamp a valid receipt before the mutation check has a chance to fail the transport.
+    **Why it matters:** Silent data safety gap. A compromised or misbehaving agent run could successfully authorize a malicious payload because the binding verdict is recorded before the transport security invariants are verified.
+    **Fix:** The runner must buffer the verdict and *only* write the durable receipt to the journal *after* the teardown and all post-flight verifications (including the tuple recheck) have fully passed.
+    
+    ### 3. HIGH: Concurrency / Lock Hazards — Orphaned Single-Flight Lock
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The runner acquires a "per-repository single-flight ownership" lock and releases it manually "on every path" (normal success, timeout, abnormal exit). If the runner script itself is forcefully terminated (e.g., `kill -9`, OOM killer, host power loss), the teardown trap never executes.
+    **Why it matters:** Violates the "Idempotency / partial-failure" invariant regarding "a non-transactional multi-step write that leaves orphans." The repository becomes permanently wedged, requiring manual intervention to unblock future reviews.
+    **Fix:** Use an OS-managed lock tied to the process lifecycle that the kernel automatically reaps on death (e.g., `flock` on a file descriptor), rather than application-level state bookkeeping.
+    
+    ### 4. MEDIUM: Mechanism Correctness — False-FAIL on `Stderr is failure`
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** The design dictates that "Stderr is failure". If the underlying `agy` runtime (e.g., Node.js or Python) emits a non-fatal ambient warning to stderr (like `ExperimentalWarning`, a deprecation notice from a transitive dependency, or a network retry log), the runner will instantly abort the review.
+    **Why it matters:** Brittle transport that violates the "False-FAIL checks on legitimate data" invariant. A minor runtime update could permanently break all automated gate reviews until patched.
+    **Fix:** Do not make any stderr output a binding failure condition. Fail explicitly on nonzero exit codes, timeouts, malformed NDJSON streams, or explicit FATAL event types in the protocol.
+    
+    ### 5. MEDIUM: Concurrency / Lock Hazards — O(N) Work Inside the Write Lock
+    **§ Section:** `Fail-closed stream and process boundary`
+    **Concrete failure scenario:** Computing a "deterministic pre-launch repository-state baseline" and comparing it post-run requires an O(N) hash/walk of the entire repository tree. Doing this work *inside* the "per-repository single-flight ownership" lock means the lock-hold time scales with repository size, rather than just the review duration.
+    **Why it matters:** Violates the invariant forbidding "O(N)-growing or network/IO work done INSIDE the one process-wide write lock." For massive monorepos, computing the tree hash might block all other concurrent review attempts severely.
+    **Fix:** (Resolved if Finding #1 is implemented to use a scratch copy). Otherwise, ensure the lock only protects the write to the sanctioned journal, not the baseline computation.
+    
+    ***
+    
+    **Highest-risk thing to resolve first:** The live-tree repository baseline check (Finding #1). It breaks the core guarantee of reviewing a pinned revision and will cause continuous false failures for active developers.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md, core/INVARIANTS.md
+    
+    PIL-DONE-5f80d233952c5549cc540ee6
+
 ## Gemini frozen gate attempt — FAILED_TRANSPORT — 2026-09-05T21:14:24.099Z
 
 - Status: `FAILED_TRANSPORT`
@@ -3350,192 +3538,6 @@
 - Record-SHA256: `27b3fa2394ff40a48f6d6d7b4e3bdd5290348c082d9af51054400e1dcaa1198c`
 - Complete-Record: `YES`
 
-## Gemini gate attempt — PASS_VERDICT — 2026-09-12T15:56:00Z
-
-- Status: `PASS_VERDICT`
-- Attempt-ID: `PIL-GATE-1789228441-39190-1933524459`
-- Record-Kind: `FULL_REVIEW`
-- Release-Gate: `YES`
-- Delivery: `INLINE`
-- Bytes: raw_payload=18436; instrumented_payload=18538; inline_combined=22355; file=18611
-- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
-- Model: Gemini 3.1 Pro (High)
-- Context/design: design:docs/journal/2026-09-12-execution-profile-contract.md
-- HEAD: `3c931c07a464648442a8bc487d08bc046e634062`
-- Artifact-Base: `6178c1de4ebcf94df626de5666dcf803c195054a`
-- Artifact-SHA: `3c931c07a464648442a8bc487d08bc046e634062`
-- Artifact-Ref: `refs/pil/gate-artifacts/3c931c07a464648442a8bc487d08bc046e634062`
-- Artifact-Worktree: `detached`
-- Gate-Verdict: `NO-GO`
-- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
-- Start: 2026-09-12T15:54:01Z
-- End: 2026-09-12T15:56:00Z
-- Slice: (none; full artifact)
-
-### Verified review verdict
-
-    PIL-RCPT-c85ad49d3ba45e815474bc0d
-    CANARIES: PIL-INGEST-01023830f630 PIL-INGEST-02459235dd3a
-    
-    Here is the cross-family audit of the proposed execution profile contract. 
-    
-    1. [BLOCKER] INTER-SECTION CONTRADICTION / MECHANISM CORRECTNESS
-    - **Section:** "Model roles and continuity"
-    - **Concrete failure scenario:** The design strictly isolates the Builder's context: "Raw T2/T3/live-path source and decisive facts remain in that Builder's own context." However, the immediate next sentence dictates: "The PM independently inspects actual changes and decisive evidence; a worker summary alone cannot discharge that responsibility." 
-    - **Why it matters:** This defines a physical paradox. The PM (Sol) is legally bound to inspect the "actual changes" (raw diffs/source) to fulfill its gating duty, but is explicitly forbidden from accessing the Builder's context where those raw changes reside, and cannot rely on a summary. The workflow will either permanently deadlock (PM blocked from seeing the required input) or silently fail-open (PM hallucinates an approval without actually seeing the diff).
-    - **Fix:** Clarify the context boundary. Either specify a deterministic extraction tool that bridges exact read-only diffs to the PM's context, or relax the Builder's context isolation to permit the PM direct read access to the raw source.
-    
-    2. [HIGH] INVARIANT VIOLATION (Epistemic Rule 1) / VACUOUS CONTROL
-    - **Section:** "Falsifiable acceptance evidence" (#7) vs "Finite controller and one completion exception"
-    - **Concrete failure scenario:** The design dictates an exception only occurs "After terminal Round 4 STOP". Thus, the parent is exactly Round 4. The exception is granted "exactly one repair batch" (making its ordinal Round 5). Yet, Section 7 mandates: "an exception whose next ordinal is divisible by four still requires the checkpoint."
-    - **Why it matters:** A child exception born at Round 5 that gets exactly 1 batch will transition to Round 6. Neither 5 nor 6 is divisible by 4. This modulo-4 checkpoint rule for exceptions is mathematically unreachable. It violates Epistemic Rule 1 by manufacturing false assurance of a safety bound (the checkpoint) that can never execute in practice.
-    - **Fix:** Remove the modulo-4 checkpoint rule for exceptions, as their fixed 1-batch limit prevents them from ever reaching a cumulative boundary. 
-    
-    3. [HIGH] COMPLETENESS GAP / PERMANENT STATE ORPHANING (DEADLOCK)
-    - **Section:** "Finite controller and one completion exception" & "Falsifiable acceptance evidence" (#6)
-    - **Concrete failure scenario:** If the 1-batch completion exception fails to fix the defect, the design dictates a hard "stop". It explicitly refuses a "second repair batch," a "repeat child," a "child of an exception," or a "refreeze-as-new-budget." It also explicitly bans the PM from classifying the "same unfinished repair as new scope". 
-    - **Why it matters:** The system provides literally zero legal state transitions to ever fix the remaining defect. The parent is permanently closed ("terminal Round 4 STOP"), the exception is exhausted, and the new scope route is banned. The partially-repaired worktree is permanently orphaned in a deadlocked state, with no Owner escalation path to salvage the work.
-    - **Fix:** Define an explicit, deterministic Owner-level escape hatch (e.g., the Owner manually authorizes a "Round 4 reset" or manually blesses the unfinished state as a new parent root) to recover from an exhausted exception.
-    
-    4. [MEDIUM] CONCURRENCY / MULTI-STEP WRITE ORPHANING
-    - **Section:** "Routine authority and Owner boundaries"
-    - **Concrete failure scenario:** The PM's allowed routine workflow includes a non-transactional sequence of mutations and network calls: "run tests, make local commits and eligible local integrations, prepare Gemini slices/packets... adjudicate findings and dispatch allowed repair batches."
-    - **Why it matters:** If the PM's process crashes or the network transport fails *after* making local commits/integrations but *before* successfully dispatching the repair batch, the local worktree is left in a dirty, mutated state. The design states "failed transmissions do not add rounds" but fails to mandate cleaning up the local state.
-    - **Fix:** Mandate that PM local mutations occur in a transactional scratch worktree, or require an explicit rollback of local commits to the parent's frozen state upon a failed downstream dispatch.
-    
-    **Highest-risk thing to resolve first:** The physical paradox in Finding 1. You cannot legally obligate the PM to perform an independent inspection of code changes while simultaneously denying it access to the very context where those raw changes reside.
-    
-    VERDICT: NO-GO
-    INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
-    
-    PIL-DONE-9f8f152d54573d9ea2bc2872
-
-## Gemini gate attempt — PASS_VERDICT — 2026-09-12T15:59:21Z
-
-- Status: `PASS_VERDICT`
-- Attempt-ID: `PIL-GATE-1789228681-14340-127443083`
-- Record-Kind: `FULL_REVIEW`
-- Release-Gate: `YES`
-- Delivery: `INLINE`
-- Bytes: raw_payload=18793; instrumented_payload=18895; inline_combined=22712; file=18968
-- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
-- Model: Gemini 3.1 Pro (High)
-- Context/design: design:docs/journal/2026-09-12-execution-profile-contract.md
-- HEAD: `eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
-- Artifact-Base: `6178c1de4ebcf94df626de5666dcf803c195054a`
-- Artifact-SHA: `eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
-- Artifact-Ref: `refs/pil/gate-artifacts/eea78bb87ec49f01d4df79a72c2c8e59c69cf110`
-- Artifact-Worktree: `detached`
-- Gate-Verdict: `NO-GO`
-- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
-- Start: 2026-09-12T15:58:01Z
-- End: 2026-09-12T15:59:21Z
-- Slice: (none; full artifact)
-
-### Verified review verdict
-
-    PIL-RCPT-9efd127197cacf2635ee1cfe
-    CANARIES: PIL-INGEST-01a2f833d179 PIL-INGEST-0265c9841685
-    
-    **1. BLOCKER: INVARIANT VIOLATION / MECHANISM CORRECTNESS**
-    - **§ Section**: § Finite controller and one completion exception
-    - **Concrete failure scenario**: The design creates a "completion exception" bypass contingent on Owner approval, but explicitly admits that "Controls validate records and mechanical bounds, not the truth of semantic declarations or the identity behind human approval evidence." A compromised or hallucinating PM (Sol) can autonomously write a record asserting "Owner approved" to bypass the gate.
-    - **Why it matters**: Violates Epistemic Rule 2 ("A prompt is not a control... Make outputs checkable") and Invariant 2 ("Exact provenance"). By stripping the gate of identity verification, the PM can forge Owner approval, entirely neutralizing the Owner's boundary authority and autonomously evading the 4-round limit.
-    - **Fix**: Require the mechanical gate to validate an unforgeable, cryptographically secure receipt (e.g., authenticated API state transition, signed token) to prove the human Owner authorized the exception, rather than trusting PM-generated text records.
-    
-    **2. HIGH: INTER-SECTION CONTRADICTION**
-    - **§ Section**: § Model roles and continuity vs. § Routine authority and Owner boundaries
-    - **Concrete failure scenario**: In "Model roles and continuity", the PM is strictly restricted to "direct read-only access to the shared source". In the very next section ("Routine authority and Owner boundaries"), the PM is authorized to "make local commits and eligible local integrations".
-    - **Why it matters**: If the PM's environment enforces the stated read-only invariant, it will crash when attempting its authorized local commits, deadlocking the workflow. If it is granted write access to commit, the security invariant is broken, allowing the PM to silently rewrite raw T2/T3 source without the Terra Builder's involvement.
-    - **Fix**: Reconcile permissions. Either restrict the PM from making commits (delegating them entirely to the Terra Builder), or provide the PM a tightly constrained Git-only interface for commits while preserving strict read-only access to the raw file system.
-    
-    **3. HIGH: MECHANISM CORRECTNESS / COMPLETENESS (FRONTIER BYPASS)**
-    - **§ Section**: § Falsifiable acceptance evidence (Bullet 7) & § Finite controller and one completion exception
-    - **Concrete failure scenario**: Checkpoints are enforced "at each cumulative multiple of four". An exception launched after a terminal Round 4 performs its single repair at ordinal 5, and its final review at ordinal 6. Since 6 is not a multiple of 4, the exception's final review skips the frontier checkpoint.
-    - **Why it matters**: The exception is designed to fix "surviving concrete harm". Bypassing the frontier checkpoint on ordinal 6 means the cheaper PM model (Sol) makes the final semantic decision on a critical repair without frontier oversight. This violates Invariant 1 (Intelligence-ordering).
-    - **Fix**: Explicitly require that the completion exception's final review unconditionally triggers a mandatory frontier checkpoint, or enforce that *any* terminal review triggers the gate, regardless of the cumulative ordinal math.
-    
-    **4. MEDIUM: COMPLETENESS GAPS**
-    - **§ Section**: § Finite controller and one completion exception
-    - **Concrete failure scenario**: If the single completion exception fails, the rules dictate to "stop" with "No automatic repeated exception". The only allowed path forward is for "genuinely new... successor scope".
-    - **Why it matters**: If the exception fails to fix the defect, the branch is permanently deadlocked. The PM is forbidden from relabeling the unfinished repair as "new scope", and no other repair mechanism is legally allowed for that parent. The Owner has no structured mechanism to salvage the branch without falsifying the intent.
-    - **Fix**: Define a formal escalation or hard-reset path for a failed completion exception. Allow the Owner to explicitly authorize a new parent plan specifically to rescue the failed state, rather than forcing them to abandon the branch or lie about "new scope".
-    
-    **HIGHEST-RISK TO RESOLVE FIRST:**
-    The complete inability of the mechanical gate to verify the human identity behind the approval (Finding 1), which renders the Owner's boundary functionally non-existent and allows the PM to forge authorization for the exception.
-    
-    VERDICT: NO-GO
-    INSPECTED SCOPE: docs/journal/2026-09-12-execution-profile-contract.md (Entire Document)
-    PIL-DONE-5d792c73c0381c7bf3dd2924
-
-## Gemini gate attempt — PASS_VERDICT — 2026-09-12T20:04:51Z
-
-- Status: `PASS_VERDICT`
-- Attempt-ID: `PIL-GATE-1789243366-83852-733632086`
-- Record-Kind: `FULL_REVIEW`
-- Release-Gate: `YES`
-- Delivery: `INLINE`
-- Bytes: raw_payload=17200; instrumented_payload=17302; inline_combined=21119; file=17375
-- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
-- Model: Gemini 3.1 Pro (High)
-- Context/design: design:docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md
-- HEAD: `8b17fa9d96961683feffe92f6a54729a255a1f1b`
-- Artifact-Base: `b1d5b40236eef3170bf6e3f981dc6a6d7672e2d3`
-- Artifact-SHA: `8b17fa9d96961683feffe92f6a54729a255a1f1b`
-- Artifact-Ref: `refs/pil/gate-artifacts/8b17fa9d96961683feffe92f6a54729a255a1f1b`
-- Artifact-Worktree: `detached`
-- Gate-Verdict: `NO-GO`
-- Inspected-Scope: INSPECTED SCOPE: docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md, core/INVARIANTS.md
-- Start: 2026-09-12T20:02:46Z
-- End: 2026-09-12T20:04:51Z
-- Slice: (none; full artifact)
-
-### Verified review verdict
-
-    PIL-RCPT-1fbe14e63460d767672bd9aa
-    CANARIES: PIL-INGEST-01fcc6e10435 PIL-INGEST-02fa74440a25
-    
-    The design for the automated frozen Gemini subscription transport has severe structural flaws relating to how it verifies the repository and handles process teardown. It introduces major False-FAIL traps and TOCTOU vulnerabilities by operating on the live tree instead of a scratch copy.
-    
-    ### 1. BLOCKER: Invariant Violation (Epistemic Rule #6) — Moving Tree & False-FAIL Trap
-    **§ Section:** `Non-negotiable automated transport shape` & `Fail-closed stream and process boundary`
-    **Concrete failure scenario:** The design mandates taking a "deterministic pre-launch repository-state baseline" and comparing it after the run, explicitly excluding only the sanctioned journal. Because `agy` can take minutes to stream a response, any concurrent, legitimate developer activity in the live repository (e.g., saving a file, a background compile, an IDE updating its index) will mutate the tree. The post-run comparison will detect this and hard-fail the review.
-    **Why it matters:** This violates Epistemic Rule #6 ("Reviewers judge a pinned revision, not a moving tree... Run controls on a scratch copy") and creates a massive False-FAIL check on legitimate data. It penalizes users for not sitting idle during a background review.
-    **Fix:** Remove the whole-repository state comparison. Run the review against a frozen scratch copy of the exact tuple. A scratch copy trivially prevents the LLM from mutating the real repo and guarantees a pinned revision without false-failing on the user's independent git activity.
-    
-    ### 2. HIGH: Mechanism Correctness — Validate-at-X-but-stamp-at-Y (TOCTOU)
-    **§ Section:** `Fail-closed stream and process boundary`
-    **Concrete failure scenario:** The runner parses the NDJSON stream and processes the `final-result` verdict from `agy`. However, the repository-state baseline comparison and tuple re-check occur in the "always-executed owned teardown path". If the runner writes the durable receipt upon receiving the successful `final-result` packet but *before* teardown completes, a mutating or escaping `agy` run will successfully stamp a valid receipt before the mutation check has a chance to fail the transport.
-    **Why it matters:** Silent data safety gap. A compromised or misbehaving agent run could successfully authorize a malicious payload because the binding verdict is recorded before the transport security invariants are verified.
-    **Fix:** The runner must buffer the verdict and *only* write the durable receipt to the journal *after* the teardown and all post-flight verifications (including the tuple recheck) have fully passed.
-    
-    ### 3. HIGH: Concurrency / Lock Hazards — Orphaned Single-Flight Lock
-    **§ Section:** `Fail-closed stream and process boundary`
-    **Concrete failure scenario:** The runner acquires a "per-repository single-flight ownership" lock and releases it manually "on every path" (normal success, timeout, abnormal exit). If the runner script itself is forcefully terminated (e.g., `kill -9`, OOM killer, host power loss), the teardown trap never executes.
-    **Why it matters:** Violates the "Idempotency / partial-failure" invariant regarding "a non-transactional multi-step write that leaves orphans." The repository becomes permanently wedged, requiring manual intervention to unblock future reviews.
-    **Fix:** Use an OS-managed lock tied to the process lifecycle that the kernel automatically reaps on death (e.g., `flock` on a file descriptor), rather than application-level state bookkeeping.
-    
-    ### 4. MEDIUM: Mechanism Correctness — False-FAIL on `Stderr is failure`
-    **§ Section:** `Fail-closed stream and process boundary`
-    **Concrete failure scenario:** The design dictates that "Stderr is failure". If the underlying `agy` runtime (e.g., Node.js or Python) emits a non-fatal ambient warning to stderr (like `ExperimentalWarning`, a deprecation notice from a transitive dependency, or a network retry log), the runner will instantly abort the review.
-    **Why it matters:** Brittle transport that violates the "False-FAIL checks on legitimate data" invariant. A minor runtime update could permanently break all automated gate reviews until patched.
-    **Fix:** Do not make any stderr output a binding failure condition. Fail explicitly on nonzero exit codes, timeouts, malformed NDJSON streams, or explicit FATAL event types in the protocol.
-    
-    ### 5. MEDIUM: Concurrency / Lock Hazards — O(N) Work Inside the Write Lock
-    **§ Section:** `Fail-closed stream and process boundary`
-    **Concrete failure scenario:** Computing a "deterministic pre-launch repository-state baseline" and comparing it post-run requires an O(N) hash/walk of the entire repository tree. Doing this work *inside* the "per-repository single-flight ownership" lock means the lock-hold time scales with repository size, rather than just the review duration.
-    **Why it matters:** Violates the invariant forbidding "O(N)-growing or network/IO work done INSIDE the one process-wide write lock." For massive monorepos, computing the tree hash might block all other concurrent review attempts severely.
-    **Fix:** (Resolved if Finding #1 is implemented to use a scratch copy). Otherwise, ensure the lock only protects the write to the sanctioned journal, not the baseline computation.
-    
-    ***
-    
-    **Highest-risk thing to resolve first:** The live-tree repository baseline check (Finding #1). It breaks the core guarantee of reviewing a pinned revision and will cause continuous false failures for active developers.
-    
-    VERDICT: NO-GO
-    INSPECTED SCOPE: docs/journal/2026-09-12-gemini-agy-automated-transport-contract.md, core/INVARIANTS.md
-    
-    PIL-DONE-5f80d233952c5549cc540ee6
-
 ## Gemini frozen gate attempt — FAILED_TRANSPORT — 2026-09-13T01:04:49.009Z
 
 - Status: `FAILED_TRANSPORT`
@@ -4336,4 +4338,93 @@
 - Completion-Token-SHA256: `b933cc8f0c07d4a39b158f6b640267c50bd7079caa7b5266554229ce5a94dfb1`
 - Reply-UTF8-Base64: `UElMLUlOR0VTVC1FT0YtMGE5YWUwMWIxMzZjYTZiOTkwMWQ4OTY0CgpDQU5BUklFUzogUElMLUlOR0VTVC1IRUFELTdmM2ZlODg2NmQ3MjZjMTJkNzcyYjNkOCBQSUwtSU5HRVNULU1JRERMRS02MzgwNjhkYTlhNzY5NTFjMjNjMWVlMDIgUElMLUlOR0VTVC1FT0YtMGE5YWUwMWIxMzZjYTZiOTkwMWQ4OTY0CgoxLiBCTE9DS0VSIChDb250cmFjdC12cy1EZXNpZ24gRHJpZnQpOgotICoqSXNzdWU6KiogVGhlIGNhbmRpZGF0ZSBpbXBsZW1lbnRhdGlvbiBjb21wbGV0ZWx5IGNvbnRyYWRpY3RzIHRoZSBkZXNpZ24gaW50ZW50IG9mIHRoZSBzdXBwbGllZCBgZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kYCBzbGljZSBjb250ZXh0LiBUaGUgc2NyaXB0IGNvbnRpbnVlcyB0byBsYXVuY2ggYGFneWAgdXRpbGl6aW5nIGAtLWFkZC1kaXJgLCBgLS1tb2RlIHBsYW5gLCBhbmQgYC0tcHJpbnRgICh3aGljaCBwYXNzZXMgcmV2aWV3IHBheWxvYWQgY29udGVudCB2aWEgYW4gYXJndiBwcm9tcHQpLgotICoqV2h5IGl0IG1hdHRlcnM6KiogVGhlIHRyYW5zcG9ydCBjb250cmFjdCBub24tbmVnb3RpYWJseSBkZW1hbmRzOiAiTmV2ZXIgcGFzcyBhIHJlcG9zaXRvcnkgY3dkLCAtLWFkZC1kaXIuLi4gcHJvbXB0IGFyZ3YuLi4gTm8gcmV2aWV3IG1hdGVyaWFsIG1heSBhcHBlYXIgaW4gYW4gYXJndiBwcm9tcHQuIiBVc2luZyB0aGVzZSBleGFjdCBmbGFncyBkaXJlY3RseSB2aW9sYXRlcyB0aGUgY29yZSBzZWN1cml0eSBib3VuZGFyeSBlc3RhYmxpc2hlZCBieSB0aGUgZGVzaWduIGNvbnRleHQuIFRoZSBkaWZmIGlzIGEgZmFsc2UgY2xhaW0gb2YgbWl0aWdhdGlvbiBiZWNhdXNlIGl0IGZhaWxzIHRvIGZpeCB0aGUgYGFneWAgaW52b2NhdGlvbi4KLSAqKkNoZWNrOioqIEluIGBzY3JpcHRzL2NvbGQtcmV2aWV3LWdlbWluaS5zaGAsIGxpbmVzIGluc2lkZSB0aGUgZXhlY3V0aW9uIGJyYW5jaGVzIChgcnVuX3N1cGVydmlzZWQgIiRBR1kiIC0tbW9kZWwgIiRNT0RFTCIgLS1wcmludC10aW1lb3V0ICIke1RJTUVPVVRfU0VDT05EU31zIiAtLXByaW50ICIkSU5MSU5FX0NPTUJJTkVEImAgYW5kIGBydW5fc3VwZXJ2aXNlZCAiJEFHWSIgLS1tb2RlbCAiJE1PREVMIiAtLWFkZC1kaXIgIiRUTVBEIiAtLW1vZGUgcGxhbiAtLXNhbmRib3ggLS1wcmludC10aW1lb3V0ICIke1RJTUVPVVRfU0VDT05EU31zIiAtLXByaW50ICIkRklMRV9QUk9NUFQiYCkgcmVtYWluIHVubW9kaWZpZWQgYnkgdGhlIGNhbmRpZGF0ZSdzIGRpZmYuCgoyLiBNRURJVU0gLyBQUkVFWElTVElORyAoRmFsc2UtRkFJTCBDaGVjayAvIFN0dWNrIExvY2spOgotICoqSXNzdWU6KiogVGhlIGNhbmRpZGF0ZSBwYXRjaGVzIHRoZSBzdGFsZSBsb2NrIFBJRC1yZXVzZSB2dWxuZXJhYmlsaXR5IGZvciBgb3duZXJfa2luZD0ic3Vic2NyaXB0aW9uImAgKGJ5IHByb3Blcmx5IHZlcmlmeWluZyBgWyAiJGN1cnJlbnRfc3RhcnQiID0gIiRvd25lcl9zdGFydCIgXWApLCBidXQgZXhwbGljaXRseSBzcGxpdHMgdGhlIGNvbmRpdGlvbmFsIHRvIGxlYXZlIHRoZSBsb2NrIGZvciBgb3duZXJfa2luZD0iZGlyZWN0ImAgdnVsbmVyYWJsZSB0byB0aGUgZXhhY3Qgc2FtZSBmYWlsdXJlLiAKLSAqKldoeSBpdCBtYXR0ZXJzOioqIElmIGEgYGRpcmVjdGAgcnVuIGNyYXNoZXMgYW5kIGl0cyBQSUQgaXMgbGF0ZXIgb3JnYW5pY2FsbHkgcmV1c2VkIGJ5IGFuIGVudGlyZWx5IHVucmVsYXRlZCBwcm9jZXNzLCB0aGUgc2NyaXB0IHdpbGwgcGVyY2VpdmUgdGhlIFBJRCBhcyBhbGl2ZSBidXQgZmFpbCB0byB2ZXJpZnkgaXRzIHByb2Nlc3Mgc3RhcnQgdGltZSwgcmVzdWx0aW5nIGluIGFuIGluZmluaXRlIGZhbHNlLUZBSUwgYmxvY2sgKGBleGl0IDRgKS4gV2hpbGUgcHJlZXhpc3RpbmcsIHRoZSBjYW5kaWRhdGUgZGVsaWJlcmF0ZWx5IHRvdWNoZWQgdGhpcyBsb2dpYyBhbmQgaXNvbGF0ZWQgdGhlIGJ1ZyBpbnN0ZWFkIG9mIG1pdGlnYXRpbmcgaXQuCi0gKipDaGVjazoqKiBUaGUgZGlmZiBpbiBgc2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2hgIGF0IGBhY3F1aXJlX3NpbmdsZV9mbGlnaHRgOiBgaWYgWyAiJG93bmVyX2tpbmQiID0gImRpcmVjdCIgXSAmJiBbICIkb3duZXJfcmVwbyIgPSAiJGNvbW1vbiIgXTsgdGhlbiAuLi4gZXhpdCA0YCBleHBsaWNpdGx5IG9taXRzIHRoZSBgIiRjdXJyZW50X3N0YXJ0IiA9ICIkb3duZXJfc3RhcnQiYCB2ZXJpZmljYXRpb24gYXBwbGllZCBpbW1lZGlhdGVseSBhYm92ZSBpdC4KCk92ZXJhbGwgcmVhZDogVGhlIGJsYXN0IHJhZGl1cyBpcyBoaWdoIGJlY2F1c2UgdGhlIHRyYW5zcG9ydCBzdGlsbCBkYW5nZXJvdXNseSByZWxpZXMgb24gYXJndiBpbmplY3Rpb24gYW5kIHJlcG9zaXRvcnkgY29udGV4dCBpbmplY3Rpb24sIGZhaWxpbmcgdG8gbWVldCB0aGUgc2VjdXJlIGF1dG9tYXRlZCB0cmFuc3BvcnQgY29udHJhY3QuIFJldmVyc2liaWxpdHkgaXMgc3RyYWlnaHRmb3J3YXJkLCBidXQgdGhpcyBzbGljZSBjYW5ub3Qgc2hpcCBhcyBpdCBmdW5kYW1lbnRhbGx5IHZpb2xhdGVzIGl0cyBkZXNpZ24gbWFuZGF0ZS4KClZFUkRJQ1Q6IE5PLUdPCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNvdmVyYWdlLTAwNCIsImdhdGVfa2luZCI6ImJhc2UuLmNhbmRpZGF0ZV9jaGFuZ2UiLCJiYXNlIjoiOThhOGIzZDhiZWFhNTE5NDQ1NDEzYTA0MzJiZjYzZmJlNjRhNDAyMiIsImNhbmRpZGF0ZSI6IjY1YmY4MDU4ZWVkYzk0ZTBjYWNkYjJkZjY3ODVhMmM0ZTU3MTFmYmQiLCJ0cmVlIjoiNWFlZjNiZDk2NWNhZDk3MWFhMTI1NTIxMDNiZTEzMzZhYTllZTUzMyIsImZpbGVzIjpbInNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsLzIwMjYtMDktMTItZ2VtaW5pLWFneS1hdXRvbWF0ZWQtdHJhbnNwb3J0LWNvbnRyYWN0Lm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiMzBkYmEwYmViM2NjZDU1OTEyNTI2YmEwY2E2MWYzYzYwOGUwYTNiNDhkMTlhNGMxN2E0MGNjODY2YzM0OWMyZiIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJmcm96ZW5fc291cmNlIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo4MTU4OCwiY29tcG9uZW50X3NoYTI1NiI6ImZlOTIxZTQ4YjVlMjM1NjVjMTMzNWYzY2NjZjQ4MzRmZWQyNDBlMDk0N2VhYTI2MzJiYmM1YjU0ZmY1MDk5ZWQiLCJieXRlX3N0YXJ0Ijo1NTQ2MSwiYnl0ZV9lbmQiOjgxNTg4LCJmcmFnbWVudF9zaGEyNTYiOiIzNTRlNTRlZmNjNDFkZDg5YjczYWVhMzAxZGQwMGViOWI5MzVjZDY0MzNkOWVjYWM0NjAzZWVmZTRhN2M4ZTEwIiwicmFuZ2Vfc3RhdHVzIjoicGFydGlhbCJ9LHsicGF0aCI6InNjcmlwdHMvY29sZC1yZXZpZXctZ2VtaW5pLnNoIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjo5NzY2LCJjb21wb25lbnRfc2hhMjU2IjoiMWQyZjQzNDlkZDkwNGFjZjk2ZWYzMDhjZTU3ZWM2Njk0MDVhZmFlYzVlZmFjODlkN2MyNzg4MDliMzMxNmVhYiIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoxNzcsImZyYWdtZW50X3NoYTI1NiI6IjlhZTFjYzYyMmU2NTU5ZmEwNmQ4MzQxZWU5OGJlMTBkMzY1MTg2YzM3OWJmMzVhN2FhOTQ0NDA5ZTA5YzhjM2EiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoic2NyaXB0cy9jb2xkLXJldmlldy1nZW1pbmkuc2giLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjk3NjYsImNvbXBvbmVudF9zaGEyNTYiOiIxZDJmNDM0OWRkOTA0YWNmOTZlZjMwOGNlNTdlYzY2OTQwNWFmYWVjNWVmYWM4OWQ3YzI3ODgwOWIzMzE2ZWFiIiwiYnl0ZV9zdGFydCI6MTc3LCJieXRlX2VuZCI6OTc2NiwiZnJhZ21lbnRfc2hhMjU2IjoiZTQ5MjE4NjcxM2JmOTBiZmY1ZTYxMjE4MzNiODRmZTA4OGJiZjhjZDgwZWY0NWNjNTc0YzA4MGI3MWUwOGY1MSIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CklOR0VTVElPTiBQUk9PRjogUElMLUlOR0VTVC1IRUFELTdmM2ZlODg2NmQ3MjZjMTJkNzcyYjNkOCB8IFBJTC1JTkdFU1QtTUlERExFLTYzODA2OGRhOWE3Njk1MWMyM2MxZWUwMiB8IFBJTC1JTkdFU1QtRU9GLTBhOWFlMDFiMTM2Y2E2Yjk5MDFkODk2NApQSUwtRE9ORS0wNzJlYzI0ZTliY2FkNWFlODA0YWExMjIK`
 - Record-SHA256: `04f5ade71aa71341cb5759f3563073319e0ac5fb643297240e88698e50be1c9d`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-16T22:36:32.088Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `operator-attested-manual-gemini-subscription-v1`
+- Transport-Identity: `operator-attested-manual-gemini-subscription-v1|gemini-3.1-pro-high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `PIL-GEMINI-HANDOFF-18f4062cb633eec50447a848`
+- Attempt-ID: `PIL-MANUAL-18f4062cb633eec50447a848-0001`
+- Rig-ID: `codex-desktop-manual-gemini`
+- Rig-Key: `efe65df400822cffb23ba4a5922d2561ff3e684b4393e01355513f3cab127363`
+- Failure-Class: `(none)`
+- Base: `b091afce029a025b6df6d14198f6acb438e060a9`
+- Candidate: `aa1538c66852abe95a5c3d6d0e42bb186121aa51`
+- Tree: `5106572942a86051a06c81e7b8b09dc6a441ea01`
+- Plan-ID: `96ae8c5d69e8497b4b904be6355baec7ff30e1786cad485cb542479c5e0f7162`
+- Slice: `coverage-001`
+- Material-SHA256: `31cb3eee9aa632e85323d08e7eb80b0832c3dbf73bc47b80eb3e470fda0f8b4a`
+- Envelope-SHA256: `fbf9158f651a05a3dc4407e9045a538343a0584c2467cfcfa1781dad9ceb527f`
+- Envelope-Bytes: `71508`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"coverage-001","gate_kind":"base..candidate_change","base":"b091afce029a025b6df6d14198f6acb438e060a9","candidate":"aa1538c66852abe95a5c3d6d0e42bb186121aa51","tree":"5106572942a86051a06c81e7b8b09dc6a441ea01","files":["docs/journal/architect_consult_routing_design.md"],"contract_context":["docs/journal/architect_consult_routing_design.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"31cb3eee9aa632e85323d08e7eb80b0832c3dbf73bc47b80eb3e470fda0f8b4a","slice_kind":"coverage","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"docs/journal/architect_consult_routing_design.md","component_kind":"frozen_source","component_byte_length":17045,"component_sha256":"01a0393f3946891866b64d2902f87ccdf22c8ad6388c5329c53a0337a18ac7d3","byte_start":0,"byte_end":17045,"fragment_sha256":"01a0393f3946891866b64d2902f87ccdf22c8ad6388c5329c53a0337a18ac7d3","range_status":"whole"},{"path":"docs/journal/architect_consult_routing_design.md","component_kind":"per_file_diff","component_byte_length":21743,"component_sha256":"ee3550b677db1039512c488101008c5d8709d0bc8f890e9c22685b75746e001b","byte_start":0,"byte_end":253,"fragment_sha256":"7ea3293a5e9f407595b582402840eb6b43313759f42aa721ac3c4573da9c163f","range_status":"partial"},{"path":"docs/journal/architect_consult_routing_design.md","component_kind":"per_file_diff","component_byte_length":21743,"component_sha256":"ee3550b677db1039512c488101008c5d8709d0bc8f890e9c22685b75746e001b","byte_start":253,"byte_end":21743,"fragment_sha256":"ee27dd61ed8258764a00fd206d658306690e27b3175f6401b44ba216648ee276","range_status":"partial"}]}`
+- Reply-SHA256: `e222318447b5e66e53e45d65e3cca81df917a91b41a20f9cc67f2c5da2dcb912`
+- Completion-Token-SHA256: `46d0886b7bd3fd5b41c951f67adec95cedc550a6a5fe6c311811b0b6c87a7530`
+- Reply-UTF8-Base64: `RklORElOR1M6ClRoZSBjYW5kaWRhdGUgdXBkYXRlcyB0aGUgVDIgcHJlLWltcGxlbWVudGF0aW9uIGRlc2lnbiBicmllZiAoZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kKSB0byB0cmFuc2l0aW9uIHRoZSBwZXJzaXN0ZW50IGFyY2hpdGVjdCByb2xlIGZyb20gYW4gYWR2aXNvcnkgY2FwYWNpdHkgdG8gYSAiUHJvamVjdCBQcmluY2lwYWwiIHdpdGggZGVsZWdhdGVkIGdlbmVyYWwgY29udHJhY3RvciBhdXRob3JpdHkuCgpTYWZldHkgYW5kIFNjb3BlOiBUaGUgY2hhbmdlIGV4cGxpY2l0bHkgcHJlc2VydmVzIE93bmVyIHJlc2VydmF0aW9uIGZvciBpbml0aWFsIGludGVudCwgYnVkZ2V0IGNoYW5nZXMsIGxpdmUgd3JpdGVzLCBkZXBsb3ltZW50cywgYW5kIHB1c2hlcy4KCkJvdW5kYXJpZXMgTWFpbnRhaW5lZDogVGhlIG5ld2x5IGludHJvZHVjZWQgc2VhdC5zdWJzdGl0dXRpb24uYXJjaGl0ZWN0X2V2aWRlbmNlIGNvbmNlcHQgaXMgbmFycm93bHkgc2NvcGVkLiBJdCBzdHJpY3RseSByZXF1aXJlcyBkb2N1bWVudGFyeSBwcm92ZW5hbmNlIGFuZCBleHBsaWNpdGx5IHJlZnVzZXMgdG8gb3ZlcnJpZGUgdGhlIGluZGVwZW5kZW50IGZhbWlseSBmbG9vciAocmVqZWN0cyBzYW1lLWZhbWlseS1vbmx5IGFuZCBhbGwtb25lLWZhbWlseSByb3N0ZXJzKS4KCkludmFyaWFudCBBZGhlcmVuY2U6IENvcmUgd29ya2Zsb3cgYW5kIG1ldGhvZCBpbnZhcmlhbnRzIGFyZSByZXNwZWN0ZWQuIFRoZSBwb2xpY3kgZXhwbGljaXRseSBhY2tub3dsZWRnZXMgdGhhdCBwcm9ncmFtLXNwZWNpZmljIHRhc2tzIGFuZCBtb2RlbCBiaW5kaW5ncyByZW1haW4gb3V0c2lkZSBraXQgZG9jdHJpbmUgKGFzIGFkb3B0ZXIgZGF0YSkuCgpObyBNZWNoYW5pY2FsIEhhcm06IFRoaXMgaXMgYSBkb2N1bWVudGF0aW9uL2Rlc2lnbiB1cGRhdGUuIE5vIGV4ZWN1dGFibGUgY29kZSwgY29udHJvbGxlcnMsIG9yIHNjaGVkdWxlcnMgYXJlIGludHJvZHVjZWQgaW4gdGhpcyBkaWZmLCBhbmQgdGhlIFQyIGRvY3VtZW50IGVzdGFibGlzaGVzIHJvYnVzdCB2ZXJpZmljYXRpb24gY3JpdGVyaWEgYW5kIHN0b3AgcnVsZXMgdG8gcHJldmVudCBydW5hd2F5IGltcGxlbWVudGF0aW9uLgoKTm8gY29uY3JldGUgcmVhY2hhYmxlIGhhcm0sIGZhbHNlIG1pdGlnYXRpb24sIG9yIGludmFyaWFudCB2aW9sYXRpb24gaXMgaW50cm9kdWNlZCBieSB0aGlzIGRlc2lnbiBjaGFuZ2UuCgpWRVJESUNUOiBHTwoKSU5TUEVDVEVEIFNDT1BFOiB7InNsaWNlIjoiY292ZXJhZ2UtMDAxIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMDkxYWZjZTAyOWEwMjViNmRmNmQxNDE5OGY2YWNiNDM4ZTA2MGE5IiwiY2FuZGlkYXRlIjoiYWExNTM4YzY2ODUyYWJlOTVhNWMzZDZkMGU0MmJiMTg2MTIxYWE1MSIsInRyZWUiOiI1MTA2NTcyOTQyYTg2MDUxYTA2YzgxZTdiOGIwOWRjNmE0NDFlYTAxIiwiZmlsZXMiOlsiZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiMzFjYjNlZWU5YWE2MzJlODUzMjNkMDhlN2ViODBiMDgzMmMzZGJmNzNiYzQ3YjgwZWIzZTQ3MGZkYTBmOGI0YSIsInNsaWNlX2tpbmQiOiJjb3ZlcmFnZSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6ImRvY3Mvam91cm5hbC9hcmNoaXRlY3RfY29uc3VsdF9yb3V0aW5nX2Rlc2lnbi5tZCIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTcwNDUsImNvbXBvbmVudF9zaGEyNTYiOiIwMWEwMzkzZjM5NDY4OTE4NjZiNjRkMjkwMmY4N2NjZGYyMmM4YWQ2Mzg4YzUzMjljNTNhMDMzN2ExOGFjN2QzIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjE3MDQ1LCJmcmFnbWVudF9zaGEyNTYiOiIwMWEwMzkzZjM5NDY4OTE4NjZiNjRkMjkwMmY4N2NjZGYyMmM4YWQ2Mzg4YzUzMjljNTNhMDMzN2ExOGFjN2QzIiwicmFuZ2Vfc3RhdHVzIjoid2hvbGUifSx7InBhdGgiOiJkb2NzL2pvdXJuYWwvYXJjaGl0ZWN0X2NvbnN1bHRfcm91dGluZ19kZXNpZ24ubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjIxNzQzLCJjb21wb25lbnRfc2hhMjU2IjoiZWUzNTUwYjY3N2RiMTAzOTUxMmM0ODgxMDEwMDhjNWQ4NzA5ZDBiYzhmODkwZTljMjI2ODViNzU3NDZlMDAxYiIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoyNTMsImZyYWdtZW50X3NoYTI1NiI6IjdlYTMyOTNhNWU5ZjQwNzU5NWI1ODI0MDI4NDBlYjZiNDMzMTM3NTlmNDJhYTcyMWFjM2M0NTczZGE5YzE2M2YiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoyMTc0MywiY29tcG9uZW50X3NoYTI1NiI6ImVlMzU1MGI2NzdkYjEwMzk1MTJjNDg4MTAxMDA4YzVkODcwOWQwYmM4Zjg5MGU5YzIyNjg1Yjc1NzQ2ZTAwMWIiLCJieXRlX3N0YXJ0IjoyNTMsImJ5dGVfZW5kIjoyMTc0MywiZnJhZ21lbnRfc2hhMjU2IjoiZWUyN2RkNjFlZDgyNTg3NjRhMDBmZDIwNmQ2NTgzMDY2OTBlMjdiMzE3NWY2NDAxYjQ0YmEyMTY2NDhlZTI3NiIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CgpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC1lNTIxMTAzYzY2ZGVlMzcyNzQxNmU1YzEgfCBQSUwtSU5HRVNULU1JRERMRS0yNjIwNWVlNzg0NWE2YjkzYmM3NzdiOGIgfCBQSUwtSU5HRVNULUVPRi1hOTM2NjIxZmRlZmM1OTY1MzQxMjZmNzEKClBJTC1ET05FLTEwMDQ0ZDlmZDc0ZGY4N2Y4OTFhZDgyZA==`
+- Record-SHA256: `f4919f3aded30fb24d53af6324d662df58d515a7b591e04802e0d6337dceed31`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-16T22:36:32.093Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_RESULT`
+- Release-Gate: `NO`
+- Transport: `operator-attested-manual-gemini-subscription-v1`
+- Transport-Identity: `operator-attested-manual-gemini-subscription-v1|gemini-3.1-pro-high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `PIL-GEMINI-HANDOFF-18f4062cb633eec50447a848`
+- Attempt-ID: `PIL-MANUAL-18f4062cb633eec50447a848-0002`
+- Rig-ID: `codex-desktop-manual-gemini`
+- Rig-Key: `efe65df400822cffb23ba4a5922d2561ff3e684b4393e01355513f3cab127363`
+- Failure-Class: `(none)`
+- Base: `b091afce029a025b6df6d14198f6acb438e060a9`
+- Candidate: `aa1538c66852abe95a5c3d6d0e42bb186121aa51`
+- Tree: `5106572942a86051a06c81e7b8b09dc6a441ea01`
+- Plan-ID: `96ae8c5d69e8497b4b904be6355baec7ff30e1786cad485cb542479c5e0f7162`
+- Slice: `cross-boundary-final`
+- Material-SHA256: `b29c5a5ea2e4939080223140c82dc4b8c6280e6e9a452ab1ae06200fcaa214ea`
+- Envelope-SHA256: `5435fca90af6fd995605717e7a94113930ee4fbce6c3ba076b78fc2983b5c93d`
+- Envelope-Bytes: `71522`
+- Ordered-Contributors: `(none)`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"cross-boundary-final","gate_kind":"base..candidate_change","base":"b091afce029a025b6df6d14198f6acb438e060a9","candidate":"aa1538c66852abe95a5c3d6d0e42bb186121aa51","tree":"5106572942a86051a06c81e7b8b09dc6a441ea01","files":["docs/journal/architect_consult_routing_design.md"],"contract_context":["docs/journal/architect_consult_routing_design.md"],"invariants":["core/INVARIANTS.md","core/REPO_INVARIANTS.md"],"material_sha256":"b29c5a5ea2e4939080223140c82dc4b8c6280e6e9a452ab1ae06200fcaa214ea","slice_kind":"cross_boundary","material_mode":"verified_fragments","exact_per_file_diff_transition_evidence":true,"fragments":[{"path":"docs/journal/architect_consult_routing_design.md","component_kind":"frozen_source","component_byte_length":17045,"component_sha256":"01a0393f3946891866b64d2902f87ccdf22c8ad6388c5329c53a0337a18ac7d3","byte_start":0,"byte_end":17045,"fragment_sha256":"01a0393f3946891866b64d2902f87ccdf22c8ad6388c5329c53a0337a18ac7d3","range_status":"whole"},{"path":"docs/journal/architect_consult_routing_design.md","component_kind":"per_file_diff","component_byte_length":21743,"component_sha256":"ee3550b677db1039512c488101008c5d8709d0bc8f890e9c22685b75746e001b","byte_start":0,"byte_end":253,"fragment_sha256":"7ea3293a5e9f407595b582402840eb6b43313759f42aa721ac3c4573da9c163f","range_status":"partial"},{"path":"docs/journal/architect_consult_routing_design.md","component_kind":"per_file_diff","component_byte_length":21743,"component_sha256":"ee3550b677db1039512c488101008c5d8709d0bc8f890e9c22685b75746e001b","byte_start":253,"byte_end":21743,"fragment_sha256":"ee27dd61ed8258764a00fd206d658306690e27b3175f6401b44ba216648ee276","range_status":"partial"}]}`
+- Reply-SHA256: `4d1ef2b7a99d8ca22ae06fb0353aeffcb0e3f3d44c17813895817afc3c094d5f`
+- Completion-Token-SHA256: `c713356dc41e40fe913de5b39d15e5d7636137208f6c0b9d8a6a22b8274d1c28`
+- Reply-UTF8-Base64: `VGhlIGNhbmRpZGF0ZSBtb2RpZmljYXRpb25zIHRvIHRoZSBUMiBhcmNoaXRlY3QgY29uc3VsdCByb3V0aW5nIGRlc2lnbiBoYXZlIGJlZW4gcmV2aWV3ZWQgYWdhaW5zdCB0aGUgZnJvemVuIGJhc2UgYW5kIHN1cHBsaWVkIGNvcmUgaW52YXJpYW50cy4gVGhlIHN0cnVjdHVyYWwgY2hhbmdlcyBjb3JyZWN0bHkgdHJhbnNpdGlvbiB0aGUgcm9sZSBmcm9tIGFuIGFkdmlzb3J5IGNvbnN1bHQgdG8gYSBwZXJzaXN0ZW50IFByb2plY3QgUHJpbmNpcGFsIGFjdGluZyBhcyBhIGRlbGVnYXRlZCBnZW5lcmFsIGNvbnRyYWN0b3IuIFRoZSBwcm9wb3NlZCBwb2xpY3kgZXhwbGljaXRseSBib3VuZHMgdGhpcyBuZXcgYXV0aG9yaXR5LCBwcmV2ZW50aW5nIGl0IGZyb20gZXhjZWVkaW5nIGV4aXN0aW5nIE93bmVyIGxpbWl0cyBvciBtYXNraW5nIGlycmV2ZXJzaWJsZSB0aWVyIGNoYW5nZXMsIGRlcGxveW1lbnRzLCBvciBsaXZlIHdyaXRlcy4KClRoZSBpbXBsZW1lbnRhdGlvbiBjb25zdHJhaW50cyBhcmUgcm9idXN0LCBleHBsaWNpdGx5IGZvcmJpZGRpbmcgdGhlIGFkZGl0aW9uIG9mIGEgc2Vjb25kIGV4ZWN1dGlvbiBjb21tYW5kIGNoYWluLCBhbiB1bnZlcmlmaWVkIGdlbmVyaWMgcGVybWlzc2lvbiBjb250cm9sbGVyLCBvciBiYWNrZ3JvdW5kIHRpbWVkIHRhc2tzL3NjaGVkdWxlcnMsIHRoZXJlYnkgcHJlc2VydmluZyBleGlzdGluZyBmYWlsLWNsb3NlZCBnYXRlIGFuZCBidWRnZXQgcnVsZXMuIFRoZSBuYXJyb3cgaW50cm9kdWN0aW9uIG9mIHNlYXQuc3Vic3RpdHV0aW9uLmFyY2hpdGVjdF9ldmlkZW5jZSBpcyBzYWZlbHkgc2NvcGVkLCBzcGVjaWZpY2FsbHkgcmVqZWN0aW5nIGNvbmZpZ3VyYXRpb25zIHRoYXQgdmlvbGF0ZSB0aGUgaW5kZXBlbmRlbnQgZmFtaWx5IGZsb29yIChzdWNoIGFzIHNhbWUtZmFtaWx5LW9ubHkgcm9zdGVycykgYW5kIHByZXNlcnZpbmcgbGVnYWN5IE93bmVyIGZhbGxiYWNrIHJlcXVpcmVtZW50cy4gVGhlIGRlc2lnbiBleGhpYml0cyBubyBjb250cmFjdC12cy1kZXNpZ24gZHJpZnQgb3IgcHJlY2VkZW5jZSBtYXNraW5nIGJ1Z3MuIFJlZmVyZW5jZSB0byBleHRlcm5hbCBjb250ZXh0LCBpbmNsdWRpbmcgdGhlIHVzZXItc3BlY2lmaWVkIDAwMDIudHh0LCB5aWVsZHMgbm8gdW5taXRpZ2F0ZWQgY29uY3JldGUgcmVhY2hhYmxlIGhhcm1zLgoKVkVSRElDVDogR08KCklOU1BFQ1RFRCBTQ09QRTogeyJzbGljZSI6ImNyb3NzLWJvdW5kYXJ5LWZpbmFsIiwiZ2F0ZV9raW5kIjoiYmFzZS4uY2FuZGlkYXRlX2NoYW5nZSIsImJhc2UiOiJiMDkxYWZjZTAyOWEwMjViNmRmNmQxNDE5OGY2YWNiNDM4ZTA2MGE5IiwiY2FuZGlkYXRlIjoiYWExNTM4YzY2ODUyYWJlOTVhNWMzZDZkMGU0MmJiMTg2MTIxYWE1MSIsInRyZWUiOiI1MTA2NTcyOTQyYTg2MDUxYTA2YzgxZTdiOGIwOWRjNmE0NDFlYTAxIiwiZmlsZXMiOlsiZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kIl0sImNvbnRyYWN0X2NvbnRleHQiOlsiZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kIl0sImludmFyaWFudHMiOlsiY29yZS9JTlZBUklBTlRTLm1kIiwiY29yZS9SRVBPX0lOVkFSSUFOVFMubWQiXSwibWF0ZXJpYWxfc2hhMjU2IjoiYjI5YzVhNWVhMmU0OTM5MDgwMjIzMTQwYzgyZGM0YjhjNjI4MGU2ZTlhNDUyYWIxYWUwNjIwMGZjYWEyMTRlYSIsInNsaWNlX2tpbmQiOiJjcm9zc19ib3VuZGFyeSIsIm1hdGVyaWFsX21vZGUiOiJ2ZXJpZmllZF9mcmFnbWVudHMiLCJleGFjdF9wZXJfZmlsZV9kaWZmX3RyYW5zaXRpb25fZXZpZGVuY2UiOnRydWUsImZyYWdtZW50cyI6W3sicGF0aCI6ImRvY3Mvam91cm5hbC9hcmNoaXRlY3RfY29uc3VsdF9yb3V0aW5nX2Rlc2lnbi5tZCIsImNvbXBvbmVudF9raW5kIjoiZnJvemVuX3NvdXJjZSIsImNvbXBvbmVudF9ieXRlX2xlbmd0aCI6MTcwNDUsImNvbXBvbmVudF9zaGEyNTYiOiIwMWEwMzkzZjM5NDY4OTE4NjZiNjRkMjkwMmY4N2NjZGYyMmM4YWQ2Mzg4YzUzMjljNTNhMDMzN2ExOGFjN2QzIiwiYnl0ZV9zdGFydCI6MCwiYnl0ZV9lbmQiOjE3MDQ1LCJmcmFnbWVudF9zaGEyNTYiOiIwMWEwMzkzZjM5NDY4OTE4NjZiNjRkMjkwMmY4N2NjZGYyMmM4YWQ2Mzg4YzUzMjljNTNhMDMzN2ExOGFjN2QzIiwicmFuZ2Vfc3RhdHVzIjoid2hvbGUifSx7InBhdGgiOiJkb2NzL2pvdXJuYWwvYXJjaGl0ZWN0X2NvbnN1bHRfcm91dGluZ19kZXNpZ24ubWQiLCJjb21wb25lbnRfa2luZCI6InBlcl9maWxlX2RpZmYiLCJjb21wb25lbnRfYnl0ZV9sZW5ndGgiOjIxNzQzLCJjb21wb25lbnRfc2hhMjU2IjoiZWUzNTUwYjY3N2RiMTAzOTUxMmM0ODgxMDEwMDhjNWQ4NzA5ZDBiYzhmODkwZTljMjI2ODViNzU3NDZlMDAxYiIsImJ5dGVfc3RhcnQiOjAsImJ5dGVfZW5kIjoyNTMsImZyYWdtZW50X3NoYTI1NiI6IjdlYTMyOTNhNWU5ZjQwNzU5NWI1ODI0MDI4NDBlYjZiNDMzMTM3NTlmNDJhYTcyMWFjM2M0NTczZGE5YzE2M2YiLCJyYW5nZV9zdGF0dXMiOiJwYXJ0aWFsIn0seyJwYXRoIjoiZG9jcy9qb3VybmFsL2FyY2hpdGVjdF9jb25zdWx0X3JvdXRpbmdfZGVzaWduLm1kIiwiY29tcG9uZW50X2tpbmQiOiJwZXJfZmlsZV9kaWZmIiwiY29tcG9uZW50X2J5dGVfbGVuZ3RoIjoyMTc0MywiY29tcG9uZW50X3NoYTI1NiI6ImVlMzU1MGI2NzdkYjEwMzk1MTJjNDg4MTAxMDA4YzVkODcwOWQwYmM4Zjg5MGU5YzIyNjg1Yjc1NzQ2ZTAwMWIiLCJieXRlX3N0YXJ0IjoyNTMsImJ5dGVfZW5kIjoyMTc0MywiZnJhZ21lbnRfc2hhMjU2IjoiZWUyN2RkNjFlZDgyNTg3NjRhMDBmZDIwNmQ2NTgzMDY2OTBlMjdiMzE3NWY2NDAxYjQ0YmEyMTY2NDhlZTI3NiIsInJhbmdlX3N0YXR1cyI6InBhcnRpYWwifV19CgpJTkdFU1RJT04gUFJPT0Y6IFBJTC1JTkdFU1QtSEVBRC0xYmMyNDY3ZGRmMGRhMmM4ZDRkMjg5ZTMgfCBQSUwtSU5HRVNULU1JRERMRS02ZjZjNDFjMjRlYjE5ZWQ0YmYxMmExMWMgfCBQSUwtSU5HRVNULUVPRi03NDZkODc3ZWI3NDJiYzM0MDdlNmU2NTIKClBJTC1ET05FLWM3ZjVlYjhkMDMyMjcxOGQyOTQ5OTgwMg==`
+- Record-SHA256: `59d83b21079c991d1ace997521eb8d0cbf3ce6c68e707fbabd34ea29ac399c4f`
+- Complete-Record: `YES`
+
+## Gemini frozen gate attempt — PASS_VERDICT — 2026-09-16T22:36:32.126Z
+
+- Status: `PASS_VERDICT`
+- Record-Kind: `SLICE_SET`
+- Release-Gate: `YES`
+- Transport: `operator-attested-manual-gemini-subscription-v1`
+- Transport-Identity: `operator-attested-manual-gemini-subscription-v1|gemini-3.1-pro-high`
+- Model: `gemini-3.1-pro-high`
+- Handoff-ID: `PIL-GEMINI-HANDOFF-18f4062cb633eec50447a848`
+- Attempt-ID: `PIL-MANUAL-AGGREGATE-18f4062cb633eec50447a848`
+- Rig-ID: `codex-desktop-manual-gemini`
+- Rig-Key: `efe65df400822cffb23ba4a5922d2561ff3e684b4393e01355513f3cab127363`
+- Failure-Class: `(none)`
+- Base: `b091afce029a025b6df6d14198f6acb438e060a9`
+- Candidate: `aa1538c66852abe95a5c3d6d0e42bb186121aa51`
+- Tree: `5106572942a86051a06c81e7b8b09dc6a441ea01`
+- Plan-ID: `96ae8c5d69e8497b4b904be6355baec7ff30e1786cad485cb542479c5e0f7162`
+- Slice: `aggregate`
+- Material-SHA256: `152dee63e2928bf1fb21d265e9ffe61524bf59c6b866161645f90ccd42c188f2`
+- Envelope-SHA256: `a8a39f15f88704494486da6bdf1e6fe44d1ba68bdccacade56dde54f22d4c6ef`
+- Envelope-Bytes: `143030`
+- Ordered-Contributors: `PIL-MANUAL-18f4062cb633eec50447a848-0001,PIL-MANUAL-18f4062cb633eec50447a848-0002`
+- Gate-Verdict: `GO`
+- Inspected-Scope: `{"slice":"aggregate","base":"b091afce029a025b6df6d14198f6acb438e060a9","candidate":"aa1538c66852abe95a5c3d6d0e42bb186121aa51","tree":"5106572942a86051a06c81e7b8b09dc6a441ea01","plan_id":"96ae8c5d69e8497b4b904be6355baec7ff30e1786cad485cb542479c5e0f7162","material_sha256":"152dee63e2928bf1fb21d265e9ffe61524bf59c6b866161645f90ccd42c188f2","contributors":[{"attempt_id":"PIL-MANUAL-18f4062cb633eec50447a848-0001","slice":"coverage-001","verdict":"GO","material_sha256":"31cb3eee9aa632e85323d08e7eb80b0832c3dbf73bc47b80eb3e470fda0f8b4a","reply_sha256":"e222318447b5e66e53e45d65e3cca81df917a91b41a20f9cc67f2c5da2dcb912","inspected_scope_sha256":"7eee6879b2b67861102045de9515a295634f755daff7593111b5619d21f2cb7d"},{"attempt_id":"PIL-MANUAL-18f4062cb633eec50447a848-0002","slice":"cross-boundary-final","verdict":"GO","material_sha256":"b29c5a5ea2e4939080223140c82dc4b8c6280e6e9a452ab1ae06200fcaa214ea","reply_sha256":"4d1ef2b7a99d8ca22ae06fb0353aeffcb0e3f3d44c17813895817afc3c094d5f","inspected_scope_sha256":"33171c453540a77bd210391ec03f597e57be03058b73550a1ad9b8080adc0196"}],"unresolved_attribution":[]}`
+- Aggregate-Result-SHA256: `32bb640297c420cd8b2496216d57238d265ece5840d98d19d14b7373b475236e`
+- Aggregate-Result: `assembled verified slice results; no model reply`
+- Record-SHA256: `9986b0c052e92a9507ecd6067817f639b84a074d322a99dd453845645e3cd089`
 - Complete-Record: `YES`

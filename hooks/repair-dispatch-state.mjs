@@ -530,10 +530,25 @@ function expectedSeatShape(seat, changedPaths) {
   const paths = sortedPaths(seat.paths);
   if (!paths || paths.some((entry) => !changedPaths.includes(entry))) return false;
   if (seat.substitution === undefined || seat.substitution === null) return true;
-  return plain(seat.substitution) && seat.substitution.replaced_family === seat.family &&
-    text(seat.substitution.actual_family, 120) && seat.substitution.actual_family !== seat.family &&
-    text(seat.substitution.owner_evidence, 1000) &&
-    ["full", "one-family", "same-family-only"].includes(seat.substitution.decorrelation_level);
+  const substitution = seat.substitution;
+  if (!plain(substitution) || substitution.replaced_family !== seat.family ||
+      !text(substitution.actual_family, 120) || substitution.actual_family === seat.family ||
+      !["full", "one-family", "same-family-only"].includes(substitution.decorrelation_level)) return false;
+  // Owner evidence preserves the legacy exceptional path. Architect evidence is a deliberately
+  // narrow documentary record: it binds an ordinary reviewer replacement, but cannot turn a
+  // principal decision into either identity authentication or reduced-family risk acceptance.
+  const ownerAuthorized = text(substitution.owner_evidence, 1000) &&
+    substitution.architect_evidence === undefined;
+  const evidence = substitution.architect_evidence;
+  const architectAuthorized = substitution.owner_evidence === undefined && seat.role !== "free" &&
+    substitution.decorrelation_level !== "same-family-only" && text(substitution.provider, 120) &&
+    text(substitution.model, 200) && plain(evidence) && text(evidence.authority_record, 500) &&
+    text(evidence.decision_id, 200) && evidence.scope === "review-seat-substitution" &&
+    evidence.seat_id === seat.seat_id && evidence.replaced_family === seat.family &&
+    evidence.actual_family === substitution.actual_family &&
+    evidence.decorrelation_level === substitution.decorrelation_level &&
+    evidence.provider === substitution.provider && evidence.model === substitution.model;
+  return ownerAuthorized || architectAuthorized;
 }
 
 function receivedSeatShape(received) {
@@ -572,7 +587,8 @@ function expectedPanelShape(tier, seats, changedPaths) {
   const families = new Set(seats.map((seat) =>
     String(seat.substitution?.actual_family || seat.family).toLowerCase()));
   const sameFamilyAuthorized = seats.some((seat) =>
-    seat.substitution?.decorrelation_level === "same-family-only");
+    seat.substitution?.decorrelation_level === "same-family-only" &&
+    text(seat.substitution?.owner_evidence, 1000) && seat.substitution?.architect_evidence === undefined);
   return free?.pass_type === "free" && same(free.paths, changedPaths) &&
     seats.filter((seat) => seat.role === "free").length === 1 &&
     seats.filter((seat) => seat.role.startsWith("angle:")).every((seat) => seat.pass_type === "free") &&
