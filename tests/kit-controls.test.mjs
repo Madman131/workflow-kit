@@ -818,6 +818,29 @@ test("an obstructed repo-local architect skill fails while downstream hook contr
   }
 });
 
+test("an obstructed Claude mechanism shim fails while downstream hook controls still install", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-architect-shim-obstruct-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-architect-shim-obstruct-codex-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const obstruction = path.join(dir, ".claude", "skills", "architect-build");
+    mkdirSync(path.dirname(obstruction), { recursive: true });
+    writeFileSync(obstruction, "not a skill directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(r.status, 1, "an unavailable Claude execution-method shim makes adoption nonzero");
+    const output = r.stdout + r.stderr;
+    assert.match(output, /mechanism skill "architect-build" Claude shim/, "the named unavailable mechanism is reported");
+    assert.match(output, /repo-local mechanism skill artifact\(s\) could NOT install/, "the failure reaches final status");
+    assert.ok(existsSync(path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs")), "downstream hook files still install");
+    const settings = JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
+    assert.ok((settings.hooks?.PreToolUse || []).length > 0, "downstream hook registrations still install");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
+});
+
 test("init installs the frontier-review skill + reviewer agents; the tools: [] cage survives verbatim", () => {
   const { dir, codexDir, run, cleanup } = adopt();
   try {

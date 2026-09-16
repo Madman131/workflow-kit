@@ -1183,7 +1183,20 @@ function main() {
     }
     for (const name of claudeShims) {
       const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
-      copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, MECHANISM_SKILLS.has(name));
+      const mechanism = MECHANISM_SKILLS.has(name);
+      try {
+        const status = copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, mechanism);
+        if (status === "refused" && mechanism) {
+          mechanismSkillInstallFailures.push(dst);
+          warn(`could not install repo-local mechanism skill "${name}" Claude shim at ${dst} (REFUSED) — controls still install, but this mechanism is unavailable`);
+          continue;
+        }
+      } catch (e) {
+        if (!mechanism) throw e;
+        mechanismSkillInstallFailures.push(dst);
+        warn(`could not install repo-local mechanism skill "${name}" Claude shim at ${dst} (${e && (e.code || e.message) || "error"}) — controls still install, but this mechanism is unavailable`);
+        continue;
+      }
       installedShims.push(["claude", name, dst]);
     }
     log(bodyNames.length || claudeShims.length
