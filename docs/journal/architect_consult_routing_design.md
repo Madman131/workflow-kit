@@ -1,10 +1,10 @@
-# Architect consult routing — pre-implementation T2 brief
+# Architect project-principal routing — pre-implementation T2 brief
 
 **Status:** pre-implementation design; no doctrine, skill, template, test, controller, or scheduler
-has changed.
+has changed. This supersedes the earlier advisory-architect proposal.
 **Source packet:** `/private/tmp/workflow-kit-architect-consult-policy/`, SHA-256 verified on
 2026-09-16. The packet informs this design; it is not adopted wording.
-**Candidate base:** `332da81d71842841e51ecc26db6c129cb0026b59`.
+**Candidate base:** `b091afce029a025b6df6d14198f6acb438e060a9`.
 
 ## Rung Zero — classification, intent, and proof
 
@@ -14,19 +14,18 @@ follow when selecting a consult, including a gate checkpoint, so it is FULL T2 u
 Owner wording sign-off, and an adversarial walk-through for gate machinery. The same section requires
 the T2 pre-code contract lens before code exists; this brief is that contract, not a discharged gate.
 
-**Intent:** add one portable consult-routing policy with two destinations and a small
-`/architect-build` companion skill. The skill establishes, reuses, or recovers the persistent
-architect and hands an approved baseline to a separate `/orchestrate` PM. A compact core anchor points
-to one installed skill reference layer rather than duplicating the routing rule. Neither artifact creates a second controller, scheduler,
-review path, or implementation authority.
+**Intent:** establish one persistent **Architect / Project Principal** as the Owner's delegated general
+contractor. It holds the approved blueprint/endpoints/acceptance evidence, drives the project through
+completion, directs a separate `/orchestrate` PM, and makes bounded nonreserved program decisions. The PM
+remains the sole execution and worker-command chain; the Builder retains protected source authoring. The
+Principal is not a second PM, scheduler, or implementation lane.
 
 **Done:** a future implementation makes the destination decision unambiguous, establishes a clean
 architect-to-PM handoff, and preserves the existing fourth-gate and frontier-budget rules. It keeps
-architectural continuity in a durable record, lets routine CHIP progress update that record without
-contacting the architect, and uses architect reasoning only at meaningful milestones or qualifying
-architectural triggers. It supports an approved-baseline recovery when an architect task is missing;
-the PM remains the sole execution command chain. Program-specific task names and model bindings stay
-outside kit doctrine.
+architectural continuity in a durable record, lets routine CHIP progress proceed without contacting either
+Principal or Owner, and routes nonroutine program decisions to the Principal. It supports an
+approved-baseline recovery when the Principal task is missing; valid directives remain usable and no acting
+Principal or second PM is minted. Program-specific task names and model bindings stay outside kit doctrine.
 
 **Proof required before the implementation is accepted:**
 
@@ -55,10 +54,11 @@ brief. Any remote publication still needs a fresh Owner GO for the exact head an
 
 1. **Internal active consult** is the default: a bounded, current-candidate consultation inside the
    approved chip. It has no durable work authority.
-2. **Persistent architect** is a durable program-level task and record for questions that outgrow the
-   chip. It preserves a recommendation and unresolved decisions for later Owner/PM consideration. It is
-   advisory, not a scheduler, controller, or second implementation lane; the separate PM remains the
-   single execution command chain.
+2. **Persistent Architect / Project Principal** is the durable program-level task and record for questions
+   that outgrow the chip. It is the Owner's delegated general contractor: within the accepted baseline it
+   directs the PM, settles ordinary program judgment, issues bounded directives/permits, and carries the
+   blueprint through completion. It is not a scheduler, second PM, or source-authoring lane; the separate
+   PM remains the single execution command chain.
 
 Internal triggers are a current-chip design tradeoff, root-cause correction, required gate/process
 checkpoint, disputed technical ruling, or another bounded question inside approved scope. Routine
@@ -97,19 +97,21 @@ Owner-reserved decision sought or `none — PM disposition within existing autho
 additionally names current gate/round, candidate, panel close, lineage, and proposed action. A persistent
 packet additionally carries the durable baseline, latest decisions, and the last program-alignment check.
 
-A response must state a recommendation, supporting evidence, tradeoffs, unresolved risks, confidence or
-insufficiency, Rule #1/KISS/root-cause assessment, program fit, the smallest next action, stop condition,
-and the Owner-reserved decision when one exists. It must state the exact decision boundary it does not
-cross. The PM records **adopt / adapt / decline**, with reason, outcome, and next evidence. Portable core
-wording names the PM role, not a model. A response is advisory input, never an instruction or
-implementation authorization.
+A Principal response states its directive or decision, supporting evidence, tradeoffs, unresolved risks,
+Rule #1/KISS/root-cause assessment, program fit, smallest next action, stop condition, and any
+Owner-reserved decision. The PM records execution/disposition, reason, outcome, and next evidence. A
+valid Principal directive binds the PM inside its stated envelope; ordinary reviews and consults remain
+advisory evidence only.
 
 ### Continuity, establishment, and recovery
 
-The durable record minimally names the program/repository identity; architect and active-PM locator, or
-their file-only equivalents; approved baseline and source pointers; accepted decisions separately from
-pending recommendations; current phase/CHIP; unresolved decisions; last alignment check; and any
-reconciliation owed. `/architect-build` inspects that record before creating a task. It establishes an
+The durable record names the Owner delegation source; program/repository and outcome boundaries;
+architect and active-PM locator, or file-only equivalents; approved baseline/source pointers; applicable
+access/egress and budget limits; accepted decisions separately from pending advice; current phase/CHIP;
+unresolved decisions; last alignment check; and reconciliation owed. Each material decision records its
+id/date/type (`advice`, `architect-decision`, or `owner-required`), decision-maker/delegation reference,
+question, baseline/candidate, evidence, limits/stop condition, PM execution status, and resulting evidence.
+`/architect-build` inspects that record before creating a task. It establishes an
 architect during planning, reuses an existing architect when its identity and approved baseline are
 current, or reconstructs file-only continuity from the record and current evidence. Recovery never
 promotes pending advice to an approved decision, creates a replacement or acting architect, or creates a
@@ -119,16 +121,27 @@ the next meaningful checkpoint.
 
 ### Authority, fallback, and portability
 
-The Owner retains intent and critical design decisions, material scope or budget, risk acceptance,
-credentials, irreversible or live writes, tier changes where Owner ratification is required, pushes,
-deployments, and unresolved terminal decisions. The PM retains only ordinary in-scope disposition and
-local execution authority already granted by the method.
+The Owner retains initial intent/outcomes/acceptance/baseline/launch; material intent, outcome, scope, or
+budget changes; truly critical product decisions; credentials; destructive/irreversible acts; explicit risk
+acceptance; exact push/deploy/publication and production/live/external-write GOs; and the terminal
+exhausted-surface completion exception. The Principal decides in-baseline tier, topology, model/seat,
+gate-routing, ordinary successor/worker-continuation, sequencing, and bounded private external-gate
+transmission. The PM automatically performs routine reversible baseline work and executes valid Principal
+directives, but holds only the conflicting/uncovered dependency.
 
-If the persistent architect is unavailable, do not mint an acting architect. Continue independent authorized
-work and hold only the dependent decision. An existing defined consult can be advisory input but neither
-replaces persistent continuity nor discharges it; an existing gate review keeps its own obligation. Later
-reconcile the record, PM disposition, and outcomes with the persistent architect. If an active consult is
-unavailable when a gate requires it, existing fail-closed gate and Owner-escalation rules apply.
+No generic permit/controller subsystem is added. The only demonstrated controller mismatch is a review-seat
+substitution that accepts only `owner_evidence`. It gains a narrow typed `architect_evidence` alternative:
+authority reference, decision id, scope/provider/model binding, and an explicit marker that it is not Owner
+evidence. It is valid only for an eligible non-spine review substitution and retains the existing role,
+family, effort, scope, packet, decorrelation, and budget checks. Terminal continuation/close, gate waiver,
+Owner extension, release, deployment, publication, and live writes never accept it. Documentary decisions
+are not authenticated identity proofs and do not invent expiry or numeric budgets.
+
+If the Principal is unavailable, do not mint an acting architect. Continue independent authorized work and
+execute still-valid recorded decisions; hold only a decision not covered by a decision. An existing defined consult
+is evidence, neither replacement Principal nor discharge of continuity; an existing gate keeps its own
+obligation. Later reconcile the record, PM disposition, and outcomes with the persistent Principal. If an
+active consult is unavailable when a gate requires it, existing fail-closed gate rules apply.
 
 Cross-session messaging is optional harness plumbing. In a portable or degraded environment, the durable
 record, file brief, and consult entry are the record of continuity. The policy must not claim an automated
@@ -139,7 +152,7 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 | Planned file | Purpose |
 | --- | --- |
 | `core/WORKFLOW.md` | Compact authoritative anchor: the installed companion reference owns detailed routing; PM stays the execution chain. |
-| `skills/architect-build/ROUTING.md` | Installed reference layer for triggers, packet currency, fourth-gate eligibility, advisory authority, cadence, and fallback. |
+| `skills/architect-build/ROUTING.md` | Installed reference layer for triggers, packet currency, fourth-gate eligibility, delegated authority, cadence, and fallback. |
 | `skills/orchestrate/SKILL.md` | A short operational pointer to the core rule, durable baseline/latest-decision record, and degraded reconciliation practice. |
 | `skills/architect-build/SKILL.md` | Establish, reuse, or recover the persistent architect; maintain the durable record; produce the approved-baseline handoff to a separate PM; point to the core routing rule. |
 | `skill-shims/claude/architect-build.md` and `skill-shims/codex/architect-build.md` | Discover the one canonical companion-skill body in each harness. |
@@ -147,9 +160,7 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 
 **Explicit cuts from the source proposal:**
 
-- `core/GATES.md` is cut unless implementation uncovers an actual ambiguity in budget accounting. The
-  proposed rule changes routing semantics, not runner invocation or budget arithmetic; duplicating it in
-  the tool manual would create two authorities.
+- `core/GATES.md` receives only any required compact pointer; it remains the runner/budget authority.
 - `skills/frontier-review/SKILL.md` is cut unless its existing wording cannot point to the authoritative
   rule without contradicting it. The active-consult budget remains there; detailed destination policy
   belongs in the installed `/architect-build` reference layer.
@@ -157,8 +168,8 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
   The policy requires no new portable role field, and exact model identity is adopter data.
 - No program task name, including the NexusBot architect task, belongs in Workflow-Kit core. Program
   binding and operating records remain with the adopting program.
-- No controller, scheduler, daemon, transport, or new review seat is planned. Existing review and
-  disposition mechanics remain authoritative.
+- No scheduler, daemon, transport, generic permission service, or new review seat is planned. Existing
+  review and disposition mechanics remain authoritative except the narrow substitution receipt.
 
 ## Adversarial walkthrough cases
 
@@ -168,7 +179,8 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 | A broad question looks convenient to answer inside a normal current-chip review. | Use the internal consult; below-trigger questions do not contact the persistent architect unless an existing gate owes its own seat. |
 | Routine CHIP progress is recorded with no material trigger or meaningful milestone. | Update the durable record without contacting the architect. |
 | The persistent architect is unavailable at the first safe checkpoint after five active workdays. | Continue independent authorized work, hold only the dependent decision, and reconcile the record and outcome with the persistent architect when available; do not create a replacement architect. |
-| A consult recommends changing scope, tier, live behavior, or publication. | Treat it as advisory; stop at the relevant Owner boundary rather than executing or treating the response as a verdict. |
+| A Principal decides an in-envelope implementation direction or eligible substitution. | PM records `acknowledged/executing/completed` and executes through normal gates; it returns any concrete safeguard conflict rather than silently declining. |
+| A Principal proposes an outcome/scope/risk, live behavior, or publication change. | Stop at the Owner boundary; Principal authority does not cross it. |
 | A degraded adopter has no cross-session message transport. | Preserve the common packet and disposition in the durable record/file brief; do not imply a scheduler or automatic handoff. |
 | A repair round attempts to count a persistent response and an active consult as two frontier firings. | Use one combined response where overlap is present; do not spend or duplicate discretionary frontier budget, add a batch, or grant authority. |
 | A restart finds a stale architect locator or an unresolved recommendation. | Inspect the durable record and current evidence before creating/reusing a seat; preserve one PM chain, keep the recommendation pending, and hold only dependent authority until reconciliation. |
@@ -176,7 +188,7 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 ## Stop rules for implementation
 
 Stop and return to the Owner before implementation if the proposed text requires a new model binding,
-transport mechanism, scheduler/controller, a second review seat, a change to the existing frontier budget,
-or a program-specific authority decision. Stop if core and skill wording cannot be made one-home-per-rule,
+transport mechanism, scheduler/controller beyond the demonstrated substitution receipt, a second review
+seat, or a change to the existing frontier budget. Stop if core and skill wording cannot be made one-home-per-rule,
 or if any gate finding shows an implementer could use the text to bypass a required review or Owner
 boundary. This brief itself authorizes neither implementation nor publication.

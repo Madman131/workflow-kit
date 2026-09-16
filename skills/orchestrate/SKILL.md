@@ -15,10 +15,11 @@ formatting).
 For a multi-thread program with separate gates. One chip = one changeset = one version,
 ordered; each verifies its predecessor landed. Never let two chips write one repo.
 
-## The three roles
+## The roles
 | Role | Owns | Never |
 |---|---|---|
 | **Owner** | approved plan and the decisions § Routing reserves | asked to run the method |
+| **Principal** | delegated program direction, continuity and closeout | worker dispatch, protected source, remote GO |
 | **Workhorse PM** | worker/chip dispatch, briefs, rulings, fold-checks, local integration, lesson bank | authors designated Builder source or gives remote GO |
 | **Builder** | its raw T2/T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
 
@@ -35,22 +36,25 @@ integrate Builder-authored bytes but never authors designated T2/T3 source. One 
 tier, risk and that routine authority; do not re-ask unchanged authority. Drafting a ticket does not
 authorize its implementation; the PM cannot relabel an unfinished repair as new scope.
 
-Only the Owner decides critical design/intent/risk, material scope/budget, credentials,
-destructive/irreversible acts, named live-write GO, fresh remote push/deploy GO, and an unresolved
-terminal decision. A chip routes those calls to the PM using `CONSULT:` or `RULING NEEDED:`; the
+For a program with recorded Owner delegation, Principal decides nonreserved in-envelope program questions
+and its decisions bind PM; reviews remain evidence. PM proceeds on covered work and returns a safeguard
+conflict, never silently declining. Owner alone decides product intent/risk, material scope/budget,
+credentials, destructive/irreversible acts, named live-write GO, remote push/deploy
+GO, terminal exception, gate waiver, max/ultra, second frontier firing and cap increase. A chip routes
+those calls through PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
 An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a
 consult or a wait:** send it, name what you do meanwhile, and do it.
 
 ## Standing duties
 - Before PM local integration in a primary clone, it must be clean, on the target branch, and the
-  candidate must be a pure fast-forward; otherwise report the divergence for an Owner decision.
+  candidate must be a pure fast-forward; otherwise Principal selects reconciliation or Owner decides.
 - Surface landed/stale worktrees and branches; use the merge-type proof and occupancy refusal in
   `.agents/skills/orchestrate/PROTOCOLS.md`.
 - When a program has a persistent architect, use `core/WORKFLOW.md` § Architectural consult routing and
   its installed `/architect-build` reference layer.
-  Keep routine CHIP progress in its durable record; consult only at the listed milestone/material
-  triggers. The architect advises; the PM remains the single execution command chain.
+  Keep routine CHIP progress in its durable record; consult only at listed triggers. Principal drives
+  completion; PM remains the single execution command chain.
 
 ## One writer per repo
 Before writing, a chip looks for competing writers in the repo's own **lane declarations** —
