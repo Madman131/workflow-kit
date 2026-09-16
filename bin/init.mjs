@@ -1221,22 +1221,29 @@ function main() {
     let cInstalled = 0, cKept = 0, cFailed = 0;
     for (const name of codexShims) {
       const dst = path.join(args.codexPromptsDir, `${name}.md`);
+      const mechanism = MECHANISM_SKILLS.has(name);
       // The Codex prompts dir is a FLAT, user-global namespace shared with the command prompts
       // (/thread-restart). A skill whose name collides would silently replace a command under --force.
       // Refuse rather than clobber: a kit-authoring mistake, caught at the one moment anyone is looking.
       if (existsSync(path.join(KIT_ROOT, "commands", "codex", `${name}.md`))) {
         warn(`skill shim "${name}" collides with the Codex COMMAND prompt of the same name — skipped. Rename the skill in skill-shims/codex/ (this dir is a flat user-global namespace).`);
         cFailed++;
+        if (mechanism) mechanismSkillInstallFailures.push(dst);
         continue;
       }
       // Failure-ISOLATED, exactly like the /thread-restart Codex prompt: this is the ONE install
       // target outside the repo, and an unwritable ~/.codex must never abort a mostly-complete adopt.
       try {
-        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force, MECHANISM_SKILLS.has(name)) === "written") cInstalled++; else cKept++;
+        if (copyGuarded(path.join(shimsSrc, "codex", `${name}.md`), dst, force, mechanism) === "written") cInstalled++; else cKept++;
         installedShims.push(["codex", name, dst]);
       } catch (e) {
         cFailed++;
-        warn(`could not install the Codex skill prompt ${dst} (${e && (e.code || e.message) || "error"}) — the repo-local bodies + Claude shims are unaffected; pass --codex-prompts-dir <writable dir> or --skip-codex-prompt to silence this`);
+        if (mechanism) {
+          mechanismSkillInstallFailures.push(dst);
+          warn(`could not install repo-local mechanism skill "${name}" Codex shim at ${dst} (${e && (e.code || e.message) || "error"}) — controls still install, but this mechanism is unavailable`);
+        } else {
+          warn(`could not install the Codex skill prompt ${dst} (${e && (e.code || e.message) || "error"}) — the repo-local bodies + Claude shims are unaffected; pass --codex-prompts-dir <writable dir> or --skip-codex-prompt to silence this`);
+        }
       }
     }
     if (codexShims.length) {
