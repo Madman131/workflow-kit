@@ -1154,13 +1154,33 @@ function main() {
   // Track the INSTALLED shim path per lane+name, so verification below reads what the harness will
   // actually load rather than what the kit shipped.
   const installedShims = [];
+  // A repo-local mechanism skill that could not install is a failing delivery state, but it cannot
+  // abort the later hook registration. Keep the exception identity for final status after controls
+  // install; personal/adopter-owned skill failures retain the existing failure-isolated behavior.
+  const mechanismSkillInstallFailures = [];
+  const unresolvedMechanismShims = [];
   // Failure-ISOLATED like the Codex prompt, and for a sharper reason: this whole block is a NUDGE,
   // and step 5 below — registering the guards in settings.json — is a CONTROL. An ENOTDIR from a
   // `.claude/skills` that happens to be a regular file, or a broken symlink under `.agents/skills`,
   // must not abort the run before the guards are registered, which would leave hook files on disk
   // with zero registrations: exactly the silent fail-open mergeSettings' own read-back exists to stop.
   try {
-    for (const name of bodyNames) copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force, () => true, MECHANISM_SKILLS.has(name));
+    for (const name of bodyNames) {
+      const mechanism = MECHANISM_SKILLS.has(name);
+      try {
+        const results = copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force, () => true, mechanism);
+        if (mechanism) {
+          for (const [dst, status] of results) {
+            if (status === "refused") mechanismSkillInstallFailures.push(dst);
+          }
+        }
+      } catch (e) {
+        if (!mechanism) throw e;
+        const dst = path.join(T, ".agents", "skills", name);
+        mechanismSkillInstallFailures.push(dst);
+        warn(`could not install repo-local mechanism skill "${name}" at ${dst} (${e && (e.code || e.message) || "error"}) — controls still install, but this mechanism is unavailable`);
+      }
+    }
     for (const name of claudeShims) {
       const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
       copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, MECHANISM_SKILLS.has(name));
@@ -1225,17 +1245,24 @@ function main() {
   for (const [lane, name, dst] of installedShims) {
     let text;
     try { text = readFileSync(dst, "utf8"); }
-    catch { warn(`${lane} skill shim "${name}" could not be read back at ${dst} — its body reference is UNVERIFIED`); dangling++; continue; }
+    catch {
+      warn(`${lane} skill shim "${name}" could not be read back at ${dst} — its body reference is UNVERIFIED`);
+      dangling++;
+      if (MECHANISM_SKILLS.has(name)) unresolvedMechanismShims.push(dst);
+      continue;
+    }
     const refs = [...text.matchAll(BODY_REF_RE)];
     if (!refs.length) {
       warn(`${lane} skill shim "${name}" names NO .agents/skills/<name>/<file>.md body — a shim carries no rules of its own, so this command would dead-end`);
       dangling++;
+      if (MECHANISM_SKILLS.has(name)) unresolvedMechanismShims.push(dst);
       continue;
     }
     for (const m of refs) {
       if (existsSync(path.join(T, ".agents", "skills", m[1], m[2]))) { verified++; continue; }
       warn(`${lane} skill shim "${name}" points at .agents/skills/${m[1]}/${m[2]}, which is NOT installed — that command would dead-end`);
       dangling++;
+      if (MECHANISM_SKILLS.has(name)) unresolvedMechanismShims.push(dst);
     }
   }
   if (installedShims.length) {
@@ -1932,6 +1959,18 @@ function main() {
       `cannot be taken REFUSES the overwrite and fails the run); a .codex/hooks.json entry the upgrade ` +
       `changes is NOT ARMED in the Codex lane until re-trusted interactively (Codex keys trust to the ` +
       `entry, not the script), so verify: node scripts/check-codex-hooks-armed.mjs, and re-trust only if it reports NOT ARMED.`);
+    process.exitCode = 1;
+  }
+  if (mechanismSkillInstallFailures.length) {
+    console.error(`\ninit: ${mechanismSkillInstallFailures.length} repo-local mechanism skill artifact(s) could NOT install; downstream controls were still installed:`);
+    for (const f of mechanismSkillInstallFailures) console.error(`  · ${f}`);
+    console.error(`Repair the repo-local path and re-run. This run does not treat an unavailable execution-method skill as a successful adoption.`);
+    process.exitCode = 1;
+  }
+  if (unresolvedMechanismShims.length) {
+    console.error(`\ninit: ${unresolvedMechanismShims.length} installed mechanism skill shim reference(s) do NOT resolve:`);
+    for (const f of unresolvedMechanismShims) console.error(`  · ${f}`);
+    console.error(`Repair the referenced repo-local body and re-run. Unrelated optional skill references retain their existing warning-only behavior.`);
     process.exitCode = 1;
   }
 }

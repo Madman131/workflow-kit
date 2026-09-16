@@ -764,7 +764,7 @@ test("architect-build is a mechanism skill: a plain rerun names stale body and b
     assert.ok(existsSync(routing), "the architect-build body installs its authoritative routing reference beside itself");
     assert.match(readFileSync(body, "utf8"), /\.agents\/skills\/architect-build\/ROUTING\.md/, "the body names the installed reference layer");
     const edited = {};
-    for (const p of [body, claudeShim, codexShim]) {
+    for (const p of [body, routing, claudeShim, codexShim]) {
       edited[p] = readFileSync(p, "utf8") + "\n<!-- drift -->\n";
       writeFileSync(p, edited[p]);
     }
@@ -772,12 +772,50 @@ test("architect-build is a mechanism skill: a plain rerun names stale body and b
       "--repo-name", "adopter", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
     assert.equal(rerun.status, 1, "a plain rerun with stale architect-build mechanism files fails");
     const output = rerun.stdout + rerun.stderr;
-    for (const p of [body, claudeShim, codexShim]) {
+    for (const p of [body, routing, claudeShim, codexShim]) {
       assert.match(output, new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${p} is named as stale`);
       assert.equal(readFileSync(p, "utf8"), edited[p], `${p} remains untouched without --force`);
     }
-    assert.equal((output.match(/KEPT BUT STALE/g) || []).length, 3, "all three architect-build mechanism files are detected");
+    assert.equal((output.match(/KEPT BUT STALE/g) || []).length, 4, "every architect-build mechanism artifact is detected");
+    const forced = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--codex-prompts-dir", codexDir, "--force"], { encoding: "utf8" });
+    assert.equal(forced.status, 1, "the hermetic forced rerun restores artifacts but remains honest about unverified Codex hook trust");
+    const canonical = new Map([
+      [body, path.join(KIT, "skills", "architect-build", "SKILL.md")],
+      [routing, path.join(KIT, "skills", "architect-build", "ROUTING.md")],
+      [claudeShim, path.join(KIT, "skill-shims", "claude", "architect-build.md")],
+      [codexShim, path.join(KIT, "skill-shims", "codex", "architect-build.md")],
+    ]);
+    for (const [installed, source] of canonical) {
+      assert.equal(readFileSync(installed, "utf8"), readFileSync(source, "utf8"), `${installed} is restored from the canonical artifact`);
+      assert.equal(readFileSync(`${installed}.bak`, "utf8"), edited[installed], `${installed}.bak preserves the differing artifact`);
+    }
+    assert.equal(existsSync(`${path.join(dir, ".agents", "skills", "orchestrate", "SKILL.md")}.bak`), false,
+      "an identical mechanism artifact gets no backup on --force");
   } finally { cleanup(); }
+});
+
+test("an obstructed repo-local architect skill fails while downstream hook controls still install", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-architect-obstruct-"));
+  const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-architect-obstruct-codex-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const obstruction = path.join(dir, ".agents", "skills", "architect-build");
+    mkdirSync(path.dirname(obstruction), { recursive: true });
+    writeFileSync(obstruction, "not a skill directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.equal(r.status, 1, "an unavailable repo-local execution-method skill makes adoption nonzero");
+    const output = r.stdout + r.stderr;
+    assert.match(output, /repo-local mechanism skill artifact\(s\) could NOT install/, "the final report names the unavailable mechanism");
+    assert.match(output, /mechanism skill shim reference\(s\) do NOT resolve/, "the dangling architect shims are named at final status");
+    assert.ok(existsSync(path.join(dir, ".claude", "hooks", "guard-lane-authoring.mjs")), "downstream hook files still install");
+    const settings = JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
+    assert.ok((settings.hooks?.PreToolUse || []).length > 0, "downstream hook registrations still install");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(codexDir, { recursive: true, force: true });
+  }
 });
 
 test("init installs the frontier-review skill + reviewer agents; the tools: [] cage survives verbatim", () => {
