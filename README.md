@@ -7,12 +7,14 @@ when the Owner instructs a launch, hands an approved baseline to a separate `/or
 architect stays advisory; the PM remains the single execution command chain. Routine CHIP progress updates
 the durable record without spending an architect consult. Meaningful milestones, material architectural
 changes, and a due five-active-workday alignment check consult the architect; an overlapping fourth-gate
-checkpoint uses the existing eligible process-review procedure and one combined packet.
+checkpoint combines only when the persistent architect independently meets the existing process-review
+eligibility and freshness rules.
 
 The skill installs automatically through the existing dual-harness discovery mechanism. The established
-user-skill sync command now keeps `/architect-build` beside `/orchestrate` in both user copies:
-`node scripts/sync-user-orchestrate-skill.mjs --install`; use `--check` to detect drift. Existing
-adopters need `init --force` to update shipped `[P]` files and the sync command to refresh user copies.
+`sync:orchestrate-user` command remains `/orchestrate`-only. To install or check the complete architecture
+pair in both user copies, use `npm run sync:architect-build-user` or `npm run check:architect-build-user`.
+That explicit install preserves an existing `/architect-build` by default; use `--force` only to take over
+or update it. Existing adopters need `init --force` to update shipped `[P]` files.
 
 ## What's new in v2.32.1 — hook trust is keyed to the registration, and three kit defects
 

@@ -47,7 +47,8 @@ consult or a wait:** send it, name what you do meanwhile, and do it.
   candidate must be a pure fast-forward; otherwise report the divergence for an Owner decision.
 - Surface landed/stale worktrees and branches; use the merge-type proof and occupancy refusal in
   `.agents/skills/orchestrate/PROTOCOLS.md`.
-- When a program has a persistent architect, follow `core/WORKFLOW.md` § Architectural consult routing.
+- When a program has a persistent architect, use `core/WORKFLOW.md` § Architectural consult routing and
+  its installed `/architect-build` reference layer.
   Keep routine CHIP progress in its durable record; consult only at the listed milestone/material
   triggers. The architect advises; the PM remains the single execution command chain.
 

@@ -758,8 +758,11 @@ test("architect-build is a mechanism skill: a plain rerun names stale body and b
   const { dir, codexDir, cleanup } = adopt();
   try {
     const body = path.join(dir, ".agents", "skills", "architect-build", "SKILL.md");
+    const routing = path.join(dir, ".agents", "skills", "architect-build", "ROUTING.md");
     const claudeShim = path.join(dir, ".claude", "skills", "architect-build", "SKILL.md");
     const codexShim = path.join(codexDir, "architect-build.md");
+    assert.ok(existsSync(routing), "the architect-build body installs its authoritative routing reference beside itself");
+    assert.match(readFileSync(body, "utf8"), /\.agents\/skills\/architect-build\/ROUTING\.md/, "the body names the installed reference layer");
     const edited = {};
     for (const p of [body, claudeShim, codexShim]) {
       edited[p] = readFileSync(p, "utf8") + "\n<!-- drift -->\n";

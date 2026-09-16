@@ -65,43 +65,8 @@ declaration below.
 
 ### Architectural consult routing
 
-When the Owner instructs a launch, `/architect-build` establishes, reuses, or recovers a persistent
-architect and, after baseline approval, creates or connects a separate `/orchestrate` PM. The architect
-is advisory and preserves program fit; the PM is the sole execution command chain. Before creating or
-reusing either task, inspect the durable record:
-program/repository identity; architect and active-PM locator or file-only equivalents; approved baseline
-and source pointers; accepted decisions separately from pending recommendations; current phase/CHIP;
-unresolved decisions; last alignment check; and reconciliation owed. Recovery never promotes pending
-advice, creates a second PM, or blocks independent authorized work; it holds only a dependent decision
-whose current authority cannot be established.
-
-Locate the repository's existing architecture/current-state record first. If none carries those fields,
-create one using the repository's normal docs/state convention and record its exact path. Record both task
-locators. Without an Owner launch instruction, do not create either task. Without task creation or
-cross-session transport, emit the approved-baseline handoff and use the file-only equivalents instead.
-
-Routine CHIP progress updates that record without contacting the architect. Consult the architect at
-program inception/baseline, terminal STOP, a material pivot, foundation/ownership/authority or major
-sequencing change, a meaningful milestone or planned phase boundary, or the first safe checkpoint after
-five active workdays since the last alignment review. Material means a change to accepted outcomes,
-acceptance criteria, foundation, ownership, dependency order, authority, or budget. Quiet means no
-routine polling/status messages or repeated review of one unresolved decision; it does not suppress a due
-alignment review. Coalesce a due alignment review with any qualifying checkpoint.
-
-Use the ordinary active consult for a bounded current-chip question. When a persistent trigger overlaps a
-fourth-gate process checkpoint, send one combined packet to the persistent architect **only through the
-existing process-review procedure**: preserve its eligible seat, verified model/effort, purpose/outcome,
-receipt, controller record, frozen candidate, panel close, lineage, and proposed action; separately ask
-for program alignment. It may discharge both obligations only through that procedure. Do not add a
-firing, round, batch, or authority. Otherwise keep the existing fresh process review. Packets name the
-question, scope, evidence, alternatives, risks, and either an exact Owner-reserved decision or
-`none — PM disposition within existing authority`. The PM records adopt/adapt/decline, reason, outcome,
-and next evidence; the architect never authorizes implementation, tier, push, deploy, or live write.
-
-When cross-session messaging is absent, the durable record, file brief, and consult entry provide
-continuity. When the architect is unavailable, use one fresh **eligible** acting-architect consult with
-the record and honest model/effort; later reconcile the memo and PM outcome at the next meaningful
-checkpoint. No scheduler, controller, transport, polling service, new seat, or model binding is implied.
+Authoritative detail is the installed `/architect-build` reference layer; its architect is advisory and the
+`/orchestrate` PM remains the sole execution chain.
 
 **Before building:** state the smallest **user-visible definition of done** and the exact evidence that proves it; recommend the intelligence tier; for T2/T3 write **intent + falsifiable acceptance criteria** as a design doc *before* coding; for chain/stateful logic name the **adversarial cases up front** (crash-mid-sequence · retry · corrupt-state→fail-closed · starvation · empty-tick) and write them as tests before the gate.
 

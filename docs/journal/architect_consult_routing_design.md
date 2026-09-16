@@ -16,8 +16,8 @@ the T2 pre-code contract lens before code exists; this brief is that contract, n
 
 **Intent:** add one portable consult-routing policy with two destinations and a small
 `/architect-build` companion skill. The skill establishes, reuses, or recovers the persistent
-architect and hands an approved baseline to a separate `/orchestrate` PM. It points to the core
-routing rule rather than duplicating it. Neither artifact creates a second controller, scheduler,
+architect and hands an approved baseline to a separate `/orchestrate` PM. A compact core anchor points
+to one installed skill reference layer rather than duplicating the routing rule. Neither artifact creates a second controller, scheduler,
 review path, or implementation authority.
 
 **Done:** a future implementation makes the destination decision unambiguous, establishes a clean
@@ -37,7 +37,7 @@ outside kit doctrine.
    skill and both harness shims install and resolve, pointers do not contradict the core rule, no
    second discretionary frontier firing is introduced, and no text implies transport, automation, or
    authority that does not exist.
-3. A reviewer can trace each routing example below to one fresh response and confirm that neither
+3. A reviewer can trace each routing example below to its required fresh response or responses and confirm that neither
    destination authorizes implementation, a push, deployment, a live write, or a tier change.
 4. A reviewer can trace establishment, reuse, and recovery to one durable record and confirm that a
    restart neither creates a duplicate architect/PM nor treats a pending recommendation as an approved
@@ -50,7 +50,8 @@ brief. Any remote publication still needs a fresh Owner GO for the exact head an
 
 ### One policy, two destinations
 
-`core/WORKFLOW.md` will be the sole authoritative home for the routing rule.
+`core/WORKFLOW.md` will retain the compact authority and command-chain rule; the installed
+`skills/architect-build/ROUTING.md` reference layer will be the one detailed authority for routing.
 
 1. **Internal active consult** is the default: a bounded, current-candidate consultation inside the
    approved chip. It has no durable work authority.
@@ -72,15 +73,15 @@ ownership, dependency order, authority, or budget. A phase boundary is a planned
 milestone, not each commit, round, or model switch. Routine CHIP progress updates the durable record and
 does not contact the architect.
 
-At a normal checkpoint, use the internal active consult. If a persistent trigger is also present, route
-**one combined packet** to the persistent architect instead. For every cumulative gate ordinal divisible
-by four, the combined response may discharge both obligations only through the existing eligible
-process-review procedure: it retains that procedure's verified model/effort, purpose/outcome, receipt,
-and controller-recording requirements; explicitly binds the current candidate, panel close, lineage, and
-proposed action; and separately addresses the process checkpoint and program alignment. Earlier
-architecture advice cannot discharge a later checkpoint. Do not make a second consult merely for the
-other label, and do not add a round, batch, or authority. If no persistent trigger is present, the
-required fourth-gate response remains one fresh internal active consult on the frozen candidate.
+At a normal checkpoint, use the internal active consult. A bounded below-trigger question does not contact
+the persistent architect unless an existing gate independently requires its own seat. At every cumulative
+gate ordinal divisible by four, combine a persistent-trigger packet only when that architect independently
+satisfies every existing process-review eligibility and freshness requirement. The combined response then
+uses the existing process-review procedure unchanged: verified model/effort, purpose/outcome, receipt,
+controller recording, current candidate, panel close, lineage, and proposed action remain required. If it
+does not independently qualify, keep the fresh process review and route the architecture question
+separately. Earlier advice never discharges a later checkpoint; no path adds a round, batch, authority, or
+frontier firing.
 
 ### Cadence, packet, response, and disposition
 
@@ -122,13 +123,11 @@ credentials, irreversible or live writes, tier changes where Owner ratification 
 deployments, and unresolved terminal decisions. The PM retains only ordinary in-scope disposition and
 local execution authority already granted by the method.
 
-If the persistent architect is unavailable, use **one fresh eligible internal frontier consult as acting
-architect** with the durable baseline, latest decisions, current packet, and honest model/effort record;
-never claim it inherited context. It does not change the existing eligibility or process-review procedure.
-Later send the memo, PM disposition, and outcomes to the persistent architect for reconciliation. That is
-a context update, not a repeat review; reopen only for a newly identified material conflict. If no eligible
-route is available, continue independent authorized work and hold only the dependent decision. If an active
-consult is unavailable when a gate requires it, existing fail-closed gate and Owner-escalation rules apply.
+If the persistent architect is unavailable, do not mint an acting architect. Continue independent authorized
+work and hold only the dependent decision. An existing defined consult can be advisory input but neither
+replaces persistent continuity nor discharges it; an existing gate review keeps its own obligation. Later
+reconcile the record, PM disposition, and outcomes with the persistent architect. If an active consult is
+unavailable when a gate requires it, existing fail-closed gate and Owner-escalation rules apply.
 
 Cross-session messaging is optional harness plumbing. In a portable or degraded environment, the durable
 record, file brief, and consult entry are the record of continuity. The policy must not claim an automated
@@ -138,7 +137,8 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 
 | Planned file | Purpose |
 | --- | --- |
-| `core/WORKFLOW.md` | One authoritative rule for triggers, combined fourth-gate routing, packet/response requirements, advisory authority, cadence, and fallback. |
+| `core/WORKFLOW.md` | Compact authoritative anchor: the installed companion reference owns detailed routing; PM stays the execution chain. |
+| `skills/architect-build/ROUTING.md` | Installed reference layer for triggers, packet currency, fourth-gate eligibility, advisory authority, cadence, and fallback. |
 | `skills/orchestrate/SKILL.md` | A short operational pointer to the core rule, durable baseline/latest-decision record, and degraded reconciliation practice. |
 | `skills/architect-build/SKILL.md` | Establish, reuse, or recover the persistent architect; maintain the durable record; produce the approved-baseline handoff to a separate PM; point to the core routing rule. |
 | `skill-shims/claude/architect-build.md` and `skill-shims/codex/architect-build.md` | Discover the one canonical companion-skill body in each harness. |
@@ -150,8 +150,8 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
   proposed rule changes routing semantics, not runner invocation or budget arithmetic; duplicating it in
   the tool manual would create two authorities.
 - `skills/frontier-review/SKILL.md` is cut unless its existing wording cannot point to the authoritative
-  rule without contradicting it. The active-consult budget remains there; destination policy belongs in
-  `core/WORKFLOW.md`.
+  rule without contradicting it. The active-consult budget remains there; detailed destination policy
+  belongs in the installed `/architect-build` reference layer.
 - `templates/BINDINGS.md.tmpl`, `agents/frontier-consult.md`, and any model-specific binding are cut.
   The policy requires no new portable role field, and exact model identity is adopter data.
 - No program task name, including the NexusBot architect task, belongs in Workflow-Kit core. Program
@@ -163,10 +163,10 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 
 | Case | Required result |
 | --- | --- |
-| A current candidate reaches cumulative gate four while a material architecture pivot is also present. | Send one combined packet to the persistent architect only through the existing eligible process-review procedure; its fresh response binds candidate, panel close, lineage, proposed action, and separately covers the process checkpoint and program alignment. |
-| A broad question looks convenient to answer inside a normal current-chip review. | Use the internal consult unless an explicit persistent trigger applies; then route one combined packet to the persistent architect and do not mint a duplicate call. |
+| A current candidate reaches cumulative gate four while a material architecture pivot is also present. | Combine only if the persistent architect independently meets every existing process-review eligibility and freshness rule; otherwise preserve the fresh process review and consult architecture separately. |
+| A broad question looks convenient to answer inside a normal current-chip review. | Use the internal consult; below-trigger questions do not contact the persistent architect unless an existing gate owes its own seat. |
 | Routine CHIP progress is recorded with no material trigger or meaningful milestone. | Update the durable record without contacting the architect. |
-| The persistent architect is unavailable at the first safe checkpoint after five active workdays. | Use one fresh eligible internal frontier consult as acting architect with honest model/effort and no inherited-context claim; later reconcile by memo, PM disposition, and outcomes. |
+| The persistent architect is unavailable at the first safe checkpoint after five active workdays. | Continue independent authorized work, hold only the dependent decision, and reconcile the record and outcome with the persistent architect when available; do not create a replacement architect. |
 | A consult recommends changing scope, tier, live behavior, or publication. | Treat it as advisory; stop at the relevant Owner boundary rather than executing or treating the response as a verdict. |
 | A degraded adopter has no cross-session message transport. | Preserve the common packet and disposition in the durable record/file brief; do not imply a scheduler or automatic handoff. |
 | A repair round attempts to count a persistent response and an active consult as two frontier firings. | Use one combined response where overlap is present; do not spend or duplicate discretionary frontier budget, add a batch, or grant authority. |

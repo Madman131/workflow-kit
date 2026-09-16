@@ -6,7 +6,7 @@ description: Establish or recover a persistent architect for a multi-CHIP progra
 # /architect-build — persistent architecture, separate execution
 
 Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing and § Gate;
-`core/FOUNDATIONS.md` Roles; `.agents/skills/orchestrate/SKILL.md`.
+`core/FOUNDATIONS.md` Roles; `.agents/skills/architect-build/ROUTING.md`; `.agents/skills/orchestrate/SKILL.md`.
 
 Use for a substantial program that needs one continuing architectural view while a separate PM runs
 CHIPS. The architect advises on program fit; `/orchestrate` owns worker dispatch, implementation,
@@ -45,8 +45,10 @@ new scope, tier, push, deployment, or live write.
 The PM records routine CHIP progress, dispositions, outcomes, and evidence in the durable record without
 contacting the architect. Consult only at program inception/baseline, terminal STOP, a material pivot,
 foundation/ownership/authority or major sequencing change, a meaningful milestone or planned phase
-boundary, or a due five-active-workday alignment review. Read `core/WORKFLOW.md` for the exact material
-test, packet, combined fourth-gate rule, and degraded fallback; those rules have one authoritative home.
+boundary, or a due five-active-workday alignment review. Every persistent packet carries, or explicitly
+consults in that record, the approved baseline, latest accepted decisions, and last alignment check. The
+reference layer has the exact material test, ordinary-consult boundary, combined fourth-gate rule, and
+degraded fallback; those rules have one authoritative home.
 
 A consult is advisory. Its packet identifies the question, scope, evidence, alternatives, risks, and
 either an Owner-reserved decision or `none — PM disposition within existing authority`. The PM records
