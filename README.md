@@ -2,11 +2,13 @@
 
 ## What's new in v2.33.0 — persistent architecture, separate execution
 
-`/architect-build` establishes, reuses, or recovers a persistent Architect / Project Principal from a durable
-record and, when the Owner launches, hands the baseline to a separate `/orchestrate` PM. Recorded Owner
-delegation lets the Principal direct nonreserved program decisions and completion; PM remains the single
-execution chain. Routine CHIP work proceeds quietly. Milestones, material changes, and a due five-active-
-workday alignment consult the Principal; fourth-gate overlap still requires independent process eligibility.
+`/architect-build` establishes, reuses, or recovers a persistent architect from a durable record and,
+when the Owner instructs a launch, hands an approved baseline to a separate `/orchestrate` PM. The
+architect stays advisory; the PM remains the single execution command chain. Routine CHIP progress updates
+the durable record without spending an architect consult. Meaningful milestones, material architectural
+changes, and a due five-active-workday alignment check consult the architect; an overlapping fourth-gate
+checkpoint combines only when the persistent architect independently meets the existing process-review
+eligibility and freshness rules.
 
 The skill installs automatically through the existing dual-harness repository-adoption discovery mechanism.
 Existing adopters need `init --force` to update shipped `[P]` files.
