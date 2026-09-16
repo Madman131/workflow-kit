@@ -29,7 +29,7 @@ outside kit doctrine.
 2. Static checks and focused tests prove that the one-home rule is represented once, pointers do not
    contradict it, no second discretionary frontier firing is introduced, and no text implies transport,
    automation, or authority that does not exist.
-3. A reviewer can trace each routing example below to exactly one destination and confirm that neither
+3. A reviewer can trace each routing example below to one fresh response and confirm that neither
    destination authorizes implementation, a push, deployment, a live write, or a tier change.
 
 No push, publication, merge, deployment, model invocation, or live-data action is authorized by this
@@ -41,43 +41,51 @@ brief. Any remote publication still needs a fresh Owner GO for the exact head an
 
 `core/WORKFLOW.md` will be the sole authoritative home for the routing rule.
 
-1. **Active consult** is a bounded, current-candidate consultation attached to a current changeset,
-   gate, design ambiguity, root-cause escalation, process question, fold-check, or required fourth-gate
-   checkpoint. It has no durable work authority.
-2. **Persistent architecture record** is a durable program-level question and record that spans
-   changesets, sessions, or repositories. It preserves a recommendation and unresolved decisions for
-   later Owner/PM consideration. It is not a scheduler, controller, or second implementation lane.
+1. **Internal active consult** is the default: a bounded, current-candidate consultation inside the
+   approved chip. It has no durable work authority.
+2. **Persistent architect** is a durable program-level task and record for questions that outgrow the
+   chip. It preserves a recommendation and unresolved decisions for later Owner/PM consideration. It is
+   not a scheduler, controller, or second implementation lane.
 
-For a single consult question, evaluate broader/persistent triggers first. If any applies, route the
-question to the persistent architecture record; otherwise route it to the active consult. Persistent
-triggers are: multiple changesets or repositories; a program-shape or authority-boundary change; an
-architecture decision that must survive the current changeset; or a question that cannot be answered
-without creating a second design lineage.
+Internal triggers are a current-chip design tradeoff, root-cause correction, required gate/process
+checkpoint, disputed technical ruling, or another bounded question inside approved scope. Routine
+debugging, gathering, and mechanical checks do not trigger Astra.
 
-The fourth-gate obligation is separate and remains current-candidate gate work. At every cumulative gate
-ordinal divisible by four, its required fresh frontier/process review routes **only to the active
-consult** for that frozen candidate. The persistent record can later receive the resulting disposition as
-evidence, but can neither satisfy, waive, duplicate, nor replace that gate review. Thus each question or
-required review has one destination; a broader architecture question does not silently consume the
-fourth-gate review, and the fourth-gate review does not create a duplicate architecture review.
+Persistent triggers are explicit: program inception or baseline; terminal STOP; a material pivot;
+engine/provider/foundation selection or replacement; a cross-repo authority or ownership change; a major
+sequencing amendment; and a planned phase boundary before the next phase. A change is material when it
+alters accepted outcomes, acceptance criteria, foundation, ownership, dependency order, authority, or
+budget. A phase boundary is a planned capability or adoption milestone, not each commit, round, or model
+switch.
+
+At a normal checkpoint, use the internal active consult. If a persistent trigger is also present, route
+**one combined packet** to the persistent architect instead. For every cumulative gate ordinal divisible
+by four, a fresh response from that combined packet may discharge both obligations only when it explicitly
+binds the required current candidate, panel close, lineage, and proposed action, and separately addresses
+the process checkpoint and program alignment. Earlier architecture advice cannot discharge a later
+checkpoint. Do not make a second Astra call merely for the other label, and do not add a round, batch, or
+authority. If no persistent trigger is present, the required fourth-gate response remains one fresh
+internal active consult on the frozen candidate.
 
 ### Cadence, packet, response, and disposition
 
-An unresolved persistent architecture record is reconsidered every **five active workdays**. A material
-new architecture fact may wake it earlier. Unchanged state remains quiet; the cadence does not create a
-background worker, timed task, message transport, or automatic decision.
+At the first safe checkpoint after **five active workdays with project work** and no program-alignment
+review, run the program-alignment review and record the last check. A material trigger may require it
+earlier. This is not repeated polling of an unresolved record; unchanged state remains quiet, and the
+cadence creates no background monitor, timed task, message transport, or automatic decision.
 
 Both destinations receive one common packet: question; scope; current frozen head/tree where applicable;
 source citations; constraints; alternatives; assumptions; unresolved risks; and the exact Owner decision
-sought. The active consult additionally names the current gate/round, candidate, and required decision.
-The persistent record additionally carries prior dispositions, cross-session continuity, and its
-five-workday next-review marker.
+sought. A gate-bound packet additionally names current gate/round, candidate, panel close, lineage, and
+proposed action. A persistent packet additionally carries the durable baseline, latest decisions, and the
+last program-alignment check.
 
 A response must state a recommendation, supporting evidence, tradeoffs, unresolved risks, confidence or
-insufficiency, and the exact decision boundary it does not cross. The active PM decides whether to adopt,
-adapt, or decline it and records the reason and next evidence. In the initiating program, the Sol PM is
-expected to make that **adopt / adapt / decline** disposition; portable core wording names the PM role,
-not a model. A response is advisory input, never an instruction or implementation authorization.
+insufficiency, Rule #1/KISS/root-cause assessment, program fit, the smallest next action, stop condition,
+and the Owner-reserved decision. It must state the exact decision boundary it does not cross. The PM
+records **adopt / adapt / decline**, with reason and next evidence. In the initiating program, Sol is the
+PM expected to make that disposition; portable core wording names the PM role, not a model. A response is
+advisory input, never an instruction or implementation authorization.
 
 ### Authority, fallback, and portability
 
@@ -86,12 +94,13 @@ credentials, irreversible or live writes, tier changes where Owner ratification 
 deployments, and unresolved terminal decisions. The PM retains only ordinary in-scope disposition and
 local execution authority already granted by the method.
 
-If an architect or persistent record is unavailable, the PM continues routine in-scope work, records the
-deferred architecture question and missing evidence in the durable program record, and does not substitute
-a lower-authority architecture decision. Reconcile it when the architect becomes available: submit the
-preserved packet, response gap, intervening decisions, and current state; then record adopt/adapt/decline.
-If an active consult is unavailable when a gate requires it, existing fail-closed gate and Owner-escalation
-rules apply.
+If the persistent architect is unavailable, use **one fresh internal frontier consult as acting
+architect** with the durable baseline, latest decisions, current packet, and honest model/effort record;
+never claim it inherited context. Later send the memo, PM disposition, and outcomes to the persistent
+architect for reconciliation. That is a context update, not a repeat review; reopen only for a newly
+identified material conflict. If no eligible route is available, continue independent authorized work and
+hold only the dependent decision. If an active consult is unavailable when a gate requires it, existing
+fail-closed gate and Owner-escalation rules apply.
 
 Cross-session messaging is optional harness plumbing. In a portable or degraded environment, the durable
 record, file brief, and consult entry are the record of continuity. The policy must not claim an automated
@@ -101,8 +110,8 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 
 | Planned file | Purpose |
 | --- | --- |
-| `core/WORKFLOW.md` | One authoritative destination rule, trigger precedence, fourth-gate exclusivity, advisory authority, and fallback. |
-| `skills/orchestrate/SKILL.md` | A short operational pointer to the core rule, packet fields, degraded durable-record practice, and the existing fourth-gate route. |
+| `core/WORKFLOW.md` | One authoritative rule for triggers, combined fourth-gate routing, packet/response requirements, advisory authority, cadence, and fallback. |
+| `skills/orchestrate/SKILL.md` | A short operational pointer to the core rule, durable baseline/latest-decision record, and degraded reconciliation practice. |
 | Focused doctrine/skill tests as proven necessary | Pin the authoritative wording and prevent duplicate budget or transport claims. |
 
 **Explicit cuts from the source proposal:**
@@ -124,12 +133,12 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 
 | Case | Required result |
 | --- | --- |
-| A current candidate reaches cumulative gate four while a broad architecture question is already open. | Run one fresh active consult for the frozen candidate; the persistent record may receive its result later and cannot count as that gate. |
-| A broad question looks convenient to answer inside the current review. | Persistent triggers win for that question; record it durably and do not mint a second active review. |
-| The persistent architect is unavailable on its five-day review date. | Keep routine work moving only within existing authority, write the deferred question and evidence gap, then reconcile when available. |
+| A current candidate reaches cumulative gate four while a material architecture pivot is also present. | Send one combined packet to the persistent architect; its fresh response binds candidate, panel close, lineage, and proposed action, and separately covers the process checkpoint and program alignment. |
+| A broad question looks convenient to answer inside a normal current-chip review. | Use the internal consult unless an explicit persistent trigger applies; then route one combined packet to the persistent architect and do not mint a duplicate call. |
+| The persistent architect is unavailable at the first safe checkpoint after five active workdays. | Use one fresh internal frontier consult as acting architect with honest model/effort and no inherited-context claim; later reconcile by memo, PM disposition, and outcomes. |
 | A consult recommends changing scope, tier, live behavior, or publication. | Treat it as advisory; stop at the relevant Owner boundary rather than executing or treating the response as a verdict. |
 | A degraded adopter has no cross-session message transport. | Preserve the common packet and disposition in the durable record/file brief; do not imply a scheduler or automatic handoff. |
-| A repair round attempts to count the persistent response and a fourth-gate active consult as two frontier firings. | Count only the mandated active fourth-gate review; do not spend or duplicate discretionary frontier budget. |
+| A repair round attempts to count a persistent response and an active consult as two frontier firings. | Use one combined response where overlap is present; do not spend or duplicate discretionary frontier budget, add a batch, or grant authority. |
 
 ## Stop rules for implementation
 
