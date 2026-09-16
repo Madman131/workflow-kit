@@ -841,6 +841,48 @@ test("an obstructed Claude mechanism shim fails while downstream hook controls s
   }
 });
 
+test("an obstructed optional Claude shim does not skip later mechanism shims or controls", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-humanize-shim-obstruct-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const obstruction = path.join(dir, ".claude", "skills", "humanize");
+    mkdirSync(path.dirname(obstruction), { recursive: true });
+    writeFileSync(obstruction, "not a skill directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(r.status, 0, "an optional Claude shim obstruction remains warning-only");
+    assert.match(r.stderr, /repo-local skills install failed/, "the optional shim obstruction is reported");
+    assert.ok(existsSync(path.join(dir, ".agents", "skills", "orchestrate", "SKILL.md")),
+      "the later mechanism body still installs");
+    assert.ok(existsSync(path.join(dir, ".claude", "skills", "orchestrate", "SKILL.md")),
+      "the later mechanism Claude shim still installs");
+    const settings = JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
+    assert.ok((settings.hooks?.PreToolUse || []).length > 0, "downstream hook registrations still install");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an obstructed optional shared body does not skip later mechanism artifacts or controls", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-boot-body-obstruct-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const obstruction = path.join(dir, ".agents", "skills", "boot");
+    mkdirSync(path.dirname(obstruction), { recursive: true });
+    writeFileSync(obstruction, "not a skill directory\n");
+    const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
+      "--repo-name", "adopter", "--skip-codex-prompt"], { encoding: "utf8" });
+    assert.equal(r.status, 0, "an optional shared-body obstruction remains warning-only");
+    assert.match(r.stderr, /repo-local skills install failed/, "the optional body obstruction is reported");
+    for (const name of ["frontier-review", "orchestrate"]) {
+      assert.ok(existsSync(path.join(dir, ".agents", "skills", name, "SKILL.md")),
+        `the later ${name} mechanism body still installs`);
+      assert.ok(existsSync(path.join(dir, ".claude", "skills", name, "SKILL.md")),
+        `the later ${name} mechanism Claude shim still installs`);
+    }
+    const settings = JSON.parse(readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
+    assert.ok((settings.hooks?.PreToolUse || []).length > 0, "downstream hook registrations still install");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("init installs the frontier-review skill + reviewer agents; the tools: [] cage survives verbatim", () => {
   const { dir, codexDir, run, cleanup } = adopt();
   try {

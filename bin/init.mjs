@@ -1159,52 +1159,54 @@ function main() {
   // install; personal/adopter-owned skill failures retain the existing failure-isolated behavior.
   const mechanismSkillInstallFailures = [];
   const unresolvedMechanismShims = [];
-  // Failure-ISOLATED like the Codex prompt, and for a sharper reason: this whole block is a NUDGE,
+  // Failure-ISOLATED like the Codex prompt, and for a sharper reason: each body and Claude shim is
+  // an individual NUDGE,
   // and step 5 below — registering the guards in settings.json — is a CONTROL. An ENOTDIR from a
   // `.claude/skills` that happens to be a regular file, or a broken symlink under `.agents/skills`,
   // must not abort the run before the guards are registered, which would leave hook files on disk
   // with zero registrations: exactly the silent fail-open mergeSettings' own read-back exists to stop.
-  try {
-    for (const name of bodyNames) {
-      const mechanism = MECHANISM_SKILLS.has(name);
-      try {
-        const results = copyTree(path.join(skillsSrc, name), path.join(T, ".agents", "skills", name), force, () => true, mechanism);
-        if (mechanism) {
-          for (const [dst, status] of results) {
-            if (status === "refused") mechanismSkillInstallFailures.push(dst);
-          }
+  for (const name of bodyNames) {
+    const mechanism = MECHANISM_SKILLS.has(name);
+    const dst = path.join(T, ".agents", "skills", name);
+    try {
+      const results = copyTree(path.join(skillsSrc, name), dst, force, () => true, mechanism);
+      if (mechanism) {
+        for (const [artifact, status] of results) {
+          if (status === "refused") mechanismSkillInstallFailures.push(artifact);
         }
-      } catch (e) {
-        if (!mechanism) throw e;
-        const dst = path.join(T, ".agents", "skills", name);
+      }
+    } catch (e) {
+      if (mechanism) {
         mechanismSkillInstallFailures.push(dst);
         warn(`could not install repo-local mechanism skill "${name}" at ${dst} (${e && (e.code || e.message) || "error"}) — controls still install, but this mechanism is unavailable`);
+      } else {
+        warn(`the repo-local skills install failed (${e && (e.code || e.message) || "error"}) — /${name} may be missing or partial. This is a NUDGE, not a control: the guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
       }
     }
-    for (const name of claudeShims) {
-      const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
-      const mechanism = MECHANISM_SKILLS.has(name);
-      try {
-        const status = copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, mechanism);
-        if (status === "refused" && mechanism) {
-          mechanismSkillInstallFailures.push(dst);
-          warn(`could not install repo-local mechanism skill "${name}" Claude shim at ${dst} (REFUSED) — controls still install, but this mechanism is unavailable`);
-          continue;
-        }
-      } catch (e) {
-        if (!mechanism) throw e;
+  }
+  for (const name of claudeShims) {
+    const dst = path.join(T, ".claude", "skills", name, "SKILL.md");
+    const mechanism = MECHANISM_SKILLS.has(name);
+    try {
+      const status = copyGuarded(path.join(shimsSrc, "claude", `${name}.md`), dst, force, mechanism);
+      if (status === "refused" && mechanism) {
         mechanismSkillInstallFailures.push(dst);
-        warn(`could not install repo-local mechanism skill "${name}" Claude shim at ${dst} (${e && (e.code || e.message) || "error"}) — controls still install, but this mechanism is unavailable`);
+        warn(`could not install repo-local mechanism skill "${name}" Claude shim at ${dst} (REFUSED) — controls still install, but this mechanism is unavailable`);
         continue;
       }
       installedShims.push(["claude", name, dst]);
+    } catch (e) {
+      if (mechanism) {
+        mechanismSkillInstallFailures.push(dst);
+        warn(`could not install repo-local mechanism skill "${name}" Claude shim at ${dst} (${e && (e.code || e.message) || "error"}) — controls still install, but this mechanism is unavailable`);
+      } else {
+        warn(`the repo-local skills install failed (${e && (e.code || e.message) || "error"}) — /${name} may be missing or partial. This is a NUDGE, not a control: the guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
+      }
     }
-    log(bodyNames.length || claudeShims.length
-      ? `  skills: ${bodyNames.length} shared body(ies) → .agents/skills/ · ${claudeShims.length} Claude shim(s) → .claude/skills/<name>/SKILL.md (existing files kept; --force to update)`
-      : `  skills: none shipped in this kit version`);
-  } catch (e) {
-    warn(`the repo-local skills install failed (${e && (e.code || e.message) || "error"}) — /humanize and any other skill may be missing or partial. This is a NUDGE, not a control: the guards, the pre-commit floor and the method docs are unaffected and the adopt continues.`);
   }
+  log(bodyNames.length || claudeShims.length
+    ? `  skills: ${bodyNames.length} shared body(ies) → .agents/skills/ · ${claudeShims.length} Claude shim(s) → .claude/skills/<name>/SKILL.md (existing files kept; --force to update)`
+    : `  skills: none shipped in this kit version`);
 
   if (args.skipCodexPrompt) {
     // Skipped is not UNEXAMINED: the MECHANISM shims already sitting in the user-global prompts
