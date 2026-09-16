@@ -63,6 +63,40 @@ declaration below.
 
 **Core-document amendments are never T0** (no prod blast-radius, but high leverage — a doctrine/architecture flaw propagates to every change under it). Gate depends on whether anything FOLLOWS the text. **Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel + Owner wording sign-off** (gate machinery also keeps the adversarial walk-through). **Text nothing follows — records, history, README-class description → ONE blind cold reviewer.** *(Corrected at v2.9.0: this row read T1 for ALL core-doc amendments, and two independent seats flagged that as the seat-cut FOUNDATIONS names as the misreading. Harm reaches a user THROUGH an implementation, so text an implementer acts on is gated at the depth of what it produces.)* Cross-family, no exception on `core/`; **Owner sign-off on the wording**; **no external gate** (no code to verify; an idea's substance is the Owner's call). The Owner wording sign-off closes the core-document gate only; it is never a remote-publication GO. Every remote push or publication still needs a fresh Owner GO for the exact head and target. **For PROSE this caps the gate SHAPE at every tier, and the EXTERNAL GATE ONLY:** escalation raises depth, never re-adds the external gate, and the **cross-family lens stays REQUIRED at T3** — the T3 row bundles both seats in one cell, so reading the cap across it would drop one that is not capped. *Exception:* an amendment carrying **executable content** (schemas, an API contract code depends on) follows the **code tiers** for that portion — **the prose cap does NOT reach it; that portion still owes its tier's external gate** (`core/ARTIFACT_CLASS.md` § Artifact-class review physics, rule 6). **Amendments to the gate machinery itself** — *any clause that sets a tier, a gate trigger, a NO-GO condition, a reviewer payload, an invariant, or a mitigation/manifest schema (if in doubt, it is)* — require an **adversarial walk-through** — ≥1 reviewer constructs a concrete scenario where an agent technically *complies* yet the targeted failure still occurs — before sign-off; design-mode prose-reading alone is insufficient. Core docs are listed in `core/BINDINGS.md`.
 
+### Architectural consult routing
+
+`/architect-build` establishes, reuses, or recovers a persistent architect and hands its approved
+baseline to a separate `/orchestrate` PM. The architect is advisory and preserves program fit; the PM
+is the sole execution command chain. Before creating or reusing either task, inspect the durable record:
+program/repository identity; architect and active-PM locator or file-only equivalents; approved baseline
+and source pointers; accepted decisions separately from pending recommendations; current phase/CHIP;
+unresolved decisions; last alignment check; and reconciliation owed. Recovery never promotes pending
+advice, creates a second PM, or blocks independent authorized work; it holds only a dependent decision
+whose current authority cannot be established.
+
+Routine CHIP progress updates that record without contacting the architect. Consult the architect at
+program inception/baseline, terminal STOP, a material pivot, foundation/ownership/authority or major
+sequencing change, a meaningful milestone or planned phase boundary, or the first safe checkpoint after
+five active workdays since the last alignment review. Material means a change to accepted outcomes,
+acceptance criteria, foundation, ownership, dependency order, authority, or budget. Quiet means no
+routine polling/status messages or repeated review of one unresolved decision; it does not suppress a due
+alignment review. Coalesce a due alignment review with any qualifying checkpoint.
+
+Use the ordinary active consult for a bounded current-chip question. When a persistent trigger overlaps a
+fourth-gate process checkpoint, send one combined packet to the persistent architect **only through the
+existing process-review procedure**: preserve its eligible seat, verified model/effort, purpose/outcome,
+receipt, controller record, frozen candidate, panel close, lineage, and proposed action; separately ask
+for program alignment. It may discharge both obligations only through that procedure. Do not add a
+firing, round, batch, or authority. Otherwise keep the existing fresh process review. Packets name the
+question, scope, evidence, alternatives, risks, and either an exact Owner-reserved decision or
+`none — PM disposition within existing authority`. The PM records adopt/adapt/decline, reason, outcome,
+and next evidence; the architect never authorizes implementation, tier, push, deploy, or live write.
+
+When cross-session messaging is absent, the durable record, file brief, and consult entry provide
+continuity. When the architect is unavailable, use one fresh **eligible** acting-architect consult with
+the record and honest model/effort; later reconcile the memo and PM outcome at the next meaningful
+checkpoint. No scheduler, controller, transport, polling service, new seat, or model binding is implied.
+
 **Before building:** state the smallest **user-visible definition of done** and the exact evidence that proves it; recommend the intelligence tier; for T2/T3 write **intent + falsifiable acceptance criteria** as a design doc *before* coding; for chain/stateful logic name the **adversarial cases up front** (crash-mid-sequence · retry · corrupt-state→fail-closed · starvation · empty-tick) and write them as tests before the gate.
 
 ## Gate — the review ladder
