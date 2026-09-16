@@ -1,4 +1,18 @@
-# workflow-kit — v2.32.1
+# workflow-kit — v2.33.0
+
+## What's new in v2.33.0 — persistent architecture, separate execution
+
+`/architect-build` establishes, reuses, or recovers a persistent architect from a durable record and,
+when the Owner instructs a launch, hands an approved baseline to a separate `/orchestrate` PM. The
+architect stays advisory; the PM remains the single execution command chain. Routine CHIP progress updates
+the durable record without spending an architect consult. Meaningful milestones, material architectural
+changes, and a due five-active-workday alignment check consult the architect; an overlapping fourth-gate
+checkpoint uses the existing eligible process-review procedure and one combined packet.
+
+The skill installs automatically through the existing dual-harness discovery mechanism. The established
+user-skill sync command now keeps `/architect-build` beside `/orchestrate` in both user copies:
+`node scripts/sync-user-orchestrate-skill.mjs --install`; use `--check` to detect drift. Existing
+adopters need `init --force` to update shipped `[P]` files and the sync command to refresh user copies.
 
 ## What's new in v2.32.1 — hook trust is keyed to the registration, and three kit defects
 

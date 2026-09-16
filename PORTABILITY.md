@@ -747,7 +747,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   Codex has no observed Stop payload, so like `guard-owner-comms` it installs and is not registered
   there), `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
-  `/frontier-review`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
+  `/frontier-review`, `/architect-build`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
   `/grilling`, `/kill-pass`), the `scripts/worktree-census.mjs` and `scripts/token-report.mjs` report tools, the
   `agents/*` reviewer seat
   definitions (→ `.claude/agents/`), and `codex/config.toml` (→ `.codex/config.toml`).
