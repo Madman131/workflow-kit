@@ -631,15 +631,37 @@ function completeHandoffRecord(block) { return complete(block.replace(/\n$/, "")
 function receiptFields(block) {
   return [...block.matchAll(/^- ([^:\n]+): `([^\n`]*)`$/gm)].filter(([, key]) => key !== "Record-SHA256" && key !== "Complete-Record").map(([, key, value]) => [key, value]);
 }
+function frozenJournalRecords(text) {
+  // `append()` owns this precise format. A record ends at its checksum trailer, not at whatever
+  // another writer places next in the shared journal; separators are deliberately outside the hash.
+  const headers = [...text.matchAll(/^## Gemini frozen gate attempt — /gm)], records = [];
+  for (const [index, header] of headers.entries()) {
+    const start = header.index, nextHeader = headers[index + 1]?.index ?? text.length;
+    const trailer = /^- Record-SHA256: `([0-9a-f]{64})`\n- Complete-Record: `YES`(?:\n|$)/gm;
+    trailer.lastIndex = start;
+    const match = trailer.exec(text);
+    if (!match || match.index >= nextHeader) die("journal has an incomplete receipt; refusing unsafe replay", 3);
+    const end = match.index + match[0].length, block = text.slice(start, end);
+    if (!completeHandoffRecord(block)) die("journal has an incomplete receipt; refusing unsafe replay", 3);
+    records.push({ start, end, block });
+  }
+  // These three unindented fields are emitted only by the frozen writer. They catch header loss
+  // without treating legacy headings or indented quoted reply text as frozen authority.
+  for (const signature of text.matchAll(/^- (?:Record-SHA256|Complete-Record|Handoff-ID):/gm)) {
+    if (!records.some(record => record.start <= signature.index && signature.index < record.end)) {
+      die("journal has ambiguous frozen receipt structure; refusing unsafe replay", 3);
+    }
+  }
+  return records;
+}
+function frozenHandoffId(block) {
+  const values = receiptFields(block).filter(([key]) => key === "Handoff-ID").map(([, value]) => value);
+  if (values.length > 1) die("frozen receipt has ambiguous Handoff-ID fields; refusing unsafe replay", 3);
+  return values[0];
+}
 function durableHandoffPrefix(repo, handoffId) {
   let text = ""; try { text = fs.readFileSync(journalPath(repo), "utf8"); } catch { return []; }
-  const marker = `- Handoff-ID: \`${handoffId}\``;
-  const blocks = text.split(/(?=^## Gemini frozen gate attempt — )/m);
-  for (const block of blocks) if (block.startsWith("## Gemini frozen gate attempt — ") && !completeHandoffRecord(block)) die("journal has an incomplete receipt; refusing unsafe replay", 3);
-  return blocks.filter(block => block.includes(marker)).map(block => {
-    if (!completeHandoffRecord(block)) die("Handoff-ID has an incomplete durable receipt; refusing unsafe replay", 3);
-    return receiptFields(block);
-  });
+  return frozenJournalRecords(text).filter(record => frozenHandoffId(record.block) === handoffId).map(record => receiptFields(record.block));
 }
 function manualTransport() { return { name: MANUAL_TRANSPORT, identity: `${MANUAL_TRANSPORT}|${SUBSCRIPTION_MODEL}` }; }
 function importedReceiptSet(o, plan, prepared, imported) {

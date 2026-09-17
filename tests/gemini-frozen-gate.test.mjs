@@ -47,6 +47,15 @@ function reply(packet, verdict) {
 function packets(f) { const root = path.join(f.dir, ".gemini-gate", "handoff"); return JSON.parse(readFileSync(path.join(root, "handoff.json"), "utf8")).packets.map(item => readFileSync(path.join(root, "packets", item.filename), "utf8")); }
 function replies(f, verdicts) { const dir = path.join(f.dir, ".gemini-gate", "handoff", "replies"); for (const [index, verdict] of verdicts.entries()) writeFileSync(path.join(dir, `${String(index + 1).padStart(4, "0")}.txt`), reply(packets(f)[index], verdict)); }
 function importHandoff(f) { return invoke(f, ["--slice-manifest", "plan.json", "--handoff-import", ".gemini-gate/handoff"]); }
+function handoffId(f) { return JSON.parse(readFileSync(path.join(f.dir, ".gemini-gate", "handoff", "handoff.json"), "utf8")).handoff_id; }
+function writeJournal(f, text) { const file = path.join(f.dir, journal); mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); }
+function committedJournal() { return execFileSync("git", ["-C", root, "show", `HEAD:${journal}`], { encoding: "utf8" }); }
+function legacyAttempt(body = "legacy history") { return `\n## Gemini gate attempt — PASS_VERDICT — 2026-09-17T00:00:00Z\n\n    ${body}\n`; }
+function scopeMismatchDiagnostic() { return "\n## Gemini gate scope-mismatch diagnostic — 2026-09-17T00:00:01Z\n\n- Record-Kind: `SCOPE_MISMATCH_DIAGNOSTIC`\n\n### Diagnostic output — NOT A VERDICT\n\n    scope.files does not equal the actual changed surface\n"; }
+function rejectedImportPreservesJournal(f, text, message) {
+  writeJournal(f, text); const before = readFileSync(path.join(f.dir, journal), "utf8"), result = importHandoff(f);
+  assert.equal(result.status, 3, result.stderr); assert.match(result.stderr, message); assert.equal(readFileSync(path.join(f.dir, journal), "utf8"), before);
+}
 function dry(f, extra = []) { return invoke(f, ["--context", "docs/contract.md", "--dry-run", ...extra]); }
 function fakeAgy({ hang = false, termIgnoringWriter = false, omitToolPermission = false, toolPermission = "request-review", initPermissionMode = "request-review", initEffort, stepUsage, terminalUsage } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "fake-agy-")), home = path.join(dir, "home"), binary = path.join(dir, "agy"), settings = path.join(home, ".gemini", "antigravity-cli", "settings.json");
@@ -137,6 +146,42 @@ test("an exact durable prefix is reused and only missing handoff receipts are ap
     writeFileSync(path.join(f.dir, journal), blocks[0]); const retry = importHandoff(f); assert.equal(retry.status, 0, retry.stderr);
     const recovered = readFileSync(path.join(f.dir, journal), "utf8"); assert.equal((recovered.match(/Handoff-ID: `PIL-GEMINI-HANDOFF-/g) || []).length, 4); assert.equal((recovered.match(/Status: `PASS_VERDICT`/g) || []).length, 4);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("strict manual import accepts the stopped candidate's mixed journal without changing its prefix", () => {
+  const f = fixture(); try {
+    exportHandoff(f); replies(f, ["GO", "GO", "GO"]);
+    const stopped = committedJournal(); writeJournal(f, stopped);
+    const result = importHandoff(f), after = readFileSync(path.join(f.dir, journal), "utf8");
+    assert.equal(result.status, 0, result.stderr); assert.ok(after.startsWith(stopped), "the stopped journal bytes are preserved before the new receipts");
+    assert.equal((after.match(new RegExp("- Handoff-ID: `" + handoffId(f) + "`", "g")) || []).length, 4);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("strict manual import treats legacy and diagnostic material as non-authoritative while validating frozen records", () => {
+  const foreign = fixture(), f = fixture(); try {
+    exportHandoff(foreign); replies(foreign, ["GO", "GO", "GO"]); assert.equal(importHandoff(foreign).status, 0);
+    const frozen = readFileSync(path.join(foreign.dir, journal), "utf8");
+    exportHandoff(f); replies(f, ["GO", "GO", "GO"]);
+    const quoted = "quoted - Handoff-ID: `" + handoffId(f) + "`\n    ## Gemini frozen gate attempt — PASS_VERDICT — quoted\n    - Complete-Record: `YES`";
+    const mixed = `${legacyAttempt("pre-frozen history")}\n${frozen}\n\n${scopeMismatchDiagnostic()}${legacyAttempt(quoted)}\n${frozen}\n\n${legacyAttempt("future legacy append")}`;
+    writeJournal(f, mixed); const result = importHandoff(f), after = readFileSync(path.join(f.dir, journal), "utf8");
+    assert.equal(result.status, 0, result.stderr); assert.ok(after.startsWith(mixed), "foreign history and quoted receipt-shaped text have no prefix authority");
+  } finally { rmSync(foreign.dir, { recursive: true, force: true }); rmSync(f.dir, { recursive: true, force: true }); }
+});
+test("strict manual import refuses damaged or orphaned frozen structure even near legacy material", () => {
+  const cases = [
+    ["truncated frozen record before legacy", text => text.replace(/- Complete-Record: `YES`\n/, ""), /incomplete receipt/],
+    ["checksum-invalid frozen record before diagnostic", text => text.replace(/- Record-SHA256: `([0-9a-f])/, (_, first) => "- Record-SHA256: `" + (first === "0" ? "1" : "0")), /incomplete receipt/],
+    ["header-loss orphan before legacy", text => text.replace(/^## Gemini frozen gate attempt — .*\n/m, ""), /ambiguous frozen receipt structure/],
+    ["legacy-headed frozen-only field", text => legacyAttempt("legacy") + "\n- Handoff-ID: `PIL-GEMINI-HANDOFF-" + "0".repeat(24) + "`\n" + text, /ambiguous frozen receipt structure/],
+    ["new frozen header before completion", text => text.replace(/- Record-SHA256:/, "## Gemini frozen gate attempt — PASS_VERDICT — interrupted\n\n- Record-SHA256:"), /incomplete receipt/],
+  ];
+  for (const [name, mutate, message] of cases) {
+    const foreign = fixture(), f = fixture(); try {
+      exportHandoff(foreign); replies(foreign, ["GO", "GO", "GO"]); assert.equal(importHandoff(foreign).status, 0);
+      exportHandoff(f); replies(f, ["GO", "GO", "GO"]);
+      rejectedImportPreservesJournal(f, `${mutate(readFileSync(path.join(foreign.dir, journal), "utf8"))}${legacyAttempt("trailing legacy")}`, message);
+    } finally { rmSync(foreign.dir, { recursive: true, force: true }); rmSync(f.dir, { recursive: true, force: true }); }
+  }
 });
 test("endpoint changes after slice receipts prevent the final release aggregate", async () => {
   const f = fixture(); try {

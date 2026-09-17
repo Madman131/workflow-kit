@@ -38,12 +38,14 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    generalization rules, read-only sources.
 7. **Consult protocol** — route questions to the orchestrator with stage, question, options with
    costs, and a recommendation. **Never end a turn on a consult:** name what you are doing while you
-   wait, and state the addressee in visible output. **Only a known orchestrator-owned consult older than ONE turn is
-   answered by the orchestrator's recommendation**; a queued ruling supersedes.
+   wait, and state the addressee in visible output. **After ONE turn, a known ordinary PM-owned consult may proceed
+   only on the worker's already-submitted recommendation: reversible local work within the current CHIP's approved
+   paths and existing execution/review authority. Report it; a later PM ruling supersedes.**
    **⚠ The timeout requires that you KNOW the question was the orchestrator's. If you were UNSURE
    which bucket it fell in, the timeout does not apply — unsure is not a licence to proceed, it is
    the reason to wait.** Every other unsure in this method fails closed; this one does too.
-   **It NEVER reaches a Principal-required ruling or a decision the TARGET REPO reserves to the Owner. The examples below are
+   **It NEVER reaches a Principal-required ruling, Owner reservation, external/live/irreversible action, missing
+   gate/admission, or stopped/revoked authority. The examples below are
    EXAMPLES, not a closed set** — a repo reserves what it reserves, and any list a portable file
    ships is short in every repo it is wrong about. **Short used to mean "ask the Owner"; keyed to a
    timeout it means "proceed without them", so the property is what binds, never the count.** A ratification that did not arrive did

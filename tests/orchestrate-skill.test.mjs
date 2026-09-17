@@ -507,6 +507,15 @@ test("§ Routing and § Standing duties exist in the body — the two sections t
     "a worker must never end a turn on a consult or a wait");
 });
 
+test("ordinary consult timeout uses the worker's recommendation and retains every authority boundary", () => {
+  const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
+  pin(brief, "known ordinary PM-owned consult may proceed\n   only on the worker's already-submitted recommendation", "ordinary timeout uses the submitted worker recommendation, not an absent PM reply");
+  pin(brief, "reversible local work within the current CHIP's approved\n   paths and existing execution/review authority", "ordinary timeout stays in the approved CHIP and local authority");
+  pin(brief, "Report it; a later PM ruling supersedes.", "later PM ruling supersedes the worker fallback");
+  pin(brief, "Principal-required ruling, Owner reservation, external/live/irreversible action, missing\n   gate/admission, or stopped/revoked authority", "timeout cannot cross Principal, Owner, action, gate, or revoked-authority boundaries");
+  pin(brief, "If you were UNSURE\n   which bucket it fell in, the timeout does not apply", "unknown authority remains held");
+});
+
 // ── (5) CROSS-SURFACE SENSOR — derived SURFACE set, ENUMERATED phrase set ──────────────────────
 // WHAT THIS IS, STATED AT ITS REAL SIZE. It walks the shipped docs from disk and asks each whether
 // it carries a claim's shape, so the SURFACE set is derived and a new file is covered without
