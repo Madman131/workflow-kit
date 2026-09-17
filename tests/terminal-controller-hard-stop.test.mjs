@@ -110,6 +110,126 @@ async function importMutant(dir, replacements) {
   return import(pathToFileURL(file).href);
 }
 
+const FROZEN_V2_READER = "060a055f695fa0523d88e56f735fa0256f5d1109";
+const FROZEN_V2_READER_SHA256 = "62bdece79709d7e152f8a7929e2e0a69c31912fb41494e50e1ef2aab07fac4f2";
+
+async function importFrozenV2Reader(dir) {
+  const source = execFileSync("git", ["show", `${FROZEN_V2_READER}:hooks/repair-dispatch-state.mjs`], {
+    cwd: KIT, encoding: "utf8",
+  });
+  assert.equal(createHash("sha256").update(source).digest("hex"), FROZEN_V2_READER_SHA256,
+    "the historical oracle must be the exact frozen v2 reader");
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "frozen-v2-reader-"));
+  const file = path.join(fixture, "repair-dispatch-state.mjs");
+  writeFileSync(file, source);
+  try { return await import(pathToFileURL(file).href); }
+  finally { rmSync(fixture, { recursive: true, force: true }); }
+}
+
+function historicalFixture(ctx, reader) {
+  const rows = () => reader.loadRepairEventsForProject(ctx.dir).aggregate_events;
+  const state = (taskId = "task-1") => reader.deriveAggregateRepairState(rows(), taskId);
+  const open = (round, candidate, incoming = {}) => {
+    const input = openPanelInput(ctx, candidate, {}, incoming, false, round);
+    const result = reader.recordAggregatePanelOpen(input, options(ctx.dir));
+    assert.equal(result.ok, true, result.state);
+    return { opened: result, expected: input.expected_seats };
+  };
+  const close = (opened, expected, candidate, findingId) => {
+    const result = reader.recordAggregatePanelClose({ type: "aggregate_v2", kind: "panel_close",
+      task_id: "task-1", changeset_id: "changeset-1", panel_open_event_id: opened.event_id,
+      received_seats: receivedSeats(expected, findingId).map((seat) => ({ ...seat,
+        reviewed_commit: candidate.commit, reviewed_tree: candidate.tree })) }, options(ctx.dir));
+    assert.equal(result.ok, true, result.state);
+    return result;
+  };
+  const decide = (closed, findingId, terminal = false, remediation = "bounded") => {
+    const result = reader.recordAggregateDisposition({ type: "aggregate_v2", kind: "disposition",
+      task_id: "task-1", changeset_id: "changeset-1", panel_close_event_id: closed.event_id,
+      pm_findings: [], finding_dispositions: { accepted: [findingId], declined: [], note: [], followup: [] },
+      terminal_state: terminal ? "STOP" : "CONTINUE", remediation_kind: terminal ? null : remediation,
+      authorized_paths: terminal ? [] : ["src/x.mjs"], same_mechanism_repeated: false }, options(ctx.dir));
+    assert.equal(result.ok, true, result.state);
+    return result;
+  };
+  const rootExit = (dispositionEventId) => {
+    const result = reader.recordAggregateRootExit({ type: "aggregate_v2", kind: "root_exit",
+      task_id: "task-1", changeset_id: "changeset-1", disposition_event_id: dispositionEventId,
+      shared_mechanism: "one shared controller defect", symptom_explanation: "prior repairs treated symptoms",
+      owner_state_yield_seams: ["owner/state seam"], replacement: "one bounded correction",
+      removed_workarounds: ["repeat patch"], trigger_matrix: ["the original trigger closes"],
+      closure_evidence: "candidate evidence closes the trigger" }, options(ctx.dir));
+    assert.equal(result.ok, true, result.state);
+    return result;
+  };
+  const review = (panelCloseId, candidate, ruling = "finish_bounded_root", proposed = null) => {
+    const parent = state();
+    const root = parent.root_exits.find((row) => row.disposition_event_id === parent.latest?.event_id);
+    const proposed_transition = proposed ?? { policy_version: reader.AGGREGATE_POLICY_VERSION,
+      disposition_event_id: parent.latest.event_id, panel_close_event_id: panelCloseId,
+      source_round: parent.latest.round, next_round: parent.latest.round + 1,
+      root_exit_event_id: root?.event_id ?? null, authorized_paths: parent.latest.authorized_paths };
+    const result = reader.recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
+      task_id: "task-1", changeset_id: "changeset-1", reviewer_role: "frontier",
+      purpose: proposed ? "child_continuation" : "dispatch", proposed_transition,
+      anchor: proposed ? terminalAnchor(parent) : { kind: "aggregate_panel_close", event_id: panelCloseId,
+        frozen_commit: candidate.commit, frozen_tree: candidate.tree },
+      review_evidence: "frontier review of the completed aggregate panel",
+      zoom_out: "the correction stays tied to the requested outcome", ruling, bounded_scope: "one consolidated correction",
+      closure_evidence: "the original accepted triggers no longer fire" }, options(ctx.dir));
+    assert.equal(result.ok, true, result.state);
+    return result;
+  };
+  const dispatchHistorical = (dispositionEventId, panelCloseEventId, nextRound, rootExitEventId = null,
+    processReviewEventId = null) => {
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    const brief = `briefs/historical-round-${nextRound}.md`;
+    writeFileSync(path.join(ctx.dir, brief), `historical repair ${nextRound}\n`);
+    const receipt = reader.confirmRepairBrief({ declaration: { aggregate_controller: "aggregate_v2",
+      task_id: "task-1", changeset_id: "changeset-1", disposition_event_id: dispositionEventId,
+      panel_close_event_id: panelCloseEventId, next_round: nextRound, root_exit_event_id: rootExitEventId,
+      process_review_event_id: processReviewEventId }, brief_path: brief }, options(ctx.dir));
+    assert.equal(receipt.ok, true, receipt.state);
+    const worker = reader.recordWorkerVerification({ task_id: "task-1", repair_dispatch_event_id: receipt.event_id },
+      options(ctx.dir, `historical-worker-${nextRound}`));
+    assert.equal(worker.ok, true, worker.state);
+    return { dispatch: receipt.event_id, worker: worker.event_id };
+  };
+  const stop = () => {
+    const candidate = commit(ctx.dir, 1);
+    const panel = open(1, candidate);
+    const closed = close(panel.opened, panel.expected, candidate, "F1");
+    decide(closed, "F1", true);
+    return candidate;
+  };
+  const fourGateStop = () => {
+    let candidate = commit(ctx.dir, 1);
+    let panel = open(1, candidate);
+    let closed = close(panel.opened, panel.expected, candidate, "F1");
+    let decided = decide(closed, "F1");
+    let authority = dispatchHistorical(decided.event_id, closed.event_id, 2);
+    candidate = commit(ctx.dir, 2);
+    panel = open(2, candidate, authority);
+    closed = close(panel.opened, panel.expected, candidate, "F2");
+    decided = decide(closed, "F2", false, "root_replacement");
+    const roundTwoExit = rootExit(decided.event_id);
+    authority = dispatchHistorical(decided.event_id, closed.event_id, 3, roundTwoExit.event_id);
+    candidate = commit(ctx.dir, 3);
+    panel = open(3, candidate, authority);
+    closed = close(panel.opened, panel.expected, candidate, "F3");
+    decided = decide(closed, "F3", false, "root_replacement");
+    const exit = rootExit(decided.event_id);
+    const process = review(closed.event_id, candidate);
+    authority = dispatchHistorical(decided.event_id, closed.event_id, 4, exit.event_id, process.event_id);
+    candidate = commit(ctx.dir, 4);
+    panel = open(4, candidate, authority);
+    closed = close(panel.opened, panel.expected, candidate, "FINAL");
+    decide(closed, "FINAL", true);
+    return candidate;
+  };
+  return { rows, state, review, stop, fourGateStop };
+}
+
 function repo() {
   const dir = mkdtempSync(path.join(os.tmpdir(), "terminal-controller-"));
   execFileSync("git", ["init", "-q", dir]);
@@ -693,12 +813,95 @@ test("v3 version boundaries reject invalid projections and preserve historical o
   } finally { ctx.cleanup(); }
 });
 
-test("child panel-open floor preserves v2 lineage baselines and adds only an accepted v3 completion-worker floor", () => {
-  const source = readFileSync(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url), "utf8");
-  assert.match(source, /aggregatePolicyVersion\(row\) < Math\.max\(lineage\.policy_version \?\? HISTORICAL_AGGREGATE_POLICY_VERSION,\s+completionWorker && aggregatePolicyVersion\(completionWorker\) === AGGREGATE_POLICY_VERSION\s+\? AGGREGATE_POLICY_VERSION : HISTORICAL_AGGREGATE_POLICY_VERSION\)/s,
-    "a v2 ordinary or completion lineage keeps its v2 child-open floor");
-  assert.doesNotMatch(source, /lineage\.policy_version === AGGREGATE_POLICY_VERSION \|\|\s+\(completionWorker && aggregatePolicyVersion\(completionWorker\) === AGGREGATE_POLICY_VERSION\)/s,
-    "the v3-worker predicate cannot discard the established v2 lineage baseline");
+test("historical v2 ordinary lineage keeps a versionless child panel inert in both readers", async () => {
+  const ctx = repo();
+  try {
+    const frozen = await importFrozenV2Reader(ctx.dir);
+    const history = historicalFixture(ctx, frozen);
+    history.stop();
+    const parent = history.state();
+    const proposal = { type: "aggregate_v2", policy_version: frozen.AGGREGATE_POLICY_VERSION,
+      kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: parent.latest.event_id, trigger_ids: parent.latest.finding_dispositions.accepted,
+      continuation_kind: "new_changeset", authority_route: "owner", owner_evidence: "historical Owner fixed child",
+      action_screen: _DEFAULT_CONTINUATION_SCREEN, children: [{ task_id: "historical-child",
+        changeset_id: "historical-child-cs", tier: "T2", budget: "one fixed-scope changeset",
+        authorized_paths: ["src/x.mjs"] }] };
+    const minted = frozen.recordAggregateChildContinuation(proposal, options(ctx.dir));
+    assert.equal(minted.ok, true, minted.state);
+    const child = { task_id: "historical-child", changeset_id: "historical-child-cs",
+      child_continuation_event_id: minted.event_id };
+    const opened = frozen.recordAggregatePanelOpen(openPanelInput(ctx, commitSource(ctx.dir, 2), child),
+      options(ctx.dir));
+    assert.equal(opened.ok, true, opened.state, "the valid v2 child panel opens under the frozen reader");
+    const validRows = aggregateRows(ctx);
+    assert.equal(frozen.deriveAggregateRepairState(validRows, child.task_id).panels_open.length, 1,
+      "the frozen reader accepts the valid v2 ordinary child panel");
+    assert.equal(deriveAggregateRepairState(validRows, child.task_id).panels_open.length, 1,
+      "the candidate accepts the valid v2 ordinary child panel");
+
+    const versionless = { ...validRows.at(-1).event };
+    delete versionless.policy_version;
+    const replay = [...validRows.slice(0, -1), stamped(versionless)];
+    const frozenReplay = frozen.deriveAggregateRepairState(replay, child.task_id);
+    assert.equal(frozenReplay.ok, true, JSON.stringify(frozenReplay));
+    assert.equal(frozenReplay.panels_open.length, 0,
+      "the frozen reader leaves only the versionless child panel inert");
+    assert.equal(deriveAggregateRepairState(replay, child.task_id).panels_open.length, 0,
+      "the candidate leaves only the versionless child panel inert");
+  } finally { ctx.cleanup(); }
+});
+
+test("historical v2 completion lineage keeps a versionless child panel inert in both readers", async () => {
+  const ctx = repo();
+  try {
+    const frozen = await importFrozenV2Reader(ctx.dir);
+    const history = historicalFixture(ctx, frozen);
+    history.fourGateStop();
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/historical-completion.md"), "historical completion batch\n");
+    const parent = history.state();
+    assert.equal(parent.terminal, "STOP", "the frozen reader accepts the valid v2 terminal parent");
+    const paths = [...new Set(parent.panels_open.flatMap((open) => open.changed_paths))].sort();
+    const proposal = { type: "aggregate_v2", policy_version: frozen.AGGREGATE_POLICY_VERSION,
+      kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: parent.latest.event_id, trigger_ids: parent.latest.finding_dispositions.accepted,
+      continuation_kind: "completion_exception", authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      owner_evidence: "historical Owner completion", children: [{ task_id: "historical-finish",
+        changeset_id: "historical-finish-cs", tier: "T2", budget: "one final batch", authorized_paths: paths }],
+      completion_exception: { repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: "T2", coverage: "full" },
+        pm_recommendation: "one repair", surviving_harm: "FINAL", smallest_correction: "src/x.mjs",
+        completion_proof: "one full final panel" },
+      completion_batch: { worker_session_id: "historical-finish-worker", brief_path: "briefs/historical-completion.md" } };
+    const review = history.review(null, null, "owner_decision", proposal);
+    const minted = frozen.recordAggregateChildContinuation({ ...proposal, process_review_event_id: review.event_id },
+      options(ctx.dir));
+    assert.equal(minted.ok, true, minted.state);
+    const worker = frozen.recordWorkerVerification({ task_id: "historical-finish",
+      repair_dispatch_event_id: minted.event_id }, options(ctx.dir, "historical-finish-worker"));
+    assert.equal(worker.ok, true, worker.state, "the valid v2 completion worker is accepted before the child panel");
+    const child = { task_id: "historical-finish", changeset_id: "historical-finish-cs",
+      child_continuation_event_id: minted.event_id };
+    const opened = frozen.recordAggregatePanelOpen({ ...openPanelInput(ctx, commitSource(ctx.dir, 5), child,
+      { worker: worker.event_id }), phase: "final_bookend" }, options(ctx.dir));
+    assert.equal(opened.ok, true, opened.state, "the valid v2 completion child panel opens under the frozen reader");
+    const validRows = aggregateRows(ctx);
+    assert.equal(frozen.deriveAggregateRepairState(validRows, child.task_id).panels_open.length, 1,
+      "the frozen reader accepts the valid v2 completion child panel");
+    assert.equal(deriveAggregateRepairState(validRows, child.task_id).panels_open.length, 1,
+      "the candidate accepts the valid v2 completion child panel");
+
+    const versionless = { ...validRows.at(-1).event };
+    delete versionless.policy_version;
+    const replay = [...validRows.slice(0, -1), stamped(versionless)];
+    const frozenReplay = frozen.deriveAggregateRepairState(replay, child.task_id);
+    assert.equal(frozenReplay.ok, true, JSON.stringify(frozenReplay));
+    assert.equal(frozenReplay.panels_open.length, 0,
+      "the frozen reader leaves only the versionless completion child panel inert");
+    assert.equal(deriveAggregateRepairState(replay, child.task_id).panels_open.length, 0,
+      "the candidate leaves only the versionless completion child panel inert");
+  } finally { ctx.cleanup(); }
 });
 
 test("v3 Principal completion binds one reviewed batch and rejects lower-version pre-open workers", () => {

@@ -4,13 +4,13 @@ Word budget: 2400 (**Owner-ratified 2026-08-05**; its own number, never summed w
 **Raising it again is an Owner call.** A cap may never force deleting doctrine. Not split: a bank's
 only seam is its section headings, and two half-banks are two files to forget.
 
-Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read it before writing a brief: one that
-omits any of these hands the worker the incident again.
+Reference layer for `.agents/skills/orchestrate/SKILL.md`. Read before writing a brief: one omitting
+these hands the worker the incident again.
 
 ⚠ **Read these as anonymised illustrative lessons, not as receipts.** Each came from a real program,
 but anonymising strips what § Evidence discipline demands of an observation — named artifact — so
-these are shapes to recognise, not evidence you can check. **A rule here is load-bearing once your
-own repo gives it an artifact.**
+these are shapes to recognise, not evidence you can check. **A rule is load-bearing once your repo gives
+it an artifact.**
 
 ## Freeze and the panel
 - **Freeze compliance is PANEL-ENFORCED, not willpower.** Three changesets edited the artifact while
@@ -28,8 +28,9 @@ own repo gives it an artifact.**
   require one shared-cause root kind and closure proof.** R3 tests that consolidated correction.
   Before R4 dispatch, a fresh frontier process review bound to the latest frozen panel
   rules: finish once; Owner terminal children use fixed authorized scope and bounded T2 Principal children opened-only scope;
-  this controller-record ceiling never narrows the Principal's broader delegated program authority. Either may cite successor
-  or Owner decision, never current-chip dispatch. Gate count
+  this controller-record ceiling never narrows the Principal's broader delegated program authority. Every Principal continuation
+  cites its exact typed, proposal-bound `successor` review; Owner completion cites `owner_decision`; other Owner continuations
+  retain applicable review/cadence; never current-chip dispatch. Gate count
   continues through children; each fourth gate repeats the review; no extra round. After
   terminal R4 STOP, one Owner- or T2 Principal-evidenced completion child fixes Owner-authorized or Principal-opened-only paths/proof: one
   verified batch and one real final full review. Parent terminal, inherited checkpoints remain;
