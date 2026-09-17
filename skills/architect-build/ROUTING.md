@@ -64,10 +64,9 @@ obligations only through that existing procedure.
 
 With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for
 blueprint, acceptance, continuity and closeout; it decides nonreserved questions within approved outcome,
-baseline, access, risk and budget and its decisions bind PM. Examples—never an allowlist—include in-plan
-direction, sequencing, local topology/reconciliation, eligible model/seat choice, in-plan tier/wording,
-and bounded approved-provider review routing. PM is sole execution chain, proceeds automatically on
-covered work, and returns a concrete conflict rather than silently declining.
+baseline, access, risk and budget. Examples—never an allowlist—include direction, sequencing, topology,
+model/seat choice, tier/wording and approved-provider routing. PM is sole execution chain,
+proceeds automatically on covered work, and returns concrete conflicts.
 
 Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;
 credentials/access changes; destructive/irreversible acts; money/new-spend commitments; max/ultra, second frontier firing and cap increases; terminal
@@ -75,14 +74,18 @@ exception/waiver; exact push/deploy/publication; and live/external-write GO. Rev
 private frozen packet with redacted necessary context, never publication, messaging, live data, secrets, or
 unrelated export. Principal evidence is not Owner evidence or a review verdict.
 
-When Principal is unavailable, do not create an acting architect. Continue covered work and recorded
-decisions; hold only a new dependent decision. A gate review keeps its own obligation; ordinary consult is
-evidence, not replacement authority. On a rejected execution method, hold its affected action and preserve exact
-evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds, but no equivalent workaround,
-fabricated receipt, or unowned exception proceeds. If reconciliation finds conflict, preserve/verify state, keep the
-affected dependency held, restore only under existing authority, and send an unresolved reserved decision once through
-Principal to Owner while independent covered work continues. No scheduler, controller, transport, polling service, new
-seat, or model binding is implied.
+Within recorded Owner availability policy, Principal routes a required unavailable review: no verdict
+for capacity/outage/unsupported runtime; supported full-coverage Gemini first, then fresh cold Astra.
+It records the actual family and reduced decorrelation, never bypasses host denial or relaxes transport
+controls, and returns to Claude for the next unstarted appropriate seat. A substantive `NO-GO` routes
+as a finding, not as availability; outside that policy, a reduced-family seat still needs Owner evidence.
+
+When Principal is unavailable, create no acting architect. Continue covered work and recorded decisions;
+hold only a new dependent decision. On a rejected execution method, hold its affected action and preserve
+exact evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds. If reconciliation
+conflicts, preserve/verify state, hold the dependency, restore under existing authority, and route an
+unresolved reserved decision once through Principal to Owner while independent covered work continues.
+No workaround, fabricated receipt or unowned exception proceeds.
 
 Controller admission is necessary recorded-shape evidence, never certification of a complete tier roster. PM and
 Principal verify configured required roles/families and independent eligibility against WORKFLOW/REVIEW/GATES. Thus a

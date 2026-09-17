@@ -115,6 +115,11 @@ material* failure at all; these two fire on a `DEFER` that is individually legit
 
 ## Routing — which family gates what
 
+**Availability route.** The preferred Claude code seat is not an exclusive or wait condition: if it
+has capacity/outage/unsupported-runtime failure, record no verdict and apply `core/REVIEW.md` §
+External gate — supported full-coverage Gemini first, otherwise cold Astra. Host denial remains held;
+the route never weakens a Gemini binding, envelope, slice, tool, identity or permission control.
+
 ### ⚠ GEMINI REVIEWS DESIGNS, NOT DIFFS — pick by WHO BUILT the change (Owner ruling 2026-07-28; supersedes the 2026-07-15 routing)
 
 | Builder | Design gate | Code gate |
@@ -178,10 +183,10 @@ slice route (§ Gemini → Bounded slicing), because a single oversized FILE run
 deliberate.
 
 > **Residual, stated: this concentrates the Codex code gate on Claude — both its AVAILABILITY and its
-> FAMILY INTEGRITY.** Availability: when Claude is exhausted *and* the payload is large, the route is
-> a PM-approved bounded slice plan; if no viable slice set can be approved, record the seat
-> UNAVAILABLE + substitution + decorrelation level and escalate to the Owner rather than shipping
-> single-family. Family integrity: see the hijack precondition above — with only one non-Codex family
+> FAMILY INTEGRITY.** Availability: when Claude is exhausted, apply `core/REVIEW.md`'s required-review
+> availability route: supported full-coverage Gemini first, otherwise cold Astra with the reduced
+> decorrelation recorded; do not wait for a reset or escalate merely because Gemini cannot cover the
+> payload. Family integrity: see the hijack precondition above — with only one non-Codex family
 > on the code, a compromised same-family panel is no longer caught by a second family. Removing code
 > mode as the default does not remove the fallback; it stops it being the everyday path.
 

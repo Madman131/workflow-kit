@@ -48,11 +48,12 @@ own repo gives it an artifact.**
   FROZEN SHA itself rather than being told it. What a receipt does NOT prove is in the body.
 - **A warm delta round may write no thread sidecar of its own** — chain every resume from the
   ORIGINAL cold round's sidecar, and refuse an empty id rather than silently starting a new thread.
-- **A cross-family seat failing with a DIFFERENT denied tool each attempt MAY be agentic drift** —
-  sandbox policy, runner state or a real missing prerequisite produce the same shape, so the pattern
-  does not settle the cause. Either way record "unreliable here", never "categorically unavailable",
-  cap the retries, and receipt them. **Never widen tool permissions to buy a green
-  rung** — that trades the gate's meaning for its colour.
+- **Availability is no verdict:** for capacity/outage/unsupported runtime, record failed route and
+  requested/actual seat/family, then supported full-coverage Gemini or fresh cold Astra; never wait,
+  repeat Owner, loosen binding/transport/tool/permission, bypass host denial, duplicate a seat, or
+  call Codex-build Astra cross-family. Free input excludes findings/verdicts/advocacy; folded may use
+  history. Return Claude on the next unstarted seat. A denied-tool pattern may be drift: receipt it,
+  never widen permissions to buy green.
 - **A read-only seat cannot execute the suite.** Its "tests fail" may be a COVERAGE judgment, not a
   result — read the receipt, not the label, and pair it with an executing seat.
 - **Deviating TOWARD a repo's stricter contract, over a non-Owner instruction to do the looser
@@ -105,11 +106,10 @@ own repo gives it an artifact.**
   historical claims into false ones. Re-derive the fix from the artifact before believing the word.
 
 ## Shipping and merging
-- **The upgrade instruction is DERIVED PER RELEASE from what the diff actually EDITS.** Verbatim-
-  file edits make a forced re-install mandatory; a new-files-only release makes it FORBIDDEN — there
-  it buys a version stamp and destroys hand-authored generated content while exiting 0. Execute both
-  directions. To break a CLI contract, break it LOUDLY: exit non-zero, name the flag and version,
-  carry the remediation — while tolerating the old config KEY so an existing adopter is not bricked.
+- **Derive upgrade instructions per release from edited bytes.** For an existing adopter, a verbatim
+  edit requires reviewed scoped replacement, or force only when every differing file may be replaced
+  and generated bindings are reconciled; new-files-only forbids force. Verify installed bytes. Break
+  CLI contracts loudly: nonzero, flag/version/remediation; tolerate old config keys.
 - **If an artifact must ship at exactly its budget, flag the NUMBER to the Owner.** Zero headroom
   pressures the next editor to raise the cap rather than cut. It is a state you may inherit under a
   parity constraint; it is never one you mint on a new artifact.

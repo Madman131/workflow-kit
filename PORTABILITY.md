@@ -3,6 +3,20 @@
 > Read this before you rely on any control. A kit that is *believed* to enforce something it does not
 > is worse than no kit — it manufactures assurance (`core/INVARIANTS.md` epistemic rules 2 & 10).
 
+## Reviewer-availability rollout
+
+A fresh install copies `core/REVIEW.md` and `core/GATES.md` and generates `core/BINDINGS.md`. On an
+existing adopter, an ordinary rerun retains differing mechanism files as `KEPT BUT STALE` and exits
+nonzero; it also retains generated BINDINGS. An installer invocation therefore is not upgrade proof.
+Use a reviewed scoped update for every affected installed mechanism: replace `core/REVIEW.md`,
+`core/GATES.md`, `core/WORKFLOW.md`, `.agents/skills/orchestrate/{SKILL.md,PROTOCOLS.md}`, and
+`.agents/skills/architect-build/ROUTING.md` with accepted kit bytes. Compare the new template's
+availability section and core-document approval wording with `core/BINDINGS.md`, carry its concrete
+local model/effort and transport facts into the new fields, and deliberately edit that generated file. Preserve every unrelated local
+binding; verify all seven installed surfaces. Synchronize and check actually used user-global
+Orchestrate copies with the kit's supported sync script. Do not use blanket `--force`; it is global
+and may replace other differing generated content (with backup).
+
 ## The enforcement asymmetry (the load-bearing caveat)
 
 The guard hooks are `PreToolUse` registrations. Since **v2.1** they are registered in **both** lanes —

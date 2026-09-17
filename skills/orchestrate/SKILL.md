@@ -29,11 +29,10 @@ ratifies a specific artifact:** if the changeset gains a commit the GO is void u
 the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
 
 ### Routing — the Owner is not a queue
-Within approved plan, access and budget, PM may dispatch workers/reviews, approve Gemini slices and
-in-scope transmission, disposition findings/repairs, run tests, make commits/integration, and draft
-tickets. PM may inspect/integrate Builder bytes; never author designated T2/T3
-source. One approval captures routine tier/risk authority; do not re-ask unchanged authority. A ticket
-does not authorize implementation; PM cannot relabel an unfinished repair as scope.
+Within approved plan, access and budget, PM may dispatch ordinary workers/reviews, approve Gemini
+slices and in-scope transmission, disposition findings/repairs, test, make local commits/integration
+and draft tickets. PM may inspect/integrate Builder bytes; never author designated T2/T3 source. One
+approval captures routine authority; a ticket never authorizes implementation or relabels repair scope.
 
 For a delegated program, Principal decides nonreserved in-envelope questions; directives bind PM and reviews remain
 evidence. PM proceeds on covered work and returns safeguards, never silently declines. A rejected method is held with
@@ -44,17 +43,15 @@ terminal exception, gate waiver, max/ultra, second frontier firing and cap incre
 those calls through PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
 An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a
-consult or a wait:** send it, name what you do meanwhile, and do it.
+consult or a wait:** send it, name what you do meanwhile, and do it. Review availability follows
+`core/REVIEW.md` § External gate; it does not change authority.
 
 ## Standing duties
-- Before PM local integration in a primary clone, it must be clean, on the target branch, and the
-  candidate must be a pure fast-forward; otherwise Principal selects reconciliation or Owner decides.
-- Surface landed/stale worktrees and branches; use the merge-type proof and occupancy refusal in
-  `.agents/skills/orchestrate/PROTOCOLS.md`.
-- When a program has a persistent architect, use `core/WORKFLOW.md` § Architectural consult routing and
-  its installed `/architect-build` reference layer.
-  Keep routine CHIP progress in its durable record; consult only at listed triggers. Principal drives
-  completion; PM remains the single execution command chain.
+- Before PM local integration in a primary clone: clean, on the target branch, pure fast-forward; otherwise
+  Principal selects reconciliation or Owner decision.
+- Surface stale worktrees, use `.agents/skills/orchestrate/PROTOCOLS.md`, and route persistent-architect
+  work through `core/WORKFLOW.md` § Architectural consult routing. Keep routine CHIP progress in its
+  durable record; consult only at listed triggers. Principal drives completion; PM is the single execution chain.
 
 ## One writer per repo
 Before writing, a chip looks for competing writers in the repo's own **lane declarations** —

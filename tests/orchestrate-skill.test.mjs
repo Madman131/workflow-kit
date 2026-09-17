@@ -323,11 +323,14 @@ test("architect-build routing keeps delegated authority, quiet boundaries, fourt
   pin(routing, "persistent architect independently satisfies every existing process-review eligibility and freshness\nrequirement.", "combined fourth-gate eligibility");
   pin(routing, "Recovery does not promote advice, create an acting architect or second PM, or block covered work.", "recovery preserves one architect chain");
   pin(routing, "With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for", "delegated Principal owns program continuity");
+  pin(routing, "Examples—never an allowlist", "Principal examples do not narrow authority");
+  pin(routing, "proceeds automatically on covered work, and returns concrete conflicts", "PM quiet continuity");
   pin(routing, "Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;", "Owner reservations remain explicit");
-  pin(routing, "When Principal is unavailable, do not create an acting architect.", "unavailable architect does not mint a replacement chain");
+  pin(routing, "When Principal is unavailable, create no acting architect", "unavailable architect does not mint a replacement chain");
   pin(routing, "Controller admission is necessary recorded-shape evidence, never certification of a complete tier roster.", "controller shape is not a full T3 roster certification");
   pin(routing, "T3 roster missing\nits configured lens or external family is not full even if a two-family controller predicate accepts it.", "T3 family assurance stays outside the controller-shape claim");
-  pin(routing, "On a rejected execution method, hold its affected action and preserve exact\nevidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds", "rejected-method routing holds only the action and preserves ordinary retry authority");
+  pin(routing, "hold its affected action and preserve\nexact evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds", "rejected method holds only affected action and preserves ordinary retry");
+  pin(routing, "while independent covered work continues", "reserved routing does not stop independent covered work");
 });
 
 // The list below is the tree's, not a habit: it was ["CHIP_BRIEF.md", "PROTOCOLS.md"] while a THIRD

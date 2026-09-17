@@ -14,7 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, readFileSync, readdirSync, existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -961,12 +961,76 @@ test("REVIEW names contract OMISSION as the residual only the free adversary def
   assert.match(r, /owning one would point it at something that exists/);
 });
 
-test("REVIEW's single-reviewer seat is cross-family by default, with no escape on a core/ file", () => {
+test("REVIEW's single-reviewer seat keeps the cross-family default and names the authorized availability exception", () => {
   const r = read("core/REVIEW.md");
   assert.match(r, /that seat is CROSS-FAMILY by default/);
-  assert.match(r, /the escape is unavailable on any `core\/` file/);
+  assert.match(r, /the escape is unavailable on any `core\/` file except the recorded required-review availability route below/);
   // The named gap — an accepted weakness must never read as a cleared one.
   assert.match(r, /"T1 passed" must never be read as "T1 was decorrelated"/);
+});
+
+test("required Claude-seat availability routes Gemini then cold Astra without false coverage", () => {
+  const r = read("core/REVIEW.md");
+  const g = read("core/GATES.md");
+  const w = read("core/WORKFLOW.md");
+  const b = read("templates/BINDINGS.md.tmpl");
+  for (const phrase of ["Capacity, outage, or unavailable supported runtime is **no", "supported Gemini only when its verified binding and transport cover them all, otherwise fresh cold", "Never wait for reset, re-ask Owner, relax version/size/slice/tool/identity/permission controls", "Free input is the actual change plus contract mechanisms, criteria and invariants", "Astra on a Codex build is **same-family-only**", "do not duplicate a running/completed seat or repeat it"])
+    assert.ok(r.includes(phrase), `REVIEW retains ${phrase}`);
+  assert.match(g, /when Claude is exhausted, apply `core\/REVIEW\.md`'s required-review.*supported full-coverage Gemini first, otherwise cold Astra/s);
+  assert.match(w, /Unavailable: no verdict; use REVIEW fallback/);
+  assert.match(w, /Cross-family except REVIEW fallback/, "core-doc branch names the authorized exception");
+  assert.match(r, /outside the recorded availability route, dropping below the tier's cross-family mandate/, "family floor keeps its default outside the route");
+  assert.match(r, /if no different family can be seated, the recorded availability route governs/, "T3 branch uses the standing route");
+  assert.doesNotMatch(r, /cross-family mandate .* is a floor breach, escalated to the Owner|if no different family can be seated the artifact is \*\*not gradable at T3\*\* → escalate to the Owner/s,
+    "no unconditional family-floor Owner reask remains");
+  assert.match(b, /For a seat concretely bound to \*\*Claude\*\*/, "binding scopes fallback to Claude-bound seats");
+  assert.match(b, /wording approval under recorded authority/, "generated bindings honor delegated Principal wording approval");
+  const protocols = read("skills/orchestrate/PROTOCOLS.md");
+  assert.match(protocols, /a verbatim edit requires reviewed scoped replacement, or force only when every differing file may be replaced/);
+  assert.doesNotMatch(protocols, /Verbatim-\s*file edits make a forced re-install mandatory/,
+    "upgrade protocol does not contradict scoped reconciliation");
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-availability-"));
+  try {
+    assert.equal(spawnSync("git", ["init", "-q", dir]).status, 0);
+    const args = [path.join(ROOT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--skip-codex-prompt", "--skip-codex-lane"];
+    assert.equal(spawnSync(process.execPath, args, { encoding: "utf8" }).status, 0);
+    assert.match(readFileSync(path.join(dir, "core", "REVIEW.md"), "utf8"), /Required-review availability route/);
+    assert.match(readFileSync(path.join(dir, "core", "GATES.md"), "utf8"), /Availability route/);
+    const base = "060a055f695fa0523d88e56f735fa0256f5d1109";
+    const mechanisms = [
+      ["core/REVIEW.md", "core/REVIEW.md"],
+      ["core/GATES.md", "core/GATES.md"],
+      ["core/WORKFLOW.md", "core/WORKFLOW.md"],
+      ["skills/orchestrate/SKILL.md", ".agents/skills/orchestrate/SKILL.md"],
+      ["skills/orchestrate/PROTOCOLS.md", ".agents/skills/orchestrate/PROTOCOLS.md"],
+      ["skills/architect-build/ROUTING.md", ".agents/skills/architect-build/ROUTING.md"],
+    ];
+    for (const [source, installed] of mechanisms) {
+      const old = spawnSync("git", ["show", `${base}:${source}`], { cwd: ROOT, encoding: null });
+      assert.equal(old.status, 0, `frozen availability base exists for ${source}`);
+      writeFileSync(path.join(dir, installed), old.stdout);
+    }
+    const local = path.join(dir, "core", "BINDINGS.md");
+    const localFacts = "# local binding\nPM model: sol\nPM effort: high\nAstra model: astra\nAstra effort: xhigh\nTransport: claude companion\nCore documents: Owner sign-off\n";
+    writeFileSync(local, localFacts);
+    const stale = spawnSync(process.execPath, args, { encoding: "utf8" });
+    assert.equal(stale.status, 1, "ordinary upgrade rerun fails on stale mechanism bytes");
+    assert.match(stale.stderr, /KEPT BUT STALE/, "ordinary upgrade names the stale keep");
+    for (const [source, installed] of mechanisms) {
+      const target = path.join(dir, installed);
+      assert.notEqual(readFileSync(target).equals(readFileSync(path.join(ROOT, source))), true,
+        `ordinary upgrade retains stale ${installed}`);
+      copyFileSync(path.join(ROOT, source), target);
+      assert.equal(readFileSync(target).equals(readFileSync(path.join(ROOT, source))), true,
+        `scoped update installs accepted ${installed} bytes`);
+    }
+    writeFileSync(local, `${localFacts.replace("Owner sign-off", "wording approval under recorded authority")}\n## Required-review availability binding\nreviewed local route\n`);
+    for (const fact of ["PM model: sol", "PM effort: high", "Astra model: astra", "Astra effort: xhigh", "Transport: claude companion"])
+      assert.match(readFileSync(local, "utf8"), new RegExp(fact), `scoped reconciliation preserves ${fact}`);
+    assert.match(readFileSync(local, "utf8"), /Required-review availability binding/, "scoped reconciliation adds availability binding");
+    assert.match(readFileSync(local, "utf8"), /wording approval under recorded authority/, "scoped reconciliation updates delegated wording authority");
+    assert.doesNotMatch(readFileSync(local, "utf8"), /Owner sign-off/, "scoped reconciliation removes stale Owner-only shorthand");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("REVIEW's packet rules survive the two ways they are usually broken", () => {
