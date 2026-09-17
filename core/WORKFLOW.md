@@ -26,7 +26,7 @@
 3. **Local — touches no live prod** (a test, a local tool/script, a local-DB mutation, a *bounded* read-only prod query) → **T1 Minor** *(an **unbounded** prod read is **T3** — OOM risk; download an artifact instead)*
 4. **Local, non-code** — docs, comments, a log string, a memory pointer → **T0 Trivial**
 
-Builder proposes tier; **Owner's Principal/general contractor directs/completes all ordinary in-scope completion work through PM and approves tier/wording; otherwise Owner ratifies. Owner retains critical intent, material scope/budget/access/accepted-risk decisions, irrevocable deletion, exact push/deploy/live/external-write GO.** Split separable tiers; otherwise use the highest. The tier sets a **code gate** (review depth) + an **execution gate** (run authorization, only if it runs a prod write). ⚠ **RULE #1 (`core/FOUNDATIONS.md`) lowers the cost of gates on CODE AND DOCTRINE by cutting REPAIRS, never review DEPTH — cutting seats is the misreading — and it does NOT touch the EXECUTION gate — per-write Owner authorization at the moment of a live-data write is unchanged.**
+Builder proposes tier; **with recorded delegation, the Owner's Project Principal completes ordinary in-scope work through PM, including tier/wording. Owner decides critical intent/outcome, material scope/budget/access, explicit risk acceptance, irreversible deletion, credential/access change, money/new spend, and exact push/deploy/publication/live/external-write GO.** Split separable tiers; otherwise use the highest. The tier sets a **code gate** (review depth) + an **execution gate** (run authorization, only if it runs a prod write). ⚠ **RULE #1 (`core/FOUNDATIONS.md`) lowers the cost of gates on CODE AND DOCTRINE by cutting REPAIRS, never review DEPTH — cutting seats is the misreading — and it does NOT touch the EXECUTION gate — per-write Owner authorization at the moment of a live-data write is unchanged.**
 
 | Tier | Code gate | Execution gate *(only if prod write)* |
 |---|---|---|
@@ -65,11 +65,12 @@ declaration below.
 
 ### Architectural consult routing
 
-With recorded Owner delegation, the persistent Architect is Project Principal: it drives completion and
-decides nonreserved in-baseline/access/risk/budget questions; decisions bind the PM, advice/reviews do not.
-PM remains the sole execution chain and proceeds on covered work. Detail: installed `/architect-build` routing.
+With recorded Owner delegation, persistent Architect is Project Principal: it drives completion and decides
+ordinary in-envelope questions; directives bind PM, advice/reviews do not. PM is sole execution chain. A blocked
+method goes with exact evidence to Principal; valid ordinary retry proceeds, otherwise hold it and route an unresolved
+reserved exception once through Principal to Owner. Detail: installed `/architect-build` routing.
 
-**Before building:** state the smallest **user-visible definition of done** and the exact evidence that proves it; recommend the intelligence tier; for T2/T3 write **intent + falsifiable acceptance criteria** as a design doc *before* coding; for chain/stateful logic name the **adversarial cases up front** (crash-mid-sequence · retry · corrupt-state→fail-closed · starvation · empty-tick) and write them as tests before the gate.
+**Before building:** state user-visible done and proof; for T2/T3 write intent + falsifiable acceptance criteria before coding; for chain/stateful logic name and test crash, retry, corrupt-state, starvation, and empty-tick cases before the gate.
 
 ## Gate — the review ladder
 *The ladder itself is below. **How a review is constructed and judged** — the cold-review payload contract, decorrelation, the cross-family lens, and the external gate — is `core/REVIEW.md`. **Tool invocation** (Codex / Gemini runners, model-effort matrix, receipts, traps) is `core/GATES.md`.*

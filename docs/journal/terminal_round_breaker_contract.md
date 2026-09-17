@@ -413,8 +413,8 @@ install — that rung is the § 8c release-completeness blocker, discharged at l
 Freeze; complete T3 instruction/control panel (free seat + ≥3 angles + both cross-family
 families + the adversarial walk-through — this IS gate machinery); all seats collected before any
 repair; accepted harms batched ONCE; the batch's bookend per the final-gate rule. The new rule is
-never used to excuse its own gate. Owner boundaries: tier ratified (§ 0); core-doc wording
-sign-off; push/merge GO on the exact frozen SHA. No push, release, adopter upgrade, or
+never used to excuse its own gate. Current authority: tier/core-doc wording follow WORKFLOW § Steer;
+Owner retains push/merge GO on the exact frozen SHA. No push, release, adopter upgrade, or
 user-install mutation inside the changeset. Disclosed bounds: ≤500 changed paths per candidate
 (and per manifest), 4–12 seats per panel, ≤100 finding ids per seat, 2–8 split children; panel
 git evidence is captured from a WORKING TREE standing at the declared frozen pair, bracketed by

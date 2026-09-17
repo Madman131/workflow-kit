@@ -29,18 +29,18 @@ ratifies a specific artifact:** if the changeset gains a commit the GO is void u
 the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
 
 ### Routing — the Owner is not a queue
-Within approved plan, access and budget, the PM may dispatch workers/reviews, approve Gemini slice
-plans and in-scope artifact transmission, disposition findings and allowed repair batches, run tests,
-make safe local commits/eligible integration, and draft parent-linked tickets. The PM may inspect and
-integrate Builder-authored bytes but never authors designated T2/T3 source. One approval captures
-tier, risk and that routine authority; do not re-ask unchanged authority. Drafting a ticket does not
-authorize its implementation; the PM cannot relabel an unfinished repair as new scope.
+Within approved plan, access and budget, PM may dispatch workers/reviews, approve Gemini slices and
+in-scope transmission, disposition findings/repairs, run tests, make commits/integration, and draft
+tickets. PM may inspect/integrate Builder bytes; never author designated T2/T3
+source. One approval captures routine tier/risk authority; do not re-ask unchanged authority. A ticket
+does not authorize implementation; PM cannot relabel an unfinished repair as scope.
 
-For a program with recorded Owner delegation, Principal decides nonreserved in-envelope program questions
-and its decisions bind PM; reviews remain evidence. PM proceeds on covered work and returns a safeguard
-conflict, never silently declining. Owner alone decides product intent/risk, material scope/budget,
-credentials, destructive/irreversible acts, named live-write GO, remote push/deploy
-GO, terminal exception, gate waiver, max/ultra, second frontier firing and cap increase. A chip routes
+For a delegated program, Principal decides nonreserved in-envelope questions; directives bind PM and reviews remain
+evidence. PM proceeds on covered work and returns safeguards, never silently declines. A rejected method is held with
+exact evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds, otherwise an unresolved reserved
+exception reaches Owner once through Principal. Owner alone decides critical product intent/risk, material scope/budget,
+credentials/access change, money/new-spend, destructive/irreversible acts, named live-write GO, remote push/deploy GO,
+terminal exception, gate waiver, max/ultra, second frontier firing and cap increase. A chip routes
 those calls through PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
 An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a

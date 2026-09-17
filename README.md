@@ -4,7 +4,7 @@
 
 `/architect-build` establishes, reuses, or recovers a persistent architect from a durable record and,
 when the Owner instructs a launch, hands an approved baseline to a separate `/orchestrate` PM. The
-architect stays advisory; the PM remains the single execution command chain. Routine CHIP progress updates
+architect is the Owner's binding Project Principal/general contractor; the PM remains the single execution command chain. Routine CHIP progress updates
 the durable record without spending an architect consult. Meaningful milestones, material architectural
 changes, and a due five-active-workday alignment check consult the architect; an overlapping fourth-gate
 checkpoint combines only when the persistent architect independently meets the existing process-review

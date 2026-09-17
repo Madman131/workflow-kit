@@ -20,7 +20,8 @@ equivalents. Without launch, preserve planning continuity only. Existing authori
 a renewed launch. Inspect the durable record before either action. It names the program/repository;
 architect and active PM locator or file-only equivalents; Owner delegation/limits; approved baseline and
 source pointers; accepted decisions separately from pending advice; current phase/CHIP; unresolved
-decisions; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
+decisions with id/type/source, program/baseline/scope, evidence, delegation/limits, stop/supersession,
+execution/result and active/pending/superseded status; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
 otherwise create one through the repository's normal docs/state convention and record its exact path.
 Record both task locators.
 
@@ -42,10 +43,11 @@ review. Coalesce a due alignment review with another qualifying checkpoint.
 
 ## Packets, ordinary consults, and fourth-gate overlap
 
-Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, accepted
-decisions, and alignment check. It names question, scope, evidence, alternatives, risks, and any exact
+Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, current
+directives, and alignment check. It names question, scope, evidence, alternatives, risks, and any exact
 Owner boundary. PM records advice as adopt/adapt/decline; a delegated decision as acknowledged/executing/
-completed or a concrete safety, gate, or evidence conflict.
+completed/stopped or a concrete safety, gate, or evidence conflict. Pending or superseded advice never promotes;
+a current directive remains applicable only inside its recorded program, baseline and scope.
 
 An ordinary bounded current-CHIP question stays with the active in-thread consult. Below-trigger questions
 do not contact the persistent architect unless an existing gate independently requires its own seat.
@@ -68,12 +70,22 @@ and bounded approved-provider review routing. PM is sole execution chain, procee
 covered work, and returns a concrete conflict rather than silently declining.
 
 Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;
-credentials; destructive/irreversible acts; max/ultra, second frontier firing and cap increases; terminal
+credentials/access changes; destructive/irreversible acts; money/new-spend commitments; max/ultra, second frontier firing and cap increases; terminal
 exception/waiver; exact push/deploy/publication; and live/external-write GO. Review transmission is a
 private frozen packet with redacted necessary context, never publication, messaging, live data, secrets, or
 unrelated export. Principal evidence is not Owner evidence or a review verdict.
 
 When Principal is unavailable, do not create an acting architect. Continue covered work and recorded
 decisions; hold only a new dependent decision. A gate review keeps its own obligation; ordinary consult is
-evidence, not replacement authority. Reconcile at the next checkpoint. No scheduler, controller,
-transport, polling service, new seat, or model binding is implied.
+evidence, not replacement authority. On a rejected execution method, hold its affected action and preserve exact
+evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds, but no equivalent workaround,
+fabricated receipt, or unowned exception proceeds. If reconciliation finds conflict, preserve/verify state, keep the
+affected dependency held, restore only under existing authority, and send an unresolved reserved decision once through
+Principal to Owner while independent covered work continues. No scheduler, controller, transport, polling service, new
+seat, or model binding is implied.
+
+Controller admission is necessary recorded-shape evidence, never certification of a complete tier roster. PM and
+Principal verify configured required roles/families and independent eligibility against WORKFLOW/REVIEW/GATES. Thus a
+T2 Builder-family plus eligible cross-family roster may be full when its configured obligations pass; a T3 roster missing
+its configured lens or external family is not full even if a two-family controller predicate accepts it. Only applicable
+Owner evidence can authorize a recorded reduction, never relabel it full.

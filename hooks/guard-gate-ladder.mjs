@@ -258,7 +258,8 @@ export const SELF_REPORT =
   `correctly-tiered changeset from a mis-tiered one. Re-derive it against core/WORKFLOW.md § Steer\n` +
   `before relying on the row above: an ADMITTED change touching live-path, chain/stateful, schema,\n` +
   `or deploy code is at least T2 — admission itself is § Steer step 0's four doors — and a T2/T3\n` +
-  `tier is only settled once the Owner has RATIFIED it. The tier may be escalated mid-task at any\n` +
+  `tier is settled under core/WORKFLOW.md § Steer authority; recorded Principal delegation covers ordinary\n` +
+  `in-scope tier/wording, while Owner retains its listed reserved decisions. The tier may be escalated mid-task at any\n` +
   `time; lowering one mid-task needs the Owner's confirmation (§ Steer's reversibility handle) and\n` +
   `belongs in the PM disposition record.\n`;
 

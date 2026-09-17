@@ -315,7 +315,7 @@ test("architect-build routing keeps delegated authority, quiet boundaries, fourt
   pin(skill, "Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff.", "launch gates every PM activation and handoff");
   pin(skill, "Without launch, preserve planning continuity only. Existing authorized execution\ndoes not need a renewed launch.", "no-launch file-only boundary");
   pin(routing, "In file-only mode, a launch emits the same handoff through file-only\nequivalents. Without launch, preserve planning continuity only.", "launch gates file-only handoff");
-  pin(routing, "Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, accepted\ndecisions, and alignment check.", "persistent packet currency and delegation provenance");
+  pin(routing, "Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, current\ndirectives, and alignment check.", "persistent packet currency and delegation provenance");
   pin(routing, "Below-trigger questions\ndo not contact the persistent architect unless an existing gate independently requires its own seat.", "quiet current-chip boundary");
   const principalDirectionTrigger = "unresolved in-envelope program decision or concrete PM authority, safety, or evidence conflict requiring Principal direction";
   pin(skill, principalDirectionTrigger, "the PM has a durable contact trigger for an uncovered in-envelope decision or concrete conflict");
@@ -325,6 +325,9 @@ test("architect-build routing keeps delegated authority, quiet boundaries, fourt
   pin(routing, "With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for", "delegated Principal owns program continuity");
   pin(routing, "Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;", "Owner reservations remain explicit");
   pin(routing, "When Principal is unavailable, do not create an acting architect.", "unavailable architect does not mint a replacement chain");
+  pin(routing, "Controller admission is necessary recorded-shape evidence, never certification of a complete tier roster.", "controller shape is not a full T3 roster certification");
+  pin(routing, "T3 roster missing\nits configured lens or external family is not full even if a two-family controller predicate accepts it.", "T3 family assurance stays outside the controller-shape claim");
+  pin(routing, "On a rejected execution method, hold its affected action and preserve exact\nevidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds", "rejected-method routing holds only the action and preserves ordinary retry authority");
 });
 
 // The list below is the tree's, not a habit: it was ["CHIP_BRIEF.md", "PROTOCOLS.md"] while a THIRD
@@ -462,10 +465,12 @@ test("the pin helper reports a DEAD pin instead of passing it", () => {
 test("reserved decisions route through the PM without a portable mirror", () => {
   const body = readFileSync(BODY, "utf8");
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
-  assert.match(body, /Owner alone decides product intent\/risk, material scope\/budget,\s+credentials/,
+  assert.match(body, /Owner alone decides critical product intent\/risk, material scope\/budget,\s+credentials\/access change, money\/new-spend/,
     "§ Routing names the Owner-only boundary without treating Principal delegation as a release waiver");
-  assert.match(body, /Principal decides nonreserved in-envelope program questions/,
+  assert.match(body, /Principal decides nonreserved in-envelope questions/,
     "§ Routing makes delegated program direction binding rather than advisory");
+  assert.match(body, /rejected method is held with\s+exact evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds, otherwise an unresolved reserved\s+exception reaches Owner once through Principal/,
+    "§ Routing gives rejected methods one Principal diagnosis before the unresolved Owner exception");
   assert.match(body, /A chip routes\s+those calls through PM using `CONSULT:` or `RULING NEEDED:`/,
     "§ Routing keeps chip-to-PM consultation distinct from Owner-facing form");
   assert.match(body, /core\/OWNER_COMMS\.md` rule 8, not mirrored here/,

@@ -155,7 +155,7 @@ test("execution roles, legacy slice provenance, and closeout preserve their auth
   const closeout = read("skills/closeout/SKILL.md");
   assert.match(foundations, /PM independently inspects its bytes and may commit\/integrate them, but does not replace its authoring role/);
   assert.match(foundations, /Frontier planning or a critical consult hands its approved plan to the active workhorse PM for implementation/);
-  assert.match(orchestrate, /PM may inspect and integrate Builder-authored bytes but never authors designated T2\/T3 source/);
+  assert.match(orchestrate, /PM may inspect\/integrate Builder bytes; never author designated T2\/T3 source/);
   assert.match(orchestrate, /failed\/STOP surface stays closed.*genuinely new Owner-approved work begins separately only on disjoint surfaces.*controller binds the typed `owner_decision` review and exact continuation proposal.*Astra model\/effort is runtime-verified procedure, not controller-authenticated identity/s);
   assert.match(protocols, /terminal R4 STOP.*one Owner-approved completion child.*recorded paths\/proof.*one verified batch and one real final full review.*second batch, scope growth, repeat\/reset\/relabel STOP.*failed\/STOP surface stays closed.*Genuinely new Owner-approved work starts separately only on disjoint surfaces/s);
   assert.match(rootReadme, /Its failed\/STOP surface remains closed; separately approved genuinely new work begins only on disjoint surfaces/);
@@ -200,10 +200,10 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
     "the tier summary cannot narrow the universal remote-publication GO to code pushes");
   assert.doesNotMatch(workflow, /wording sign-off also stands as its push-GO/,
     "core-document wording sign-off is never equivalent to a remote-publication GO");
-  assert.match(workflow, /Builder proposes tier; \*\*Owner's Principal\/general contractor directs\/completes all ordinary in-scope completion work through PM and approves tier\/wording; otherwise Owner ratifies/,
-    "tier classification grants the Principal completion authority while keeping Builder proposal distinct");
-  assert.match(workflow, /Owner retains critical intent, material scope\/budget\/access\/accepted-risk decisions, irrevocable deletion, exact push\/deploy\/live\/external-write GO/,
-    "Owner retains the exact reserved decisions without reclaiming ordinary review approval");
+  assert.match(workflow, /with recorded delegation, the Owner's Project Principal completes ordinary in-scope work through PM, including tier\/wording/,
+    "tier classification grants the Principal completion authority without an Owner-ratification mirror");
+  assert.match(workflow, /Owner decides critical intent\/outcome, material scope\/budget\/access, explicit risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/,
+    "Owner retains the exact reserved actions without reclaiming ordinary review approval");
   assert.doesNotMatch(workflow, /review\/publication GO/,
     "the superseded combined Owner review/publication reservation cannot return");
   assert.match(readme, /classify \(Builder proposes → ratification under WORKFLOW § Steer\)/,
@@ -216,6 +216,10 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
     "the design makes the Principal's completion authority broad while keeping examples illustrative");
   assert.match(hookPrinted, /Every remote push or publication requires a fresh Owner GO for the exact head and target, regardless of tier or file type/,
     "the actual decision-time ladder must emit the universal remote-publication boundary");
+  assert.match(hookPrinted, /tier is settled under core\/WORKFLOW\.md § Steer authority; recorded Principal delegation covers ordinary\s+in-scope tier\/wording/,
+    "the emitted ladder projects delegated tier authority instead of an Owner-only ratification stop");
+  assert.doesNotMatch(hookPrinted, /only settled once the Owner has RATIFIED/i,
+    "the emitted ladder cannot retain the retired Owner-only ratification instruction");
   assert.doesNotMatch(hookPrinted, /Any push containing code additionally requires/,
     "the emitted ladder must not retain the code-only publication-GO limitation");
   assert.match(rootReadme, /Superseded in v2\.31\.0:\*{0,2}\s+wording sign-off remains a core-document gate, never a remote-publication GO; every remote push or publication requires a fresh Owner GO for the exact head and target/,
@@ -459,8 +463,8 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
   assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ wording approval under above authority/);
-  assert.match(w, /Owner's Principal\/general contractor directs\/completes all ordinary in-scope completion work through PM and approves tier\/wording; otherwise Owner ratifies/);
-  assert.match(w, /Owner retains critical intent, material scope\/budget\/access\/accepted-risk decisions, irrevocable deletion, exact push\/deploy\/live\/external-write GO/);
+  assert.match(w, /with recorded delegation, the Owner's Project Principal completes ordinary in-scope work through PM, including tier\/wording/);
+  assert.match(w, /Owner decides critical intent\/outcome, material scope\/budget\/access, explicit risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/);
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
   // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
   // HARD. Pinned in the amended test above — this older pin named the retired sentence.

@@ -110,10 +110,12 @@ advisory evidence only.
 
 The durable record names the Owner delegation source; program/repository and outcome boundaries;
 architect and active-PM locator, or file-only equivalents; approved baseline/source pointers; applicable
-access/egress and budget limits; accepted decisions separately from pending advice; current phase/CHIP;
+access/egress and budget limits; active directives separately from pending/superseded advice; current phase/CHIP;
 unresolved decisions; last alignment check; and reconciliation owed. Each material decision records its
 id/date/type (`advice`, `architect-decision`, or `owner-required`), decision-maker/delegation reference,
-question, baseline/candidate, evidence, limits/stop condition, PM execution status, and resulting evidence.
+program/baseline/scope, question, evidence, limits/stop condition, active/pending/superseded status, PM
+execution status, and resulting evidence. A current directive remains usable only inside its recorded envelope;
+ordinary commits do not stale it, and pending/superseded advice never becomes authority.
 `/architect-build` inspects that record before creating a task. It establishes an
 architect during planning, reuses an existing architect when its identity and approved baseline are
 current, or reconstructs file-only continuity from the record and current evidence. Recovery never
@@ -152,8 +154,19 @@ read architect evidence.
 If the Principal is unavailable, do not mint an acting architect. Continue independent authorized work and
 execute still-valid recorded decisions; hold only the dependent action whose authority is unresolved. An existing defined consult
 is evidence, neither replacement Principal nor discharge of continuity; an existing gate keeps its own
-obligation. Later reconcile the record, PM disposition, and outcomes with the persistent Principal. If an
-active consult is unavailable when a gate requires it, existing fail-closed gate rules apply.
+obligation. A rejected execution/admission method holds its affected action and goes with exact evidence to
+Principal for supported-method diagnosis. A valid ordinary retry proceeds under existing authority; neither role
+may use an equivalent workaround, fabricate a receipt, or override a platform restriction. If reconciliation
+finds a conflict, preserve/verify state and hold the affected dependency; restore only under existing authority,
+continue independent covered work, and send an unresolved reserved exception once through Principal to Owner.
+If an active consult is unavailable when a gate requires it, existing fail-closed gate rules apply.
+
+Controller admission is necessary recorded-shape evidence, not proof that every configured tier obligation was
+met. PM and Principal verify actual required roles/families and independent eligibility against WORKFLOW/REVIEW/GATES.
+A T2 Builder-family plus eligible cross-family reviewer can satisfy both the recorded shape and its configured
+obligations. A T3 roster with only Builder family plus one other actual family may satisfy a two-family controller
+predicate yet is not a full T3 gate when its configured lens or external family is absent. Only applicable Owner
+evidence permits a recorded reduction; it is never relabeled full.
 
 Cross-session messaging is optional harness plumbing. In a portable or degraded environment, the durable
 record, file brief, and consult entry are the record of continuity. The policy must not claim an automated
@@ -197,6 +210,8 @@ handoff, controller, scheduler, or service that Workflow-Kit does not ship.
 | A terminal child, `owner_decision`, waiver, release, or live action carries architect evidence. | Refuse it; those paths continue to require their existing Owner evidence/GO. |
 | A legacy eligible substitution carries valid `owner_evidence`. | Preserve its existing compatibility, including the explicitly Owner-authorized reduction. |
 | A Principal proposes an outcome/scope/risk, live behavior, or publication change. | Stop at the Owner boundary; Principal authority does not cross it. |
+| An execution/admission method is rejected. | Hold that action and give Principal exact evidence; diagnose a supported method, use a valid ordinary retry under existing authority, and raise only an unresolved reserved exception once through Principal to Owner. |
+| A T3 roster has Builder family plus only one other actual family. | Treat controller two-family acceptance as shape evidence only; it is not a full T3 gate if a configured lens or external family is missing. |
 | A degraded adopter has no cross-session message transport. | Preserve the common packet and disposition in the durable record/file brief; do not imply a scheduler or automatic handoff. |
 | A repair round attempts to count a persistent response and an active consult as two frontier firings. | Use one combined response where overlap is present; do not spend or duplicate discretionary frontier budget, add a batch, or grant authority. |
 | A restart finds a stale architect locator or an unresolved recommendation. | Inspect the durable record and current evidence before creating/reusing a seat; preserve one PM chain, keep the recommendation pending, and hold only dependent authority until reconciliation. |

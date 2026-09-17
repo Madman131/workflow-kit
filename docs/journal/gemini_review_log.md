@@ -4428,3 +4428,69 @@
 - Aggregate-Result: `assembled verified slice results; no model reply`
 - Record-SHA256: `9986b0c052e92a9507ecd6067817f639b84a074d322a99dd453845645e3cd089`
 - Complete-Record: `YES`
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-16T23:36:07Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1789601684-80289-537729843`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=27543; instrumented_payload=27645; inline_combined=31462; file=27718
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/architect_consult_routing_design.md
+- HEAD: `a32ca333ce988033bcce1b6fbc853a481a30875d`
+- Artifact-Base: `7ffa7d398609d4fc5b1d999ba2261f1cc15b9e91`
+- Artifact-SHA: `a32ca333ce988033bcce1b6fbc853a481a30875d`
+- Artifact-Ref: `refs/pil/gate-artifacts/a32ca333ce988033bcce1b6fbc853a481a30875d`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/architect_consult_routing_design.md
+- Start: 2026-09-16T23:34:44Z
+- End: 2026-09-16T23:36:07Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    RECEIPT: PIL-RCPT-ea8c84ef99464c83668dec3d
+    CANARIES: PIL-INGEST-0177e1987c12 PIL-INGEST-02cc790f0215
+    
+    ### Findings
+    
+    **1. BLOCKER: INTER-SECTION CONTRADICTION & BUDGET HAZARD**
+    * **Section:** `One policy, two destinations` vs. `Adversarial walkthrough cases`
+    * **Concrete failure:** The core policy dictates that at a fourth-gate checkpoint, if the persistent architect does not satisfy "freshness" (cold seat) requirements, the PM must "keep the fresh process review and route the architecture question separately." This explicitly mandates two separate firings. However, the Adversarial Walkthrough explicitly forbids this: "attempts to count a persistent response and an active consult as two frontier firings... Use one combined response where overlap is present; do not spend or duplicate discretionary frontier budget."
+    * **Why it matters:** The execution chain is trapped in an impossible state. When an architecture decision aligns with a cold gate, the PM must either violate the budget/duplicate-firing invariant to preserve the cold seat, or violate the cold-seat gate invariant to stay within budget.
+    * **Fix:** Explicitly state which constraint wins. (e.g., "A required cold gate always consumes its own independent firing; this does not constitute duplicate budget spend, and the architecture question routes separately.")
+    
+    **2. HIGH: DEPLOY/MIGRATION ORDERING (INVARIANT #4 VIOLATION)**
+    * **Section:** `Authority, fallback, and portability`
+    * **Concrete failure:** The design introduces `seat.substitution.architect_evidence` as a new permit, noting it is a "mutually exclusive alternative" to `owner_evidence`. However, it explicitly states: "The only demonstrated controller mismatch is a review-seat substitution that accepts only `owner_evidence`." This means the live controller currently *only* accepts `owner_evidence`.
+    * **Why it matters:** This violates Invariant #4 (Deploy-order safety). If this policy is adopted and the PM starts emitting `architect_evidence` before the mechanical gate controller is updated and deployed to parse it, the gate will fail-closed and block all further execution.
+    * **Fix:** Add an explicit deployment sequencing requirement: the mechanical gate controller must be updated to accept the `architect_evidence` schema *before* this policy is active, or the feature must be strictly flag-gated.
+    
+    **3. HIGH: UNBOUNDED GROWTH / RESOURCE EXHAUSTION**
+    * **Section:** `Continuity, establishment, and recovery` & `Cadence, packet, response, and disposition`
+    * **Concrete failure:** The durable record mandates recording `id/date/type... question, baseline/candidate, evidence, limits/stop condition, PM execution status, and resulting evidence` for *each* material decision. The persistent packet then "carries the durable baseline, latest decisions, and the last program-alignment check."
+    * **Why it matters:** There is no stated TTL, pruning rule, or size cap on the durable record file itself. In a long-running project, appending every material decision and its complete evidence will cause the file (and the resulting packet) to grow unboundedly, eventually causing context-window exhaustion or OOMs on a small 2GB instance.
+    * **Fix:** Define a strict bounding mechanism (e.g., "The durable record retains only unresolved decisions and the N most recent material decisions; older history is archived out of the active payload").
+    
+    **4. MEDIUM: MECHANISM CORRECTNESS (DORMANT CONTROL)**
+    * **Section:** `One policy, two destinations`
+    * **Concrete failure:** The design allows coalescing a gate and an architect consult "only when that architect independently satisfies every existing process-review eligibility and freshness requirement."
+    * **Why it matters:** A *persistent* architect, by definition, retains continuous memory of the project baseline and prior decisions. It is structurally impossible for a persistent actor to ever satisfy a "freshness" (cold seat) requirement. Thus, the coalescing path is dead code (a dormant control) that manufactures assurance of efficiency but will never actually trigger.
+    * **Fix:** Acknowledge that the persistent architect can never serve as a cold seat, and remove the unreachable coalescing clause for freshness-requiring gates.
+    
+    **5. MEDIUM: COMPLETENESS GAP / DATA-SAFETY**
+    * **Section:** `Continuity, establishment, and recovery`
+    * **Concrete failure:** If the Principal is unavailable, the PM "holds only dependent decisions whose current authority cannot be established, while independent authorized work continues... and reconciles them at the next meaningful checkpoint."
+    * **Why it matters:** The design provides no mechanism for what happens when reconciliation fails. If the Architect returns and determines the PM's "independent" work actually violated an uncommunicated architectural constraint or stop-condition, there is no defined rollback, revert, or dispute-resolution protocol. 
+    * **Fix:** Define the fallback state for a failed reconciliation (e.g., "If reconciliation reveals out-of-bounds PM execution, the Architect must halt the chain and escalate to the Owner").
+    
+    ### Highest-Risk Resolution
+    The highest-risk issue is the direct contradiction between routing an architecture question separately at Gate 4 (mandated by the policy to preserve cold seats) and the strict ban on spending two frontier firings for overlapping work (mandated by the walkthrough). This will cause the workflow to either crash or violate an invariant at the first coincident checkpoint.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/architect_consult_routing_design.md
+    PIL-DONE-d20b9ade5473ed4ff9dad7dd
