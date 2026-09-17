@@ -68,10 +68,10 @@ baseline, access, risk and budget. Examples—never an allowlist—include direc
 model/seat choice, tier/wording and approved-provider routing. PM is sole execution chain,
 proceeds automatically on covered work, and returns concrete conflicts.
 
-Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;
-credentials/access changes; destructive/irreversible acts; money/new-spend commitments; max/ultra, second frontier firing and cap increases; terminal
-exception/waiver; exact push/deploy/publication; and live/external-write GO. Review transmission is a
-private frozen packet with redacted necessary context, never publication, messaging, live data, secrets, or
+Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;
+credentials/access changes; destructive-or-irreversible acts; money/new-spend; max/ultra, second frontier firing/cap increases; terminal
+exception except bounded T2 Principal controller completion; gate waiver; push/deploy/publication; and live/external-write GO. Review transmission is a
+frozen packet with redacted context, never publication, messaging, live data, secrets, or
 unrelated export. Principal evidence is not Owner evidence or a review verdict.
 
 Within recorded Owner availability policy, Principal routes a required unavailable review: no verdict

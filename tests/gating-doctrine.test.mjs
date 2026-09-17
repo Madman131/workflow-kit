@@ -156,8 +156,12 @@ test("execution roles, legacy slice provenance, and closeout preserve their auth
   assert.match(foundations, /PM independently inspects its bytes and may commit\/integrate them, but does not replace its authoring role/);
   assert.match(foundations, /Frontier planning or a critical consult hands its approved plan to the active workhorse PM for implementation/);
   assert.match(orchestrate, /PM may inspect\/integrate Builder bytes; never author designated T2\/T3 source/);
-  assert.match(orchestrate, /failed\/STOP surface stays closed.*genuinely new Owner-approved work begins separately only on disjoint surfaces.*controller binds the typed `owner_decision` review and exact continuation proposal.*Astra model\/effort is runtime-verified procedure, not controller-authenticated identity/s);
-  assert.match(protocols, /terminal R4 STOP.*one Owner-approved completion child.*recorded paths\/proof.*one verified batch and one real final full review.*second batch, scope growth, repeat\/reset\/relabel STOP.*failed\/STOP surface stays closed.*Genuinely new Owner-approved work starts separately only on disjoint surfaces/s);
+  assert.match(orchestrate, /Owner terminal children use fixed\s+authorized scope; bounded T2 Principal children use opened-only scope\. This controller-record ceiling never narrows the\s+Principal's broader delegated program authority/,
+    "Owner scope and the Principal controller-record ceiling remain distinct");
+  assert.match(orchestrate, /failed\/STOP surface stays closed.*genuinely new Owner-approved work begins separately only on disjoint surfaces.*controller binds typed `owner_decision`\/`successor` review and exact continuation proposal.*runtime model\/effort is procedure, not controller-authenticated identity/s);
+  assert.match(protocols, /Owner terminal children use fixed authorized scope and bounded T2 Principal children opened-only scope;\s+this controller-record ceiling never narrows the Principal's broader delegated program authority/,
+    "protocols retain the Owner-versus-Principal path distinction");
+  assert.match(protocols, /terminal R4 STOP.*one Owner- or T2 Principal-evidenced completion child.*Owner-authorized or Principal-opened-only paths\/proof.*one verified batch and one real final full review.*final STOP, second batch, scope growth, repeat\/reset\/relabel STOP.*failed\/STOP surface stays closed.*Genuinely new Owner-approved work starts separately only on disjoint surfaces/s);
   assert.match(rootReadme, /Its failed\/STOP surface remains closed; separately approved genuinely new work begins only on disjoint surfaces/);
   assert.match(gates, /`frontier-pm` is a legacy mechanical manifest token, not a model identity/);
   assert.match(closeout, /finish \/ wrap up \/ close this.*safe local closeout only.*not a fresh push, deploy, merge, activation, or prod-write GO/s);
@@ -1673,4 +1677,16 @@ test("§ 3's continuation-admissibility clause AGREES with the code on the HONES
   assert.match(clause, SHARES_REMAINDER,
     "§ 3 must state the budget-SHARES-remainder guarantee the code makes — not 'must repair/target', "
     + "which promises a wall the controller does not hold (M43/M54 in § 8 carry the same trued spelling)");
+});
+
+test("the terminal contract pins the v3 reader cutover without treating replay as migration", () => {
+  const contract = raw(BREAKER_CONTRACT);
+  const cutover = /\*\*Policy v3 cutover \(2026-09-17\)\.\*\*[\s\S]*?(?=\n## |\n\n## |$)/.exec(contract)?.[0] ?? "";
+  assert.ok(cutover, "the v3 cutover clause must be present in the terminal contract");
+  assert.match(cutover, /absent historical version,\s*explicit v2, and explicit v3 only/,
+    "the closed v3 envelope preserves only absent/v2 history");
+  assert.match(cutover, /frozen `060a055f` v2 reader must reject a valid-hash v3 row/,
+    "the old-reader proof is fail-closed before usable authority");
+  assert.match(cutover, /Replay never rewrites, filters, or relabels prior ledger bytes/,
+    "cutover cannot silently migrate append-only history");
 });

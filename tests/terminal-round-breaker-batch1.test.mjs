@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, gitSubjectPresent,
+  AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, gitSubjectPresent,
   loadRepairEventsForProject, recordAggregateChildContinuation as _rawChildContinuation, recordAggregateClose,
   recordAggregateDisposition, recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateProcessReview,
   recordAggregateRootExit, recordWorkerVerification,
@@ -128,7 +128,8 @@ function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") 
     reviewer_role: "frontier", purpose: "dispatch",
     anchor: { kind: "aggregate_panel_close", event_id: closeId,
       frozen_commit: candidate.commit, frozen_tree: candidate.tree },
-    proposed_transition: { disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
+    proposed_transition: { policy_version: AGGREGATE_POLICY_VERSION,
+      disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
       source_round: state.latest.round, next_round: state.latest.round + 1,
       root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths },
     review_evidence: "frontier review of the completed panel", zoom_out: "the repair remains finite",
@@ -457,7 +458,7 @@ test("lineage budgets are supersets: a child opens on a SUBSET of its declared p
     const continuation = recordAggregateChildContinuation({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
       parent_disposition_event_id: derive(ctx).latest.event_id, trigger_ids: ["CRIT"],
-      continuation_kind: "new_changeset", owner_evidence: "Owner successor",
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor", authority_route: "owner",
       children: [{ task_id: "child", changeset_id: "child-cs", tier: "T2",
         budget: "one changeset", authorized_paths: twoFile.paths }],
     }, options(ctx.dir));
@@ -516,7 +517,7 @@ test("the STOP reservation yields only to the reserving parent's own lineage", (
     const continuationB = recordAggregateChildContinuation({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-b", changeset_id: "cs-b",
       parent_disposition_event_id: stateB.latest.event_id, trigger_ids: ["ADJ"],
-      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on",
+      continuation_kind: "new_changeset", owner_evidence: "Owner follow-on", authority_route: "owner",
       children: [{ task_id: "b-child", changeset_id: "b-child-cs", tier: "T2",
         budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
     }, options(ctx.dir));

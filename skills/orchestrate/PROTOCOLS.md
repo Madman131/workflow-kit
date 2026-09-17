@@ -27,10 +27,11 @@ own repo gives it an artifact.**
 - **R1 permits one bounded batch unless the mechanism repeated; harm-bearing R2 and repeated R1
   require one shared-cause root kind and closure proof.** R3 tests that consolidated correction.
   Before R4 dispatch, a fresh frontier process review bound to the latest frozen panel
-  rules: finish once; Owner-evidenced child continuation after terminal close may cite
-  successor or Owner decision, never current-chip dispatch. Gate count
+  rules: finish once; Owner terminal children use fixed authorized scope and bounded T2 Principal children opened-only scope;
+  this controller-record ceiling never narrows the Principal's broader delegated program authority. Either may cite successor
+  or Owner decision, never current-chip dispatch. Gate count
   continues through children; each fourth gate repeats the review; no extra round. After
-  terminal R4 STOP, one Owner-approved completion child fixes recorded paths/proof: one
+  terminal R4 STOP, one Owner- or T2 Principal-evidenced completion child fixes Owner-authorized or Principal-opened-only paths/proof: one
   verified batch and one real final full review. Parent terminal, inherited checkpoints remain;
   final STOP, second batch, scope growth, repeat/reset/relabel STOP; its failed/STOP surface stays
   closed. Genuinely new Owner-approved work starts separately only on disjoint surfaces. R4 is the

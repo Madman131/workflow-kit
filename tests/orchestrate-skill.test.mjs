@@ -195,7 +195,7 @@ test("the round controller pins the finite aggregate boundary", () => {
   pin(protocols, "each fourth gate repeats the review", "cumulative cadence retains the gate noun");
   pin(body, "genuinely new Owner-approved work begins separately only on disjoint surfaces",
     "new work is not a relabel of the stopped completion surface");
-  pin(body, "exact Astra model/effort is runtime-verified procedure, not controller-authenticated identity",
+  pin(body, "runtime model/effort is procedure, not controller-authenticated identity",
     "controller evidence binding does not claim provider identity authentication");
   pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
 
@@ -325,7 +325,10 @@ test("architect-build routing keeps delegated authority, quiet boundaries, fourt
   pin(routing, "With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for", "delegated Principal owns program continuity");
   pin(routing, "Examples—never an allowlist", "Principal examples do not narrow authority");
   pin(routing, "proceeds automatically on covered work, and returns concrete conflicts", "PM quiet continuity");
-  pin(routing, "Owner alone retains initial baseline/launch; material outcome/scope/budget/risk; critical product choice;", "Owner reservations remain explicit");
+  pin(routing, "Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;", "Owner reservations remain explicit");
+  pin(routing, "destructive-or-irreversible acts", "Owner reservation covers destructive and irreversible acts");
+  pin(routing, "frozen packet with redacted context", "review packets remain frozen and redacted");
+  pin(routing, "terminal\nexception except bounded T2 Principal controller completion; gate waiver;", "only the bounded T2 Principal controller completion leaves the Owner terminal reservation");
   pin(routing, "When Principal is unavailable, create no acting architect", "unavailable architect does not mint a replacement chain");
   pin(routing, "Controller admission is necessary recorded-shape evidence, never certification of a complete tier roster.", "controller shape is not a full T3 roster certification");
   pin(routing, "T3 roster missing\nits configured lens or external family is not full even if a two-family controller predicate accepts it.", "T3 family assurance stays outside the controller-shape claim");

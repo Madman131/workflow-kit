@@ -39,7 +39,7 @@ evidence. PM proceeds on covered work and returns safeguards, never silently dec
 exact evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds, otherwise an unresolved reserved
 exception reaches Owner once through Principal. Owner alone decides critical product intent/risk, material scope/budget,
 credentials/access change, money/new-spend, destructive/irreversible acts, named live-write GO, remote push/deploy GO,
-terminal exception, gate waiver, max/ultra, second frontier firing and cap increase. A chip routes
+terminal exception except bounded T2 Principal completion, gate waiver, max/ultra, second frontier firing and cap increase. A chip routes
 those calls through PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
 An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a
@@ -83,14 +83,13 @@ into a private worktree.
    non-blockers to parent-linked successors. R1 permits one bounded batch unless the mechanism
    repeated; harm-bearing R2 and repeated R1 require one root kind plus a root exit with closure
    proof. R3 tests that consolidated correction. Dispatch into R4 requires a fresh frontier process
-   review: finish once, successor after terminal close, or Owner decision with no dispatch. It
-   resolves via an Owner-evidenced terminal child, never current-chip dispatch. Every fourth gate
-   repeats it without granting a round. R4 is the
-   final GO/STOP bookend; no R5. One R4 STOP exception child is fixed paths/proof only: one verified
-   batch then one real final full review; parent terminal and inherited checkpoints remain. Its failed/STOP
-   surface stays closed: final STOP, second batch, scope growth, reset/relabel/repeat STOP; genuinely new
-   Owner-approved work begins separately only on disjoint surfaces. The controller binds the typed
-   `owner_decision` review and exact continuation proposal; exact Astra model/effort is runtime-verified
+   review: finish once, successor after terminal close, or Owner decision with no dispatch. Owner terminal children use fixed
+   authorized scope; bounded T2 Principal children use opened-only scope. This controller-record ceiling never narrows the
+Principal's broader delegated program authority; never current-chip dispatch. Every fourth gate repeats it without granting a round.
+   R4 is the final GO/STOP bookend; no R5. One R4 STOP exception child fixes Owner-authorized or Principal-opened-only paths/proof: one verified batch then one full final
+   review; parent terminal and inherited checkpoints remain. Its failed/STOP surface stays closed: final STOP, second batch,
+scope growth, reset/relabel/repeat STOP; genuinely new Owner-approved work begins separately only on disjoint surfaces. The controller binds typed
+   `owner_decision`/`successor` review and exact continuation proposal; runtime model/effort is
    procedure, not controller-authenticated identity.
    **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
    lenses; zoom-out controls disagreement; KISS; carve-outs before RULE #1. Round events:

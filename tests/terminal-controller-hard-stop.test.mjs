@@ -23,8 +23,28 @@ import {
 const _DEFAULT_CONTINUATION_SCREEN = { surviving_finding_ids: [], harm: "n/a — mechanics fixture",
   trigger: "n/a — mechanics fixture", smallest_action: "the narrow successor", kiss: "no new machinery",
   zoom_out: "still the asked-for work" };
-const recordAggregateChildContinuation = (input, opts) =>
-  _rawChildContinuation({ action_screen: _DEFAULT_CONTINUATION_SCREEN, ...input }, opts);
+const v3ChildProposal = (input) => {
+  const { completion_exception: suppliedCompletion, ...rest } = input;
+  return { policy_version: AGGREGATE_POLICY_VERSION,
+    authority_route: rest.principal_evidence ? "principal" : "owner",
+    action_screen: _DEFAULT_CONTINUATION_SCREEN, ...rest,
+    ...(rest.continuation_kind === "completion_exception" ? { completion_exception: {
+      repair_batches: 1, final_panels: 1,
+      final_panel: { phase: "final_bookend", tier: rest.children?.[0]?.tier, coverage: "full" },
+      ...suppliedCompletion } } : {}) };
+};
+const v3HandoffProposal = (input) => ({ policy_version: AGGREGATE_POLICY_VERSION, ...input });
+const recordAggregateChildContinuation = (input, opts) => {
+  const { completion_exception: suppliedCompletion, ...rest } = input;
+  const completion = rest.continuation_kind === "completion_exception" ? {
+    completion_exception: { repair_batches: 1, final_panels: 1,
+      final_panel: { phase: "final_bookend", tier: rest.children?.[0]?.tier, coverage: "full" },
+      ...suppliedCompletion },
+  } : {};
+  return _rawChildContinuation({ policy_version: AGGREGATE_POLICY_VERSION,
+    authority_route: rest.principal_evidence ? "principal" : "owner",
+    action_screen: _DEFAULT_CONTINUATION_SCREEN, ...rest, ...completion }, opts);
+};
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
@@ -267,11 +287,20 @@ function processReview(ctx, panelCloseId, candidate, ruling = "finish_bounded_ro
   const loaded = loadRepairEventsForProject(ctx.dir);
   const state = deriveAggregateRepairState(loaded.aggregate_events, task_id, { standardEvents: loaded.events });
   const root = state.root_exits.find((row) => row.disposition_event_id === state.latest?.event_id);
-  const proposed_transition = proposed ?? {
+  const proposed_transition = purpose === "child_continuation" && proposed ? (() => {
+    const { completion_exception: suppliedCompletion, ...rest } = proposed;
+    return { policy_version: AGGREGATE_POLICY_VERSION,
+      authority_route: rest.principal_evidence ? "principal" : "owner",
+      action_screen: _DEFAULT_CONTINUATION_SCREEN, ...rest,
+      ...(rest.continuation_kind === "completion_exception" ? { completion_exception: {
+        repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: rest.children?.[0]?.tier, coverage: "full" },
+        ...suppliedCompletion } } : {}) };
+  })() : { policy_version: AGGREGATE_POLICY_VERSION, ...(proposed ?? {
     disposition_event_id: state.latest.event_id, panel_close_event_id: panelCloseId,
     source_round: state.latest.round, next_round: state.latest.round + 1,
     root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths,
-  };
+  }) };
   return recordAggregateProcessReview({
     type: "aggregate_v2", kind: "process_review", task_id, changeset_id,
     reviewer_role: "frontier", purpose, proposed_transition,
@@ -340,6 +369,416 @@ function fourGateStopParent(ctx) {
   return { candidate, decided };
 }
 
+const PRINCIPAL_SCREEN_KEYS = [
+  "remote_push", "remote_or_pr_merge", "deploy", "publication", "live_or_external_write",
+  "destructive_or_irreversible", "credential_or_access_change", "money_or_new_spend",
+  "material_scope_or_risk", "gate_waiver", "critical_or_fail_open_acceptance",
+  "reduced_family_acceptance",
+];
+const aggregateRows = (ctx) => loadRepairEventsForProject(ctx.dir).aggregate_events;
+const aggregateState = (ctx, taskId = "task-1") => deriveAggregateRepairState(aggregateRows(ctx), taskId);
+const ledgerBytes = (ctx) => readFileSync(repairLedgerPath(ctx.dir));
+const setAggregateRows = (ctx, rows) => writeFileSync(repairLedgerPath(ctx.dir),
+  `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+// Historical rows are content-addressed, so version rewrites must also rewrite every citation.
+// This helper models an imported old ledger; it never asks the current recorder to mint history.
+function rewriteAggregateRows(ctx, change) {
+  const ids = new Map();
+  const rewrite = (value) => Array.isArray(value) ? value.map(rewrite)
+    : value && typeof value === "object"
+      ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, rewrite(entry)]))
+      : typeof value === "string" ? (ids.get(value) ?? value) : value;
+  const rewritten = aggregateRows(ctx).map((row) => {
+    const event = rewrite(row.event);
+    change(event);
+    const next = stamped(event);
+    ids.set(row.event_id, next.event_id);
+    return next;
+  });
+  setAggregateRows(ctx, rewritten);
+  return ids;
+}
+const terminalAnchor = (state) => ({ kind: "aggregate_terminal",
+  event_id: state.terminal === "CLOSED" ? state.closes.at(-1).event_id : state.latest.event_id,
+  panel_open_event_id: state.panels_open.at(-1).event_id,
+  frozen_commit: state.panels_open.at(-1).frozen_commit,
+  frozen_tree: state.panels_open.at(-1).frozen_tree });
+function principalEvidence(transitionKind, anchor, paths, decisionId = "principal-decision-1") {
+  return { authority_record: "contract-v9-test", decision_id: decisionId,
+    transition_kind: transitionKind, task_id: "task-1", changeset_id: "changeset-1", tier: "T2",
+    anchor, authorized_paths: paths,
+    reserved_action_screen: Object.fromEntries(PRINCIPAL_SCREEN_KEYS.map((key) => [key, false])) };
+}
+function principalStoppedParent() {
+  const ctx = repo();
+  const candidate = commit(ctx.dir, 1);
+  const panel = openPanel(ctx, 1, candidate);
+  const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+  const decided = disposition(ctx, closed.closed, { accepted: ["F1"], terminal_state: "STOP",
+    remediation_kind: null, authorized_paths: [] });
+  assert.equal(decided.ok, true, decided.state);
+  return { ctx, candidate, panel, closed, decided };
+}
+function principalChildProposal(ctx, continuationKind = "new_changeset", paths = ["src/x.mjs"]) {
+  const state = aggregateState(ctx);
+  return { type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION,
+    kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+    parent_disposition_event_id: state.latest.event_id,
+    trigger_ids: state.latest.finding_dispositions.accepted,
+    continuation_kind: continuationKind, authority_route: "principal",
+    action_screen: _DEFAULT_CONTINUATION_SCREEN,
+    children: [{ task_id: "principal-child", changeset_id: "principal-child-cs", tier: "T2",
+      budget: "one fixed-scope changeset", authorized_paths: paths }] };
+}
+function attachPrincipalEvidence(ctx, proposal, decisionId = "principal-decision-1") {
+  const paths = [...new Set(proposal.children.flatMap((child) => child.authorized_paths))].sort();
+  return { ...proposal, principal_evidence: principalEvidence(proposal.continuation_kind,
+    terminalAnchor(aggregateState(ctx)), paths, decisionId) };
+}
+
+test("v3 Principal close and worker replacement enforce exact evidence and idempotent retry", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    const open = aggregateState(ctx).panels_open.at(-1);
+    const closeAnchor = { kind: "aggregate_close", event_id: open.event_id,
+      panel_open_event_id: open.event_id, frozen_commit: open.frozen_commit, frozen_tree: open.frozen_tree };
+    const closeInput = { type: "aggregate_v2", kind: "close", task_id: "task-1",
+      changeset_id: "changeset-1", disposition_event_id: null,
+      panel_open_event_id: open.event_id, reason: "Principal abandons the bounded lane",
+      principal_evidence: principalEvidence("close", closeAnchor, open.changed_paths) };
+    const malformed = [
+      { ...closeInput, owner_evidence: "mixed" },
+      { ...closeInput, principal_evidence: { ...closeInput.principal_evidence, tier: "T3" } },
+      { ...closeInput, principal_evidence: { ...closeInput.principal_evidence,
+        authorized_paths: ["src/outside.mjs"] } },
+      { ...closeInput, principal_evidence: { ...closeInput.principal_evidence,
+        reserved_action_screen: { ...closeInput.principal_evidence.reserved_action_screen,
+          gate_waiver: true } } },
+    ];
+    for (const input of malformed) {
+      const before = ledgerBytes(ctx);
+      assert.equal(recordAggregateClose(input, options(ctx.dir, "principal")).ok, false);
+      assert.deepEqual(ledgerBytes(ctx), before, "a refused Principal close appends no bytes");
+    }
+    const closed = recordAggregateClose(closeInput, options(ctx.dir, "principal"));
+    assert.equal(closed.ok, true, closed.state);
+    assert.equal(aggregateState(ctx).terminal, "CLOSED");
+  } finally { ctx.cleanup(); }
+
+  const replacement = repo();
+  try {
+    const candidate = commit(replacement.dir, 1);
+    const panel = openPanel(replacement, 1, candidate);
+    const closed = closePanel(replacement, panel.opened, panel.expected, candidate, "F1");
+    const decided = disposition(replacement, closed.closed, { accepted: ["F1"] });
+    const authority = dispatch(replacement, decided.event_id, closed.closed.event_id, 2);
+    const state = aggregateState(replacement);
+    const handoff = { type: "aggregate_v2", kind: "worker_handoff", task_id: "task-1",
+      changeset_id: "changeset-1", dispatch_event_id: authority.dispatch,
+      prior_worker_event_id: authority.worker, new_worker_session_id: "principal-replacement",
+      principal_evidence: principalEvidence("worker_handoff", { kind: "active_dispatch",
+        dispatch_event_id: authority.dispatch, prior_worker_event_id: authority.worker },
+      state.active_dispatch.authorized_paths) };
+    const beforeBad = ledgerBytes(replacement);
+    assert.equal(recordAggregateWorkerHandoff({ ...handoff, owner_evidence: "mixed" },
+      options(replacement.dir)).ok, false);
+    assert.deepEqual(ledgerBytes(replacement), beforeBad);
+    const first = recordAggregateWorkerHandoff(handoff, options(replacement.dir));
+    assert.equal(first.ok, true, first.state);
+    const beforeRetry = ledgerBytes(replacement);
+    const retry = recordAggregateWorkerHandoff(handoff, options(replacement.dir));
+    assert.equal(retry.ok, true, retry.state);
+    assert.equal(retry.idempotent, true);
+    assert.equal(retry.event_id, first.event_id);
+    assert.deepEqual(ledgerBytes(replacement), beforeRetry);
+
+    // A handoff retry is an accepted, same-session v3 logical twin.  A stale row must not
+    // become a retry just because it is hash-valid in the append-only audit trail.
+    assert.equal(recordAggregateWorkerHandoff(handoff,
+      options(replacement.dir, "different-principal-session")).ok, false,
+    "the current v3 handoff does not alias a request from another session");
+    const inert = stamped({ ...handoff, policy_version: AGGREGATE_POLICY_VERSION,
+      prior_worker_event_id: "f".repeat(64), session_id: "orchestrator",
+      recorded_at: "2099-01-01T00:00:00.000Z" });
+    setAggregateRows(replacement, [...aggregateRows(replacement), inert]);
+    assert.equal(aggregateState(replacement).worker_handoffs.length, 1,
+      "the forged row is inert and does not replace the accepted handoff");
+    assert.equal(recordAggregateWorkerHandoff({ ...handoff,
+      prior_worker_event_id: inert.event.prior_worker_event_id }, options(replacement.dir)).ok, false,
+    "an inert v3 row cannot satisfy a handoff retry");
+  } finally { replacement.cleanup(); }
+
+  const historical = repo();
+  try {
+    const candidate = commit(historical.dir, 1);
+    const panel = openPanel(historical, 1, candidate);
+    const closed = closePanel(historical, panel.opened, panel.expected, candidate, "F1");
+    const decided = disposition(historical, closed.closed, { accepted: ["F1"] });
+    const authority = dispatch(historical, decided.event_id, closed.closed.event_id, 2);
+    const handoff = recordAggregateWorkerHandoff({ type: "aggregate_v2", kind: "worker_handoff",
+      task_id: "task-1", changeset_id: "changeset-1", dispatch_event_id: authority.dispatch,
+      prior_worker_event_id: authority.worker, new_worker_session_id: "historical-replacement",
+      owner_evidence: "Owner worker replacement" }, options(historical.dir));
+    assert.equal(handoff.ok, true, handoff.state);
+    rewriteAggregateRows(historical, (event) => { event.policy_version = 2; });
+    const old = aggregateRows(historical).find((row) => row.event.kind === "worker_handoff");
+    const before = ledgerBytes(historical);
+    assert.equal(recordAggregateWorkerHandoff(old.event, options(historical.dir)).ok, false,
+      "a current v3 recorder never aliases a historical v2 handoff");
+    assert.deepEqual(ledgerBytes(historical), before);
+  } finally { historical.cleanup(); }
+});
+
+test("v3 Principal successors require review, stay inside parent paths, and exclude material scope", () => {
+  const { ctx } = principalStoppedParent();
+  try {
+    const proposal = principalChildProposal(ctx);
+    const withEvidence = attachPrincipalEvidence(ctx, proposal);
+    const beforeNoReview = ledgerBytes(ctx);
+    assert.equal(recordAggregateChildContinuation(withEvidence, options(ctx.dir)).ok, false,
+      "Principal fixed-scope authority always requires its matching successor review");
+    assert.deepEqual(ledgerBytes(ctx), beforeNoReview);
+    const suppliedEvidenceReview = processReview(ctx, null, null, "successor", "task-1",
+      "changeset-1", "child_continuation", withEvidence);
+    assert.equal(suppliedEvidenceReview.ok, false,
+      "the pre-decision review proposal contains neither authority object");
+    const review = processReview(ctx, null, null, "successor", "task-1", "changeset-1",
+      "child_continuation", proposal);
+    assert.equal(review.ok, true, review.state);
+    const accepted = recordAggregateChildContinuation({ ...withEvidence,
+      process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(accepted.ok, true, accepted.state);
+    assert.deepEqual(derivePendingLineageBudgets(aggregateRows(ctx)).map((row) => row.task_id),
+      ["principal-child"]);
+  } finally { ctx.cleanup(); }
+
+  for (const continuationKind of ["new_changeset", "split"]) {
+    const fixture = principalStoppedParent();
+    try {
+      const proposal = principalChildProposal(fixture.ctx, continuationKind,
+        ["src/outside.mjs", "src/x.mjs"].sort());
+      const review = processReview(fixture.ctx, null, null, "successor", "task-1", "changeset-1",
+        "child_continuation", proposal);
+      assert.equal(review.ok, true, review.state);
+      const before = ledgerBytes(fixture.ctx);
+      assert.equal(recordAggregateChildContinuation({ ...attachPrincipalEvidence(fixture.ctx, proposal),
+        process_review_event_id: review.event_id }, options(fixture.ctx.dir)).ok, false,
+      `${continuationKind} cannot grow past the parent-opened path union`);
+      assert.deepEqual(ledgerBytes(fixture.ctx), before);
+    } finally { fixture.ctx.cleanup(); }
+  }
+
+  const material = principalStoppedParent();
+  try {
+    const proposal = principalChildProposal(material.ctx, "material_scope");
+    const before = ledgerBytes(material.ctx);
+    assert.equal(recordAggregateChildContinuation(attachPrincipalEvidence(material.ctx, proposal),
+      options(material.ctx.dir)).ok, false, "material scope remains Owner-only");
+    assert.deepEqual(ledgerBytes(material.ctx), before);
+  } finally { material.ctx.cleanup(); }
+});
+
+test("Principal continuation cannot replay through a historical untyped Owner review", () => {
+  const { ctx } = principalStoppedParent();
+  try {
+    rewriteAggregateRows(ctx, (event) => { event.policy_version = 2; });
+    const parent = aggregateState(ctx);
+    const open = parent.panels_open.at(-1);
+    const close = parent.panels_close.at(-1);
+    const oldReview = stamped({ type: "aggregate_v2", policy_version: 2, kind: "process_review",
+      task_id: "task-1", changeset_id: "changeset-1", recorded_at: "2099-01-01T00:00:00.000Z",
+      session_id: "historical-review", reviewer_role: "frontier", panel_close_event_id: close.event_id,
+      frozen_commit: open.frozen_commit, frozen_tree: open.frozen_tree, next_gate_ordinal: 2,
+      review_evidence: "historical untyped Owner review", zoom_out: "fixed child",
+      ruling: "owner_decision", bounded_scope: "src/x.mjs", closure_evidence: "one correction" });
+    setAggregateRows(ctx, [...aggregateRows(ctx), oldReview]);
+    assert.equal(aggregateState(ctx).process_reviews.length, 1,
+      "the historical review remains accepted history for its historical route");
+    const proposal = attachPrincipalEvidence(ctx, principalChildProposal(ctx));
+    assert.equal(recordAggregateChildContinuation({ ...proposal, process_review_event_id: oldReview.event_id },
+      options(ctx.dir)).ok, false, "mint refuses an untyped Owner review for a Principal child");
+    const planted = stamped({ ...proposal, process_review_event_id: oldReview.event_id,
+      parent_frozen_commit: open.frozen_commit, parent_frozen_tree: open.frozen_tree,
+      recorded_at: "2099-01-01T00:01:00.000Z", session_id: "orchestrator" });
+    assert.deepEqual(derivePendingLineageBudgets([...aggregateRows(ctx), planted]), [],
+      "hash-valid replay also refuses the untyped Owner-review fallback");
+  } finally { ctx.cleanup(); }
+});
+
+test("Principal split admits two bounded children and refuses otherwise-valid path growth", () => {
+  const ctx = repo();
+  try {
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 0;\n");
+    const candidate = commit(ctx.dir, "principal-split");
+    const panel = openPanel(ctx, 1, candidate);
+    const closed = closePanel(ctx, panel.opened, panel.expected, candidate, "F1");
+    const stopped = disposition(ctx, closed.closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    const proposal = (paths) => ({ type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION,
+      kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"], continuation_kind: "split",
+      authority_route: "principal", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [
+        { task_id: "split-x", changeset_id: "split-x-cs", tier: "T2", budget: "x half",
+          authorized_paths: ["src/x.mjs"] },
+        { task_id: "split-y", changeset_id: "split-y-cs", tier: "T2", budget: "y half",
+          authorized_paths: paths },
+      ],
+    });
+    const bounded = proposal(["src/y.mjs"]);
+    const review = processReview(ctx, null, null, "successor", "task-1", "changeset-1",
+      "child_continuation", bounded);
+    assert.equal(review.ok, true, review.state);
+    const accepted = recordAggregateChildContinuation({ ...attachPrincipalEvidence(ctx, bounded),
+      process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(accepted.ok, true, accepted.state);
+    assert.deepEqual(derivePendingLineageBudgets(aggregateRows(ctx)).map((row) => row.task_id).sort(),
+      ["split-x", "split-y"], "the valid two-child split is admitted");
+  } finally { ctx.cleanup(); }
+
+  const growing = repo();
+  try {
+    writeFileSync(path.join(growing.dir, "src", "y.mjs"), "export const y = 0;\n");
+    const candidate = commit(growing.dir, "principal-growth");
+    const panel = openPanel(growing, 1, candidate);
+    const closed = closePanel(growing, panel.opened, panel.expected, candidate, "F1");
+    const stopped = disposition(growing, closed.closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    const proposal = { type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION,
+      kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"], continuation_kind: "split",
+      authority_route: "principal", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [
+        { task_id: "growth-x", changeset_id: "growth-x-cs", tier: "T2", budget: "x half",
+          authorized_paths: ["src/x.mjs"] },
+        { task_id: "growth-y", changeset_id: "growth-y-cs", tier: "T2", budget: "grown half",
+          authorized_paths: ["src/outside.mjs", "src/y.mjs"] },
+      ],
+    };
+    const review = processReview(growing, null, null, "successor", "task-1", "changeset-1",
+      "child_continuation", proposal);
+    assert.equal(review.ok, true, review.state, "the exact two-child proposal is reviewable");
+    const before = ledgerBytes(growing);
+    assert.equal(recordAggregateChildContinuation({ ...attachPrincipalEvidence(growing, proposal),
+      process_review_event_id: review.event_id }, options(growing.dir)).ok, false,
+    "only the parent-opened path ceiling rejects the otherwise-valid split");
+    assert.deepEqual(ledgerBytes(growing), before);
+  } finally { growing.cleanup(); }
+});
+
+test("v3 version boundaries reject invalid projections and preserve historical opaque authority", () => {
+  const proposal = { disposition_event_id: "1".repeat(64), panel_close_event_id: "2".repeat(64),
+    source_round: 1, next_round: 2, root_exit_event_id: null, authorized_paths: ["src/x.mjs"] };
+  for (const policy_version of [1, null, "3", 4]) {
+    assert.equal(aggregateTransitionSha256("dispatch", { ...proposal, policy_version }), null,
+      `unsupported proposal version ${JSON.stringify(policy_version)} has no projection`);
+  }
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    openPanel(ctx, 1, candidate);
+    const currentOpen = aggregateRows(ctx)[0].event;
+    const oldOpen = stamped({ ...currentOpen, policy_version: 2 });
+    const oldClose = stamped({ type: "aggregate_v2", policy_version: 2, kind: "close",
+      task_id: "task-1", changeset_id: "changeset-1", session_id: "owner",
+      recorded_at: "2099-01-01T00:00:00.000Z", disposition_event_id: null,
+      panel_open_event_id: oldOpen.event_id, reason: "historical close",
+      owner_evidence: "Owner authorized", principal_evidence: { opaque: "historical extra" } });
+    const replay = deriveAggregateRepairState([oldOpen, oldClose], "task-1");
+    assert.equal(replay.terminal, "CLOSED",
+      "v2 Owner rows retain opaque Principal-named extras without v3 interpretation");
+  } finally { ctx.cleanup(); }
+});
+
+test("child panel-open floor preserves v2 lineage baselines and adds only an accepted v3 completion-worker floor", () => {
+  const source = readFileSync(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url), "utf8");
+  assert.match(source, /aggregatePolicyVersion\(row\) < Math\.max\(lineage\.policy_version \?\? HISTORICAL_AGGREGATE_POLICY_VERSION,\s+completionWorker && aggregatePolicyVersion\(completionWorker\) === AGGREGATE_POLICY_VERSION\s+\? AGGREGATE_POLICY_VERSION : HISTORICAL_AGGREGATE_POLICY_VERSION\)/s,
+    "a v2 ordinary or completion lineage keeps its v2 child-open floor");
+  assert.doesNotMatch(source, /lineage\.policy_version === AGGREGATE_POLICY_VERSION \|\|\s+\(completionWorker && aggregatePolicyVersion\(completionWorker\) === AGGREGATE_POLICY_VERSION\)/s,
+    "the v3-worker predicate cannot discard the established v2 lineage baseline");
+});
+
+test("v3 Principal completion binds one reviewed batch and rejects lower-version pre-open workers", () => {
+  const ctx = repo();
+  try {
+    fourGateStopParent(ctx);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/principal-completion.md"), "one exact Principal batch\n");
+    const state = aggregateState(ctx);
+    const paths = [...new Set(state.panels_open.flatMap((open) => open.changed_paths))].sort();
+    const proposal = { ...principalChildProposal(ctx, "completion_exception", paths),
+      children: [{ task_id: "principal-finish", changeset_id: "principal-finish-cs", tier: "T2",
+        budget: "one batch and one full final panel", authorized_paths: paths }],
+      completion_exception: { repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: "T2", coverage: "full" },
+        pm_recommendation: "one batch", surviving_harm: "FINAL remains",
+        smallest_correction: "repair src/x.mjs only", completion_proof: "one full final panel" },
+      completion_batch: { worker_session_id: "principal-finish-worker",
+        brief_path: "briefs/principal-completion.md" } };
+    const beforeWrongReview = aggregateRows(ctx);
+    const wrong = processReview(ctx, null, null, "owner_decision", "task-1", "changeset-1",
+      "child_continuation", proposal);
+    assert.equal(wrong.ok, true, wrong.state);
+    const withEvidence = attachPrincipalEvidence(ctx, proposal);
+    let before = ledgerBytes(ctx);
+    assert.equal(recordAggregateChildContinuation({ ...withEvidence,
+      process_review_event_id: wrong.event_id }, options(ctx.dir)).ok, false,
+    "Principal completion cannot consume an Owner-decision ruling");
+    assert.deepEqual(ledgerBytes(ctx), before);
+    setAggregateRows(ctx, beforeWrongReview);
+
+    const right = processReview(ctx, null, null, "successor", "task-1", "changeset-1",
+      "child_continuation", proposal);
+    assert.equal(right.ok, true, right.state);
+    const approved = { ...withEvidence, process_review_event_id: right.event_id };
+    for (const bad of [
+      { ...approved, owner_evidence: "mixed" },
+      { ...approved, completion_exception: { ...approved.completion_exception, final_panels: 2 } },
+      { ...approved, principal_evidence: { ...approved.principal_evidence,
+        authorized_paths: ["src/outside.mjs"] } },
+      { ...approved, children: [{ ...approved.children[0], tier: "T3" }] },
+    ]) {
+      before = ledgerBytes(ctx);
+      assert.equal(recordAggregateChildContinuation(bad, options(ctx.dir)).ok, false);
+      assert.deepEqual(ledgerBytes(ctx), before);
+    }
+    const continuation = recordAggregateChildContinuation(approved, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
+    const original = aggregateRows(ctx);
+    const brief = readFileSync(path.join(ctx.dir, "briefs/principal-completion.md"));
+    for (const policy_version of [undefined, 2]) {
+      const workerEvent = { type: "aggregate_v2", kind: "worker", task_id: "principal-finish",
+        changeset_id: "principal-finish-cs", recorded_at: "2099-01-01T00:00:00.000Z",
+        session_id: "principal-finish-worker", dispatch_event_id: continuation.event_id,
+        worker_session_id: "principal-finish-worker", authorized_paths: paths,
+        brief_path: "briefs/principal-completion.md",
+        brief_sha256: createHash("sha256").update(brief).digest("hex"),
+        ...(policy_version === undefined ? {} : { policy_version }) };
+      setAggregateRows(ctx, [...original, stamped(workerEvent)]);
+      const unchanged = ledgerBytes(ctx);
+      const result = verifyRepairWorkerWrite({ task_id: "principal-finish",
+        session_id: "principal-finish-worker", target: "src/x.mjs" }, options(ctx.dir));
+      assert.equal(result.ok, false, `policy ${policy_version ?? "absent"} worker is inert under v3 lineage`);
+      assert.deepEqual(ledgerBytes(ctx), unchanged);
+    }
+    setAggregateRows(ctx, original);
+    const worker = recordWorkerVerification({ task_id: "principal-finish",
+      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "principal-finish-worker"));
+    assert.equal(worker.ok, true, worker.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-finish",
+      session_id: "principal-finish-worker", target: "src/x.mjs" }, options(ctx.dir)).ok, true);
+    const candidate = commitSource(ctx.dir, 5);
+    const panelInput = { ...openPanelInput(ctx, candidate, { task_id: "principal-finish",
+      changeset_id: "principal-finish-cs", child_continuation_event_id: continuation.event_id },
+    { worker: worker.event_id }), phase: "final_bookend" };
+    const opened = recordAggregatePanelOpen(panelInput, options(ctx.dir));
+    assert.equal(opened.ok, true, opened.state);
+  } finally { ctx.cleanup(); }
+});
+
 test("a terminal R4 STOP admits one verified completion batch and one final child review", async () => {
   const ctx = repo();
   try {
@@ -348,13 +787,14 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "rerun FINAL after the narrow correction\n");
     const completionPaths = [...parent.candidate.paths, "briefs/completion.md", "src/unused.mjs"].sort();
     const exception = {
-      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
       parent_disposition_event_id: parent.decided.event_id, trigger_ids: ["FINAL"],
-      continuation_kind: "completion_exception", owner_evidence: "Owner approved this exact finish",
+      continuation_kind: "completion_exception", authority_route: "owner", owner_evidence: "Owner approved this exact finish",
       action_screen: { ..._DEFAULT_CONTINUATION_SCREEN, surviving_finding_ids: ["FINAL"] },
       children: [{ task_id: "finish-child", changeset_id: "finish-child-cs", tier: "T2",
         budget: "one repair batch and final review", authorized_paths: completionPaths }],
-      completion_exception: { repair_batches: 1, pm_recommendation: "one narrow repair is warranted",
+      completion_exception: { repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: "T2", coverage: "full" }, pm_recommendation: "one narrow repair is warranted",
         surviving_harm: "FINAL still harms the terminal outcome", smallest_correction: "repair only src/x.mjs",
         completion_proof: "rerun FINAL and collect the full final panel" },
       completion_batch: { worker_session_id: "finish-worker", brief_path: "briefs/completion.md" },
@@ -362,7 +802,7 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     assert.doesNotThrow(() => assert.equal(recordAggregateChildContinuation({ ...exception, children: [] }, options(ctx.dir)).state,
       "aggregate-continuation-malformed"), "an empty completion child list is a typed refusal, not a throw");
     assert.equal(recordAggregateChildContinuation({ ...exception, owner_evidence: "" }, options(ctx.dir)).state,
-      "aggregate-continuation-conflict", "Owner evidence is mandatory for the exception");
+      "aggregate-continuation-malformed", "Owner evidence is mandatory for the exception");
     writeFileSync(path.join(ctx.dir, "briefs", "completion.md"), "changed after the proposal\n");
     assert.equal(recordAggregateChildContinuation(exception, options(ctx.dir)).state, "aggregate-continuation-conflict",
       "a changed brief cannot reuse the proposed exception authority");
@@ -381,7 +821,7 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
     "aggregate-continuation-malformed", "the exception child cannot lower the terminal parent's tier");
     assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
       completion_exception: { ...exception.completion_exception, completion_proof: "" } }, options(ctx.dir)).state,
-    "aggregate-continuation-conflict", "completion proof is required before exception work authority");
+      "aggregate-continuation-malformed", "completion proof is required before exception work authority");
     assert.equal(recordAggregateChildContinuation({ ...exception, process_review_event_id: review.event_id,
       owner_evidence: "different Owner evidence" }, options(ctx.dir)).state,
     "aggregate-continuation-conflict", "the review binds the exact Owner evidence for this exception");
@@ -1091,6 +1531,7 @@ test("disabled completeness, partition, batch-3, final-dispatch, and first-winne
       recorded_at: at, session_id: "mutant", parent_disposition_event_id: decided.event_id,
       parent_frozen_commit: candidate.commit, parent_frozen_tree: candidate.tree,
       trigger_ids: [trigger], continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
+      authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
       process_review_event_id: null,
       children: [{ task_id: child, changeset_id: `${child}-change`, tier: "T2", budget: "one changeset", authorized_paths: candidate.paths }],
     });
@@ -1383,7 +1824,7 @@ test("a live successor cannot bypass the gate-4 review on a pre-policy three-gat
     const planted = {
       ...continuation, policy_version: AGGREGATE_POLICY_VERSION,
       parent_frozen_commit: parent.candidate.commit, parent_frozen_tree: parent.candidate.tree,
-      process_review_event_id: null, action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      authority_route: "owner", process_review_event_id: null, action_screen: _DEFAULT_CONTINUATION_SCREEN,
       recorded_at: "2099-01-01T00:00:00.000Z", session_id: "planted",
     };
     writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(stamped(planted))}\n`, { flag: "a" });
@@ -1491,14 +1932,14 @@ test("invalid typed child rulings stay inert and leave the exact proposal availa
       remediation_kind: null, authorized_paths: [] });
     assert.equal(stopped.ok, true, stopped.state);
     const proposal = { parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
-      continuation_kind: "new_changeset", children: [{ task_id: "valid-child",
+      continuation_kind: "new_changeset", owner_evidence: "Owner terminal evidence", children: [{ task_id: "valid-child",
         changeset_id: "valid-child-cs", tier: "T2", budget: "one changeset",
         authorized_paths: candidate.paths }] };
     const anchor = { kind: "aggregate_terminal", event_id: stopped.event_id,
       panel_open_event_id: panel.opened.event_id, frozen_commit: candidate.commit, frozen_tree: candidate.tree };
     const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "task-1",
       changeset_id: "changeset-1", reviewer_role: "frontier", purpose: "child_continuation",
-      anchor, proposed_transition: proposal, review_evidence: "terminal proposal review",
+      anchor, proposed_transition: v3ChildProposal(proposal), review_evidence: "terminal proposal review",
       zoom_out: "one bounded successor", bounded_scope: "one child",
       closure_evidence: "the parent remains terminal" };
     const ledger = repairLedgerPath(ctx.dir);
@@ -1512,7 +1953,7 @@ test("invalid typed child rulings stay inert and leave the exact proposal availa
       policy_version: AGGREGATE_POLICY_VERSION, task_id: "task-1", changeset_id: "changeset-1",
       recorded_at: "2099-01-01T00:00:00.000Z", session_id: "historical-writer",
       reviewer_role: "frontier", purpose: "child_continuation", anchor,
-      transition_sha256: aggregateTransitionSha256("child_continuation", proposal),
+      transition_sha256: aggregateTransitionSha256("child_continuation", v3ChildProposal(proposal)),
       next_gate_ordinal: 2, review_evidence: "historical invalid pair", zoom_out: "historical",
       ruling: "finish_bounded_root", bounded_scope: "one child", closure_evidence: "historical" });
     writeFileSync(ledger, `${JSON.stringify(historical)}\n`, { flag: "a" });
@@ -1557,7 +1998,7 @@ test("a spent finish review cannot route an abandoned open; an exact terminal-pu
     assert.equal(ended.ok, true, ended.state);
     const proposed = {
       parent_disposition_event_id: decided.event_id, trigger_ids: ["F1"],
-      continuation_kind: "new_changeset",
+      continuation_kind: "new_changeset", owner_evidence: "Owner terminal receipt",
       children: [{ task_id: "terminal-child", changeset_id: "terminal-child-cs", tier: "T2",
         budget: "one changeset", authorized_paths: candidate2.paths }],
     };
@@ -1571,7 +2012,7 @@ test("a spent finish review cannot route an abandoned open; an exact terminal-pu
       panel_open_event_id: panel2.opened.event_id, frozen_commit: candidate2.commit, frozen_tree: candidate2.tree };
     const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "task-1",
       changeset_id: "changeset-1", reviewer_role: "frontier", purpose: "child_continuation",
-      anchor, proposed_transition: proposed, review_evidence: "terminal review", zoom_out: "still bounded",
+      anchor, proposed_transition: v3ChildProposal(proposed), review_evidence: "terminal review", zoom_out: "still bounded",
       ruling: "successor", bounded_scope: "one child", closure_evidence: "current repair is closed" };
     assert.equal(recordAggregateProcessReview({ ...reviewInput,
       anchor: { ...anchor, frozen_tree: "f".repeat(40) } }, options(ctx.dir)).state,
@@ -1622,7 +2063,7 @@ test("an abandoned R4 needs a fresh terminal-purpose review after its spent fini
     }, options(ctx.dir, "owner"));
     assert.equal(ended.ok, true, ended.state);
     const proposed = { parent_disposition_event_id: parent.decided.event_id, trigger_ids: ["F3"],
-      continuation_kind: "new_changeset",
+      continuation_kind: "new_changeset", owner_evidence: "Owner terminal receipt",
       children: [{ task_id: "r4-child", changeset_id: "r4-child-cs", tier: "T2",
         budget: "one changeset", authorized_paths: candidate4.paths }] };
     const base = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
@@ -1679,7 +2120,7 @@ test("a round-3 standard handoff requires an exact standard-purpose process revi
     const anchor = { kind: "standard_disposition", event_id: r3.event_id, candidate_sha: manifest.digest };
     const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "legacy",
       changeset_id: "legacy-cs", reviewer_role: "frontier", purpose: "legacy_handoff",
-      anchor, proposed_transition: proposed, review_evidence: "handoff review", zoom_out: "bounded successor",
+      anchor, proposed_transition: v3HandoffProposal(proposed), review_evidence: "handoff review", zoom_out: "bounded successor",
       ruling: "successor", bounded_scope: "one child", closure_evidence: "standard parent hands off",
       next_gate_ordinal: 4 };
     const beforeReview = readFileSync(repairLedgerPath(ctx.dir), "utf8").split("\n").filter(Boolean).length;
@@ -1691,7 +2132,7 @@ test("a round-3 standard handoff requires an exact standard-purpose process revi
       policy_version: AGGREGATE_POLICY_VERSION, task_id: "legacy", changeset_id: "legacy-cs",
       recorded_at: "2099-01-01T00:00:05.000Z", session_id: "historical-writer",
       reviewer_role: "frontier", purpose: "legacy_handoff", anchor,
-      transition_sha256: aggregateTransitionSha256("legacy_handoff", proposed), next_gate_ordinal: 4,
+      transition_sha256: aggregateTransitionSha256("legacy_handoff", v3HandoffProposal(proposed)), next_gate_ordinal: 4,
       review_evidence: "historical invalid pair", zoom_out: "historical",
       ruling: "finish_bounded_root", bounded_scope: "one child", closure_evidence: "historical" });
     writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(historicalInvalid)}\n`, { flag: "a" });
@@ -1786,9 +2227,8 @@ test("live dispositions require an explicit boolean, while an exact old omitted-
     const retried = recordAggregateDisposition({
       ...input, panel_close_event_id: remap.get(closed.closed.event_id),
     }, options(ctx.dir));
-    assert.equal(retried.ok, true, retried.state);
-    assert.equal(retried.idempotent, true);
-    assert.equal(retried.event_id, remap.get(accepted.event_id));
+    assert.equal(retried.ok, false, "a new v3 disposition never aliases a versionless historical row");
+    assert.equal(retried.state, "aggregate-disposition-malformed");
   } finally { ctx.cleanup(); }
   const ctxTrue = repo();
   try {

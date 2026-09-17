@@ -32,8 +32,17 @@ import {
 const _DEFAULT_CONTINUATION_SCREEN = { surviving_finding_ids: [], harm: "n/a — mechanics fixture",
   trigger: "n/a — mechanics fixture", smallest_action: "the narrow successor", kiss: "no new machinery",
   zoom_out: "still the asked-for work" };
-const recordAggregateChildContinuation = (input, opts) =>
-  _rawChildContinuation({ action_screen: _DEFAULT_CONTINUATION_SCREEN, ...input }, opts);
+const recordAggregateChildContinuation = (input, opts) => {
+  const { completion_exception: suppliedCompletion, ...rest } = input;
+  const completion = rest.continuation_kind === "completion_exception" ? {
+    completion_exception: { repair_batches: 1, final_panels: 1,
+      final_panel: { phase: "final_bookend", tier: rest.children?.[0]?.tier, coverage: "full" },
+      ...suppliedCompletion },
+  } : {};
+  return _rawChildContinuation({ policy_version: AGGREGATE_POLICY_VERSION,
+    authority_route: rest.principal_evidence ? "principal" : "owner",
+    action_screen: _DEFAULT_CONTINUATION_SCREEN, ...rest, ...completion }, opts);
+};
 
 const stable = (value) => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
   : value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype
@@ -167,7 +176,8 @@ function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") 
     reviewer_role: "frontier", purpose: "dispatch",
     anchor: { kind: "aggregate_panel_close", event_id: closeId,
       frozen_commit: candidate.commit, frozen_tree: candidate.tree },
-    proposed_transition: { disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
+    proposed_transition: { policy_version: AGGREGATE_POLICY_VERSION,
+      disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
       source_round: state.latest.round, next_round: state.latest.round + 1,
       root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths },
     review_evidence: "frontier review of the completed panel", zoom_out: "the repair remains finite",
@@ -690,7 +700,7 @@ test("a minted successor REQUIRES a structured action_screen — omission and ea
     const state = derive(ctx);
     const baseInput = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
       changeset_id: "cs-1", parent_disposition_event_id: state.latest.event_id, trigger_ids: ["CRIT-1"],
-      continuation_kind: "new_changeset", owner_evidence: "Owner continuation",
+      continuation_kind: "new_changeset", owner_evidence: "Owner continuation", authority_route: "owner",
       children: [{ task_id: "next", changeset_id: "next-cs", tier: "T2", budget: "one narrow successor",
         authorized_paths: ["src/x.mjs"] }] };
     const full = { surviving_finding_ids: ["CRIT-1"], harm: "orientation delivery breaks",
@@ -1021,7 +1031,7 @@ test("H2: close eligibility against the FULL admitted set — verification, hand
     const dispatchRow = loaded.aggregate_events.find((row) => row.event.kind === "dispatch").event;
     const sneakClose = stamped({
       type: "aggregate_v2", kind: "close", task_id: "task-1", changeset_id: "cs-1",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:00:10.000Z", session_id: "sneak",
       disposition_event_id: decided.event_id, reason: "pre-mint escape", owner_evidence: "claimed",
     });
@@ -1619,18 +1629,19 @@ test("M36: the CLOSED trigger floor — the accepted set must be CARRIED, and on
     const parentOpenRow = window.aggregate_events.find((row) => row.event.kind === "panel_open").event;
     const plantedShed = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:01:00.000Z", session_id: "planter",
       parent_disposition_event_id: decided.event_id,
       parent_frozen_commit: parentOpenRow.frozen_commit, parent_frozen_tree: parentOpenRow.frozen_tree,
       trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "shed the harms",
+      authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
       process_review_event_id: null,
       children: [{ task_id: "m36-shed", changeset_id: "m36-shed-cs", tier: "T2",
         budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
     });
     const plantedChildOpen = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "m36-shed", changeset_id: "m36-shed-cs",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:01:01.000Z", session_id: "planter", round: 1,
       phase: "repair_round", tier: "T2",
       frozen_commit: parentOpenRow.frozen_commit, frozen_tree: parentOpenRow.frozen_tree,
@@ -2164,11 +2175,12 @@ test("M44: pending-vs-active refuses AT DECLARATION — continuation and legacy 
     const p44Open = derive(ctx, "p44").panels_open.at(-1);
     const plantedWedge = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "p44", changeset_id: "cs-p44",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:06:00.000Z", session_id: "planter",
       parent_disposition_event_id: pGo.event_id,
       parent_frozen_commit: p44Open.frozen_commit, parent_frozen_tree: p44Open.frozen_tree,
       trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "wedge",
+      authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
       process_review_event_id: null,
       children: [{ task_id: "c44x", changeset_id: "c44x-cs", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/x.mjs"] }],
@@ -2272,18 +2284,19 @@ test("M45: the CLOSED floor carries the UNDISPOSED GROUND — collected-but-unad
     const r2Open = derive(ctx).panels_open.at(-1);
     const plantedShed = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:07:00.000Z", session_id: "planter",
       parent_disposition_event_id: d1.event_id,
       parent_frozen_commit: r2Open.frozen_commit, parent_frozen_tree: r2Open.frozen_tree,
       trigger_ids: ["H1"], continuation_kind: "new_changeset", owner_evidence: "shed the ground",
+      authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
       process_review_event_id: null,
       children: [{ task_id: "c45-shed", changeset_id: "c45-shed-cs", tier: "T2",
         budget: "one changeset", authorized_paths: ["src/x.mjs"] }],
     });
     const plantedChildOpen = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "c45-shed", changeset_id: "c45-shed-cs",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:07:01.000Z", session_id: "planter", round: 1,
       phase: "repair_round", tier: "T2",
       frozen_commit: r2Open.frozen_commit, frozen_tree: r2Open.frozen_tree,
@@ -2503,7 +2516,7 @@ test("M48: THE CROSS-ROUND BASE PIN — every later round re-derives from ROUND 
     const window = loadRepairEventsForProject(ctx.dir);
     const plantedDelta = stamped({
       type: "aggregate_v2", kind: "panel_open", task_id: "task-1", changeset_id: "cs-1",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:07:00.000Z", session_id: "orchestrator", round: 2,
       phase: "repair_round", tier: "T2", frozen_commit: r2.commit, frozen_tree: r2.tree,
       base_ref: "origin/r1line", base_commit: r1.commit, changed_paths: ["src/y.mjs"],
@@ -2711,11 +2724,12 @@ test("M50: DECLARATION-TIME STOPPED REFUSAL — a GO ends its lineage's claim, s
     const bOpenRow = derive(ctx, "b50").panels_open.at(-1);
     const plantedHop = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "b50", changeset_id: "b50-cs",
-      policy_version: 2,
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:08:00.000Z", session_id: "planter",
       parent_disposition_event_id: world.bGo.event_id,
       parent_frozen_commit: bOpenRow.frozen_commit, parent_frozen_tree: bOpenRow.frozen_tree,
       trigger_ids: [], continuation_kind: "new_changeset", owner_evidence: "springboard",
+      authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
       process_review_event_id: null,
       children: [{ task_id: "d50", changeset_id: "d50-cs", tier: "T2", budget: "the y half",
         authorized_paths: ["src/y.mjs"] }],
@@ -2989,11 +3003,15 @@ test("M54: THE REMAINDER-INTERSECT GATE — reopening on remainder must TARGET t
     const aOpen = derive(ctx, "a50").panels_open.at(-1);
     const plantedGrind = stamped({
       type: "aggregate_v2", kind: "child_continuation", task_id: "a50", changeset_id: "a50-cs",
-      policy_version: 2,
+      // This is a current-version Owner fixture so the disabled arm reaches the
+      // remainder-intersect predicate itself. A historical-version row would be
+      // inert under the v3 floor and would only test the unrelated downgrade wall.
+      policy_version: AGGREGATE_POLICY_VERSION,
       recorded_at: "2099-01-01T00:10:00.000Z", session_id: "planter",
       parent_disposition_event_id: world.aStop.event_id,
       parent_frozen_commit: aOpen.frozen_commit, parent_frozen_tree: aOpen.frozen_tree,
       trigger_ids: ["A1"], continuation_kind: "new_changeset", owner_evidence: "grind",
+      authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN,
       process_review_event_id: null,
       children: [{ task_id: "u54", changeset_id: "u54-cs", tier: "T2", budget: "one changeset",
         authorized_paths: ["src/unrelated.mjs"] }],
@@ -3001,6 +3019,17 @@ test("M54: THE REMAINDER-INTERSECT GATE — reopening on remainder must TARGET t
     const grindRows = [...window.aggregate_events, plantedGrind];
     assert.ok(!derivePendingLineageBudgets(grindRows, { standardEvents: window.events })
       .some((entry) => entry.task_id === "u54"), "replay refuses the unrelated reopen too");
+
+    // Disabled arm: remove only the new declaration's remainder intersection.
+    // The same valid current-version row now lands, proving this test reaches the
+    // original remainder gate instead of passing because the version floor rejects it.
+    const mutant = await importMutant(mutantDir, [[
+      "        return !(allTerminal && (anyVirgin || (remainder && targetsRemainder)));",
+      "        return !(allTerminal && (anyVirgin || remainder));",
+    ]]);
+    assert.ok(mutant.derivePendingLineageBudgets(grindRows, { standardEvents: window.events })
+      .some((entry) => entry.task_id === "u54"),
+    "without the remainder-intersect arm, the unrelated current-version continuation lands");
 
     // ACCEPT: a successor that actually TARGETS the remainder reopens the anchor.
     const targeted = reopenA("c54", ["src/y.mjs"]);
@@ -3024,20 +3053,6 @@ test("M54: THE REMAINDER-INTERSECT GATE — reopening on remainder must TARGET t
     assert.equal(afterVirgin.ok, true,
       `a virgin-stranded child reopens the anchor regardless of the new budget: ${afterVirgin.state}`);
 
-    // Disabled arm: strip the intersect requirement and the unrelated-path reopen lands — the
-    // 4-cycle grind, an anchor held open forever by budgets that never approach the reservation.
-    const mutant = await importMutant(mutantDir, [[
-      "        return !(allTerminal && (anyVirgin || (remainder && targetsRemainder)));",
-      "        return !(allTerminal && (anyVirgin || remainder));",
-    ]]);
-    assert.ok(mutant.derivePendingLineageBudgets(grindRows, { standardEvents: window.events })
-      .some((entry) => entry.task_id === "u54"),
-    "without the intersect gate the unrelated reopen lands — the executed grind");
-    // …and the mutant must still admit the honest cases, or the arm proves nothing about scope.
-    const final = loadRepairEventsForProject(ctx.dir);
-    assert.ok(mutant.derivePendingLineageBudgets(final.aggregate_events,
-      { standardEvents: final.events }).some((entry) => entry.task_id === "v54"),
-    "the arm removes ONE requirement — the virgin and targeted routes are untouched by it");
   } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });
 
