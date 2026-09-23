@@ -37,9 +37,10 @@
 //   · THE ATOMICITY ASSUMPTION IS INHERITED, NOT NEW. Adjudication rests on a single O_APPEND write
 //     of a small row being atomic — the property this ledger already stands on, with the same
 //     local-filesystem caveat it already carries. The kit gains no new platform surface here.
-//   · The SEND half is HARNESS-SPECIFIC. It binds a tool named `…send_message`, which exists in the
-//     Claude lane and has no Codex equivalent; in the Codex lane that half is inert by absence, and
-//     the brief-WRITE half binds both lanes through the shared payload grammar. Stated, not implied.
+//   · The SEND half binds Claude `…send_message` and the exact Codex app
+//     `mcp__codex_app__send_message_to_thread` tool. The Codex pair is scoped by the optional
+//     `pairedPmThreadId` in this session's task-lane declaration. An absent selector means no
+//     Architect pair is configured; status is still a sender declaration, not semantic proof.
 
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeSync } from "node:fs";
@@ -49,6 +50,9 @@ import { fileURLToPath } from "node:url";
 // design invariant that closed a two-round recurrence in v2.2.0, and the reason this hook binds the
 // Codex lane's multi-target `apply_patch` envelopes without knowing what a patch looks like.
 import { extractTargets, resolvePatchBase, resolveProjectRoot, toRepoRelative } from "./payload-targets.mjs";
+// Reuse the existing PM disposition questions at the Architect decision boundary. The module's
+// entry is guarded by isMain, so importing its CONTRACT never starts a second stdin listener.
+import { CONTRACT } from "./guard-gate-ladder.mjs";
 import {
   deriveAggregateRepairState, deriveRepairState, loadRepairEventsForProject,
   validateRepairDispatch, verifyRepairWorkerWrite,
@@ -162,6 +166,26 @@ export function loadTaskId(projectRoot, { readTaskLane } = {}) {
   return isPlainObject(parsed) && nonempty(parsed.taskId, 120) ? parsed.taskId : null;
 }
 
+/** Existing task-lane declaration selects the ONE Codex PM thread this guard covers. */
+export function pairedPmThreadState(projectRoot, { sessionId, readTaskLane } = {}) {
+  const file = path.join(projectRoot, TASK_LANE);
+  let parsed;
+  try {
+    if (readTaskLane) parsed = readTaskLane(file);
+    else {
+      const st = lstatSync(file);
+      if (!st.isFile() || st.isSymbolicLink()) return { state: "malformed" };
+      parsed = JSON.parse(readFileSync(file, "utf8"));
+    }
+  } catch (e) { return e?.code === "ENOENT" ? { state: "absent" } : { state: "malformed" }; }
+  if (!isPlainObject(parsed)) return { state: "malformed" };
+  if (!Object.hasOwn(parsed, "pairedPmThreadId")) return { state: "absent" };
+  return parsed.sessionId === sessionId && nonempty(parsed.pairedPmThreadId, 120) &&
+      !/\s/.test(parsed.pairedPmThreadId)
+    ? { state: "configured", threadId: parsed.pairedPmThreadId }
+    : { state: "malformed" };
+}
+
 /** Is this repo-relative path a BRIEF for the purposes of the rung? Pure. */
 export function isBriefPath(rel, briefPathDirs = []) {
   if (typeof rel !== "string" || !rel) return false;
@@ -174,7 +198,60 @@ export function isBriefPath(rel, briefPathDirs = []) {
 
 /** Does this payload name a cross-session send? Harness-specific BY CONSTRUCTION — see the header. */
 export function isSendTool(toolName) {
-  return typeof toolName === "string" && /send_message$/.test(toolName);
+  return typeof toolName === "string" &&
+    (/send_message$/.test(toolName) || toolName === "mcp__codex_app__send_message_to_thread");
+}
+
+const ARCHITECT_SEND = "mcp__codex_app__send_message_to_thread";
+const ARCHITECT_STATUS_MARKER = "ARCHITECT_STATUS_V1\n";
+// The screen is copied into one existing audit row. Keep that O_APPEND write small.
+const MAX_SCREEN_BYTES = 3072;
+const SCREEN_STEPS = ["harm", "real", "scope", "worthIt"];
+const ACTION_FIELDS = ["approvedOutcome", "blueprintAlignment", "smallestAction", "kiss", "zoomOut", "rootCause", "cost"];
+
+/** A shape check on one current decision screen; evidence quality remains the Architect's judgment. */
+export function architectScreenState(screen, prompt) {
+  if (screen === undefined) return { state: "architect-screen-missing" };
+  if (!isPlainObject(screen) || typeof prompt !== "string") return { state: "architect-screen-incomplete" };
+  if (Buffer.byteLength(JSON.stringify(screen)) > MAX_SCREEN_BYTES) return { state: "architect-screen-too-large" };
+  if (!/^[0-9a-f]{64}$/.test(screen.promptSha256) ||
+      screen.promptSha256 !== createHash("sha256").update(prompt, "utf8").digest("hex")) {
+    return { state: "architect-prompt-mismatch" };
+  }
+  if (screen.decisionId !== undefined && !nonempty(screen.decisionId, 120)) {
+    return { state: "architect-screen-incomplete" };
+  }
+  if (!isPlainObject(screen.action) || ACTION_FIELDS.some((field) => !nonempty(screen.action[field]))) {
+    return { state: "architect-screen-incomplete" };
+  }
+  if (!Array.isArray(screen.findings) || screen.findings.length > 32) return { state: "architect-screen-incomplete" };
+  const ids = new Set();
+  for (const finding of screen.findings) {
+    if (!isPlainObject(finding) || !nonempty(finding.id, 120) || ids.has(finding.id)) {
+      return { state: "architect-screen-incomplete" };
+    }
+    ids.add(finding.id);
+    let failedAt = null;
+    for (const step of SCREEN_STEPS) {
+      if (failedAt !== null) {
+        if (Object.hasOwn(finding, step)) return { state: "architect-screen-incomplete" };
+        continue;
+      }
+      const answer = finding[step];
+      if (!isPlainObject(answer) || !["pass", "fail"].includes(answer.result) || !nonempty(answer.evidence)) {
+        return { state: "architect-screen-incomplete" };
+      }
+      if (answer.result === "fail") {
+        if (!nonempty(answer.failedTrigger)) return { state: "architect-screen-incomplete" };
+        failedAt = step;
+      } else if (answer.failedTrigger !== undefined) return { state: "architect-screen-incomplete" };
+    }
+    const allowed = failedAt === "harm" ? ["NOTE"] : failedAt === "real" ? ["DEFER"]
+      : failedAt === "scope" ? ["DECLINE"] : failedAt === "worthIt" ? ["DEFER", "DECLINE"]
+      : ["REMEDIATE", "ESCALATE"];
+    if (!allowed.includes(finding.disposition)) return { state: "architect-screen-incomplete" };
+  }
+  return { state: "screened", screen };
 }
 
 /**
@@ -255,6 +332,14 @@ export function sidecarState(sidecar, {
   // the worker builds from — so there is nothing for a brief write to declare its way out of.
   if (sidecar.class === "status") {
     if (dispatch.kind !== "send") return { state: "status-not-available" };
+    if (dispatch.architectPrompt !== undefined && sidecar.architectScreen !== undefined) {
+      return { state: "architect-status-conflict" };
+    }
+    if (dispatch.architectPrompt !== undefined &&
+        (!dispatch.architectPrompt.startsWith(ARCHITECT_STATUS_MARKER) ||
+          !dispatch.architectPrompt.slice(ARCHITECT_STATUS_MARKER.length).trim())) {
+      return { state: "architect-status-marker-missing" };
+    }
     // Consumes NOTHING, and the asymmetry is deliberate rather than an oversight: this route
     // presented no receipts, so there are none to spend. What it leaves behind is a legible ledger
     // row, which is the only thing standing between this escape and invisibility.
@@ -280,8 +365,13 @@ export function sidecarState(sidecar, {
       typeof c.output === "string" && c.output.trim()
   );
   if (executed.length === 0) return { state: "no-executed-check" };
+  if (dispatch.architectPrompt !== undefined) {
+    const screened = architectScreenState(sidecar.architectScreen, dispatch.architectPrompt);
+    if (screened.state !== "screened") return screened;
+  }
   return { state: "receipted", checks: executed.length, repair: dispatchDeclaration.repair,
-    repairValidation: dispatchDeclaration.repairValidation };
+    repairValidation: dispatchDeclaration.repairValidation,
+    architectScreen: dispatch.architectPrompt !== undefined ? sidecar.architectScreen : undefined };
 }
 
 export const ALLOW_STATES = new Set(["receipted", "status-declared"]);
@@ -292,7 +382,7 @@ export const ALLOW_STATES = new Set(["receipted", "status-declared"]);
 // `control` so the Owner's spot-check can tell this control's rows from the lane guard's. A
 // STATUS-DECLARED allow is the row that matters: it is the unfalsifiable route, so it must not also
 // be the invisible one. Ledger IO fails CLOSED — an allow that cannot record its trace is denied.
-export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce, attempt, repair }) {
+export function writeLedger(projectRoot, { decision, state, kind, target, sessionId, checks, cls, nonce, attempt, repair, architectScreen }) {
   const ledger = path.join(projectRoot, LEDGER);
   let fd;
   try {
@@ -329,6 +419,7 @@ export function writeLedger(projectRoot, { decision, state, kind, target, sessio
     // from the audit trail itself, and it is append-only and fsync'd for exactly that reason.
     if (nonce !== undefined) row.nonce = nonce;
     if (repair !== undefined && repair !== null) row.repair = repair;
+    if (architectScreen !== undefined) row.architectScreen = architectScreen;
     // The ATTEMPT TOKEN is what makes first-occurrence adjudicable: without per-attempt identity two
     // near-simultaneous rows for one nonce are indistinguishable, and "first" collapses to "any".
     if (attempt !== undefined) row.attempt = attempt;
@@ -435,6 +526,14 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "rung-already-spent": `${SIDECAR}'s nonce has ALREADY been spent — an earlier attempt (${detail}) claimed it first, and this attempt is recorded in the trail as a refused one. One ritual authorizes ONE dispatch: a repeat to the same target is exactly the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
     "adjudication-unreadable": `the dispatch's own attempt row could not be read back from ${LEDGER}, so it is not possible to tell whether this attempt claimed the nonce first. An unadjudicated consume is not a consume — the guard denies rather than guess. Fix that file, re-run the rung, and retry.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
+    "architect-pair-malformed": `${TASK_LANE} has a malformed \`pairedPmThreadId\`; a configured pair must name one non-empty PM thread id. Repair the task declaration before a Codex thread send.`,
+    "architect-prompt-missing": `the covered Codex send has no readable string \`tool_input.prompt\`, so its decision screen cannot bind the exact message bytes.`,
+    "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Record approved-outcome and blueprint alignment, smallest action, KISS, zoom-out, root cause and cost, then screen each finding HARM → REAL → SCOPE → WORTH IT with the first failed trigger. A decision with no findings still owes the action screen.`,
+    "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: action fields, prompt digest, and each finding's ordered first-exit evidence/disposition must be present; a screened-out finding needs its actual failed trigger and no filler downstream answers. This checks record shape, not judgment quality.`,
+    "architect-screen-too-large": `${SIDECAR}'s Architect screen exceeds ${MAX_SCREEN_BYTES} UTF-8 bytes. Keep the current decision screen concise so its existing audit row remains a small single append.`,
+    "architect-prompt-mismatch": `${SIDECAR}'s Architect screen does not name the SHA-256 of this exact prompt. Re-screen the message bytes being sent; one decision record cannot silently authorize a changed direction.`,
+    "architect-status-conflict": `${SIDECAR} carries an Architect decision screen while declaring this send status. A direction cannot use the status class; status without a direction screen remains a self-reported, audited declaration.`,
+    "architect-status-marker-missing": `a configured-PM Codex send declared status, but its prompt does not start with the exact first line \`ARCHITECT_STATUS_V1\` followed by status text. Unmarked prompts are material directions and owe a current decision screen. The marker is a sender declaration, not semantic proof.`,
     "repair-declaration-malformed": `${SIDECAR} declares a repair dispatch but its repair record is incomplete or malformed. Supply the exact task, changeset, computed candidate digest, next round, finding ids/class, ownership area, original trigger, authorized paths, repair-introduced flag, new-scope flag, and required typed evidence event IDs. Semantic sameness remains author-declared.`,
     "repair-history-mismatch": `${SIDECAR}'s repair declaration does not exactly match the latest durable round disposition for this task and changeset. Refreezes may change the candidate, but never reset or relabel the round history.`,
     "repair-history-invalid": `the durable repair history is transition-invalid, so it cannot authorize another dispatch. Inspect the Git-common repair ledger; do not replace it with a fresh changeset.`,
@@ -477,7 +576,9 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, or \`briefPathDirs\` is not an array of non-empty path segments). This dispatch is BLOCKED (fail-closed) — a corrupt brief-path set must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
-  return state === "kit-config-malformed" || state === "ledger-error" ? head + why : head + why + " " + RITUAL;
+  const base = state === "kit-config-malformed" || state === "ledger-error"
+    ? head + why : head + why + " " + RITUAL;
+  return dispatch?.architectPrompt !== undefined ? `${base}\n\n${CONTRACT}` : base;
 }
 
 function emitDeny(reason) {
@@ -519,7 +620,28 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
 
     const dispatches = [];
     const sourceTargets = [];
-    if (isSendTool(input?.tool_name)) {
+    if (input?.tool_name === ARCHITECT_SEND) {
+      const pair = pairedPmThreadState(root, { sessionId: input?.session_id });
+      if (pair.state === "malformed") {
+        emit(denyReason("architect-pair-malformed", { dispatch: { kind: "send", target: "<unreadable-destination>" } }));
+        return exit(0);
+      }
+      if (pair.state === "configured") {
+        const dest = input?.tool_input?.threadId;
+        if (typeof dest !== "string" || !dest) {
+          emit(denyReason("architect-pair-malformed", { dispatch: { kind: "send", target: "<unreadable-destination>" } }));
+          return exit(0);
+        }
+        if (dest === pair.threadId) {
+          const prompt = input?.tool_input?.prompt;
+          if (typeof prompt !== "string") {
+            emit(denyReason("architect-prompt-missing", { dispatch: { kind: "send", target: dest } }));
+            return exit(0);
+          }
+          dispatches.push({ kind: "send", target: dest, architectPrompt: prompt });
+        }
+      }
+    } else if (isSendTool(input?.tool_name)) {
       const dest = input?.tool_input?.session_id;
       // A send whose destination cannot be read still owes the rung — it is positively send-shaped.
       // `<unreadable-destination>` can never equal a sidecar's target, so it denies, which is the
@@ -699,7 +821,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       }
       if (!writeLedger(root, { decision: "allow", state: v.state, kind: d.kind, target: d.target,
         sessionId: input?.session_id ?? "", checks: v.checks, cls: "load-bearing",
-        nonce: sidecar.nonce, attempt, repair: v.repair })) {
+        nonce: sidecar.nonce, attempt, repair: v.repair, architectScreen: v.architectScreen })) {
         say(denyReason("ledger-error", { dispatch: d })); return exit(0);
       }
     }

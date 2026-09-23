@@ -1480,13 +1480,9 @@ function main() {
               hooks: [
                 entry("guard-cross-repo-writes.mjs", "Checking every patch target stays inside this repo…"),
                 entry("guard-lane-authoring.mjs", "Checking the task's lane declaration…"),
-                // The brief-rung guard's WRITE half binds here: a Codex brief arrives as an
-                // apply_patch envelope, which the shared grammar reads exactly as it reads a
-                // Claude `file_path`. Its SEND half is registered NOWHERE in this lane, and that
-                // is a fact about the lane rather than a decision: `send_message` is a tool the
-                // Claude harness has and Codex does not, so there is no payload to bind. The half
-                // that CAN bind, does; the half that cannot is inert BY ABSENCE, and PORTABILITY.md
-                // says so rather than leaving an adopter to infer symmetry that is not there.
+                // The shared brief-rung guard reads Codex apply_patch envelopes as well as
+                // Claude file_path writes. The exact Codex app thread-send tool has its own
+                // narrow registration below; the pair selector lives in task-lane.json.
                 entry("guard-brief-rung.mjs", "Checking the pre-send verification rung for this brief…"),
                 // The two SENSORS run alongside the guards on the same matcher. They never deny —
                 // registering them here is what stops them being installed-but-inert, which is the
@@ -1496,6 +1492,10 @@ function main() {
                 entry("sensor-sweep-owed.mjs", "Checking whether this edit owes a pre-fold dependency sweep…"),
                 entry("sensor-mutation-owed.mjs", "Checking whether this edit owes a two-sided mutation record…"),
               ],
+            },
+            {
+              matcher: "mcp__codex_app__send_message_to_thread",
+              hooks: [entry("guard-brief-rung.mjs", "Checking the Architect decision screen for this PM send…")],
             },
             {
               matcher: "Bash",
@@ -1550,7 +1550,7 @@ function main() {
         // withheld, and PORTABILITY.md says so.
         if (writeWithBackup(hooksJson, registrationText)) {
           kitWroteHooksJson = true;
-          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · Bash ⇒ the gate-ladder sensor (never denies) · the brief-rung guard's cross-session SEND half is inert in this lane by absence (no such tool) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
+          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · exact Codex app thread-send ⇒ brief-rung guard for the configured PM pair · Bash ⇒ gate-ladder sensor (never denies) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
           }

@@ -66,6 +66,22 @@ const verdictEvent = (over = {}) => {
 const repairEvents = [verdictEvent()];
 const state = (sidecar, over = {}) =>
   sidecarState(sidecar, { ageMin: 1, sessionId: "s1", dispatch: BRIEF, events: [], taskId: "task1", ...over }).state;
+const architectPrompt = "Proceed with the approved bounded chip.";
+const architectScreen = (over = {}) => ({
+  promptSha256: createHash("sha256").update(architectPrompt).digest("hex"),
+  decisionId: "chip-1-direction",
+  action: {
+    approvedOutcome: "Deliver the approved chip without changing its endpoint.",
+    blueprintAlignment: "The step implements the approved architecture path.",
+    smallestAction: "Change only the named chip files.",
+    kiss: "Reuse the existing guard and record.",
+    zoomOut: "This is still the shortest path to the release outcome.",
+    rootCause: "The current dispatch lacks a checked screening record.",
+    cost: "One bounded edit and its existing review gate.",
+  },
+  findings: [],
+  ...over,
+});
 
 // ---------------------------------------------------------------- scope: what owes the rung
 
@@ -94,6 +110,7 @@ test("a BRIEF is recognised by its directory OR its name — and a shipped instr
 test("the SEND half binds a send tool and nothing else — harness-specific by construction", () => {
   assert.equal(isSendTool("mcp__ccd_session_mgmt__send_message"), true);
   assert.equal(isSendTool("send_message"), true);
+  assert.equal(isSendTool("mcp__codex_app__send_message_to_thread"), true);
   assert.equal(isSendTool("Write"), false);
   assert.equal(isSendTool("apply_patch"), false);
   assert.equal(isSendTool(undefined), false);
@@ -186,6 +203,52 @@ test("the STATUS escape is available to a send and refused to a brief", () => {
     "…and a brief cannot declare its way out: it is load-bearing by definition");
   // An explicit load-bearing class still owes receipts — the field cannot be used to skip them.
   assert.equal(state(fresh({ class: "load-bearing", checks: [] })), "no-executed-check");
+});
+
+test("an Architect direction owes a prompt-bound action screen even when there are no findings", () => {
+  const dispatch = { kind: "send", target: "pm-thread", architectPrompt };
+  const base = fresh({ target: "pm-thread" });
+  assert.equal(state(base, { dispatch }), "architect-screen-missing");
+  assert.equal(state({ ...base, architectScreen: architectScreen({ promptSha256: "0".repeat(64) }) }, { dispatch }),
+    "architect-prompt-mismatch");
+  assert.equal(state({ ...base, architectScreen: architectScreen({ action: { ...architectScreen().action, kiss: "" } }) },
+    { dispatch }), "architect-screen-incomplete");
+  assert.equal(state({ ...base, architectScreen: architectScreen() }, { dispatch }), "receipted");
+  assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
+    ...architectScreen().action, approvedOutcome: "x".repeat(4000),
+  } }) }, { dispatch }), "architect-screen-too-large", "the existing audit append remains small");
+  assert.equal(state({ ...base, class: "status", dispatch_kind: "status", architectScreen: undefined },
+    { dispatch }), "architect-status-marker-missing", "direction text cannot use class:status alone");
+  assert.equal(state({ ...base, class: "status", dispatch_kind: "status", architectScreen: undefined },
+    { dispatch: { ...dispatch, architectPrompt: "ARCHITECT_STATUS_V1\nProgress only." } }), "status-declared");
+  assert.equal(state({ ...base, class: "status", dispatch_kind: "status", architectScreen: architectScreen() },
+    { dispatch }), "architect-status-conflict", "a direction receipt cannot be relabelled as status");
+});
+
+test("Architect findings obey first-exit order and name the failed trigger before being screened out", () => {
+  const dispatch = { kind: "send", target: "pm-thread", architectPrompt };
+  const base = fresh({ target: "pm-thread" });
+  const pass = (evidence) => ({ result: "pass", evidence });
+  const fail = (evidence, failedTrigger) => ({ result: "fail", evidence, failedTrigger });
+  const finding = {
+    id: "F1", harm: pass("Owner loses the approved outcome because the send changes scope."),
+    real: pass("The changed scope reaches the supported paired PM task."),
+    scope: pass("The finding concerns the requested feature."),
+    worthIt: pass("The bounded correction is cheaper than another wrong build."),
+    disposition: "REMEDIATE",
+  };
+  assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [finding] }) }, { dispatch }), "receipted");
+  for (const [field, disposition] of [["harm", "NOTE"], ["real", "DEFER"], ["scope", "DECLINE"], ["worthIt", "DEFER"]]) {
+    const fields = ["harm", "real", "scope", "worthIt"];
+    const screened = { id: "F1", disposition };
+    for (const key of fields.slice(0, fields.indexOf(field))) screened[key] = finding[key];
+    screened[field] = fail("The original case misses the named supported target.", "Replayed original trigger against the target and observed no impact.");
+    assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [screened] }) }, { dispatch }), "receipted", field);
+    assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [{ ...screened, [field]: { ...screened[field], failedTrigger: "" } }] }) },
+      { dispatch }), "architect-screen-incomplete", `${field} cannot screen out on a bare assertion`);
+    if (field !== "worthIt") assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [{ ...screened, [fields[fields.indexOf(field) + 1]]: pass("filler") }] }) },
+      { dispatch }), "architect-screen-incomplete", "downstream answers after first exit are filler");
+  }
 });
 
 test("retired standard repair declarations refuse while active legacy state still blocks ordinary repair work", () => {
@@ -490,6 +553,75 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
     assert.equal(codexDenied.status, 0, `the Codex-lane copy must run: ${codexDenied.stderr}`);
     assert.match(codexDenied.stdout, /"permissionDecision":"deny"/,
       "the brief-WRITE half binds the Codex lane through the shared envelope grammar");
+  } finally { cleanup(); }
+});
+
+test("the installed Codex thread-send guard scopes one declared PM and checks current direction screening", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    const registration = JSON.parse(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8"));
+    const sendGroup = registration.hooks.PreToolUse.find((group) =>
+      group.matcher === "mcp__codex_app__send_message_to_thread");
+    assert.equal(sendGroup.hooks.length, 1, "the generated registration names one exact send guard");
+    const command = sendGroup.hooks[0].command;
+    const laneFile = path.join(dir, ".claude", "task-lane.json");
+    const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
+    const payload = (threadId = "pm-thread", prompt = architectPrompt) => ({
+      session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
+      tool_input: { threadId, prompt },
+    });
+    const run = (input) => spawnSync("sh", ["-c", command], {
+      input: JSON.stringify(input), encoding: "utf8",
+    });
+    const lane = JSON.parse(readFileSync(laneFile, "utf8"));
+    const setLane = (value) => writeFileSync(laneFile, JSON.stringify({ ...lane, pairedPmThreadId: value }));
+    const setSidecar = (over = {}) => writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "pm-thread", nonce: "architect-1", dispatch_kind: "build", task_id: "task1",
+      checks: OK_CHECK, architectScreen: architectScreen(), ...over,
+    }));
+
+    assert.equal(run(payload()).stdout, "", "without a configured pair the Codex send remains out of scope");
+    setLane(123);
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "a malformed selector cannot silently narrow coverage");
+    setLane(" pm-thread ");
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "whitespace cannot turn a configured pair into an unmatched quiet route");
+    setLane("pm-thread");
+    writeFileSync(laneFile, JSON.stringify({ ...lane, sessionId: "other", pairedPmThreadId: "pm-thread" }));
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the pair selector belongs to this session");
+    setLane("pm-thread");
+    assert.equal(run(payload("another-thread")).stdout, "", "an unrelated Codex send stays outside the paired guard");
+    const missing = run(payload()).stdout;
+    assert.match(missing, /"permissionDecision":"deny"/, "the covered PM send needs a sidecar");
+    for (const question of ["HARM?", "REAL?", "SCOPE?", "WORTH IT?", "root replacement"]) {
+      assert.ok(missing.includes(question), `the paired deny surfaces the existing PM CONTRACT's ${question}`);
+    }
+    setSidecar({ architectScreen: architectScreen({ findings: [
+      { id: "F1", harm: { result: "fail", evidence: "No target was reached." }, disposition: "NOTE" },
+    ] }) });
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "an incomplete first-exit finding cannot pass");
+    setSidecar({ architectScreen: architectScreen({ promptSha256: "0".repeat(64) }) });
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the screen must bind exact prompt bytes");
+    setSidecar();
+    assert.match(run(payload("pm-thread", architectPrompt + " Changed.")).stdout, /"permissionDecision":"deny"/,
+      "a changed message cannot ride the old decision digest");
+    setSidecar();
+    utimesSync(sidecarFile, new Date(Date.now() - 31 * 60_000), new Date(Date.now() - 31 * 60_000));
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "an old decision screen cannot pass");
+    setSidecar({ target: "wrong-thread" });
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the existing target binding still applies");
+    setSidecar({ class: "status", dispatch_kind: "status" });
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "a direction receipt may not take the status route");
+    setSidecar();
+    assert.equal(run(payload()).stdout, "", "the current screen permits exactly the paired direction");
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the existing nonce is single use");
+    setSidecar({ class: "status", dispatch_kind: "status", architectScreen: undefined, checks: undefined, nonce: undefined });
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "direction text cannot take the status route");
+    assert.equal(run(payload("pm-thread", "ARCHITECT_STATUS_V1\nProgress only.")).stdout, "",
+      "marked declared status remains available and auditable");
+    const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map(JSON.parse).filter((row) => row.control === "brief-rung");
+    assert.equal(rows.at(-1).class, "status");
+    assert.equal(rows.at(-1).target, "pm-thread");
   } finally { cleanup(); }
 });
 

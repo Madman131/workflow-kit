@@ -302,8 +302,9 @@ table or the scalar `hooks = "./hooks.json"` that Codex's own schema uses — `i
 did not change them and the arming probe will not vouch for them.
 
 **Registered in the Codex lane: the three write guards (`guard-cross-repo-writes`,
-`guard-lane-authoring`, `guard-brief-rung`) and the three sensors — `sensor-sweep-owed` and
-`sensor-mutation-owed` on `apply_patch`, `guard-gate-ladder` on `Bash`. Not the Owner-comms
+`guard-lane-authoring`, `guard-brief-rung`) and two sensors (`sensor-sweep-owed`,
+`sensor-mutation-owed`) on `apply_patch`; the exact `mcp__codex_app__send_message_to_thread`
+matcher runs `guard-brief-rung`; `guard-gate-ladder` runs on `Bash`. Not the Owner-comms
 Stop sensor.** Codex does list a `Stop` hook event, but this kit has not observed that payload, and
 registering a sensor against an unverified payload shape would ship a control nobody has watched. The
 file installs — the two hook trees are byte-identical by construction — and only the registration is
@@ -352,12 +353,18 @@ and a spot-check cannot read a digest.
 reality, so a hand-written sidecar naming commands that never ran satisfies this guard. It proves a
 session- and dispatch-bound RECORD exists — a raised cost and an auditable trace, not impossibility.
 
-**`guard-brief-rung` is registered HALF here, and the missing half is a property of the lane rather
-than a decision.** Its brief-WRITE half binds Codex through the shared envelope grammar, exactly as
-the other write guards do. Its cross-session SEND half binds a tool named `…send_message`, which the
-Claude harness has and Codex does not — so in this lane that half is **inert by absence**: there is
-no payload for it to read, and nothing to register it against. It is named here rather than left for
-an adopter to infer a symmetry that is not there.
+**`guard-brief-rung` binds Codex brief writes and one paired thread send.** The brief-WRITE half
+uses the shared `apply_patch` envelope grammar. For the exact Codex app tool
+`mcp__codex_app__send_message_to_thread`, the optional, session-bound `pairedPmThreadId` in the
+existing `.claude/task-lane.json` selects one PM `threadId`; without that field, Codex sends are
+outside this Architect-pair scope. A material send to that target owes the existing fresh,
+session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
+prompt bytes. The screen records approved-outcome/blueprint alignment, smallest action, KISS,
+zoom-out, root cause/cost and each finding's first-exit HARM/REAL/SCOPE/WORTH IT result. A declared
+status to that target must start with the literal `ARCHITECT_STATUS_V1` line; the marker remains the
+sender's self-report, not proof of the message's meaning. Generated registration and local command
+tests do not prove actual Codex task interception or hook trust; verify Source, Command and Trust in
+the intended task before relying on this send guard.
 
 **The Codex review seat — a v2.0 disclosure this release CORRECTS.** v2.0 recorded, against its own
 artifact, that a repo-level `.codex/agents/` was "*not* something this work verified as a discovery
