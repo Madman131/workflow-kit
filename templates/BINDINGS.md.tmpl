@@ -62,8 +62,9 @@ section names the concrete seats for THIS repo.*
 *(This is the canonical statement of the PM-portability caveat. Since kit v2.1 the PreToolUse guards
 register in the Codex lane too — but read the qualifier in that column as part of the value: a Codex
 hook does not run until a human grants hook trust in an INTERACTIVE session, and an untrusted hook is
-skipped SILENTLY. `node scripts/check-codex-hooks-armed.mjs` is what settles it. Every PreToolUse row
-binds TOOL calls only — writes, and for `guard-brief-rung` cross-session sends as well: a file
+skipped SILENTLY. `node scripts/check-codex-hooks-armed.mjs` probes `apply_patch` only; the exact
+Codex app send needs separate actual real-tool Source, Command and Trust proof. Every PreToolUse row
+binds TOOL calls only — writes, Claude cross-session sends, and the configured paired Codex send: a file
 rewritten by a plain shell command is invisible to them in either lane.)*
 
 | Control | Claude lane | {{OTHER_LANE}} lane | Human by hand |
@@ -71,15 +72,17 @@ rewritten by a plain shell command is invisible to them in either lane.)*
 | `guard-cross-repo-writes` (writes outside repo blocked) | enforced | **enforced — only once hook trust is granted** | ❌ |
 | `guard-lane-authoring` (declaration before a code write) | enforced | **enforced — only once hook trust is granted** | ❌ |
 | `guard-gate-ladder` (surfaces the tier's ladder) | enforced (sensor) | **enforced (sensor) — only once hook trust is granted** | ❌ |
-| `guard-brief-rung` (brief writes, cross-session sends, **and source writes while a repair is live**) | enforced | **enforced — only once hook trust is granted** | ❌ |
+| `guard-brief-rung` (brief writes, scoped cross-session sends, **and source writes while a repair is live**) | enforced | **Codex `apply_patch` only after hook trust; exact paired send needs separate proof** | ❌ |
 | `.githooks/pre-commit` (declaration at commit) | enforced | **enforced** | **enforced** |
 
 `guard-brief-rung` is the row most likely to stop you, so read its shape here rather than meeting it
 in a denial, and note that it has TWO halves with different trigger conditions.
 
-- **Always live:** brief writes and cross-session sends need a fresh verification sidecar naming
-  this session and this dispatch. No repair round is involved; this half binds from the moment the
-  hook is registered.
+- **Always live when the relevant hook is armed:** brief writes and Claude cross-session sends
+  need a fresh verification sidecar naming this session and dispatch. The exact Codex
+  `mcp__codex_app__send_message_to_thread` send to the configured `pairedPmThreadId` also needs
+  that receipt and a current Architect screen; without `pairedPmThreadId`, Codex sends are outside
+  this Architect-pair scope. No repair round is involved in this half.
 - **Live only during a repair:** source writes. This half is dormant until a gate round is recorded
   — and dormancy is a state with an instructed exit, never a property. Once a round stands at NO-GO
   with disposition REMEDIATE and no ELIGIBLE recorded close, writes to the paths that repair claimed need a
@@ -113,7 +116,8 @@ a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is
   `lane-retired` state (doctrine retired at kit v1.4.0, mechanism at v1.5.0 — history:
   `core/README.md` § Provenance). Rules: `core/MULTI_AGENT.md` § Task-lane declaration.
 - **Repo-specific families** live in `.claude/kit.config.json` (`executedPathDirs`, `stateDocs`,
-  `memoryDir`) — read by `guard-lane-authoring` and `check-doc-size`. A structurally corrupt file
+  `memoryDir`, `worktreeRoots`, optional `pairedPmThreadId`) — read by their relevant guards and
+  `check-doc-size`. A structurally corrupt file
   fails CLOSED in every control that reads one: it blocks a gated write, a **code-bearing** commit
   (a docs-only commit exits before the check), and `doc:size`. A legacy `laneRiskTokens` entry from a
   pre-v1.5 adopt is ignored whatever its shape — no control reads it.

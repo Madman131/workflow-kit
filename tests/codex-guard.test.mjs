@@ -868,6 +868,29 @@ function adoptCodex(extraArgs = []) {
   return { dir, out, run, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
+test("generated entry and bindings distinguish the optional paired Codex send from write-probe arming", () => {
+  const A = adoptCodex();
+  try {
+    const claude = readFileSync(path.join(A.dir, "CLAUDE.md"), "utf8");
+    const bindings = readFileSync(path.join(A.dir, "core", "BINDINGS.md"), "utf8");
+    for (const [name, body] of [["CLAUDE.md", claude], ["BINDINGS.md", bindings]]) {
+      assert.match(body, /mcp__codex_app__send_message_to_thread/, `${name} names the exact Codex send tool`);
+      assert.match(body, /pairedPmThreadId/, `${name} names the optional checkout pair selector`);
+      assert.match(body, /Source, Command and Trust/, `${name} requires separate actual-send proof`);
+      assert.match(body, /check-codex-hooks-armed\.mjs` probes `apply_patch` only/,
+        `${name} limits the arming probe to the write matcher`);
+      assert.doesNotMatch(body, /send half.*no Codex payload/s,
+        `${name} must not deny the generated exact Codex send matcher`);
+    }
+    assert.match(claude, /Claude.*cross-session send.*brief-rung/s,
+      "the Claude-lane send registration remains stated");
+    assert.match(bindings, /without.*pairedPmThreadId.*outside.*scope/s,
+      "unconfigured Codex sends remain outside this Architect-pair guard");
+    assert.doesNotMatch(bindings, /Always live:\*\* brief writes and cross-session sends need/,
+      "the binding cannot claim every cross-session send needs a sidecar");
+  } finally { A.cleanup(); }
+});
+
 test("a configured PM pair survives task-lane refresh and init --force without a hidden drop", () => {
   const A = adoptCodex(["--skip-codex-lane", "--source-dirs", "src", "--paired-pm-thread-id", "pm-thread"]);
   try {
