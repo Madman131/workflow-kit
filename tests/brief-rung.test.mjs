@@ -387,6 +387,13 @@ test("every deny state produces a message that names the state's OWN remediation
   // not fix a corrupt config or an unwritable ledger, and telling the author it might is a lie.
   assert.doesNotMatch(denyReason("ledger-error", { dispatch: BRIEF }), /OPEN every citation/);
   assert.doesNotMatch(denyReason("kit-config-malformed", { dispatch: BRIEF }), /OPEN every citation/);
+  const corrupt = denyReason("kit-config-malformed", { dispatch: BRIEF });
+  assert.match(corrupt, /repair.*in place.*restore.*pairedPmThreadId.*preserve other valid fields/i,
+    "a corrupt configured pair must be repaired without removing its scope");
+  assert.match(corrupt, /if this checkout is paired/i,
+    "ordinary unpaired adopters must not be told they necessarily have a PM pair");
+  assert.doesNotMatch(corrupt, /delete it|re-run `node bin\/init\.mjs`/i,
+    "the diagnostic cannot recommend an opt-out as a recovery path");
 });
 
 test("a corrupt kit.config.json fails CLOSED rather than silently narrowing scope", () => {
@@ -575,7 +582,8 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
       input: JSON.stringify(input), encoding: "utf8",
     });
     const lane = JSON.parse(readFileSync(laneFile, "utf8"));
-    const config = JSON.parse(readFileSync(configFile, "utf8"));
+    const config = { ...JSON.parse(readFileSync(configFile, "utf8")), briefPathDirs: ["dispatches"] };
+    writeFileSync(configFile, JSON.stringify(config));
     const setPair = (value) => writeFileSync(configFile, JSON.stringify({ ...config, pairedPmThreadId: value }));
     const setSidecar = (over = {}) => writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "pm-thread", nonce: "architect-1", dispatch_kind: "build", task_id: "task1",
@@ -583,11 +591,25 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
     }));
 
     assert.equal(run(payload()).stdout, "", "without a configured pair the Codex send remains out of scope");
+    const plainInit = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"),
+      "--target", dir, "--repo-name", "adopter", "--skip-codex-prompt", "--skip-codex-lane",
+      "--paired-pm-thread-id", "pm-thread"], { encoding: "utf8" });
+    assert.equal(plainInit.status, 0, plainInit.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), config,
+      "plain init keeps an existing config even when the new flag is present");
+    const routing = readFileSync(path.join(KIT, "skills", "architect-build", "ROUTING.md"), "utf8");
+    assert.match(routing, /existing.*config.*in place.*preserv.*other fields/is,
+      "the documented existing-adopter route must not rely on plain init to add the pair");
     setPair(123);
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "a malformed selector cannot silently narrow coverage");
+    const malformed = run(payload()).stdout;
+    assert.match(malformed, /"permissionDecision":"deny"/, "a malformed selector cannot silently narrow coverage");
+    assert.doesNotMatch(malformed, /delete it|re-run `node bin\/init\.mjs`/i,
+      "the exact installed hook cannot recommend silently opting out of the configured pair");
     setPair(" pm-thread ");
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "whitespace cannot turn a configured pair into an unmatched quiet route");
     setPair("pm-thread");
+    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), { ...config, pairedPmThreadId: "pm-thread" },
+      "repairing in place retains the unrelated field and the intended pair");
     writeFileSync(laneFile, JSON.stringify(lane));
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/,
       "a normal task-lane refresh retains the durable pair and still demands a sidecar");

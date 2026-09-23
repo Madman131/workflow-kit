@@ -14,11 +14,12 @@ source pointers; accepted decisions separately from pending advice; current phas
 decisions with id/type/source, program/baseline/scope, evidence, delegation/limits, stop/supersession,
 execution/result and active/pending/superseded status; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
 otherwise create one through the repository's normal docs/state convention and record its exact path.
-Record both locators. Adopters set the actual PM `threadId` as checkout
-`.claude/kit.config.json` `pairedPmThreadId` via `init --paired-pm-thread-id`; source tasks use
-reviewed scoped runtime setup, never init. Open the current approved blueprint/source and cite
-that read in the existing receipt; the hook checks shape, not reasoning. Prove real-tool Source,
-Command and Trust for the exact send; apply_patch arming does not prove interception.
+Record both locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
+For existing config, set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
+other fields and read back. Plain init keeps existing config. Source tasks use reviewed scoped
+runtime setup, never init. Open approved blueprint/source; cite that read in the receipt. Hook
+checks shape, not reasoning. Prove exact-send real-tool Source, Command and Trust; apply_patch
+checker does not prove interception.
 
 Recovery does not promote advice, create an acting architect or second PM, or block covered work.
 Without task creation or cross-session transport, launch uses file-only equivalents for the
