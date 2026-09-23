@@ -39,7 +39,7 @@
 //     local-filesystem caveat it already carries. The kit gains no new platform surface here.
 //   · The SEND half binds Claude `…send_message` and the exact Codex app
 //     `mcp__codex_app__send_message_to_thread` tool. The Codex pair is scoped by the optional
-//     `pairedPmThreadId` in this session's task-lane declaration. An absent selector means no
+//     `pairedPmThreadId` in this checkout's kit config. An absent selector means no
 //     Architect pair is configured; status is still a sender declaration, not semantic proof.
 
 import { createHash } from "node:crypto";
@@ -97,7 +97,7 @@ function isSegmentArray(v) {
 function nonempty(v, max = 500) { return typeof v === "string" && v.trim().length > 0 && v.length <= max; }
 /** Mechanical dispatch declaration validation; semantic classifications remain author-owned. */
 export function repairDeclarationState(sidecar, { events, aggregateEvents = [], taskId, dispatch } = {}) {
-  if (!isPlainObject(sidecar) || !["status", "build", "repair"].includes(sidecar.dispatch_kind)) {
+  if (!isPlainObject(sidecar) || !["status", "build", "repair", "architect-direction"].includes(sidecar.dispatch_kind)) {
     return { ok: false, state: "dispatch-kind-missing" };
   }
   if (sidecar.dispatch_kind === "status") {
@@ -106,6 +106,16 @@ export function repairDeclarationState(sidecar, { events, aggregateEvents = [], 
   }
   if (!nonempty(sidecar.task_id, 120) || sidecar.task_id !== taskId) return { ok: false, state: "dispatch-task-mismatch" };
   if (!Array.isArray(events)) return { ok: false, state: "repair-ledger-unavailable" };
+  if (sidecar.dispatch_kind === "architect-direction") {
+    if (sidecar.repair !== undefined || sidecar.class === "status" ||
+        dispatch?.kind !== "send" || dispatch.architectPrompt === undefined) {
+      return { ok: false, state: "dispatch-kind-conflict" };
+    }
+    const aggregate = deriveAggregateRepairState(aggregateEvents, taskId, { standardEvents: events });
+    if (!aggregate.ok) return { ok: false, state: aggregate.state };
+    if (!aggregate.active) return { ok: false, state: "architect-direction-unavailable" };
+    return { ok: true, repair: null };
+  }
   if (sidecar.dispatch_kind === "build") {
     if (sidecar.repair !== undefined) return { ok: false, state: "dispatch-kind-conflict" };
     const current = deriveRepairState(events, taskId);
@@ -149,7 +159,10 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   if (!isPlainObject(parsed)) return { ok: false };
   const dirs = parsed.briefPathDirs === undefined ? [] : parsed.briefPathDirs;
   if (!isSegmentArray(dirs)) return { ok: false };
-  return { ok: true, briefPathDirs: dirs };
+  if (!Object.hasOwn(parsed, "pairedPmThreadId")) return { ok: true, briefPathDirs: dirs };
+  const pair = parsed.pairedPmThreadId;
+  if (!nonempty(pair, 120) || /\s/.test(pair)) return { ok: false };
+  return { ok: true, briefPathDirs: dirs, pairedPmThreadId: pair };
 }
 
 export function loadTaskId(projectRoot, { readTaskLane } = {}) {
@@ -166,24 +179,12 @@ export function loadTaskId(projectRoot, { readTaskLane } = {}) {
   return isPlainObject(parsed) && nonempty(parsed.taskId, 120) ? parsed.taskId : null;
 }
 
-/** Existing task-lane declaration selects the ONE Codex PM thread this guard covers. */
-export function pairedPmThreadState(projectRoot, { sessionId, readTaskLane } = {}) {
-  const file = path.join(projectRoot, TASK_LANE);
-  let parsed;
-  try {
-    if (readTaskLane) parsed = readTaskLane(file);
-    else {
-      const st = lstatSync(file);
-      if (!st.isFile() || st.isSymbolicLink()) return { state: "malformed" };
-      parsed = JSON.parse(readFileSync(file, "utf8"));
-    }
-  } catch (e) { return e?.code === "ENOENT" ? { state: "absent" } : { state: "malformed" }; }
-  if (!isPlainObject(parsed)) return { state: "malformed" };
-  if (!Object.hasOwn(parsed, "pairedPmThreadId")) return { state: "absent" };
-  return parsed.sessionId === sessionId && nonempty(parsed.pairedPmThreadId, 120) &&
-      !/\s/.test(parsed.pairedPmThreadId)
-    ? { state: "configured", threadId: parsed.pairedPmThreadId }
-    : { state: "malformed" };
+/** Existing checkout config selects the ONE Codex PM thread this guard covers. */
+export function pairedPmThreadState(config) {
+  if (!config.ok) return { state: "malformed" };
+  return config.pairedPmThreadId === undefined
+    ? { state: "absent" }
+    : { state: "configured", threadId: config.pairedPmThreadId };
 }
 
 /** Is this repo-relative path a BRIEF for the purposes of the rung? Pure. */
@@ -485,7 +486,7 @@ const RITUAL =
   `Before dispatching a brief, a ruling or a GO ask: OPEN every citation at its line and RECOMPUTE ` +
   `every number by execution (never by eye), then write \`${SIDECAR}\` as ` +
   `{"sessionId":"<this session>","target":"<the ONE dispatch these checks were run for>",` +
-  `"nonce":"<a value you have not used before>","dispatch_kind":"build|repair",` +
+  `"nonce":"<a value you have not used before>","dispatch_kind":"build|repair|architect-direction",` +
   `"task_id":"<current task-lane taskId>",` +
   `"checks":[{"command":"<what you ran>","output":"<what it returned>"}]} and retry. ` +
   `The nonce is SPENT on the dispatch it authorizes: one ritual, one dispatch, so a second send or ` +
@@ -514,10 +515,11 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "target-missing": `${SIDECAR} names no \`target\`. Freshness alone cannot bind receipts to a dispatch: copying a sidecar gives it a NEW mtime, and re-touching one clears staleness without re-running anything.`,
     "target-mismatch": `${SIDECAR} was written for ${detail}, not for this dispatch — one ritual authorizes one dispatch.`,
     "status-not-available": `${SIDECAR} declares {"class":"status"}, which is available only to a cross-session send. A brief is load-bearing by definition: it is the artifact a worker builds from, so there is nothing here to declare out of scope.`,
-    "dispatch-kind-missing": `${SIDECAR} does not explicitly declare \`dispatch_kind\` as status, build, or repair. Missing no longer defaults to build because that let a repair relabel itself out of the controller.`,
-    "dispatch-kind-conflict": `${SIDECAR}'s class/kind and repair metadata conflict. A status/build declaration cannot carry repair authority, and a repair cannot take the status escape.`,
+    "dispatch-kind-missing": `${SIDECAR} does not explicitly declare \`dispatch_kind\` as status, build, repair, or architect-direction. Missing no longer defaults to build because that let a repair relabel itself out of the controller.`,
+    "dispatch-kind-conflict": `${SIDECAR}'s class/kind, target, and repair metadata conflict. Status/build/Architect direction cannot carry repair authority, and Architect direction is only an exact paired PM send during active aggregate repair.`,
     "dispatch-task-mismatch": `${SIDECAR}'s \`task_id\` does not match the current task-lane declaration. Refreezing or relabelling a changeset cannot switch the task identity that owns its round history.`,
     "repair-dispatch-required": `${SIDECAR} declares a new build while this task's durable controller ends on NO-GO. The next actionable brief is a repair and must bind the existing round history.`,
+    "architect-direction-unavailable": `${SIDECAR} declares an Architect direction outside an active aggregate repair. Use the ordinary build declaration outside that round; this narrow consult never grants worker dispatch authority.`,
     "repair-disposition-not-authorized": `${SIDECAR} tries to dispatch repair work for a finding disposition that is not REMEDIATE. NOTE, DEFER, DECLINE, and ESCALATE remain durable observations but mint no worker authority.`,
     "repair-brief-required": `${SIDECAR} tries to carry repair authority in a cross-session send. Persist the actionable repair as a receipted brief first; later sends may be status-only pointers to that durable artifact.`,
     "repair-brief-receipt-missing": `this gate result names no exact prior repair-brief receipt for the round it judges. A round cannot close unless the durable controller proves what authorized its candidate.`,
@@ -526,7 +528,8 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "rung-already-spent": `${SIDECAR}'s nonce has ALREADY been spent — an earlier attempt (${detail}) claimed it first, and this attempt is recorded in the trail as a refused one. One ritual authorizes ONE dispatch: a repeat to the same target is exactly the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
     "adjudication-unreadable": `the dispatch's own attempt row could not be read back from ${LEDGER}, so it is not possible to tell whether this attempt claimed the nonce first. An unadjudicated consume is not a consume — the guard denies rather than guess. Fix that file, re-run the rung, and retry.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
-    "architect-pair-malformed": `${TASK_LANE} has a malformed \`pairedPmThreadId\`; a configured pair must name one non-empty PM thread id. Repair the task declaration before a Codex thread send.`,
+    "architect-pair-malformed": `${KIT_CONFIG} has a malformed configured pair or cannot be read; \`pairedPmThreadId\` must name one non-empty PM thread id without whitespace. Repair the checkout config before a Codex thread send.`,
+    "architect-send-override": `this paired Architect-to-PM send carries \`model\` or \`thinking\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
     "architect-prompt-missing": `the covered Codex send has no readable string \`tool_input.prompt\`, so its decision screen cannot bind the exact message bytes.`,
     "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Record approved-outcome and blueprint alignment, smallest action, KISS, zoom-out, root cause and cost, then screen each finding HARM → REAL → SCOPE → WORTH IT with the first failed trigger. A decision with no findings still owes the action screen.`,
     "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: action fields, prompt digest, and each finding's ordered first-exit evidence/disposition must be present; a screened-out finding needs its actual failed trigger and no filler downstream answers. This checks record shape, not judgment quality.`,
@@ -573,7 +576,7 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "repair-worker-path-owner-conflict": `this exact source path is claimed by multiple active NO-GO repair programs. The ownership conflict fails closed; reconcile those programs before any worker writes the path.`,
     "repair-brief-changed": `the persisted repair brief no longer matches the bytes the worker verified. Restore or reconfirm the intended brief, then run \`--verify\` again before writing source.`,
     "repair-dispatch-invalid": `the exact repair dispatch could not be appended to the durable controller after nonce adjudication. No worker authority was issued.`,
-    "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, or \`briefPathDirs\` is not an array of non-empty path segments). This dispatch is BLOCKED (fail-closed) — a corrupt brief-path set must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
+    "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, invalid \`briefPathDirs\`, or invalid \`pairedPmThreadId\`). This dispatch is BLOCKED (fail-closed) — corrupt config must never silently narrow a control's scope. Fix that file, delete it to fall back to the kit's portable defaults, or re-run \`node bin/init.mjs\`.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
   const base = state === "kit-config-malformed" || state === "ledger-error"
@@ -621,7 +624,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     const dispatches = [];
     const sourceTargets = [];
     if (input?.tool_name === ARCHITECT_SEND) {
-      const pair = pairedPmThreadState(root, { sessionId: input?.session_id });
+      const pair = pairedPmThreadState(config);
       if (pair.state === "malformed") {
         emit(denyReason("architect-pair-malformed", { dispatch: { kind: "send", target: "<unreadable-destination>" } }));
         return exit(0);
@@ -633,6 +636,10 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
           return exit(0);
         }
         if (dest === pair.threadId) {
+          if (Object.hasOwn(input.tool_input, "model") || Object.hasOwn(input.tool_input, "thinking")) {
+            emit(denyReason("architect-send-override", { dispatch: { kind: "send", target: dest } }));
+            return exit(0);
+          }
           const prompt = input?.tool_input?.prompt;
           if (typeof prompt !== "string") {
             emit(denyReason("architect-prompt-missing", { dispatch: { kind: "send", target: dest } }));

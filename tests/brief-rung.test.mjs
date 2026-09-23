@@ -565,31 +565,39 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
     assert.equal(sendGroup.hooks.length, 1, "the generated registration names one exact send guard");
     const command = sendGroup.hooks[0].command;
     const laneFile = path.join(dir, ".claude", "task-lane.json");
+    const configFile = path.join(dir, ".claude", "kit.config.json");
     const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
-    const payload = (threadId = "pm-thread", prompt = architectPrompt) => ({
+    const payload = (threadId = "pm-thread", prompt = architectPrompt, extra = {}) => ({
       session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
-      tool_input: { threadId, prompt },
+      tool_input: { threadId, prompt, ...extra },
     });
     const run = (input) => spawnSync("sh", ["-c", command], {
       input: JSON.stringify(input), encoding: "utf8",
     });
     const lane = JSON.parse(readFileSync(laneFile, "utf8"));
-    const setLane = (value) => writeFileSync(laneFile, JSON.stringify({ ...lane, pairedPmThreadId: value }));
+    const config = JSON.parse(readFileSync(configFile, "utf8"));
+    const setPair = (value) => writeFileSync(configFile, JSON.stringify({ ...config, pairedPmThreadId: value }));
     const setSidecar = (over = {}) => writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "pm-thread", nonce: "architect-1", dispatch_kind: "build", task_id: "task1",
       checks: OK_CHECK, architectScreen: architectScreen(), ...over,
     }));
 
     assert.equal(run(payload()).stdout, "", "without a configured pair the Codex send remains out of scope");
-    setLane(123);
+    setPair(123);
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "a malformed selector cannot silently narrow coverage");
-    setLane(" pm-thread ");
+    setPair(" pm-thread ");
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "whitespace cannot turn a configured pair into an unmatched quiet route");
-    setLane("pm-thread");
-    writeFileSync(laneFile, JSON.stringify({ ...lane, sessionId: "other", pairedPmThreadId: "pm-thread" }));
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the pair selector belongs to this session");
-    setLane("pm-thread");
+    setPair("pm-thread");
+    writeFileSync(laneFile, JSON.stringify(lane));
+    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/,
+      "a normal task-lane refresh retains the durable pair and still demands a sidecar");
     assert.equal(run(payload("another-thread")).stdout, "", "an unrelated Codex send stays outside the paired guard");
+    assert.match(run(payload("pm-thread", architectPrompt, { model: "gpt-6-astra" })).stdout, /quietly change the PM's model/,
+      "a paired send cannot quietly change its model");
+    assert.match(run(payload("pm-thread", architectPrompt, { thinking: "max" })).stdout, /quietly change the PM's model/,
+      "a paired send cannot quietly change its reasoning effort");
+    assert.equal(run(payload("another-thread", architectPrompt, { model: "gpt-6-astra" })).stdout, "",
+      "an unrelated send keeps its existing behavior");
     const missing = run(payload()).stdout;
     assert.match(missing, /"permissionDecision":"deny"/, "the covered PM send needs a sidecar");
     for (const question of ["HARM?", "REAL?", "SCOPE?", "WORTH IT?", "root replacement"]) {
@@ -680,20 +688,70 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T2",
     }));
-    const repair = {
-      aggregate_controller: "aggregate_v2", task_id: "task1", changeset_id: "cs1",
-      disposition_event_id: decided.event_id, panel_close_event_id: closed.event_id,
-      next_round: 2, root_exit_event_id: null,
-    };
-    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({
-      sessionId: "s1", target: "briefs/fix.md", nonce: "aggregate-rung", checks: OK_CHECK,
-      dispatch_kind: "repair", task_id: "task1", repair,
+    const configFile = path.join(dir, ".claude", "kit.config.json");
+    writeFileSync(configFile, JSON.stringify({
+      ...JSON.parse(readFileSync(configFile, "utf8")), pairedPmThreadId: "pm-thread",
+    }));
+    const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
+    writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "pm-thread", nonce: "consult-rung", checks: OK_CHECK,
+      dispatch_kind: "build", task_id: "task1", architectScreen: architectScreen(),
+    }));
+    const codexSend = spawnSync(process.execPath,
+      [path.join(dir, ".codex", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
+        input: JSON.stringify({ session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
+          tool_input: { threadId: "pm-thread", prompt: architectPrompt } }), encoding: "utf8",
+      });
+    assert.match(codexSend.stdout, /declares a new build while this task's durable controller/,
+      "an old build receipt cannot silently become an aggregate-repair consult");
+    writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "pm-thread", nonce: "consult-rung", checks: OK_CHECK,
+      dispatch_kind: "architect-direction", task_id: "task1", architectScreen: architectScreen(),
+    }));
+    const admittedConsult = spawnSync(process.execPath,
+      [path.join(dir, ".codex", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
+        input: JSON.stringify({ session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
+          tool_input: { threadId: "pm-thread", prompt: architectPrompt } }), encoding: "utf8",
+      });
+    assert.equal(admittedConsult.stdout, "", "an explicit screened Architect consult remains possible during active aggregate repair");
+    assert.ok(readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map(JSON.parse).some((row) =>
+        row.control === "brief-rung" && row.decision === "allow" && row.nonce === "consult-rung"),
+    "the active-round consult must actually pass the guard and leave its receipt");
+    writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "briefs/fix.md", nonce: "build-not-repair", checks: OK_CHECK,
+      dispatch_kind: "build", task_id: "task1",
     }));
     const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
     const run = (target) => spawnSync(process.execPath, [hook, "--project-dir", dir], {
       input: JSON.stringify({ session_id: "s1", tool_name: "Write", cwd: dir,
         tool_input: { file_path: path.join(dir, target) } }), encoding: "utf8",
     });
+    writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "briefs/fix.md", nonce: "consult-not-brief", checks: OK_CHECK,
+      dispatch_kind: "architect-direction", task_id: "task1", architectScreen: architectScreen(),
+    }));
+    assert.match(run("briefs/fix.md").stdout, /Architect direction cannot carry repair authority/,
+      "a direction declaration cannot authorize an aggregate repair brief");
+    assert.match(run("src/x.mjs").stdout, /no typed worker-verification event/,
+      "a direction declaration cannot authorize a source write");
+    writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "briefs/fix.md", nonce: "build-not-repair", checks: OK_CHECK,
+      dispatch_kind: "build", task_id: "task1",
+    }));
+    assert.match(run("briefs/fix.md").stdout, /repair-dispatch-required|repair and must bind/,
+      "the Architect consult does not admit a build brief during repair");
+    assert.match(run("src/x.mjs").stdout, /no typed worker-verification event/,
+      "the Architect consult does not admit a source write");
+    const repair = {
+      aggregate_controller: "aggregate_v2", task_id: "task1", changeset_id: "cs1",
+      disposition_event_id: decided.event_id, panel_close_event_id: closed.event_id,
+      next_round: 2, root_exit_event_id: null,
+    };
+    writeFileSync(sidecarFile, JSON.stringify({
+      sessionId: "s1", target: "briefs/fix.md", nonce: "aggregate-rung", checks: OK_CHECK,
+      dispatch_kind: "repair", task_id: "task1", repair,
+    }));
     assert.equal(run("briefs/fix.md").stdout, "", "aggregate declaration passes the installed guard");
     const dispatch = confirmRepairBrief({ declaration: repair, brief_path: "briefs/fix.md" }, options);
     assert.equal(dispatch.ok, true, dispatch.state);

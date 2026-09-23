@@ -1,15 +1,6 @@
 # Architect-build routing — reference layer
 
-Word budget: 900. This is the authoritative detail named by `core/WORKFLOW.md` § Architectural consult
-routing. It is lookup-only doctrine for the installed `/architect-build` skill; `SKILL.md` remains the
-compact invocation body.
-
-## Contents
-
-- Establish, reuse, and recover
-- Quiet continuity and persistent triggers
-- Packets, ordinary consults, and fourth-gate overlap
-- Authority and unavailable architect
+Word budget: 900.
 
 ## Establish, reuse, and recover
 
@@ -23,11 +14,14 @@ source pointers; accepted decisions separately from pending advice; current phas
 decisions with id/type/source, program/baseline/scope, evidence, delegation/limits, stop/supersession,
 execution/result and active/pending/superseded status; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
 otherwise create one through the repository's normal docs/state convention and record its exact path.
-Record both task locators.
+Record both locators. Adopters set the actual PM `threadId` as checkout
+`.claude/kit.config.json` `pairedPmThreadId` via `init --paired-pm-thread-id`; source tasks use
+reviewed scoped runtime setup, never init. Open the current approved blueprint/source and cite
+that read in the existing receipt; the hook checks shape, not reasoning. Prove real-tool Source,
+Command and Trust for the exact send; apply_patch arming does not prove interception.
 
-Recovery does not promote advice, create an acting architect or second PM, or block covered work. It
-preserves context through the durable record and file-only continuity, holding only a dependent decision.
-Without task creation or cross-session transport, a launch uses file-only equivalents for the
+Recovery does not promote advice, create an acting architect or second PM, or block covered work.
+Without task creation or cross-session transport, launch uses file-only equivalents for the
 approved-baseline handoff.
 
 ## Quiet continuity and persistent triggers

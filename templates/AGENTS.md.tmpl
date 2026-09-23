@@ -27,16 +27,18 @@ Do **not** "read everything in `core/`" — the read is staged.
 ## ⚠ Enforcement asymmetry — which guards bind you, and when
 Your lane's registration is `.codex/hooks.json` (Claude Code's is `.claude/settings.json`; the hook
 files in `.codex/hooks/` and `.claude/hooks/` are byte-identical). On `apply_patch` it registers
-**three fail-CLOSED GUARDS** — cross-repo writes, lane-authoring, brief-rung (its brief-write half;
-its cross-session SEND half has no Codex tool to bind) — and **two SENSORS** (sweep-owed,
+**three fail-CLOSED GUARDS** — cross-repo writes, lane-authoring, brief-rung — and **two SENSORS** (sweep-owed,
 mutation-owed) that print and never deny. On Bash it registers **one more SENSOR**, the gate ladder,
-which surfaces the declared tier's ladder and never denies anything. That is the whole Codex
+which surfaces the declared tier's ladder and never denies anything. The exact
+`mcp__codex_app__send_message_to_thread` matcher registers brief-rung for the optional
+`pairedPmThreadId` in this checkout's `.claude/kit.config.json`. That is the whole Codex
 registration: the context-pressure sensor and the two Stop sensors (Owner-comms, token ledger) are
 Claude-lane only — a Codex payload carries no transcript and no observed Stop event. **In the Codex
 lane even these are INERT until a human grants Codex hook trust in an interactive session, and an
 untrusted hook is skipped SILENTLY** (no prompt, no warning, no exit-code change), so
-never assume they are live: `node scripts/check-codex-hooks-armed.mjs` is the only thing that answers
-it. They also bind write TOOLS — a file you change with a plain SHELL command is invisible to them,
+never assume they are live: `node scripts/check-codex-hooks-armed.mjs` checks only the
+`apply_patch` registration. The paired send needs separate real-tool Source, Command and Trust
+proof in this task. They also bind write TOOLS — a file you change with a plain SHELL command is invisible to them,
 which in the Codex lane is a main road, not a corner case. A human with an editor loads none of them.
 **So what binds you unconditionally is THIS prose, the PM-disposition emission `core/WORKFLOW.md`
 § Gate requires after every verdict, and the `.githooks/pre-commit` hook** (`core.hooksPath=.githooks`),

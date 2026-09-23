@@ -868,6 +868,26 @@ function adoptCodex(extraArgs = []) {
   return { dir, out, run, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
+test("a configured PM pair survives task-lane refresh and init --force without a hidden drop", () => {
+  const A = adoptCodex(["--skip-codex-lane", "--paired-pm-thread-id", "pm-thread"]);
+  try {
+    const configFile = path.join(A.dir, ".claude", "kit.config.json");
+    const laneFile = path.join(A.dir, ".claude", "task-lane.json");
+    const original = readFileSync(configFile, "utf8");
+    assert.equal(JSON.parse(original).pairedPmThreadId, "pm-thread");
+    writeFileSync(laneFile, JSON.stringify({ mode: "in-thread", sessionId: "new-session", taskId: "task1", tier: "T2" }));
+    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread",
+      "refreshing the ignored task declaration does not erase the checkout's durable pair");
+    const refused = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", A.dir,
+      "--repo-name", "adopter", "--skip-codex-lane", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+    assert.equal(refused.status, 1, "a force run omitting the configured pair refuses instead of dropping it");
+    assert.match(refused.stderr, /pairedPmThreadId.*--paired-pm-thread-id/s);
+    assert.equal(readFileSync(configFile, "utf8"), original, "the refused run leaves the pair bytes unchanged");
+    A.run(["--skip-codex-lane", "--force", "--paired-pm-thread-id", "pm-thread"]);
+    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread");
+  } finally { A.cleanup(); }
+});
+
 test("init generates .codex/hooks.json with the REAL Codex matcher names and an explicit project dir", () => {
   const A = adoptCodex();
   try {

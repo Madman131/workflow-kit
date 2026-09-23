@@ -43,7 +43,7 @@ const KIT_VERSION = readFileSync(path.join(KIT_ROOT, "VERSION"), "utf8").trim();
 // Every flag this parser accepts. Used to reject a flag that appears where a VALUE was expected.
 const KNOWN_FLAGS = new Set([
   "--help", "-h", "--target", "--repo-name", "--owner-name", "--remote-url", "--deploy-branch",
-  "--source-dirs", "--state-docs", "--memory-dir", "--worktree-roots", "--with-gate-runners",
+  "--source-dirs", "--state-docs", "--memory-dir", "--worktree-roots", "--paired-pm-thread-id", "--with-gate-runners",
   "--codex-prompts-dir", "--skip-codex-prompt", "--codex-cold-model", "--skip-codex-lane",
   "--pm-model", "--pm-effort", "--builder-model", "--builder-effort", "--gather-model", "--gather-effort",
   "--astra-consult-model", "--astra-consult-effort",
@@ -109,6 +109,14 @@ function parseArgs(argv) {
     else if (a === "--source-dirs") out.sourceDirs = listVal(next());
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
+    else if (a === "--paired-pm-thread-id") {
+      const v = next();
+      if (v.length > 120 || /\s/.test(v)) {
+        console.error(`init: --paired-pm-thread-id requires one non-empty PM thread id of at most 120 characters without whitespace (got ${JSON.stringify(v)})`);
+        process.exit(2);
+      }
+      out.pairedPmThreadId = v;
+    }
     else if (a === "--worktree-roots") {
       // VALIDATED HERE, not at the guard alone. guard-cross-repo-writes DENIES every write on a
       // config it cannot read, so a relative entry written by this installer would hand the adopter
@@ -187,6 +195,9 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
+  --paired-pm-thread-id <id>
+                          checkout's one Architect-to-PM Codex send target ⇒ kit.config.json
+                          pairedPmThreadId (optional; absent leaves ordinary sends outside scope)
   --worktree-roots a,b    ABSOLUTE roots where THIS repo's private worktrees live ⇒ kit.config.json
                           worktreeRoots, which guard-cross-repo-writes adds to its allowed write
                           roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp,
@@ -1482,7 +1493,7 @@ function main() {
                 entry("guard-lane-authoring.mjs", "Checking the task's lane declaration…"),
                 // The shared brief-rung guard reads Codex apply_patch envelopes as well as
                 // Claude file_path writes. The exact Codex app thread-send tool has its own
-                // narrow registration below; the pair selector lives in task-lane.json.
+                // narrow registration below; the pair selector lives in kit.config.json.
                 entry("guard-brief-rung.mjs", "Checking the pre-send verification rung for this brief…"),
                 // The two SENSORS run alongside the guards on the same matcher. They never deny —
                 // registering them here is what stops them being installed-but-inert, which is the
@@ -1583,12 +1594,14 @@ function main() {
   if (args.stateDocs) config.stateDocs = args.stateDocs;
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
+  if (args.pairedPmThreadId) config.pairedPmThreadId = args.pairedPmThreadId;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  // The four families this file is ALLOWED to hold, each with the flag that fills it. Names and
+  // The five families this file is ALLOWED to hold, each with the flag that fills it. Names and
   // flags only: the refusal below reads this file to LIST what it holds and never to reprint what
   // is IN it (see there).
   const CFG_FAMILIES = [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
-    ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"]];
+    ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"],
+    ["pairedPmThreadId", "--paired-pm-thread-id"]];
   let cfgKept = false, cfgRefused = false, cfgUnreadable = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else {

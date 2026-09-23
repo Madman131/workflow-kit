@@ -355,16 +355,21 @@ session- and dispatch-bound RECORD exists — a raised cost and an auditable tra
 
 **`guard-brief-rung` binds Codex brief writes and one paired thread send.** The brief-WRITE half
 uses the shared `apply_patch` envelope grammar. For the exact Codex app tool
-`mcp__codex_app__send_message_to_thread`, the optional, session-bound `pairedPmThreadId` in the
-existing `.claude/task-lane.json` selects one PM `threadId`; without that field, Codex sends are
+`mcp__codex_app__send_message_to_thread`, the optional, checkout-durable `pairedPmThreadId` in
+`.claude/kit.config.json` selects one PM `threadId`; without that field, Codex sends are
 outside this Architect-pair scope. A material send to that target owes the existing fresh,
 session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
 prompt bytes. The screen records approved-outcome/blueprint alignment, smallest action, KISS,
 zoom-out, root cause/cost and each finding's first-exit HARM/REAL/SCOPE/WORTH IT result. A declared
 status to that target must start with the literal `ARCHITECT_STATUS_V1` line; the marker remains the
-sender's self-report, not proof of the message's meaning. Generated registration and local command
-tests do not prove actual Codex task interception or hook trust; verify Source, Command and Trust in
-the intended task before relying on this send guard.
+sender's self-report, not proof of the message's meaning. Paired sends carrying `model` or
+`thinking` overrides deny. During an active aggregate repair, an explicit `architect-direction`
+receipt permits screened Architect-to-PM direction only; it grants no worker dispatch or source-write
+authority. Ordinary task-lane refresh leaves the checkout pair intact, and `init --force` refuses
+to drop it unless its flag is supplied. `check-codex-hooks-armed.mjs` proves the `apply_patch`
+registration only. Generated registration and local command tests do not prove actual Codex task
+interception or hook trust; separately verify the exact send's Source, Command and Trust in the
+intended task before relying on this guard.
 
 **The Codex review seat — a v2.0 disclosure this release CORRECTS.** v2.0 recorded, against its own
 artifact, that a repo-level `.codex/agents/` was "*not* something this work verified as a discovery
