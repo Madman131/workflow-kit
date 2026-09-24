@@ -2448,13 +2448,13 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
     }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
     assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "child-builder",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-pending-child-write-authorized",
-    "the accepted child may make its first write inside the exact Owner budget");
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing",
+    "an unbound pending child has no first-write authority");
     assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "child-builder",
       target: "src/z.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-path-unauthorized",
     "the pending child cannot expand its budget before the first panel");
     assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-session-missing");
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing");
     for (const task_id of ["task-1", "relabel"]) {
       assert.equal(verifyRepairWorkerWrite({ task_id, session_id: "child-builder",
         target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-stopped-path-reserved",
@@ -2515,6 +2515,113 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
     const within = openPanel(ctx, 2, snap(["src/x.mjs", "src/y.mjs"]),
       { ...childOpts, incoming: authority });
     assert.equal(within.opened.ok, true, `within-budget widening opens: ${within.opened.state}`);
+  } finally { ctx.cleanup(); }
+});
+
+test("Owner-bound pending child requires immutable brief and designated worker until first panel", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const close = closePanel(ctx, panel, candidate, ["CRIT"]);
+    const stop = decide(ctx, close, { accepted: ["CRIT"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stop.ok, true, stop.state);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs", "initial.md"), "Owner-bound child work\n");
+    const child = { task_id: "first-child", changeset_id: "first-cs", tier: "T2",
+      budget: "one changeset", authorized_paths: ["src/x.mjs"],
+      initial_batch: { worker_session_id: "designated", brief_path: "briefs/initial.md" } };
+    const input = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
+      changeset_id: "cs-1", parent_disposition_event_id: stop.event_id, trigger_ids: ["CRIT"],
+      continuation_kind: "new_changeset", owner_evidence: "Owner successor", children: [child] };
+    for (const altered of [
+      { initial_batch: { ...child.initial_batch, brief_sha256: "f".repeat(64) } },
+      { initial_batch: { ...child.initial_batch, brief_size: 99 } },
+      { initial_batch: { ...child.initial_batch, authorized_paths: ["src/y.mjs"] } },
+      { initial_batch: { ...child.initial_batch, brief_path: "briefs/missing.md" } },
+    ]) assert.equal(recordAggregateChildContinuation({ ...input, children: [{ ...child, ...altered }] },
+      options(ctx.dir)).ok, false, "forged or missing brief refuses mint");
+    assert.equal(recordAggregateChildContinuation({ ...input, authority_route: "principal" },
+      options(ctx.dir)).ok, false, "Principal route cannot mint initial batch");
+    const review = recordAggregateProcessReview({
+      type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
+      reviewer_role: "frontier", purpose: "child_continuation",
+      anchor: { kind: "aggregate_terminal", event_id: stop.event_id,
+        panel_open_event_id: panel.opened.event_id, frozen_commit: candidate.commit,
+        frozen_tree: candidate.tree },
+      proposed_transition: { ...input, policy_version: AGGREGATE_POLICY_VERSION,
+        authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN },
+      review_evidence: "reviewed exact Owner child batch", zoom_out: "one successor",
+      ruling: "successor", bounded_scope: "one child", closure_evidence: "STOP carried",
+    }, options(ctx.dir));
+    assert.equal(review.ok, true, review.state);
+    const continuation = recordAggregateChildContinuation({ ...input,
+      process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const row = loaded.aggregate_events.find((entry) => entry.event_id === continuation.event_id).event;
+    const reviewed = loaded.aggregate_events.find((entry) => entry.event_id === review.event_id).event;
+    assert.equal(reviewed.transition_sha256, aggregateTransitionSha256("child_continuation", row),
+      "typed review binds the exact minted child batch and brief digest");
+    const persisted = row.children[0].initial_batch;
+    assert.equal(persisted.worker_session_id, "designated");
+    assert.equal(persisted.brief_size, Buffer.byteLength("Owner-bound child work\n"));
+    assert.deepEqual(persisted.authorized_paths, ["src/x.mjs"]);
+    const check = (task, session, target = "src/x.mjs") => verifyRepairWorkerWrite({
+      task_id: task, session_id: session, target }, { projectRoot: ctx.dir });
+    assert.equal(check("first-child", "designated").state, "repair-worker-verification-missing");
+    assert.equal(check("first-child", "wrong").state, "repair-worker-verification-missing");
+    assert.equal(check("first-child", "designated", "src/y.mjs").state, "repair-worker-path-unauthorized");
+    assert.equal(check("task-1", "designated").state, "repair-stopped-path-reserved");
+    assert.equal(check("relabel", "designated").state, "repair-stopped-path-reserved");
+    assert.equal(recordWorkerVerification({ task_id: "first-child",
+      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "wrong")).state,
+    "repair-worker-verification-missing");
+    const worker = recordWorkerVerification({ task_id: "first-child",
+      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "designated"));
+    assert.equal(worker.ok, true, worker.state);
+    const repeat = recordWorkerVerification({ task_id: "first-child",
+      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "designated"));
+    assert.equal(repeat.event_id, worker.event_id);
+    assert.equal(repeat.idempotent, true);
+    assert.equal(check("first-child", "designated").state, "repair-worker-write-authorized");
+    mkdirSync(path.join(ctx.dir, ".claude"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, ".claude", "task-lane.json"),
+      JSON.stringify({ mode: "in-thread", sessionId: "designated", taskId: "first-child", tier: "T2" }));
+    const hook = (session) => spawnSync(process.execPath,
+      [fileURLToPath(new URL("../hooks/guard-brief-rung.mjs", import.meta.url))], {
+        cwd: ctx.dir, env: { ...process.env, CLAUDE_PROJECT_DIR: ctx.dir }, encoding: "utf8",
+        input: JSON.stringify({ tool_name: "Write", cwd: ctx.dir, session_id: session,
+          tool_input: { file_path: path.join(ctx.dir, "src", "x.mjs"), content: "export const x = 9;\n" } }),
+      });
+    assert.equal(hook("designated").stdout, "", "actual Write hook permits the verified first write");
+    assert.match(hook("wrong").stdout, /permissionDecision.*deny/,
+      "actual Write hook denies a different session");
+    writeFileSync(path.join(ctx.dir, "briefs", "initial.md"), "changed\n");
+    assert.equal(check("first-child", "designated").state, "repair-brief-changed");
+    rmSync(path.join(ctx.dir, "briefs", "initial.md"));
+    assert.equal(check("first-child", "designated").state, "repair-brief-changed",
+      "a deleted brief withdraws first-write authority");
+    writeFileSync(path.join(ctx.dir, "briefs", "initial.md"), "Owner-bound child work\n");
+    assert.equal(check("first-child", "designated").ok, true);
+    // First accepted panel retires the initial receipt, even for the same admitted session.
+    execFileSync("git", ["checkout", "-qb", "first-child-branch", "origin/main"], { cwd: ctx.dir });
+    writeFileSync(path.join(ctx.dir, "src", "x.mjs"), "export const x = 9;\n");
+    execFileSync("git", ["add", "src/x.mjs"], { cwd: ctx.dir });
+    execFileSync("git", ["commit", "-qm", "first-child-candidate"], { cwd: ctx.dir });
+    const candidate2 = { commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      paths: ["src/x.mjs"] };
+    const first = openPanel(ctx, 1, candidate2, { task: "first-child", changeset: "first-cs",
+      lineage: { continuation: continuation.event_id } });
+    assert.equal(first.opened.ok, true, first.opened.state);
+    assert.equal(check("first-child", "designated").ok, false,
+      "the first panel retires the pre-panel receipt");
+    assert.equal(recordWorkerVerification({ task_id: "first-child",
+      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "designated")).state,
+    "repair-brief-receipt-missing");
   } finally { ctx.cleanup(); }
 });
 
@@ -2581,23 +2688,38 @@ test("M35: the reservation lift is COVERAGE-SCOPED — a child's GO releases its
     const stop = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
       remediation_kind: null, authorized_paths: [] });
     assert.equal(stop.ok, true, stop.state);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs", "split-a.md"), "child a only\n");
     const split = recordAggregateChildContinuation({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
       parent_disposition_event_id: stop.event_id, trigger_ids: ["F1"],
       continuation_kind: "split", owner_evidence: "Owner split",
       children: [
         { task_id: "child-a", changeset_id: "child-a-cs", tier: "T2", budget: "the x half",
-          authorized_paths: ["src/x.mjs"] },
+          authorized_paths: ["src/x.mjs"],
+          initial_batch: { worker_session_id: "split-a-worker", brief_path: "briefs/split-a.md" } },
         { task_id: "child-b", changeset_id: "child-b-cs", tier: "T2", budget: "the y half",
           authorized_paths: ["src/y.mjs"] },
       ],
     }, options(ctx.dir));
     assert.equal(split.ok, true, split.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child-a", session_id: "split-a-worker",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing");
+    const initial = recordWorkerVerification({ task_id: "child-a", repair_dispatch_event_id: split.event_id },
+      options(ctx.dir, "split-a-worker"));
+    assert.equal(initial.ok, true, initial.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child-a", session_id: "split-a-worker",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-write-authorized");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child-b", session_id: "split-a-worker",
+      target: "src/y.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing",
+    "the unbound sibling cannot borrow the first-write receipt");
     // child-a runs to GO on x only.
     const aCand = sideCandidate(ctx, "a-line", { "src/x.mjs": "export const x = 'a';\n" });
     const aOpen = openPanel(ctx, 1, aCand, { task: "child-a", changeset: "child-a-cs",
       lineage: { continuation: split.event_id } });
     assert.equal(aOpen.opened.ok, true, aOpen.opened.state);
+    assert.equal(derive(ctx, "child-a").gate_base_ordinal, 1,
+      "the first-write receipt does not add or reset the inherited gate ordinal");
     const aClosed = closePanel(ctx, aOpen, aCand, [], { task: "child-a", changeset: "child-a-cs" });
     assert.equal(aClosed.ok, true, aClosed.state);
     const aGo = decide(ctx, aClosed, { task: "child-a", changeset: "child-a-cs",

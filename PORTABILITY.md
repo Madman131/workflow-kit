@@ -686,6 +686,13 @@ through cutover; they cannot safely write the same Git-common ledger concurrentl
 Windows mutation cutover remains held until their fd-lock lifetime, contention and crash
 behavior is proven and supported.
 
+An ordinary pending child receives pre-panel source-write authority only when the current Owner
+continuation records its exact path set, designated worker session, and SHA-256/size of a regular
+in-repository brief. The designated worker must verify that receipt in the ledger. This authority
+ends at the first accepted child panel; subsequent writes use normal dispatch and worker checks.
+Historical pending children without the receipt and legacy handoffs remain held. Initial worker
+admission and the first panel open share the Git-common writer lock so their order is decisive.
+
 ## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
 
 `/orchestrate` describes how a program too large for one thread is run as sequential **chips**: an
