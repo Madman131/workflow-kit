@@ -129,8 +129,12 @@ async function importFrozenV2Reader(dir) {
 function historicalFixture(ctx, reader) {
   const rows = () => reader.loadRepairEventsForProject(ctx.dir).aggregate_events;
   const state = (taskId = "task-1") => reader.deriveAggregateRepairState(rows(), taskId);
-  const open = (round, candidate, incoming = {}) => {
-    const input = openPanelInput(ctx, candidate, {}, incoming, false, round);
+  const open = (round, candidate, incoming = {}, tier = "T2") => {
+    const input = openPanelInput(ctx, candidate, { tier }, incoming, false, round);
+    if (tier === "T3") input.expected_seats.splice(3, 0, {
+      seat_id: "third-angle", role: "angle:third", family: "codex", pass_type: "free",
+      paths: candidate.paths,
+    });
     const result = reader.recordAggregatePanelOpen(input, options(ctx.dir));
     assert.equal(result.ok, true, result.state);
     return { opened: result, expected: input.expected_seats };
@@ -227,7 +231,7 @@ function historicalFixture(ctx, reader) {
     decide(closed, "FINAL", true);
     return candidate;
   };
-  return { rows, state, review, stop, fourGateStop };
+  return { rows, state, open, close, decide, review, stop, fourGateStop };
 }
 
 function repo() {
@@ -865,6 +869,42 @@ test("historical v2 ordinary lineage keeps a versionless child panel inert in bo
       "the frozen reader leaves only the versionless child panel inert");
     assert.equal(deriveAggregateRepairState(replay, child.task_id).panels_open.length, 0,
       "the candidate leaves only the versionless child panel inert");
+  } finally { ctx.cleanup(); }
+});
+
+test("a frozen v2 T2-to-T3 authorization stays pending and opens under current full T3 rules", async () => {
+  const ctx = repo();
+  try {
+    const frozen = await importFrozenV2Reader(ctx.dir);
+    const history = historicalFixture(ctx, frozen);
+    history.stop();
+    const parent = history.state();
+    const proposal = { type: "aggregate_v2", policy_version: frozen.AGGREGATE_POLICY_VERSION,
+      kind: "child_continuation", task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: parent.latest.event_id,
+      trigger_ids: parent.latest.finding_dispositions.accepted,
+      continuation_kind: "new_changeset", authority_route: "owner",
+      owner_evidence: "recorded historical T3 child authority", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [{ task_id: "frozen-t3-child", changeset_id: "frozen-t3-child-cs", tier: "T3",
+        budget: "one historical child", authorized_paths: ["src/x.mjs"] }] };
+    const minted = frozen.recordAggregateChildContinuation(proposal, options(ctx.dir));
+    assert.equal(minted.ok, true, minted.state);
+    const pendingRows = loadRepairEventsForProject(ctx.dir).aggregate_events;
+    assert.equal(derivePendingLineageBudgets(pendingRows)
+      .some((entry) => entry.task_id === "frozen-t3-child"), true,
+    "the recorded T3 child is accepted before any child panel exists");
+    const child = { task_id: "frozen-t3-child", changeset_id: "frozen-t3-child-cs",
+      tier: "T3", child_continuation_event_id: minted.event_id };
+    const candidate = commitSource(ctx.dir, 2);
+    const input = openPanelInput(ctx, candidate, child);
+    input.expected_seats.splice(3, 0, { seat_id: "third-angle", role: "angle:third",
+      family: "codex", pass_type: "free", paths: candidate.paths });
+    const opened = recordAggregatePanelOpen(input, options(ctx.dir));
+    assert.equal(opened.ok, true, opened.state);
+    assert.equal(loadRepairEventsForProject(ctx.dir).aggregate_events.at(-1).event.policy_version, 3,
+      "current progress inherits the recorded child's full T3 envelope");
+    assert.equal(deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events,
+      child.task_id).panels_open[0].event_id, opened.event_id);
   } finally { ctx.cleanup(); }
 });
 
@@ -2103,6 +2143,104 @@ test("owner_decision blocks current dispatch but permits an Owner-evidenced term
     assert.equal(continuation.ok, true, continuation.state);
   } finally { ctx.cleanup(); }
 });
+
+for (const [tier, writerVersion] of [["T2", 4], ["T3", 3]]) {
+  for (const ruling of ["owner_decision", "successor"]) {
+    test(`accepted v2 ${tier} ${ruling} dispatch hold survives v${writerVersion} recording and replay`, async () => {
+      const ctx = repo();
+      try {
+        const frozen = await importFrozenV2Reader(ctx.dir);
+        const history = historicalFixture(ctx, frozen);
+        const candidate = commit(ctx.dir, 1);
+        const panel = history.open(1, candidate, {}, tier);
+        const closed = history.close(panel.opened, panel.expected, candidate, "F1");
+        const decided = history.decide(closed, "F1");
+        const review = history.review(closed.event_id, candidate, ruling);
+        const loaded = loadRepairEventsForProject(ctx.dir);
+        assert.equal(loaded.aggregate_events.at(-1).event.policy_version, 2);
+        assert.equal(deriveAggregateRepairState(loaded.aggregate_events, "task-1")
+          .process_reviews.some((row) => row.event_id === review.event_id), true,
+        "the frozen v2 writer's typed review remains accepted");
+        mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+        const briefPath = "briefs/v2-round-2.md";
+        const brief = Buffer.from("one historical repair\n");
+        writeFileSync(path.join(ctx.dir, briefPath), brief);
+        const declaration = { aggregate_controller: "aggregate_v2", task_id: "task-1",
+          changeset_id: "changeset-1", disposition_event_id: decided.event_id,
+          panel_close_event_id: closed.event_id, next_round: 2, root_exit_event_id: null };
+        const ledger = repairLedgerPath(ctx.dir);
+        const standing = readFileSync(ledger, "utf8");
+        for (const reviewId of [null, review.event_id]) {
+          assert.equal(confirmRepairBrief({ declaration: { ...declaration,
+            process_review_event_id: reviewId }, brief_path: briefPath }, options(ctx.dir)).state,
+          "aggregate-process-review-required");
+          assert.equal(readFileSync(ledger, "utf8"), standing, "a held dispatch appends no row");
+        }
+        const planted = stamped({ type: "aggregate_v2", policy_version: writerVersion,
+          kind: "dispatch", task_id: "task-1", changeset_id: "changeset-1",
+          recorded_at: "2099-01-01T00:00:09.000Z", session_id: "planted-dispatch",
+          disposition_event_id: decided.event_id, panel_close_event_id: closed.event_id,
+          source_round: 1, next_round: 2, authorized_paths: candidate.paths,
+          root_exit_event_id: null, process_review_event_id: null,
+          target_kind: "brief", target: briefPath,
+          brief_sha256: createHash("sha256").update(brief).digest("hex"), brief_size: brief.length });
+        writeFileSync(ledger, `${JSON.stringify(planted)}\n`, { flag: "a" });
+        const state = deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "task-1");
+        assert.equal(state.process_reviews.some((row) => row.event_id === review.event_id), true);
+        assert.equal(state.active_dispatch, null,
+          `a planted v${writerVersion} dispatch cannot discard the v2 ${ruling} hold`);
+      } finally { ctx.cleanup(); }
+    });
+  }
+  test(`accepted v2 ${tier} finish review authorizes only its exact v${writerVersion} dispatch`, async () => {
+    const ctx = repo();
+    try {
+      const frozen = await importFrozenV2Reader(ctx.dir);
+      const history = historicalFixture(ctx, frozen);
+      const candidate = commit(ctx.dir, 1);
+      const panel = history.open(1, candidate, {}, tier);
+      const closed = history.close(panel.opened, panel.expected, candidate, "F1");
+      const decided = history.decide(closed, "F1");
+      const review = history.review(closed.event_id, candidate);
+      mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+      writeFileSync(path.join(ctx.dir, "briefs/exact.md"), "exact bounded work\n");
+      const declaration = { aggregate_controller: "aggregate_v2", task_id: "task-1",
+        changeset_id: "changeset-1", disposition_event_id: decided.event_id,
+        panel_close_event_id: closed.event_id, next_round: 2, root_exit_event_id: null,
+        process_review_event_id: review.event_id };
+      const ledger = repairLedgerPath(ctx.dir);
+      const originalRows = loadRepairEventsForProject(ctx.dir).aggregate_events;
+      const reviewRow = originalRows.at(-1);
+      const prefix = originalRows.slice(0, -1);
+      const transition = { policy_version: 2, disposition_event_id: decided.event_id,
+        panel_close_event_id: closed.event_id, source_round: 1, next_round: 2,
+        root_exit_event_id: null, authorized_paths: candidate.paths };
+      for (const [name, changed] of [
+        ["purpose", { purpose: "child_continuation" }],
+        ["anchor", { anchor: { ...reviewRow.event.anchor, event_id: "e".repeat(64) } }],
+        ["ordinal", { next_gate_ordinal: 3 }],
+        ["paths", { transition_sha256: aggregateTransitionSha256("dispatch",
+          { ...transition, authorized_paths: ["other/path.mjs"] }) }],
+        ["transition", { transition_sha256: aggregateTransitionSha256("dispatch",
+          { ...transition, next_round: 3 }) }],
+      ]) {
+        const altered = stamped({ ...reviewRow.event, ...changed });
+        writeFileSync(ledger, `${[...prefix, altered].map(JSON.stringify).join("\n")}\n`);
+        assert.equal(confirmRepairBrief({ declaration: { ...declaration,
+          process_review_event_id: altered.event_id }, brief_path: "briefs/exact.md" }, options(ctx.dir)).state,
+        "aggregate-process-review-required", `${name} cannot impersonate the exact finish review`);
+      }
+      writeFileSync(ledger, `${originalRows.map(JSON.stringify).join("\n")}\n`);
+      const exact = confirmRepairBrief({ declaration, brief_path: "briefs/exact.md" }, options(ctx.dir));
+      assert.equal(exact.ok, true, exact.state);
+      const stored = loadRepairEventsForProject(ctx.dir).aggregate_events
+        .find((row) => row.event_id === exact.event_id);
+      assert.equal(stored?.event.policy_version, writerVersion);
+      assert.equal(deriveAggregateRepairState(loadRepairEventsForProject(ctx.dir).aggregate_events, "task-1")
+        .active_dispatch?.event_id, exact.event_id);
+    } finally { ctx.cleanup(); }
+  });
+}
 
 test("historical untyped process reviews replay but cannot grant new typed authority", () => {
   const replay = repo();

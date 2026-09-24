@@ -912,7 +912,29 @@ test("accepted v3 T3 R4 completion child mints under its historical Owner and re
   } finally { ctx.cleanup(); }
 });
 
-test("accepted v3 T2 Owner completion mints its authorized T3 child's worker at v3", () => {
+test("a bare accepted v3 T2 parent cannot mint a new T3 child", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = acceptedV3Root(ctx, candidate);
+    const closed = closePanel(ctx, panel, candidate, ["F1"]);
+    assert.equal(closed.ok, true, closed.state);
+    const stopped = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    const before = readFileSync(repairLedgerPath(ctx.dir), "utf8");
+    const child = recordAggregateChildContinuation({ type: "aggregate_v2", kind: "child_continuation",
+      task_id: "task-1", changeset_id: "cs-1", parent_disposition_event_id: stopped.event_id,
+      trigger_ids: ["F1"], continuation_kind: "new_changeset",
+      owner_evidence: "Owner text cannot grandfather a new T3 classification",
+      children: [{ task_id: "new-t3-child", changeset_id: "new-t3-child-cs", tier: "T3",
+        budget: "one change", authorized_paths: candidate.paths }] }, options(ctx.dir));
+    assert.equal(child.ok, false, "historical T2 provenance alone cannot mint new T3");
+    assert.equal(readFileSync(repairLedgerPath(ctx.dir), "utf8"), before);
+  } finally { ctx.cleanup(); }
+});
+
+test("a recorded v3 T2-to-T3 completion keeps its pending child and worker at full T3 strength", () => {
   const ctx = repo();
   try {
     let candidate = commit(ctx.dir, 1);
@@ -970,9 +992,30 @@ test("accepted v3 T2 Owner completion mints its authorized T3 child's worker at 
       zoom_out: "one bounded exit", ruling: "owner_decision", bounded_scope: "one final repair",
       closure_evidence: "F4 closes" }, options(ctx.dir));
     assert.equal(review.ok, true, review.state);
-    const child = recordAggregateChildContinuation({ ...completion,
+    const before = readFileSync(repairLedgerPath(ctx.dir), "utf8");
+    const newChild = recordAggregateChildContinuation({ ...completion,
       process_review_event_id: review.event_id }, options(ctx.dir));
-    assert.equal(child.ok, true, child.state);
+    assert.equal(newChild.ok, false, "an old T2 parent cannot issue a new T3 completion authorization");
+    assert.equal(readFileSync(repairLedgerPath(ctx.dir), "utf8"), before);
+    // This accepted row is pre-recorded historical authority. Replay must keep the pending T3
+    // child while the current recorder refuses an otherwise identical NEW authorization.
+    const briefBytes = readFileSync(path.join(ctx.dir, completion.completion_batch.brief_path));
+    const child = stamped({ type: "aggregate_v2", policy_version: 3, kind: "child_continuation",
+      task_id: "task-1", changeset_id: "cs-1", recorded_at: "2099-01-01T00:00:01.000Z",
+      session_id: "historical-owner", parent_disposition_event_id: stopped.event_id,
+      parent_frozen_commit: lastOpen.frozen_commit, parent_frozen_tree: lastOpen.frozen_tree,
+      trigger_ids: completion.trigger_ids, continuation_kind: completion.continuation_kind,
+      children: completion.children, authority_route: "owner", owner_evidence: completion.owner_evidence,
+      action_screen: _DEFAULT_CONTINUATION_SCREEN, completion_exception: completion.completion_exception,
+      completion_batch: { worker_session_id: completion.completion_batch.worker_session_id,
+        brief_path: completion.completion_batch.brief_path,
+        brief_sha256: createHash("sha256").update(briefBytes).digest("hex"), brief_size: briefBytes.length,
+        authorized_paths: completion.children[0].authorized_paths },
+      process_review_event_id: review.event_id });
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(child)}\n`, { flag: "a" });
+    assert.equal(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events)
+      .some((entry) => entry.task_id === "v3-t3-completion"), true,
+    "the pre-recorded T3 child remains an accepted pending lineage");
     const worker = recordWorkerVerification({ task_id: "v3-t3-completion",
       repair_dispatch_event_id: child.event_id }, options(ctx.dir, "v3-completion-worker"));
     assert.equal(worker.ok, true, worker.state);
@@ -994,7 +1037,7 @@ test("accepted v3 T2 Owner completion mints its authorized T3 child's worker at 
   } finally { ctx.cleanup(); }
 });
 
-test("an active historical standard parent hands off its Owner T3 child at v3", () => {
+test("tierless standard history refuses new T3 while a recorded T3 handoff still progresses", () => {
   const ctx = repo();
   try {
     const candidate = commit(ctx.dir, 1);
@@ -1016,14 +1059,23 @@ test("an active historical standard parent hands off its Owner T3 child at v3", 
     writeFileSync(ledger, `${JSON.stringify(stamped(parent))}\n`);
     assert.equal(loadRepairEventsForProject(ctx.dir).events.length, 1,
       "the standard parent is accepted history, not a fresh standard mint");
-    const handoff = recordAggregateLegacyHandoff({ type: "aggregate_v2", kind: "legacy_handoff",
+    const handoffInput = { type: "aggregate_v2", kind: "legacy_handoff",
       task_id: "standard-parent", changeset_id: "standard-parent-cs",
       parent_task_id: "standard-parent", parent_changeset_id: "standard-parent-cs",
       parent_candidate_sha: manifest.digest, authorized_paths: candidate.paths,
       child: { task_id: "historical-standard-child", changeset_id: "historical-standard-child-cs",
         tier: "T3", budget: "one Owner-authorized continuation", authorized_paths: candidate.paths },
-      owner_evidence: "Owner authorized historical T3 handoff" }, options(ctx.dir));
-    assert.equal(handoff.ok, true, handoff.state);
+      owner_evidence: "Owner authorized historical T3 handoff" };
+    const before = readFileSync(ledger, "utf8");
+    const newHandoff = recordAggregateLegacyHandoff(handoffInput, options(ctx.dir));
+    assert.equal(newHandoff.ok, false,
+      "tierless standard history and Owner text cannot create a new T3 classification");
+    assert.equal(readFileSync(ledger, "utf8"), before);
+    const handoff = stamped({ ...handoffInput, policy_version: 3,
+      recorded_at: "2099-01-01T00:00:01.000Z", session_id: "historical-owner",
+      parent_disposition_event_id: eventId(parent), parent_round: 1,
+      process_review_event_id: null });
+    writeFileSync(ledger, `${JSON.stringify(handoff)}\n`, { flag: "a" });
     const loaded = loadRepairEventsForProject(ctx.dir);
     assert.equal(loaded.aggregate_events.at(-1).event.policy_version, 3);
     assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events, { standardEvents: loaded.events })
@@ -1034,6 +1086,50 @@ test("an active historical standard parent hands off its Owner T3 child at v3", 
       lineage: { handoff: handoff.event_id } });
     assert.equal(child.opened.ok, true, child.opened.state);
     assert.equal(derive(ctx, "historical-standard-child").panels_open[0].event_id, child.opened.event_id);
+  } finally { ctx.cleanup(); }
+});
+
+test("tierless standard history permits only an explicit safeguarded T2 handoff", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
+    const parent = { type: "round_disposition", task_id: "standard-t2",
+      changeset_id: "standard-t2-cs", round: 1, candidate_sha: manifest.digest,
+      candidate_manifest: manifest.records, verdict: "NO-GO", disposition: "REMEDIATE",
+      finding_ids: ["F1"], finding_class: "legacy", ownership_area: "controller",
+      original_trigger: "active standard work", authorized_paths: candidate.paths,
+      introduced_by_prior_repair: false, new_scope: false, repair_dispatch_event_id: null,
+      root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "historical-worker" };
+    const ledger = repairLedgerPath(ctx.dir);
+    mkdirSync(path.dirname(ledger), { recursive: true });
+    writeFileSync(ledger, `${JSON.stringify(stamped(parent))}\n`);
+    const handoff = { type: "aggregate_v2", kind: "legacy_handoff", task_id: "standard-t2",
+      changeset_id: "standard-t2-cs", parent_task_id: "standard-t2",
+      parent_changeset_id: "standard-t2-cs", parent_candidate_sha: manifest.digest,
+      authorized_paths: candidate.paths,
+      child: { task_id: "new-t2-child", changeset_id: "new-t2-child-cs", tier: "T2",
+        budget: "one exact child", authorized_paths: candidate.paths },
+      owner_evidence: "Owner explicitly authorizes this T2 handoff" };
+    const before = readFileSync(ledger, "utf8");
+    assert.equal(recordAggregateLegacyHandoff({ ...handoff, owner_evidence: undefined },
+      options(ctx.dir)).ok, false, "Owner evidence is required");
+    assert.equal(recordAggregateLegacyHandoff({ ...handoff,
+      child: { ...handoff.child, authorized_paths: ["other/path.mjs"] } }, options(ctx.dir)).ok,
+    false, "the child cannot silently widen scope");
+    assert.equal(readFileSync(ledger, "utf8"), before);
+    const minted = recordAggregateLegacyHandoff(handoff, options(ctx.dir));
+    assert.equal(minted.ok, true, minted.state);
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(loaded.aggregate_events.at(-1).event.policy_version, 4);
+    assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events, { standardEvents: loaded.events })
+      .map((entry) => entry.task_id), ["new-t2-child"]);
+    const next = commit(ctx.dir, 2);
+    const child = openPanel(ctx, 1, next, { task: "new-t2-child", changeset: "new-t2-child-cs",
+      tier: "T2", lineage: { handoff: minted.event_id } });
+    assert.equal(child.opened.ok, true, child.opened.state);
   } finally { ctx.cleanup(); }
 });
 

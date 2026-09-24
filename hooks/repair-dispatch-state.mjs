@@ -773,21 +773,15 @@ function baseEvent(type, input, sessionId, now, policyVersion = AGGREGATE_POLICY
 }
 
 // Historical policy is inherited from accepted program or pending-child lineage, not a caller's
-// tier claim. An active standard parent is also historical authority for an Owner T3 handoff;
-// standard minting is retired, so that route cannot create a fresh standard T3 root.
+// tier claim. Standard history records no tier: its activeness cannot authorize a NEW T3 handoff.
 function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit) {
   const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
   const world = rows && aggregateWorld(rows.aggregate, rows.standard);
   const program = world?.programs.get(input?.task_id);
   const pending = world?.childLineage.get(input?.task_id);
-  const legacyChild = input?.kind === "legacy_handoff" ? input.child
-    : input?.purpose === "legacy_handoff" ? input.proposed_transition?.child : null;
-  const standard = legacyChild?.tier === "T3" && rows
-    ? deriveRepairState(rows.standard, input?.parent_task_id ?? input?.task_id) : null;
   const historical = program?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION ||
     (!program && pending?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION) ||
-    program?.tier === "T3" || (!program && pending?.tier === "T3") ||
-    (standard?.ok && standard.active && standard.task_id === (input?.parent_task_id ?? input?.task_id));
+    program?.tier === "T3" || (!program && pending?.tier === "T3");
   const policy = historical
     ? PRINCIPAL_AGGREGATE_POLICY_VERSION : AGGREGATE_POLICY_VERSION;
   return baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now, policy);
@@ -898,17 +892,17 @@ function typedReviewMatches(review, purpose, anchor, transition) {
     review.transition_sha256 === aggregateTransitionSha256(purpose, transition);
 }
 
-function applicableDispatchReview(state, transition) {
+function applicableDispatchReviews(state, transition) {
   const anchor = aggregatePanelCloseAnchor(state);
   const ordinal = nextGateOrdinal(state);
-  // A prospective v4 row must not make an accepted v3 review of the same dispatch invisible.
-  // The recorder preserves v3 provenance; this also closes the replay boundary for a planted v4 row.
-  const historical = state.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION &&
-    aggregatePolicyVersion(transition) === AGGREGATE_POLICY_VERSION
-    ? { ...transition, policy_version: PRINCIPAL_AGGREGATE_POLICY_VERSION } : null;
-  return state.process_reviews.find((review) => review.next_gate_ordinal === ordinal &&
-    (typedReviewMatches(review, "dispatch", anchor, transition) ||
-      (historical && typedReviewMatches(review, "dispatch", anchor, historical)))) || null;
+  // Policy 2's typed digest omitted its version; policies 3 and 4 include it. Compare the exact
+  // action under each accepted older grammar, so a newer writer cannot hide an Owner hold merely
+  // by hashing its prospective version. All other transition fields, anchor and ordinal stay exact.
+  const versions = [ESTABLISHED_AGGREGATE_POLICY_VERSION, PRINCIPAL_AGGREGATE_POLICY_VERSION,
+    AGGREGATE_POLICY_VERSION].filter((version) => version <= aggregatePolicyVersion(transition));
+  return state.process_reviews.filter((review) => review.next_gate_ordinal === ordinal &&
+    versions.some((version) => typedReviewMatches(review, "dispatch", anchor,
+      { ...transition, policy_version: version })));
 }
 
 function aggregateWorld(events, standardEvents = []) {
@@ -1378,14 +1372,15 @@ function aggregateWorld(events, standardEvents = []) {
         const required = processReviewRequired(state, row.next_round);
         const review = row.process_review_event_id === null ? null
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
-        const typed = review && typedReviewMatches(review, "dispatch", aggregatePanelCloseAnchor(state), row) &&
-          review.next_gate_ordinal === nextGateOrdinal(state) && review.ruling === "finish_bounded_root";
-        const typedApplicable = applicableDispatchReview(state, row);
+        const typedApplicable = applicableDispatchReviews(state, row);
+        const held = typedApplicable.some((candidate) => candidate.ruling !== "finish_bounded_root");
+        const typed = review && !held && typedApplicable.some((candidate) => candidate.event_id === review.event_id) &&
+          review.ruling === "finish_bounded_root";
         const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
           candidate.next_gate_ordinal === nextGateOrdinal(state)) || null;
         const historical = review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
           review.ruling === "finish_bounded_root";
-        if (((required || typedApplicable) && !typed && !historical) ||
+        if (held || ((required || typedApplicable.length) && !typed && !historical) ||
             (row.process_review_event_id !== null && !typed && !historical) ||
             (!typed && !historical && oldApplicable)) continue;
       }
@@ -2301,6 +2296,9 @@ export function recordAggregateChildContinuation(input,
   const state = deriveAggregateRepairState(rows.aggregate, input.task_id, { standardEvents: rows.standard });
   const parentOpen = state.ok ? (state.panels_open ?? []).at(-1) : null;
   if (!parentOpen) return { ok: false, state: "aggregate-continuation-malformed" };
+  if (state.tier !== "T3" && input.children?.some((child) => child?.tier === "T3")) {
+    return { ok: false, state: "aggregate-continuation-malformed" };
+  }
   const completionException = input.continuation_kind === "completion_exception";
   const authorityRoute = input.authority_route;
   if (!currentAggregatePolicy(base) ||
@@ -2646,12 +2644,11 @@ export function validateAggregateDispatch(declaration,
       disposition_event_id: disposition.event_id, panel_close_event_id: disposition.panel_close_event_id, source_round: disposition.round,
       next_round: declaration.next_round, root_exit_event_id: declaration.root_exit_event_id ?? null,
       authorized_paths: disposition.authorized_paths };
-    const authorized = processReview && typedReviewMatches(processReview, "dispatch",
-      aggregatePanelCloseAnchor(state), transition) &&
-      processReview.next_gate_ordinal === nextGateOrdinal(state) &&
+    const applicable = applicableDispatchReviews(state, transition);
+    const held = applicable.some((candidate) => candidate.ruling !== "finish_bounded_root");
+    const authorized = processReview && !held && applicable.some((candidate) => candidate.event_id === processReview.event_id) &&
       processReview.ruling === "finish_bounded_root";
-    const applicable = applicableDispatchReview(state, transition);
-    if (((required || applicable) && !authorized) ||
+    if (held || ((required || applicable.length) && !authorized) ||
         (declaration.process_review_event_id != null && !authorized)) {
       return { ok: false, state: "aggregate-process-review-required" };
     }
