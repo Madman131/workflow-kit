@@ -39,8 +39,8 @@ test("Architect completion mandate stays in both loaded skill and authoritative 
   pin(skill, "authorized completion through one separate PM", "Architect drives completion through one PM");
   pin(skill, "avoid unrelated work or repeated attempts without new evidence", "Architect avoids wasteful loops");
   pin(skill, "return only unresolved reserved decisions to Owner", "ordinary decisions stay delegated");
-  pin(routing, "directs completion through that one PM", "routing preserves one execution chain");
-  pin(routing, "without weakening gates, resolves in-envelope conflicts", "efficiency preserves review");
+  pin(routing, "directs completion through one PM", "routing preserves one execution chain");
+  pin(routing, "without weakening gates; resolves in-envelope conflicts", "efficiency preserves review");
   pin(foundations, "directs completion\nthrough one PM", "role foundation agrees with the loaded skill");
 });
 
