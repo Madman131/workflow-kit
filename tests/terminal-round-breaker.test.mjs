@@ -1347,6 +1347,30 @@ test("legacy handoff replay cannot upgrade an unrelated outer program's policy",
     assert.equal(broken.panels_close.length, 0,
       "without the guard the same legitimate policy-2 close disappears");
     assert.equal(broken.terminal, null, "its subsequent GO also disappears");
+
+    // Inverse ordering: an unrelated policy-4 outer program must not reject a
+    // policy-2 historical handoff of the standard parent before its own checks run.
+    const inverse = stamped({ ...handoff.event, policy_version: 2,
+      child: { ...handoff.event.child, task_id: "inverse-child", changeset_id: "inverse-child-cs" } });
+    const pending = (events, implementation = { derivePendingLineageBudgets }) =>
+      implementation.derivePendingLineageBudgets(events, { standardEvents: loaded.events })
+        .some((entry) => entry.task_id === "inverse-child");
+    assert.equal(pending([inverse]), true, "the parent alone admits the historical child");
+    assert.equal(pending([historicalOpen, inverse]), true,
+      "an unrelated policy-2 program does not affect the handoff");
+    assert.equal(pending([minted, inverse]), true,
+      "an unrelated policy-4 program cannot impose its downgrade guard");
+    const owners = activeRepairPathOwners(loaded.events, "src/x.mjs",
+      { aggregateEvents: [minted, inverse] });
+    assert.deepEqual(owners.owners, [], "accepted lineage retires the standard parent");
+    assert.deepEqual(owners.handed_off_task_ids, ["standard-parent"],
+      "the cited standard parent is the one retired");
+    const prefilterMutant = await importMutant(mutantDir, [[
+      'const state = row.kind === "legacy_handoff" ? null : programs.get(row.task_id) || null;',
+      'const state = programs.get(row.task_id) || null;',
+    ]]);
+    assert.equal(pending([minted, inverse], prefilterMutant), false,
+      "without pre-branch isolation, the child disappears behind the outer policy");
   } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });
 
@@ -1422,8 +1446,9 @@ test("historical separate-ID handoffs retain child STOP and parent retirement ac
   }
 });
 
-test("a separate-ID historical handoff at ordinal four needs its exact typed review", () => {
+test("a separate-ID historical handoff at ordinal four needs its exact typed review", async () => {
   const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
   try {
     const candidate = commit(ctx.dir, 1);
     const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
@@ -1487,8 +1512,31 @@ test("a separate-ID historical handoff at ordinal four needs its exact typed rev
       assert.equal(pending({ ...row, child: { ...row.child, budget: "different transition" } }), false,
         "the typed digest binds the exact proposed child");
       assert.equal(pending(row), true, `policy ${policy} exact permitted review admits the child`);
+      if (policy === 4) {
+        // An older applicable Owner decision is a separate accepted review. Its
+        // hold cannot be hidden by citing the policy-4 successor permit.
+        const held = stamped({ ...typed.event, policy_version: 2,
+          transition_sha256: aggregateTransitionSha256("legacy_handoff",
+            { ...proposal, policy_version: 2 }), ruling: "owner_decision",
+          review_evidence: "Owner holds this handoff", recorded_at: "2099-01-01T00:00:19.000Z" });
+        const contested = [typed, held, stamped(row)];
+        assert.equal(derivePendingLineageBudgets([held,
+          stamped({ ...row, process_review_event_id: held.event_id })],
+        { standardEvents: loaded.events }).some((entry) => entry.task_id === "reviewed-child"), true,
+        "the older Owner-decision review is itself accepted when cited with Owner evidence");
+        assert.equal(derivePendingLineageBudgets(contested, { standardEvents: loaded.events })
+          .some((entry) => entry.task_id === "reviewed-child"), false,
+        "an uncited applicable Owner hold vetoes the cited successor permit");
+        const heldMutant = await importMutant(mutantDir, [[
+          'if (held || ((required || applicable.length) && !authorized) ||',
+          'if (((required || applicable.length) && !authorized) ||',
+        ]]);
+        assert.equal(heldMutant.derivePendingLineageBudgets(contested,
+          { standardEvents: loaded.events }).some((entry) => entry.task_id === "reviewed-child"), true,
+        "without the hold veto, the same contested child is minted");
+      }
     }
-  } finally { ctx.cleanup(); }
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });
 
 test("older exact typed legacy reviews bind a new T2 handoff at ordinal two", () => {

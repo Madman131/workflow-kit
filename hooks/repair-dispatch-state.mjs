@@ -1079,7 +1079,9 @@ function aggregateWorld(events, standardEvents = []) {
   };
 
   for (const row of aggregateRows(events)) {
-    const state = programs.get(row.task_id) || null;
+    // Historical handoff outer IDs are an envelope, not the cited standard parent. An
+    // unrelated aggregate program must not supply pre-branch tier or policy gates.
+    const state = row.kind === "legacy_handoff" ? null : programs.get(row.task_id) || null;
     const rowSeq = Number.isSafeInteger(row.seq) ? row.seq : Infinity;
     // Once the live policy is present, an absent-version historical shape cannot take a later
     // transition. Old rows still replay until a live mint upgrades that program.
@@ -1653,9 +1655,13 @@ function aggregateWorld(events, standardEvents = []) {
         const anchor = { kind: "standard_disposition", event_id: standard.latest.event_id,
           candidate_sha: standard.latest.candidate_sha };
         const applicable = applicableTypedReviews(processReviews, "legacy_handoff", anchor, ordinal, row);
+        // A cited Owner decision can itself authorize the handoff under the older grammar,
+        // but a different applicable Owner hold must veto a cited successor permit.
+        const held = applicable.some((candidate) => candidate.ruling === "owner_decision" &&
+          candidate.event_id !== row.process_review_event_id);
         const authorized = review && applicable.some((candidate) => candidate.event_id === review.event_id) &&
           continuationReviewAllows(review);
-        if (((required || applicable.length) && !authorized) ||
+        if (held || ((required || applicable.length) && !authorized) ||
             (row.process_review_event_id !== null && !authorized)) continue;
       }
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
