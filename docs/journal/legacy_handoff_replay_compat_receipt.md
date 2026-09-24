@@ -1,0 +1,9 @@
+# Legacy handoff replay compatibility — Builder receipt
+
+Base: `588593e031f822ed31df6deab1837651b1de9180` (private branch `codex/legacy-handoff-replay-compat`). Tier: T2. Source/test/contract commit: `9dcb3af666e2365cc89ed1e958155e23b3542b39` (tree `67667db3989b74880950fb4c2ee30c74009d5c87`). Contract: `legacy_handoff_replay_compat_contract.md`, SHA-256 `3d9e0c3729b39e70f297456a8ed10faddf1d33174073693a19e1837e9c347779`.
+
+Decision: remove only the outer/parent ID equality predicate from `aggregateWorld`'s `legacy_handoff` replay branch. Keep the current public `recordAggregateLegacyHandoff` equality predicate. Historical policy 1/2/3/4 rows still need the active latest cited standard parent, Owner evidence, exact anchor/candidate/path match, identity and path collision checks, and applicable typed review. An accepted old cross-envelope policy 3 T3 child retains T3 panel strength and STOP reservation; a fresh cross-envelope T3 request is refused without append. The parent is retired at handoff; its later standard close is administrative.
+
+Verification: `node --test tests/terminal-round-breaker.test.mjs tests/terminal-controller-hard-stop.test.mjs` passed 103/103. `npm test` passed 430/430 and all three runner rungs. `node --check` passed for the changed source and test file; authored source/test diff has no whitespace errors. The appended Gemini journal has pre-existing reviewer whitespace in the verbatim receipt and is left untouched.
+
+Residual: ledger replay authenticates record structure and chain, not when or by whom a fully well-formed old-format row was written. Current-writer activation and cutover remain separate operational proof, per the Architect's historical-tier and R4 replay rulings. No push, installed runtime change, or live ledger write occurred in this Builder lane.
