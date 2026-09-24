@@ -1657,7 +1657,10 @@ function aggregateWorld(events, standardEvents = []) {
         const applicable = applicableTypedReviews(processReviews, "legacy_handoff", anchor, ordinal, row);
         const authorized = review && applicable.some((candidate) => candidate.event_id === review.event_id) &&
           continuationReviewAllows(review);
-        if (((required || applicable.length) && !authorized) ||
+        // Earlier public recorders admitted uncited, nonmandatory handoffs even when a
+        // permissive typed review applied. Replay their ledger grammar; current admission
+        // separately requires the citation before it appends a new handoff.
+        if ((required && !authorized) ||
             (row.process_review_event_id !== null && !authorized)) continue;
       }
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
@@ -1666,8 +1669,18 @@ function aggregateWorld(events, standardEvents = []) {
       continuations.set(row.event_id, handoff);
     }
   }
+  const stoppedReservations = new Map();
+  for (const program of programs.values()) {
+    if (!(program.terminal === "STOP" || (program.terminal === "CLOSED" && program.stopped_paths?.length))) continue;
+    const lifted = liftedPaths(program);
+    for (const entry of program.stopped_paths) {
+      if (lifted.has(entry)) continue;
+      if (!stoppedReservations.has(entry)) stoppedReservations.set(entry, []);
+      stoppedReservations.get(entry).push(program.task_id);
+    }
+  }
   return poisoned ? null : { programs, accepted, continuations, childLineage, completionBatchWorkers,
-    legacyHandedOff, processReviews };
+    legacyHandedOff, processReviews, stoppedReservations };
 }
 
 export function deriveAggregateRepairState(events, taskId, { standardEvents = [] } = {}) {
@@ -2461,6 +2474,12 @@ export function recordAggregateLegacyHandoff(input,
       candidate.event_id !== event.process_review_event_id)) {
     return { ok: false, state: "aggregate-legacy-handoff-conflict" };
   }
+  // Replay preserves older public-recorder output, but a new handoff must cite any
+  // applicable permissive review. The reader cannot distinguish those epochs by version.
+  if (applicable.length && !applicable.some((candidate) =>
+      candidate.event_id === event.process_review_event_id && continuationReviewAllows(candidate))) {
+    return { ok: false, state: "aggregate-legacy-handoff-conflict" };
+  }
   return appendEligibleAggregate(file, event, "aggregate-legacy-handoff-conflict");
 }
 
@@ -2958,6 +2977,15 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   const owner = ownership.owners[0] || null;
   if (owner && owner.task_id !== taskId) {
     return { ok: false, state: "repair-task-relabel-path-owned", owner_task_id: owner.task_id };
+  }
+  // An inactive STOP/CLOSED program is absent from active owners. Its unlifted paths
+  // still reserve the surface: a stale worker or relabeled task must not fall through
+  // to the unrelated-write path. A live authorized child owns its own write above.
+  if (!owner) {
+    const stoppedOwners = completionWorld.stoppedReservations.get(target) ?? [];
+    if (stoppedOwners.length) {
+      return { ok: false, state: "repair-stopped-path-reserved", owner_task_ids: stoppedOwners };
+    }
   }
   if (!text(taskId, 120)) return { ok: true, state: "not-repair-write" };
   // RESOLVE THE ACTIVE AGGREGATE PROGRAM BY TASK FIRST. Ownership above is derived BY TARGET, so a

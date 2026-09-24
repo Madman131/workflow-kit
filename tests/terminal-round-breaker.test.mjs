@@ -1440,6 +1440,15 @@ test("historical separate-ID handoffs retain child STOP and parent retirement ac
         remediation_kind: null, authorized_paths: [] });
       assert.equal(stop.ok, true, stop.state);
       assert.deepEqual(derive(ctx, "historical-child").stopped_paths, ["src/x.mjs"]);
+      for (const task_id of ["historical-child", "relabel", ""]) {
+        const write = verifyRepairWorkerWrite({ task_id, session_id: "historical-worker",
+          target: "src/x.mjs" }, { projectRoot: ctx.dir });
+        assert.equal(write.ok, false, `${task_id || "undeclared"} cannot write a STOP reservation`);
+        assert.equal(write.state, "repair-stopped-path-reserved");
+      }
+      assert.equal(verifyRepairWorkerWrite({ task_id: "relabel", session_id: "historical-worker",
+        target: "src/unrelated.mjs" }, { projectRoot: ctx.dir }).state, "not-repair-write",
+      "a truly unrelated path stays available");
       assert.equal(openPanel(ctx, 1, next, { task: "unrelated", changeset: "unrelated-cs" }).opened.ok,
         false, "child STOP preserves the path reservation");
     } finally { ctx.cleanup(); }
@@ -1547,6 +1556,27 @@ test("older mixed typed reviews replay their cited handoff while current admissi
       next_gate_ordinal: 2, review_evidence: "permissive Owner review", zoom_out: "bounded",
       ruling: "owner_decision", bounded_scope: "one child", closure_evidence: "bounded" });
     writeFileSync(ledger, `${JSON.stringify(parent)}\n${JSON.stringify(olderDecision)}\n`);
+    // All three public-recorder epochs admitted an uncited nonmandatory handoff. A
+    // typed permissive review cannot retroactively erase that child on replay.
+    for (const policy of [2, 3, 4]) {
+      const review = stamped({ ...olderDecision.event, policy_version: policy,
+        transition_sha256: aggregateTransitionSha256("legacy_handoff", { ...proposal,
+          policy_version: policy }) });
+      const historicalUncited = stamped({ type: "aggregate_v2", kind: "legacy_handoff",
+        policy_version: policy, task_id: "standard-parent", changeset_id: "standard-parent-cs",
+        ...proposal, owner_evidence: "Owner authorized historical handoff",
+        process_review_event_id: null, recorded_at: "2099-01-01T00:00:20.000Z",
+        session_id: "historical-owner" });
+      const replay = derivePendingLineageBudgets([review, historicalUncited],
+        { standardEvents: loadRepairEventsForProject(ctx.dir).events });
+      assert.deepEqual(replay?.map((entry) => entry.task_id), ["reviewed-child"],
+        `policy ${policy} uncited nonmandatory public handoff keeps its child`);
+      const invalidCitation = stamped({ ...historicalUncited.event,
+        process_review_event_id: "f".repeat(64) });
+      assert.deepEqual(derivePendingLineageBudgets([review, invalidCitation],
+        { standardEvents: loadRepairEventsForProject(ctx.dir).events }), [],
+      "an invalid explicit citation remains rejected");
+    }
     const permit = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
       task_id: "standard-parent", changeset_id: "standard-parent-cs", reviewer_role: "frontier",
       purpose: "legacy_handoff", anchor, proposed_transition: { ...proposal, policy_version: 4 },
@@ -1566,10 +1596,10 @@ test("older mixed typed reviews replay their cited handoff while current admissi
     assert.deepEqual(activeRepairPathOwners(loaded.events, "src/x.mjs",
       { aggregateEvents: oldRows }).handed_off_task_ids, ["standard-parent"]);
     const retroVeto = await importMutant(mutantDir, [[
-      'if (((required || applicable.length) && !authorized) ||',
+      'if ((required && !authorized) ||',
       'if (applicable.some((candidate) => candidate.ruling === "owner_decision" && ' +
         'candidate.event_id !== row.process_review_event_id) || ' +
-        '((required || applicable.length) && !authorized) ||',
+        '(required && !authorized) ||',
     ]]);
     assert.deepEqual(retroVeto.derivePendingLineageBudgets(oldRows,
       { standardEvents: loaded.events }), [],
@@ -1588,7 +1618,7 @@ test("older mixed typed reviews replay their cited handoff while current admissi
 
 test("older exact typed legacy reviews bind a new T2 handoff at ordinal two", () => {
   for (const [policy, ruling] of [[2, "owner_decision"], [2, "successor"],
-    [3, "owner_decision"], [3, "successor"]]) {
+    [3, "owner_decision"], [3, "successor"], [4, "owner_decision"], [4, "successor"]]) {
     const ctx = repo();
     try {
       const candidate = commit(ctx.dir, 1);
@@ -1642,8 +1672,8 @@ test("older exact typed legacy reviews bind a new T2 handoff at ordinal two", ()
       writeFileSync(ledger, `${JSON.stringify(parent)}\n${JSON.stringify(oldReview)}\n${JSON.stringify(planted)}\n`);
       const replay = loadRepairEventsForProject(ctx.dir);
       assert.equal(derivePendingLineageBudgets(replay.aggregate_events, { standardEvents: replay.events })
-        .some((entry) => entry.task_id === "reviewed-t2"), false,
-      "a planted v4 handoff cannot drop an accepted older exact review on replay");
+        .some((entry) => entry.task_id === "reviewed-t2"), true,
+      "older public p4 admission may be uncited at a nonmandatory ordinal; replay retains its child");
     } finally { ctx.cleanup(); }
   }
 });
@@ -2444,6 +2474,14 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
       { ...childOpts, accepted: ["CF1"], authorized_paths: ["src/y.mjs"] });
     assert.equal(childDecided.ok, true, childDecided.state);
     const authority = dispatchBatch(ctx, childDecided.event_id, childClosed.event_id, 2, null, childOpts);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "worker-2",
+      target: "src/y.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-write-authorized",
+    "the valid Owner child retains its admitted write through the parent's STOP reservation");
+    for (const task_id of ["task-1", "relabel"]) {
+      assert.equal(verifyRepairWorkerWrite({ task_id, session_id: "worker-2",
+        target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-stopped-path-reserved",
+      "the unlifted parent slice refuses stale or relabeled writes");
+    }
     // …but the ROUND-2 candidate cannot expand past the budget: a child's later-round diff
     // including a path outside its declared lineage budget refuses (a measured defect — a
     // round-2 candidate is not a skeleton key over what round 1 could not touch).
