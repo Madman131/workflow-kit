@@ -4,22 +4,20 @@ Word budget: 900. Authoritative lookup reference: `core/WORKFLOW.md` § Architec
 
 ## Lifecycle
 
-Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. On launch,
-`/architect-build` establishes, reuses, or recovers a persistent architect and, after baseline approval,
-creates or connects a separate PM. In file-only mode, a launch emits the same handoff through file-only
-equivalents. Without launch, preserve planning continuity only. Existing authorized execution does not need
-a renewed launch. Inspect the durable record before either action. It names the program/repository;
-architect and active PM locator or file-only equivalents; Owner delegation/limits; approved baseline and
-source pointers; accepted decisions separately from pending advice; current phase/CHIP; unresolved
-decisions with id/type/source, program/baseline/scope, evidence, delegation/limits, stop/supersession,
-execution/result and active/pending/superseded status; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
-otherwise create one through the repository's normal docs/state convention and record its exact path.
+Only an Owner launch may activate a `/orchestrate` PM or execution handoff. On launch,
+`/architect-build` establishes or recovers a persistent architect and, after baseline approval,
+connects a separate PM; file-only mode uses file equivalents. Without launch, preserve planning continuity.
+Existing authorized execution needs no renewed launch. Inspect the durable record first. It names the program/repository;
+architect and PM locators or file equivalents; Owner delegation/limits; approved baseline/source;
+accepted decisions versus pending advice; phase/CHIP; unresolved decisions with id/type/source,
+program/baseline/scope, evidence, delegation/limits, stop/supersession, execution/result and
+active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
+record first; otherwise create one through normal docs/state convention and record its path.
 Record both task locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
-For existing config, set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
+For existing config, set only `pairedPmThreadId` in `.claude/kit.config.json`; preserve
 other fields and read back. Plain init keeps existing config. Source tasks use reviewed scoped
-runtime setup, never init. Open approved blueprint/source; cite that read in the receipt. Hook
-checks shape, not reasoning. Prove exact-send real-tool Source, Command and Trust; apply_patch
-checker does not prove interception.
+runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
+Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.
 
 Recovery does not promote advice, create an acting architect or second PM, or block covered work.
 Without task creation or cross-session transport, a launch uses file-only equivalents for the
@@ -72,6 +70,11 @@ credentials/access changes; destructive-or-irreversible acts; money/new-spend; m
 exception except bounded T2 Principal controller completion; gate waiver; push/deploy/publication; and live/external-write GO. Review transmission is a
 frozen packet with redacted context, never publication, messaging, live data, secrets, or
 unrelated export. Principal evidence is not Owner evidence or a review verdict.
+
+Owner authorization: `core/OWNER_COMMS.md` rule 8 requires **AUTHORIZATION NEEDED**,
+concrete question, case-specific **Rule #1**, **KISS / Root cause**, **Zoom Out** bullets, and
+approve/decline/defer recommendation naming reserved boundary and actual host/budget limit.
+Links supplement; delegated work proceeds.
 
 Within recorded Owner availability policy, Principal routes a required unavailable review: no verdict
 for capacity/outage/unsupported runtime; supported full-coverage Gemini first, then fresh cold Astra.
