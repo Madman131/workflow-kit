@@ -777,8 +777,13 @@ function baseEvent(type, input, sessionId, now, policyVersion = AGGREGATE_POLICY
 function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit) {
   const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
   const world = rows && aggregateWorld(rows.aggregate, rows.standard);
-  const program = world?.programs.get(input?.task_id);
-  const pending = world?.childLineage.get(input?.task_id);
+  const legacy = input?.kind === "legacy_handoff" || input?.purpose === "legacy_handoff";
+  const taskId = legacy ? input?.parent_task_id ?? input?.task_id : input?.task_id;
+  const changesetId = legacy ? input?.parent_changeset_id ?? input?.changeset_id : input?.changeset_id;
+  const actualProgram = world?.programs.get(taskId);
+  const actualPending = world?.childLineage.get(taskId);
+  const program = actualProgram?.changeset_id === changesetId ? actualProgram : null;
+  const pending = actualPending?.changeset_id === changesetId ? actualPending : null;
   const historical = program?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION ||
     (!program && pending?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION) ||
     program?.tier === "T3" || (!program && pending?.tier === "T3");
@@ -892,17 +897,22 @@ function typedReviewMatches(review, purpose, anchor, transition) {
     review.transition_sha256 === aggregateTransitionSha256(purpose, transition);
 }
 
-function applicableDispatchReviews(state, transition) {
-  const anchor = aggregatePanelCloseAnchor(state);
-  const ordinal = nextGateOrdinal(state);
+function applicableTypedReviews(reviews, purpose, anchor, ordinal, transition) {
   // Policy 2's typed digest omitted its version; policies 3 and 4 include it. Compare the exact
   // action under each accepted older grammar, so a newer writer cannot hide an Owner hold merely
   // by hashing its prospective version. All other transition fields, anchor and ordinal stay exact.
   const versions = [ESTABLISHED_AGGREGATE_POLICY_VERSION, PRINCIPAL_AGGREGATE_POLICY_VERSION,
     AGGREGATE_POLICY_VERSION].filter((version) => version <= aggregatePolicyVersion(transition));
-  return state.process_reviews.filter((review) => review.next_gate_ordinal === ordinal &&
-    versions.some((version) => typedReviewMatches(review, "dispatch", anchor,
+  return reviews.filter((review) => review.next_gate_ordinal === ordinal &&
+    (purpose !== "legacy_handoff" || (review.task_id === transition.parent_task_id &&
+      review.changeset_id === transition.parent_changeset_id)) &&
+    versions.some((version) => typedReviewMatches(review, purpose, anchor,
       { ...transition, policy_version: version })));
+}
+
+function applicableDispatchReviews(state, transition) {
+  return applicableTypedReviews(state.process_reviews, "dispatch", aggregatePanelCloseAnchor(state),
+    nextGateOrdinal(state), transition);
 }
 
 function aggregateWorld(events, standardEvents = []) {
@@ -1473,17 +1483,18 @@ function aggregateWorld(events, standardEvents = []) {
         const required = ordinal % 4 === 0;
         const review = row.process_review_event_id === null ? null
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
-        const typed = review && typedReviewMatches(review, "child_continuation", aggregateTerminalAnchor(state), row) &&
-          review.next_gate_ordinal === ordinal && (principal ? review.ruling === "successor" : completionException
-            ? completionExceptionReviewAllows(review) : continuationReviewAllows(review));
-        const typedApplicable = state.process_reviews.find((candidate) =>
-          typedReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), row) &&
-          candidate.next_gate_ordinal === ordinal) || null;
+        const typedApplicable = applicableTypedReviews(state.process_reviews, "child_continuation",
+          aggregateTerminalAnchor(state), ordinal, row);
+        const allowed = (candidate) => principal ? candidate.ruling === "successor" : completionException
+          ? completionExceptionReviewAllows(candidate) : continuationReviewAllows(candidate);
+        const held = typedApplicable.some((candidate) => !allowed(candidate));
+        const typed = review && !held && typedApplicable.some((candidate) => candidate.event_id === review.event_id) &&
+          allowed(review);
         const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
           candidate.next_gate_ordinal === ordinal) || null;
-        const historical = !principal && !completionException && review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
+        const historical = !typedApplicable.length && !principal && !completionException && review && !typedProcessReview(review) && review.event_id === oldApplicable?.event_id &&
           continuationReviewAllows(review);
-        if (((completionException || principal || required || typedApplicable) && !typed && !historical) ||
+        if (held || ((completionException || principal || required || typedApplicable.length) && !typed && !historical) ||
             (row.process_review_event_id !== null && !typed && !historical) ||
             (!typed && !historical && oldApplicable)) continue;
       }
@@ -1601,6 +1612,7 @@ function aggregateWorld(events, standardEvents = []) {
       }
     } else if (row.kind === "legacy_handoff") {
       if (!text(row.parent_task_id, 120) || !text(row.parent_changeset_id, 120) ||
+          row.task_id !== row.parent_task_id || row.changeset_id !== row.parent_changeset_id ||
           !text(row.owner_evidence, 1000) || !aggregateChildShape(row.child) ||
           legacyHandedOff.has(row.parent_task_id) || usedTasks.has(row.child.task_id) ||
           stdTaskUsed(row.child.task_id, rowSeq) || childLineage.has(row.child.task_id) ||
@@ -1637,9 +1649,11 @@ function aggregateWorld(events, standardEvents = []) {
           : processReviews.find((candidate) => candidate.event_id === row.process_review_event_id);
         const anchor = { kind: "standard_disposition", event_id: standard.latest.event_id,
           candidate_sha: standard.latest.candidate_sha };
-        const authorized = review && typedReviewMatches(review, "legacy_handoff", anchor, row) &&
-          review.next_gate_ordinal === ordinal && continuationReviewAllows(review);
-        if ((required && !authorized) || (row.process_review_event_id !== null && !authorized)) continue;
+        const applicable = applicableTypedReviews(processReviews, "legacy_handoff", anchor, ordinal, row);
+        const authorized = review && applicable.some((candidate) => candidate.event_id === review.event_id) &&
+          continuationReviewAllows(review);
+        if (((required || applicable.length) && !authorized) ||
+            (row.process_review_event_id !== null && !authorized)) continue;
       }
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
       childLineage.set(row.child.task_id, { ...row.child, event_id: row.event_id, parent_task_id: row.parent_task_id,
@@ -2058,6 +2072,16 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
 export function recordAggregatePanelOpen(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  if (input?.tier === "T3") {
+    const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
+    const world = rows && aggregateWorld(rows.aggregate, rows.standard);
+    const program = world?.programs.get(input.task_id);
+    const pending = world?.childLineage.get(input.task_id);
+    if (!(program?.changeset_id === input.changeset_id && program.tier === "T3") &&
+        !(pending?.changeset_id === input.changeset_id && pending.tier === "T3")) {
+      return { ok: false, state: "aggregate-panel-open-malformed" };
+    }
+  }
   // The clean-candidate check brackets the evidence capture: BEFORE proves the caller stands at the
   // declared freeze when capture starts, AFTER proves nothing moved under it while it ran. The
   // evidence itself is commit-addressed (see panelGitEvidence), so the bracket closes the one
@@ -2199,6 +2223,11 @@ export function recordAggregateProcessReview(input,
   const projection = proposedTransitionProjection(purpose, reviewedProposal);
   const state = deriveAggregateRepairState(rows.aggregate, input?.task_id, { standardEvents: rows.standard });
   const standard = purpose === "legacy_handoff" ? deriveRepairState(rows.standard, input?.task_id) : null;
+  if ((purpose === "child_continuation" && state?.tier !== "T3" &&
+        reviewedProposal?.children?.some((child) => child?.tier === "T3")) ||
+      (purpose === "legacy_handoff" && reviewedProposal?.child?.tier === "T3")) {
+    return { ok: false, state: "aggregate-process-review-malformed" };
+  }
   let anchor = null, ordinal = null, contextOk = false;
   if (purpose === "dispatch" && state.ok && state.latest?.terminal_state === "CONTINUE") {
     anchor = aggregatePanelCloseAnchor(state); ordinal = nextGateOrdinal(state);
@@ -2350,14 +2379,15 @@ export function recordAggregateChildContinuation(input,
     const ordinal = nextGateOrdinal(state);
     const review = event.process_review_event_id === null ? null
       : state.process_reviews.find((candidate) => candidate.event_id === event.process_review_event_id);
-    const authorized = review && typedReviewMatches(review, "child_continuation",
-      aggregateTerminalAnchor(state), event) && review.next_gate_ordinal === ordinal &&
-      (authorityRoute === "principal" ? review.ruling === "successor" : completionException
-        ? completionExceptionReviewAllows(review) : continuationReviewAllows(review));
-    const applicable = state.process_reviews.find((candidate) =>
-      typedReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), event) &&
-      candidate.next_gate_ordinal === ordinal) || null;
-    if ((completionException || authorityRoute === "principal" || ordinal % 4 === 0 || applicable || event.process_review_event_id !== null) && !authorized) {
+    const applicable = applicableTypedReviews(state.process_reviews, "child_continuation",
+      aggregateTerminalAnchor(state), ordinal, event);
+    const allowed = (candidate) => authorityRoute === "principal" ? candidate.ruling === "successor"
+      : completionException ? completionExceptionReviewAllows(candidate) : continuationReviewAllows(candidate);
+    const held = applicable.some((candidate) => !allowed(candidate));
+    const authorized = review && !held && applicable.some((candidate) => candidate.event_id === review.event_id) &&
+      allowed(review);
+    if (held || ((completionException || authorityRoute === "principal" || ordinal % 4 === 0 || applicable.length ||
+        event.process_review_event_id !== null) && !authorized)) {
       return { ok: false, state: "aggregate-continuation-conflict" };
     }
   }
@@ -2405,7 +2435,8 @@ export function recordAggregateLegacyHandoff(input,
   const parent = deriveRepairState(rows.standard, input?.parent_task_id);
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !parent.ok || !parent.active || !parent.latest ||
-      !Array.isArray(input.authorized_paths) || !plain(input.child)) {
+      input.task_id !== input.parent_task_id || input.changeset_id !== input.parent_changeset_id ||
+      input.child?.tier !== "T2" || !Array.isArray(input.authorized_paths) || !plain(input.child)) {
     return { ok: false, state: "aggregate-legacy-handoff-malformed" };
   }
   const event = { ...base, kind: "legacy_handoff", parent_task_id: input.parent_task_id,

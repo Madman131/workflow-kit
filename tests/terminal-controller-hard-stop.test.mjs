@@ -960,6 +960,46 @@ test("historical v2 completion lineage keeps a versionless child panel inert in 
   } finally { ctx.cleanup(); }
 });
 
+test("frozen v2 typed child review binds a new v4 continuation at ordinal two", async () => {
+  for (const ruling of ["successor", "owner_decision"]) {
+    const ctx = repo();
+    try {
+    const frozen = await importFrozenV2Reader(ctx.dir);
+    const history = historicalFixture(ctx, frozen);
+    const candidate = history.stop();
+    const parent = history.state();
+    const proposal = { type: "aggregate_v2", policy_version: 2, kind: "child_continuation",
+      task_id: "task-1", changeset_id: "changeset-1",
+      parent_disposition_event_id: parent.latest.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", authority_route: "owner",
+      owner_evidence: "Owner authorizes exact child", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [{ task_id: "reviewed-child", changeset_id: "reviewed-child-cs", tier: "T2",
+        budget: "one child", authorized_paths: candidate.paths }] };
+    const review = history.review(null, null, ruling, proposal);
+    const current = { ...proposal };
+    delete current.policy_version;
+    const ledger = repairLedgerPath(ctx.dir);
+    const before = readFileSync(ledger, "utf8");
+    const denied = recordAggregateChildContinuation(current, options(ctx.dir));
+    assert.equal(denied.ok, false, "an exact v2 review must bind a new v4 child even with no citation");
+    assert.equal(readFileSync(ledger, "utf8"), before);
+    assert.equal(recordAggregateChildContinuation({ ...current,
+      children: [{ ...current.children[0], budget: "different child action" }],
+      process_review_event_id: review.event_id }, options(ctx.dir)).ok, false,
+    "a changed child action cannot cite the old exact review");
+    const cited = recordAggregateChildContinuation({ ...current,
+      process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(cited.ok, true, cited.state);
+    const accepted = aggregateRows(ctx);
+    const planted = stamped({ ...accepted.at(-1).event, process_review_event_id: null });
+    setAggregateRows(ctx, [...accepted.slice(0, -1), planted]);
+    assert.equal(derivePendingLineageBudgets(aggregateRows(ctx))
+      .some((entry) => entry.task_id === "reviewed-child"), false,
+    "a planted v4 child cannot drop an accepted v2 exact review on replay");
+    } finally { ctx.cleanup(); }
+  }
+});
+
 test("v3 Principal completion binds one reviewed batch and rejects lower-version pre-open workers", () => {
   const ctx = repo();
   try {
