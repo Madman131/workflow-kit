@@ -12,7 +12,7 @@ Doctrine:
 formatting).
 
 ## When
-For a multi-thread program with separate gates. One chip = one changeset = one version,
+For a multi-thread program with gates. One chip = one changeset = one version,
 ordered; each verifies its predecessor landed. Never let two chips write one repo.
 
 ## The roles
@@ -51,7 +51,7 @@ consult or a wait:** send it, name what you do meanwhile, and do it. Review avai
   Principal selects reconciliation or Owner decision.
 - Surface stale worktrees, use `.agents/skills/orchestrate/PROTOCOLS.md`, and route persistent-architect
   work through `core/WORKFLOW.md` § Architectural consult routing. Keep routine CHIP progress in its
-  durable record; consult only at listed triggers. Principal drives completion; PM is the single execution chain.
+  durable record; consult only at listed triggers. Principal's Quad Mandate directs completion; PM is the single execution chain.
 
 ## One writer per repo
 Before writing, a chip looks for competing writers in the repo's own **lane declarations** —

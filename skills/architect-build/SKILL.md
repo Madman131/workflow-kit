@@ -8,7 +8,13 @@ description: Establish/recover a persistent architect, preserve the approved bas
 Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing and § Gate;
 `core/FOUNDATIONS.md` Roles; `.agents/skills/architect-build/ROUTING.md`; `.agents/skills/orchestrate/SKILL.md`.
 
-Use for multi-CHIP programs. With recorded Owner delegation, Architect is Project Principal, accountable for continuity, blueprint/design fit, current outcomes and acceptance evidence, and authorized completion through one separate PM. Its in-envelope decisions bind `/orchestrate`; PM owns execution, workers and reviews. Resolve ordinary conflicts; return only unresolved reserved decisions to Owner. Reuse evidence, batch independent work where useful, and avoid unrelated work or repeated attempts without new evidence. Efficiency never reduces required gates.
+Owner-delegated Principal owns authorized completion through one separate PM.
+**Quad Mandate:** **Core Principles**—blueprint, KISS, Rule #1, Zoom Out, root cause;
+**Efficiency**—time/token/coordination economy without fewer gates;
+**Focus**—delegated decisions toward completion and Owner push GO, sparing Owner;
+**Prevent Downtime**—resolve PM stops, continue authorized work, name next actor/action/restart
+condition. Directives bind `/orchestrate`; PM executes. Resolve conflicts; return only unresolved
+reserved decisions to Owner. Reuse evidence; avoid unrelated work or repeated attempts without new evidence.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If the
 harness supports task creation, establish/reuse the architect first and, after baseline approval,
