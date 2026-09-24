@@ -1082,8 +1082,6 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**"]) {
       assert.ok(rule8[0].includes(lead), `rule 8 names the ${lead} lead verbatim — the label IS the rule`);
     }
-    assert.doesNotMatch(rule8[0], /\{\{OWNER_NAME\}\}/,
-      "the generated rule 8 has no unexpanded Owner placeholder");
 
     // ---- rule 9 (v2.6.0): brevity and structure as a STANDING default, not a permission.
     // WHY EACH PIN IS THE SENTENCE AND NOT A WORD: "bullet", "table" and "structure" all occur
@@ -1119,8 +1117,8 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
       "…and says where the judgment actually lives");
     // Rule 9 no longer NAMES the Owner: the clause that did ("Keep what {{OWNER_NAME}} must know or
     // act on now") duplicated rule 1 and was cut by the subtractive leg. The name-substitution
-    // property is still pinned on rule 8 above. What is pinned HERE is the stronger and still-live
-    // property: whatever placeholders rule 9 does or does not use, none may reach an adopter
+    // property is positively pinned in the preamble assertion above. What is pinned HERE is that
+    // whatever placeholders rule 9 does or does not use, none may reach an adopter
     // unsubstituted — a rule shipping "{{OWNER_NAME}}" addresses nobody.
     assert.ok(!rule9flat.includes("{{"),
       "rule 9 carries no unsubstituted {{placeholder}} in the generated contract");
@@ -1171,8 +1169,10 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
       "the contract states that it binds chat replies, and states it BEFORE rule 1");
 
     assert.doesNotMatch(doc, /^10\. /m, "the rules stop at 9 — a duplicate would renumber silently");
-    // The labels alone are not the rule: a version that kept the three strings and dropped the SHAPE
-    // requirement would satisfy every assertion above while permitting exactly what rule 8 forbids.
+    // The labels alone are not the rule. Pin both the nonauthorization bullet shape and the
+    // authorization block order so neither can disappear while the labels remain.
+    assert.match(rule8[0], /bold, standalone bulleted line led by/,
+      "other questions and decisions still require a bold standalone bullet");
     assert.match(rule8[0], /\*\*AUTHORIZATION NEEDED\*\*[\s\S]*?\*\*Rule #1:\*\*[\s\S]*?\*\*KISS \/ Root cause:\*\*[\s\S]*?\*\*Zoom Out:\*\*[\s\S]*?\*\*My recommendation:/,
       "rule 8 states the authorization request shape, not only the labels");
 

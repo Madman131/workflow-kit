@@ -651,6 +651,27 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
     writeFileSync(laneFile, JSON.stringify(lane));
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/,
       "a normal task-lane refresh retains the durable pair and still demands a sidecar");
+    const holdPrompt = "Hold chip pending Owner scope approval.";
+    const portable = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8");
+    const exampleMatch = /Minimal `architectScreen`[\s\S]*?```json\n([\s\S]*?)\n```/.exec(portable);
+    assert.ok(exampleMatch, "producer reference includes literal screen JSON");
+    const holdScreen = JSON.parse(exampleMatch[1]);
+    setSidecar({ nonce: "hold-1", architectScreen: { ...holdScreen, action: {
+      ...holdScreen.action, evaluation: { ...holdScreen.action.evaluation, observedEvidence: "" },
+    } } });
+    const incompleteScreen = run(payload("pm-thread", holdPrompt)).stdout;
+    assert.match(incompleteScreen, /"permissionDecision":"deny"/, "malformed published shape denies");
+    assert.match(incompleteScreen, /PORTABILITY\.md.*minimal/, "deny points to exact JSON shape");
+    setSidecar({ nonce: "hold-1", class: "status", dispatch_kind: "status", architectScreen: holdScreen });
+    const statusConflict = run(payload("pm-thread", holdPrompt)).stdout;
+    assert.match(statusConflict, /"permissionDecision":"deny"/, "screened escalation cannot use status class");
+    assert.match(statusConflict, /Keep the decision screen.*screened non-status direction/,
+      "denial preserves the high-value escalation screen");
+    setSidecar({ nonce: "hold-1", architectScreen: holdScreen });
+    assert.equal(run(payload("pm-thread", holdPrompt)).stdout, "", "published screened hold passes as direction");
+    const holdRows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map(JSON.parse).filter((row) => row.control === "brief-rung");
+    assert.deepEqual(holdRows.at(-1).architectScreen, holdScreen, "hold direction retains its decision screen in audit");
     assert.equal(run(payload("another-thread")).stdout, "", "an unrelated Codex send stays outside the paired guard");
     assert.match(run(payload("pm-thread", architectPrompt, { model: "gpt-6-astra" })).stdout, /quietly change the PM's model/,
       "a paired send cannot quietly change its model");

@@ -15,11 +15,11 @@ Owner-delegated Principal owns authorized completion through one separate PM.
 **Prevent Downtime**—resolve PM stops, continue authorized work, name next actor/action/restart
 condition. Directives bind `/orchestrate`; PM executes. Resolve conflicts; return only unresolved
 reserved decisions to Owner. Reuse evidence; avoid unrelated work or repeated attempts without new evidence.
-Evaluate options; decide route; record screen; dispatch accordingly. Proceed/simplify directs covered PM work; defer/stop holds dependent action; escalate asks Owner, permitting only PM hold/status.
+Evaluate options; decide route; record screen; dispatch accordingly. Proceed/simplify directs covered PM work; defer/stop holds dependent action; escalate asks Owner; PM hold is screened non-status direction.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If task creation is supported, establish/reuse architect first; after baseline approval,
-create/connect separate PM; record both locators. File-only launch emits the handoff. Without launch, preserve planning continuity only. Existing authorized execution
-does not need a renewed launch. Never duplicate architect or PM.
+create/connect separate PM; record both locators. File-only launch hands off. Without launch, preserve planning continuity only. Existing authorized execution
+does not need a renewed launch. Never duplicate either role.
 
 ## Establish, reuse, or recover
 

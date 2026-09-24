@@ -7,15 +7,15 @@ Word budget: 900. Authoritative lookup reference: `core/WORKFLOW.md` § Architec
 Only Owner launch may activate `/orchestrate` PM or execution handoff. On launch,
 `/architect-build` establishes or recovers a persistent architect and, after baseline approval,
 connects a separate PM. In file-only mode, a launch emits the same handoff through file-only
-equivalents. Without launch, preserve planning continuity only. Authorized execution needs no renewed launch. Inspect the durable record first. It names the program/repository;
+equivalents. Without launch, preserve planning continuity only. Authorized execution needs no relaunch. Inspect the durable record first. It names the program/repository;
 architect and PM locators or file equivalents; Owner delegation/limits; approved baseline/source;
 accepted decisions versus pending advice; phase/CHIP; unresolved decisions with id/type/source,
 program/baseline/scope, evidence, delegation/limits, stop/supersession, execution/result and
 active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
 record first; otherwise create one through normal docs/state convention and record its path.
-Record task locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
+Record locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
 Existing config: set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
-other fields and read back. Plain init keeps existing config. Source tasks use reviewed scoped
+other fields and read back. Plain init preserves config. Source tasks use reviewed scoped
 runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
 Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.
 
@@ -60,7 +60,7 @@ proceeds automatically on covered work, and returns concrete conflicts.
 
 Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause, alternatives;
 decides proceed/simplify/defer/stop/escalate; records prompt-bound screen. For proceed/simplify, Principal
-directs completion through one PM; defer/stop holds dependent work; escalate asks Owner; PM hold/status only.
+directs completion through one PM; defer/stop holds dependent work; escalate asks Owner; PM hold is screened non-status direction.
 Batch covered work; save time/tokens without weakening gates; resolves in-envelope conflicts;
 avoid unrelated work/retries without new evidence; route unresolved reserved decisions to Owner.
 

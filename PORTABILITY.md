@@ -369,10 +369,11 @@ HARM/REAL/SCOPE/WORTH IT result. Compare at least two distinct routes with trade
 `proceed`, `simplify`, `defer`, `stop`, or `escalate`; state the choice reason and, for escalation,
 the actual Owner-reserved boundary. Record the evaluation and choice before dispatch. Proceed/simplify
 may direct approved PM execution; defer/stop holds dependent work; escalate routes the reserved question
-to Owner and authorizes only a PM hold/status direction. The hook checks shape and prompt binding,
-not whether the direction matches the choice. A declared
-status to that target must start with the literal `ARCHITECT_STATUS_V1` line; the marker remains the
-sender's self-report, not proof of the message's meaning. Paired sends carrying `model` or
+to Owner. Any PM hold for that decision is a screened, non-status direction retaining `architectScreen`.
+The `ARCHITECT_STATUS_V1` status class is informational and cannot carry a decision screen. The hook checks
+shape and prompt binding, not whether the direction matches the choice. Declared status to that target
+must start with the literal `ARCHITECT_STATUS_V1` line; the marker is a sender self-report, not proof
+of the message's meaning. Paired sends carrying `model` or
 `thinking` overrides deny. During an active aggregate repair, an explicit `architect-direction`
 receipt permits screened Architect-to-PM direction only; it grants no worker dispatch or source-write
 authority. Ordinary task-lane refresh leaves the checkout pair intact, and `init --force` refuses
@@ -380,6 +381,32 @@ to drop it unless its flag is supplied. `check-codex-hooks-armed.mjs` proves the
 registration only. Generated registration and local command tests do not prove actual Codex task
 interception or hook trust; separately verify the exact send's Source, Command and Trust in the
 intended task before relying on this guard.
+
+Minimal `architectScreen` for the exact prompt `Hold chip pending Owner scope approval.` (the digest
+binds those bytes; other brief-rung sidecar fields and executed checks are still required):
+
+```json
+{
+  "promptSha256": "0423e1957a836676118d740c633f551844b88573b230be49efadc91e7fe30012",
+  "action": {
+    "approvedOutcome": "Hold the approved chip", "blueprintAlignment": "No new scope proceeds",
+    "smallestAction": "Tell PM to hold", "kiss": "Use the existing direction",
+    "zoomOut": "Avoid unapproved work", "rootCause": "Requested scope exceeds baseline",
+    "cost": "One Owner decision",
+    "evaluation": { "observedEvidence": "Scope request conflicts with approved baseline",
+      "noAction": "PM might continue unapproved work" },
+    "alternatives": [
+      { "route": "escalate", "tradeoff": "Wait for Owner scope decision" },
+      { "route": "defer", "tradeoff": "Delay without a scope decision" }
+    ],
+    "choice": "escalate", "choiceReason": "Scope change is Owner-reserved",
+    "reservedBoundary": "Material scope change"
+  },
+  "findings": []
+}
+```
+`action.reservedBoundary` is required when `choice` is `escalate`; `findings` may be empty only
+when no finding is being screened. A status declaration cannot carry this screen.
 
 **The Codex review seat — a v2.0 disclosure this release CORRECTS.** v2.0 recorded, against its own
 artifact, that a repo-level `.codex/agents/` was "*not* something this work verified as a discovery
