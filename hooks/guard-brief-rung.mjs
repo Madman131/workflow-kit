@@ -209,6 +209,7 @@ const ARCHITECT_STATUS_MARKER = "ARCHITECT_STATUS_V1\n";
 const MAX_SCREEN_BYTES = 3072;
 const SCREEN_STEPS = ["harm", "real", "scope", "worthIt"];
 const ACTION_FIELDS = ["approvedOutcome", "blueprintAlignment", "smallestAction", "kiss", "zoomOut", "rootCause", "cost"];
+const ACTION_CHOICES = new Set(["proceed", "simplify", "defer", "stop", "escalate"]);
 
 /** A shape check on one current decision screen; evidence quality remains the Architect's judgment. */
 export function architectScreenState(screen, prompt) {
@@ -225,6 +226,23 @@ export function architectScreenState(screen, prompt) {
   if (!isPlainObject(screen.action) || ACTION_FIELDS.some((field) => !nonempty(screen.action[field]))) {
     return { state: "architect-screen-incomplete" };
   }
+  const { evaluation, alternatives, choice, choiceReason, reservedBoundary } = screen.action;
+  if (!isPlainObject(evaluation) || !nonempty(evaluation.observedEvidence) ||
+      !nonempty(evaluation.noAction) || !Array.isArray(alternatives) ||
+      alternatives.length < 2 || alternatives.length > ACTION_CHOICES.size ||
+      !ACTION_CHOICES.has(choice) || !nonempty(choiceReason) ||
+      (choice === "escalate" && !nonempty(reservedBoundary))) {
+    return { state: "architect-screen-incomplete" };
+  }
+  const routes = new Set();
+  for (const alternative of alternatives) {
+    if (!isPlainObject(alternative) || !ACTION_CHOICES.has(alternative.route) ||
+        routes.has(alternative.route) || !nonempty(alternative.tradeoff)) {
+      return { state: "architect-screen-incomplete" };
+    }
+    routes.add(alternative.route);
+  }
+  if (!routes.has(choice)) return { state: "architect-screen-incomplete" };
   if (!Array.isArray(screen.findings) || screen.findings.length > 32) return { state: "architect-screen-incomplete" };
   const ids = new Set();
   for (const finding of screen.findings) {
@@ -531,8 +549,8 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "architect-pair-malformed": `${KIT_CONFIG} has a malformed configured pair or cannot be read; \`pairedPmThreadId\` must name one non-empty PM thread id without whitespace. Repair this config in place: restore the intended \`pairedPmThreadId\`, preserve other valid fields, and read it back before a Codex thread send. Removing the config or this key would disable the pair guard.`,
     "architect-send-override": `this paired Architect-to-PM send carries \`model\` or \`thinking\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
     "architect-prompt-missing": `the covered Codex send has no readable string \`tool_input.prompt\`, so its decision screen cannot bind the exact message bytes.`,
-    "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Record approved-outcome and blueprint alignment, smallest action, KISS, zoom-out, root cause and cost, then screen each finding HARM → REAL → SCOPE → WORTH IT with the first failed trigger. A decision with no findings still owes the action screen.`,
-    "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: action fields, prompt digest, and each finding's ordered first-exit evidence/disposition must be present; a screened-out finding needs its actual failed trigger and no filler downstream answers. This checks record shape, not judgment quality.`,
+    "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Evaluate observed evidence, no-action consequence, approved outcome, blueprint, KISS, zoom-out, root cause and cost; compare at least two routes, choose proceed/simplify/defer/stop/escalate, and state why (plus the reserved boundary for escalation). Then screen each finding HARM → REAL → SCOPE → WORTH IT with its first failed trigger. A decision with no findings still owes the action screen.`,
+    "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: observed evidence and no-action consequence, compared alternatives with tradeoffs, selected choice/reason, reserved boundary for escalation, prompt digest, and each finding's ordered first-exit evidence/disposition must be present. A screened-out finding needs its actual failed trigger and no filler downstream answers. This checks record shape, not judgment quality.`,
     "architect-screen-too-large": `${SIDECAR}'s Architect screen exceeds ${MAX_SCREEN_BYTES} UTF-8 bytes. Keep the current decision screen concise so its existing audit row remains a small single append.`,
     "architect-prompt-mismatch": `${SIDECAR}'s Architect screen does not name the SHA-256 of this exact prompt. Re-screen the message bytes being sent; one decision record cannot silently authorize a changed direction.`,
     "architect-status-conflict": `${SIDECAR} carries an Architect decision screen while declaring this send status. A direction cannot use the status class; status without a direction screen remains a self-reported, audited declaration.`,

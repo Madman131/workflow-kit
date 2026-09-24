@@ -15,6 +15,7 @@ Owner-delegated Principal owns authorized completion through one separate PM.
 **Prevent Downtime**—resolve PM stops, continue authorized work, name next actor/action/restart
 condition. Directives bind `/orchestrate`; PM executes. Resolve conflicts; return only unresolved
 reserved decisions to Owner. Reuse evidence; avoid unrelated work or repeated attempts without new evidence.
+Evaluate alternatives; decide proceed/simplify/defer/stop/escalate; record the prompt-bound screen; dispatch.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If the
 harness supports task creation, establish/reuse the architect first and, after baseline approval,
@@ -24,8 +25,8 @@ does not need a renewed launch. Never duplicate an established architect or PM.
 
 ## Establish, reuse, or recover
 
-Locate an architecture/current-state record supporting required fields. Otherwise create one
-under repository docs/state conventions; record its exact path. Include
+Locate the architecture/current-state record; otherwise create one under repository docs/state
+conventions and record its path. Include
 the program/repository, architect and active-PM locator (or file-only equivalents), approved
 baseline/source pointers, Owner delegation/limits, decisions with id/type/source/scope/evidence/limits/status,
 pending or superseded advice kept distinct, current phase/CHIP, unresolved decisions, last alignment check,
@@ -41,13 +42,12 @@ and reconciliation owed.
   acting architect or second PM, or promote advice. Continue covered work and hold only the dependent decision;
   a current in-scope directive survives ordinary commits, while pending/superseded advice grants nothing.
 
-The handoff gives PM baseline, record/location, Principal locator, delegation/limits, phase/CHIP, open
-decisions, and next milestone. It does not authorize new scope, push, deployment, or live write.
+Handoff gives PM baseline, record/location, Principal locator, delegation/limits, phase/CHIP, open
+decisions and milestone. It does not authorize new scope, push, deployment, or live write.
 
 ## Quiet continuity
 
-The PM records routine CHIP progress, dispositions, outcomes, and evidence in the durable record without
-contacting the architect. Consult only at program inception/baseline, terminal STOP, a material pivot,
+PM records CHIP progress, dispositions, outcomes and evidence durably without contacting the architect. Consult only at program inception/baseline, terminal STOP, a material pivot,
 foundation/ownership/authority or major sequencing change, a meaningful milestone or planned phase
 boundary, a due five-active-workday alignment review, or an unresolved in-envelope program decision or
 concrete PM authority, safety, or evidence conflict requiring Principal direction. Every persistent packet carries, or explicitly

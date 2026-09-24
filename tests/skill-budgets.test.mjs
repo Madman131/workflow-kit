@@ -569,7 +569,7 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
     // instruction matters. The stamp matters on its own: the release note tells an adopter that a
     // plain re-run leaves the doc reading v2.1.0, which is the symptom they would notice.
     writeFileSync(doc, readFileSync(doc, "utf8")
-      .replace(/^8\. \*\*Questions and recommendations never blend in\.\*\*[\s\S]*?(?=\n\n)/m, "")
+      .replace(/^8\. \*\*Questions and recommendations never blend in\.\*\*[\s\S]*?(?=^9\. )/m, "")
       // Version-AGNOSTIC rollback. This once named the then-current stamp literally, so the very
       // next release turned the replace into a no-op — and the guard below caught it, which is the
       // only reason this rewrite is a fix rather than a discovery. Match whatever stamp init just

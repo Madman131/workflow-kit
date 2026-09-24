@@ -4,24 +4,23 @@ Word budget: 900. Authoritative lookup reference: `core/WORKFLOW.md` § Architec
 
 ## Lifecycle
 
-Only an Owner launch may activate a `/orchestrate` PM or execution handoff. On launch,
+Only Owner launch may activate `/orchestrate` PM or execution handoff. On launch,
 `/architect-build` establishes or recovers a persistent architect and, after baseline approval,
-connects a separate PM; file-only mode uses file equivalents. Without launch, preserve planning continuity.
-Existing authorized execution needs no renewed launch. Inspect the durable record first. It names the program/repository;
+connects a separate PM. In file-only mode, a launch emits the same handoff through file-only
+equivalents. Without launch, preserve planning continuity only. Authorized execution needs no renewed launch. Inspect the durable record first. It names the program/repository;
 architect and PM locators or file equivalents; Owner delegation/limits; approved baseline/source;
 accepted decisions versus pending advice; phase/CHIP; unresolved decisions with id/type/source,
 program/baseline/scope, evidence, delegation/limits, stop/supersession, execution/result and
 active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
 record first; otherwise create one through normal docs/state convention and record its path.
-Record both task locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
-For existing config, set only `pairedPmThreadId` in `.claude/kit.config.json`; preserve
+Record task locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
+Existing config: set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
 other fields and read back. Plain init keeps existing config. Source tasks use reviewed scoped
 runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
 Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.
 
 Recovery does not promote advice, create an acting architect or second PM, or block covered work.
-Without task creation or cross-session transport, a launch uses file-only equivalents for the
-approved-baseline handoff.
+Without task creation or cross-session transport, launch uses file-only equivalents.
 
 ## Continuity
 
@@ -30,8 +29,8 @@ inception/baseline, terminal STOP, material pivot, foundation/ownership/authorit
 change, meaningful milestone or planned phase boundary, first safe checkpoint after five active workdays
 since alignment review, or an unresolved in-envelope program decision or concrete PM authority, safety, or evidence conflict requiring Principal direction.
 Material changes accepted outcomes, acceptance criteria, foundation, ownership, dependency order,
-authority or budget. No routine polling/status messages or repeated review of one unresolved decision.
-Never suppress due alignment review; coalesce it with another qualifying checkpoint.
+authority or budget. No routine polling/status or repeated unresolved-decision review.
+Never suppress due alignment review; coalesce with a qualifying checkpoint.
 
 ## Packets and consults
 
@@ -60,10 +59,10 @@ baseline, access, risk and budget. Examples—never an allowlist—include direc
 model/seat choice, tier/wording and approved-provider routing. PM is sole execution chain,
 proceeds automatically on covered work, and returns concrete conflicts.
 
-Within recorded delegation, Principal maintains the approved blueprint, outcomes and acceptance evidence;
-directs completion through one PM; avoids unrelated work and repeated attempts without new evidence;
-batches independent authorized work; saves time/tokens without weakening gates; resolves in-envelope
-conflicts; routes only unresolved reserved decisions to Owner.
+Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause and alternatives;
+decides proceed/simplify/defer/stop/escalate; records the prompt-bound screen; then directs completion through one PM.
+Batch covered work; save time/tokens without weakening gates; resolves in-envelope conflicts;
+avoid unrelated work/retries without new evidence; route unresolved reserved decisions to Owner.
 
 Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;
 credentials/access changes; destructive-or-irreversible acts; money/new-spend; max/ultra, second frontier firing/cap increases; terminal

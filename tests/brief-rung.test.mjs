@@ -78,6 +78,16 @@ const architectScreen = (over = {}) => ({
     zoomOut: "This is still the shortest path to the release outcome.",
     rootCause: "The current dispatch lacks a checked screening record.",
     cost: "One bounded edit and its existing review gate.",
+    evaluation: {
+      observedEvidence: "The approved chip and current gate receipt identify this bounded step.",
+      noAction: "The approved result remains delayed while the PM waits.",
+    },
+    alternatives: [
+      { route: "proceed", tradeoff: "Finish the bounded chip with its existing gate." },
+      { route: "defer", tradeoff: "Avoid work now but delay the approved result." },
+    ],
+    choice: "proceed",
+    choiceReason: "The bounded step preserves the approved outcome and passes its existing gate.",
   },
   findings: [],
   ...over,
@@ -213,6 +223,34 @@ test("an Architect direction owes a prompt-bound action screen even when there a
     "architect-prompt-mismatch");
   assert.equal(state({ ...base, architectScreen: architectScreen({ action: { ...architectScreen().action, kiss: "" } }) },
     { dispatch }), "architect-screen-incomplete");
+  const action = architectScreen().action;
+  for (const invalid of [
+    { evaluation: undefined }, { evaluation: { observedEvidence: "x" } },
+    { evaluation: { observedEvidence: "", noAction: "delay" } },
+    { evaluation: { observedEvidence: "receipt", noAction: "" } },
+    { alternatives: undefined }, { alternatives: [] },
+    { alternatives: [action.alternatives[0]] },
+    { alternatives: [action.alternatives[0], action.alternatives[0]] },
+    { alternatives: [{ route: "proceed", tradeoff: "" }, action.alternatives[1]] },
+    { choice: "approve" }, { choice: "stop" }, { choiceReason: "" },
+  ]) {
+    assert.equal(state({ ...base, architectScreen: architectScreen({ action: { ...action, ...invalid } }) },
+      { dispatch }), "architect-screen-incomplete", JSON.stringify(invalid));
+  }
+  for (const choice of ["proceed", "simplify", "defer", "stop", "escalate"]) {
+    assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
+      ...action, choice, reservedBoundary: choice === "escalate" ? "New scope requires Owner approval." : undefined,
+      alternatives: [
+        { route: choice, tradeoff: "Named consequence of this route." },
+        { route: choice === "proceed" ? "defer" : "proceed", tradeoff: "Compared consequence of the other route." },
+      ],
+    } }) }, { dispatch }), "receipted", choice);
+  }
+  assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
+    ...action, choice: "escalate", alternatives: [
+      { route: "escalate", tradeoff: "Wait for Owner's reserved decision." }, action.alternatives[0],
+    ],
+  } }) }, { dispatch }), "architect-screen-incomplete", "escalation owes its actual reserved boundary");
   assert.equal(state({ ...base, architectScreen: architectScreen() }, { dispatch }), "receipted");
   assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
     ...architectScreen().action, approvedOutcome: "x".repeat(4000),

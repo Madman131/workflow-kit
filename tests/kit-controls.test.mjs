@@ -1077,12 +1077,13 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     // the shipped file, so an unflattened pin would be pinning typography and would go red on a
     // reflow that changed no rule. (Same reasoning as tests/gating-doctrine.test.mjs's `read`.)
     const flat = doc.replace(/\s+/g, " ");
-    const rule8 = /^8\. \*\*Questions and recommendations never blend in\.\*\*([\s\S]*?)(?=\n\n)/m.exec(doc);
+    const rule8 = /^8\. \*\*Questions and recommendations never blend in\.\*\*([\s\S]*?)(?=^9\. )/m.exec(doc);
     assert.ok(rule8, "the generated contract carries rule 8");
     for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**"]) {
       assert.ok(rule8[0].includes(lead), `rule 8 names the ${lead} lead verbatim — the label IS the rule`);
     }
-    assert.ok(rule8[0].includes("Alex"), "the Owner's real name reached rule 8; a rule addressed to {{OWNER_NAME}} names nobody");
+    assert.doesNotMatch(rule8[0], /\{\{OWNER_NAME\}\}/,
+      "the generated rule 8 has no unexpanded Owner placeholder");
 
     // ---- rule 9 (v2.6.0): brevity and structure as a STANDING default, not a permission.
     // WHY EACH PIN IS THE SENTENCE AND NOT A WORD: "bullet", "table" and "structure" all occur
@@ -1172,8 +1173,8 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     assert.doesNotMatch(doc, /^10\. /m, "the rules stop at 9 — a duplicate would renumber silently");
     // The labels alone are not the rule: a version that kept the three strings and dropped the SHAPE
     // requirement would satisfy every assertion above while permitting exactly what rule 8 forbids.
-    assert.match(rule8[0], /bolded, on its own bulleted line, with\s+a labeled lead/,
-      "rule 8 still states the SHAPE it requires, not only the labels");
+    assert.match(rule8[0], /\*\*AUTHORIZATION NEEDED\*\*[\s\S]*?\*\*Rule #1:\*\*[\s\S]*?\*\*KISS \/ Root cause:\*\*[\s\S]*?\*\*Zoom Out:\*\*[\s\S]*?\*\*My recommendation:/,
+      "rule 8 states the authorization request shape, not only the labels");
 
     // The count sweep, made mechanical on the GENERATED side: the claim in the release note is that
     // no artifact an adopter receives states a rule TOTAL, so a later edit that reintroduces one

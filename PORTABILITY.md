@@ -363,8 +363,12 @@ uses the shared `apply_patch` envelope grammar. For the exact Codex app tool
 `.claude/kit.config.json` selects one PM `threadId`; without that field, Codex sends are
 outside this Architect-pair scope. A material send to that target owes the existing fresh,
 session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
-prompt bytes. The screen records approved-outcome/blueprint alignment, smallest action, KISS,
-zoom-out, root cause/cost and each finding's first-exit HARM/REAL/SCOPE/WORTH IT result. A declared
+prompt bytes. The Architect evaluates observed evidence, the no-action consequence, approved-outcome/blueprint
+alignment, smallest action, KISS, zoom-out, root cause/cost and each finding's first-exit
+HARM/REAL/SCOPE/WORTH IT result. Compare at least two distinct routes with tradeoffs; choose
+`proceed`, `simplify`, `defer`, `stop`, or `escalate`; state the choice reason and, for escalation,
+the actual Owner-reserved boundary. Record the evaluation and choice before dispatch. The hook checks their
+shape and the prompt binding, not whether the reasoning is sound. A declared
 status to that target must start with the literal `ARCHITECT_STATUS_V1` line; the marker remains the
 sender's self-report, not proof of the message's meaning. Paired sends carrying `model` or
 `thinking` overrides deny. During an active aggregate repair, an explicit `architect-direction`
