@@ -1070,7 +1070,11 @@ function aggregateWorld(events, standardEvents = []) {
   const accept = (row) => {
     accepted.set(row.event_id, row);
     const program = programs.get(row.task_id);
-    if (program) program.policy_version = Math.max(program.policy_version, aggregatePolicyVersion(row));
+    // A legacy handoff's outer IDs may name an unrelated historical aggregate program.
+    // Its policy belongs to the handoff child, never to that outer program.
+    if (program && row.kind !== "legacy_handoff") {
+      program.policy_version = Math.max(program.policy_version, aggregatePolicyVersion(row));
+    }
     return row;
   };
 
