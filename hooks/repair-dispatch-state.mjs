@@ -3137,22 +3137,28 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
       return { ok: false, state: "repair-stopped-path-reserved", owner_task_ids: stoppedOwners };
     }
   }
-  // Active owners omit two real, temporary reservations: a declared child before its first
-  // panel and a first panel before disposition. Check by TARGET, not the caller's task label;
-  // otherwise a relabeled or missing-task write falls through when the parent ended GO.
+  // A pending child reserves its declared budget. Once a panel opens, its winning
+  // undisposed freeze reserves the reviewed paths in EVERY round, including after
+  // panel_close but before disposition. The prior worker's dispatch does not permit
+  // writes to that frozen surface, even when it owns an active repair path.
   const pendingOwners = [...completionWorld.childLineage.values()].filter((lineage) =>
     !completionWorld.programs.has(lineage.task_id) && lineage.authorized_paths.includes(target));
-  const firstPanelOwners = [...completionWorld.programs.values()].filter((program) =>
-    !program.latest && !program.terminal && program.panels_open.length > 0 &&
-    (completionWorld.childLineage.get(program.task_id)?.authorized_paths ??
-      program.panels_open.at(-1).changed_paths).includes(target));
-  const reserved = [...pendingOwners, ...firstPanelOwners];
+  const panelOwners = [...completionWorld.programs.values()].filter((program) => {
+    if (program.terminal) return false;
+    const open = program.panels_open.at(-1);
+    if (!open || program.dispositions.some((disposition) => disposition.round === open.round)) return false;
+    const paths = !program.latest
+      ? (completionWorld.childLineage.get(program.task_id)?.authorized_paths ?? open.changed_paths)
+      : open.changed_paths;
+    return paths.includes(target);
+  });
+  const reserved = [...pendingOwners, ...panelOwners];
   if (reserved.length > 1) return { ok: false, state: "repair-worker-path-owner-conflict",
     owner_task_ids: reserved.map((entry) => entry.task_id) };
   if (reserved.length && reserved[0].task_id !== taskId) {
     return { ok: false, state: "repair-task-relabel-path-owned", owner_task_id: reserved[0].task_id };
   }
-  if (firstPanelOwners.length) return { ok: false, state: "repair-worker-verification-missing" };
+  if (panelOwners.length) return { ok: false, state: "repair-worker-verification-missing" };
   if (!text(taskId, 120)) return { ok: true, state: "not-repair-write" };
   // RESOLVE THE ACTIVE AGGREGATE PROGRAM BY TASK FIRST. Ownership above is derived BY TARGET, so a
   // task whose active program authorizes only OTHER paths finds no owner here — and falling

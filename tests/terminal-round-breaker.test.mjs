@@ -3721,6 +3721,72 @@ test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS,
 
 // ── batch 4 · the accepted findings the shipped code now carries ─────────────────────────────────
 
+test("undisposed later-round panel reserves widened and previously owned paths until disposition", () => {
+  const ctx = repo();
+  try {
+    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
+    const r1 = commit(ctx.dir, 1);
+    assert.deepEqual(r1.paths, ["src/x.mjs", "src/y.mjs"]);
+    const first = openPanel(ctx, 1, r1);
+    assert.equal(first.opened.ok, true, first.opened.state);
+    const closed1 = closePanel(ctx, first, r1, ["F1"]);
+    assert.equal(closed1.ok, true, closed1.state);
+    const decided1 = decide(ctx, closed1, { accepted: ["F1"], authorized_paths: ["src/x.mjs"] });
+    assert.equal(decided1.ok, true, decided1.state);
+    const authority = dispatchBatch(ctx, decided1.event_id, closed1.event_id, 2);
+
+    // The worker repairs only x. The pinned base makes x+y the next panel's reviewed surface;
+    // y is outside the prior dispatch, while x still has a valid prior worker admission.
+    writeFileSync(path.join(ctx.dir, "src", "x.mjs"), "export const x = 2;\n");
+    execFileSync("git", ["add", "src/x.mjs"], { cwd: ctx.dir });
+    execFileSync("git", ["commit", "-qm", "repair-x"], { cwd: ctx.dir });
+    const r2 = {
+      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      paths: ["src/x.mjs", "src/y.mjs"],
+    };
+    const second = openPanel(ctx, 2, r2, { incoming: authority });
+    assert.equal(second.opened.ok, true, second.opened.state);
+    assert.deepEqual(derive(ctx).panels_open.at(-1).changed_paths, r2.paths);
+    const check = (task, session, target) => verifyRepairWorkerWrite({
+      task_id: task, session_id: session, target }, { projectRoot: ctx.dir });
+    const held = () => {
+      assert.equal(check("intruder", "intruder", "src/y.mjs").ok, false,
+        "a relabeled task cannot write the widened reviewed path");
+      assert.equal(check(undefined, "intruder", "src/y.mjs").ok, false,
+        "a missing task cannot fall through on the widened reviewed path");
+      assert.equal(check("task-1", "worker-2", "src/y.mjs").ok, false,
+        "the prior dispatch never authorized y");
+      assert.equal(check("task-1", "worker-2", "src/x.mjs").ok, false,
+        "the prior x worker cannot mutate the frozen panel");
+      assert.equal(check("intruder", "intruder", "src/x.mjs").ok, false);
+    };
+    held();
+    const closed2 = closePanel(ctx, second, r2, ["F2"]);
+    assert.equal(closed2.ok, true, closed2.state);
+    held(); // collected but not yet dispositioned is still frozen
+
+    const decided2 = decide(ctx, closed2, { accepted: ["F2"],
+      remediation_kind: "root_replacement", authorized_paths: ["src/x.mjs"] });
+    assert.equal(decided2.ok, true, decided2.state);
+    assert.equal(check("task-1", "worker-2", "src/x.mjs").ok, false,
+      "old worker admission does not survive the new disposition");
+    const exit = recordAggregateRootExit({
+      type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "cs-1",
+      disposition_event_id: decided2.event_id, shared_mechanism: "one shared root",
+      symptom_explanation: "earlier fixes were symptoms", owner_state_yield_seams: ["state seam"],
+      replacement: "one replacement", removed_workarounds: ["the cycle"],
+      trigger_matrix: ["later panel freeze"], closure_evidence: "the replacement closes the trigger",
+    }, options(ctx.dir));
+    assert.equal(exit.ok, true, exit.state);
+    dispatchBatch(ctx, decided2.event_id, closed2.event_id, 3, exit.event_id);
+    assert.equal(check("task-1", "worker-3", "src/x.mjs").state,
+      "repair-worker-write-authorized", "a fresh post-disposition dispatch restores x authority");
+    assert.equal(check("task-1", "worker-3", "src/y.mjs").ok, false,
+      "the fresh dispatch does not widen authority to y");
+  } finally { ctx.cleanup(); }
+});
+
 test("M48: THE CROSS-ROUND BASE PIN — every later round re-derives from ROUND 1's base, and a refreeze may not move it", async () => {
   const ctx = repo();
   const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
