@@ -2675,6 +2675,72 @@ function sideCandidate(ctx, branch, files) {
   };
 }
 
+test("GO-parent child reserves its path before verification and through its undisposed first panel", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const close = closePanel(ctx, panel, candidate);
+    const go = decide(ctx, close, { terminal_state: "GO", remediation_kind: null,
+      authorized_paths: [] });
+    assert.equal(go.ok, true, go.state);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs", "go-child.md"), "Owner child\n");
+    const continuation = recordAggregateChildContinuation({
+      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
+      parent_disposition_event_id: go.event_id, trigger_ids: [], continuation_kind: "new_changeset",
+      owner_evidence: "Owner GO successor", children: [{ task_id: "go-child", changeset_id: "go-child-cs",
+        tier: "T2", budget: "one changeset", authorized_paths: ["src/x.mjs"],
+        initial_batch: { worker_session_id: "go-worker", brief_path: "briefs/go-child.md" } }],
+    }, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
+    const write = (task, session, target = "src/x.mjs") => verifyRepairWorkerWrite({
+      task_id: task, session_id: session, target }, { projectRoot: ctx.dir });
+    const hook = (task, session) => {
+      mkdirSync(path.join(ctx.dir, ".claude"), { recursive: true });
+      writeFileSync(path.join(ctx.dir, ".claude", "task-lane.json"),
+        JSON.stringify({ mode: "in-thread", sessionId: session, taskId: task, tier: "T2" }));
+      return spawnSync(process.execPath,
+        [fileURLToPath(new URL("../hooks/guard-brief-rung.mjs", import.meta.url))], {
+          cwd: ctx.dir, env: { ...process.env, CLAUDE_PROJECT_DIR: ctx.dir }, encoding: "utf8",
+          input: JSON.stringify({ tool_name: "Write", cwd: ctx.dir, session_id: session,
+            tool_input: { file_path: path.join(ctx.dir, "src", "x.mjs"), content: "new bytes\n" } }),
+        });
+    };
+    assert.equal(write("go-child", "go-worker").state, "repair-worker-verification-missing");
+    for (const task of ["unrelated", undefined]) {
+      assert.equal(write(task, "intruder").ok, false, "pending child reserves path by target");
+    }
+    assert.match(hook("unrelated", "intruder").stdout, /permissionDecision.*deny/,
+      "actual Write hook denies an unrelated task on the child path");
+    const worker = recordWorkerVerification({ task_id: "go-child",
+      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "go-worker"));
+    assert.equal(worker.ok, true, worker.state);
+    assert.equal(write("go-child", "go-worker").state, "repair-worker-write-authorized");
+    assert.equal(hook("go-child", "go-worker").stdout, "", "actual Write hook allows designated first write");
+    assert.equal(write("unrelated", "intruder", "src/other.mjs").state, "not-repair-write",
+      "ordinary unrelated source paths remain available");
+    const childCandidate = sideCandidate(ctx, "go-child-panel", { "src/x.mjs": "export const x = 9;\n" });
+    const first = openPanel(ctx, 1, childCandidate, { task: "go-child", changeset: "go-child-cs",
+      lineage: { continuation: continuation.event_id } });
+    assert.equal(first.opened.ok, true, first.opened.state);
+    assert.equal(write("go-child", "go-worker").ok, false,
+      "retired receipt cannot fall through during first panel");
+    assert.equal(write("unrelated", "intruder").ok, false,
+      "an unrelated task cannot write during the child's first panel");
+    assert.match(hook("go-child", "go-worker").stdout, /permissionDecision.*deny/,
+      "actual Write hook denies the retired worker during the frozen panel");
+    const childClose = closePanel(ctx, first, childCandidate, [], { task: "go-child", changeset: "go-child-cs" });
+    assert.equal(childClose.ok, true, childClose.state);
+    const childGo = decide(ctx, childClose, { task: "go-child", changeset: "go-child-cs",
+      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
+    assert.equal(childGo.ok, true, childGo.state);
+    assert.equal(write("unrelated", "intruder").state, "not-repair-write",
+      "completed GO child releases its legitimate path");
+  } finally { ctx.cleanup(); }
+});
+
 test("M35: the reservation lift is COVERAGE-SCOPED — a child's GO releases its own budget, never its siblings' surfaces", async () => {
   const ctx = repo();
   const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
