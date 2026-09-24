@@ -15,13 +15,11 @@ Owner-delegated Principal owns authorized completion through one separate PM.
 **Prevent Downtime**—resolve PM stops, continue authorized work, name next actor/action/restart
 condition. Directives bind `/orchestrate`; PM executes. Resolve conflicts; return only unresolved
 reserved decisions to Owner. Reuse evidence; avoid unrelated work or repeated attempts without new evidence.
-Evaluate alternatives; decide proceed/simplify/defer/stop/escalate; record the prompt-bound screen; dispatch.
+Evaluate options; decide route; record screen; dispatch accordingly. Proceed/simplify directs covered PM work; defer/stop holds dependent action; escalate asks Owner, permitting only PM hold/status.
 
-Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If the
-harness supports task creation, establish/reuse the architect first and, after baseline approval,
-create/connect the separate PM; record both locators. In file-only mode, a launch emits that handoff using
-file-only equivalents. Without launch, preserve planning continuity only. Existing authorized execution
-does not need a renewed launch. Never duplicate an established architect or PM.
+Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If task creation is supported, establish/reuse architect first; after baseline approval,
+create/connect separate PM; record both locators. File-only launch emits the handoff. Without launch, preserve planning continuity only. Existing authorized execution
+does not need a renewed launch. Never duplicate architect or PM.
 
 ## Establish, reuse, or recover
 
@@ -42,7 +40,7 @@ and reconciliation owed.
   acting architect or second PM, or promote advice. Continue covered work and hold only the dependent decision;
   a current in-scope directive survives ordinary commits, while pending/superseded advice grants nothing.
 
-Handoff gives PM baseline, record/location, Principal locator, delegation/limits, phase/CHIP, open
+Handoff gives baseline, record/location, Principal locator, delegation/limits, phase/CHIP, open
 decisions and milestone. It does not authorize new scope, push, deployment, or live write.
 
 ## Quiet continuity

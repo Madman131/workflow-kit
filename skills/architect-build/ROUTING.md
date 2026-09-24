@@ -20,7 +20,6 @@ runtime setup, never init. Read approved blueprint/source and cite it. Hook chec
 Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.
 
 Recovery does not promote advice, create an acting architect or second PM, or block covered work.
-Without task creation or cross-session transport, launch uses file-only equivalents.
 
 ## Continuity
 
@@ -59,8 +58,9 @@ baseline, access, risk and budget. Examples—never an allowlist—include direc
 model/seat choice, tier/wording and approved-provider routing. PM is sole execution chain,
 proceeds automatically on covered work, and returns concrete conflicts.
 
-Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause and alternatives;
-decides proceed/simplify/defer/stop/escalate; records the prompt-bound screen; then directs completion through one PM.
+Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause, alternatives;
+decides proceed/simplify/defer/stop/escalate; records prompt-bound screen. For proceed/simplify, Principal
+directs completion through one PM; defer/stop holds dependent work; escalate asks Owner; PM hold/status only.
 Batch covered work; save time/tokens without weakening gates; resolves in-envelope conflicts;
 avoid unrelated work/retries without new evidence; route unresolved reserved decisions to Owner.
 

@@ -367,8 +367,10 @@ prompt bytes. The Architect evaluates observed evidence, the no-action consequen
 alignment, smallest action, KISS, zoom-out, root cause/cost and each finding's first-exit
 HARM/REAL/SCOPE/WORTH IT result. Compare at least two distinct routes with tradeoffs; choose
 `proceed`, `simplify`, `defer`, `stop`, or `escalate`; state the choice reason and, for escalation,
-the actual Owner-reserved boundary. Record the evaluation and choice before dispatch. The hook checks their
-shape and the prompt binding, not whether the reasoning is sound. A declared
+the actual Owner-reserved boundary. Record the evaluation and choice before dispatch. Proceed/simplify
+may direct approved PM execution; defer/stop holds dependent work; escalate routes the reserved question
+to Owner and authorizes only a PM hold/status direction. The hook checks shape and prompt binding,
+not whether the direction matches the choice. A declared
 status to that target must start with the literal `ARCHITECT_STATUS_V1` line; the marker remains the
 sender's self-report, not proof of the message's meaning. Paired sends carrying `model` or
 `thinking` overrides deny. During an active aggregate repair, an explicit `architect-direction`
