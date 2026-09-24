@@ -235,11 +235,15 @@ export function architectScreenState(screen, prompt) {
     return { state: "architect-screen-incomplete" };
   }
   const routes = new Set();
+  const pairs = new Set();
   for (const alternative of alternatives) {
     if (!isPlainObject(alternative) || !ACTION_CHOICES.has(alternative.route) ||
         !nonempty(alternative.tradeoff)) {
       return { state: "architect-screen-incomplete" };
     }
+    const pair = JSON.stringify([alternative.route, alternative.tradeoff]);
+    if (pairs.has(pair)) return { state: "architect-screen-incomplete" };
+    pairs.add(pair);
     routes.add(alternative.route);
   }
   if (!routes.has(choice)) return { state: "architect-screen-incomplete" };

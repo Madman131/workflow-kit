@@ -230,6 +230,7 @@ test("an Architect direction owes a prompt-bound action screen even when there a
     { evaluation: { observedEvidence: "receipt", noAction: "" } },
     { alternatives: undefined }, { alternatives: [] },
     { alternatives: [action.alternatives[0]] },
+    { alternatives: [action.alternatives[0], { ...action.alternatives[0] }] },
     { alternatives: [{ route: "proceed", tradeoff: "" }, action.alternatives[1]] },
     { choice: "approve" }, { choice: "stop" }, { choiceReason: "" },
   ]) {
