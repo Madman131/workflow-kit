@@ -4494,3 +4494,59 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: docs/journal/architect_consult_routing_design.md
     PIL-DONE-d20b9ade5473ed4ff9dad7dd
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-24T12:51:31Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1790254198-37857-1776027011`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=16472; instrumented_payload=16574; inline_combined=20391; file=16647
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/legacy_handoff_replay_compat_contract.md
+- HEAD: `705950324e17271980a6d442601dfaf0abf22523`
+- Artifact-Base: `588593e031f822ed31df6deab1837651b1de9180`
+- Artifact-SHA: `705950324e17271980a6d442601dfaf0abf22523`
+- Artifact-Ref: `refs/pil/gate-artifacts/705950324e17271980a6d442601dfaf0abf22523`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: docs/journal/legacy_handoff_replay_compat_contract.md (Mechanism and provenance, Falsifiable acceptance criteria, Mitigation claims to falsify)
+- Start: 2026-09-24T12:49:58Z
+- End: 2026-09-24T12:51:31Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-e405ec992046634e6b69a539
+    CANARIES: PIL-INGEST-01442de3c9e3 PIL-INGEST-02d804519023
+    
+    Here is the independent cross-family review of the legacy handoff replay compatibility contract.
+    
+    ### 1. BLOCKER: INTER-SECTION CONTRADICTIONS / MECHANISM CORRECTNESS (Self-Defeating Code Change)
+    **Section:** `Mechanism and provenance` vs `Falsifiable acceptance criteria` (AC 1)
+    **Concrete failure scenario:** The design explicitly states that the candidate base `588593e` adds the exact outer-ID equality predicates to **BOTH** the public recorder (`recordAggregateLegacyHandoff`) **AND** the replay logic (`aggregateWorld`). However, the document also admits that policy 4 was already declared in the parent commit, meaning valid, authentic separate-ID policy 4 rows already exist in the ledger. By adding the strict equality check to `aggregateWorld`, deterministic replay will violently crash or refuse these valid historical rows. 
+    **Why it matters:** The specified candidate commit (`588593e`) directly introduces the exact regression that Acceptance Criterion 1 forbids ("A policy 4 replay refusal is a regression"). Deploying this will break ledger replay for any environment that recorded a separate-ID handoff recently.
+    **Fix:** The implementation must only add the equality predicate to the public recorder (`recordAggregateLegacyHandoff`) to reject new separate-ID requests. It must explicitly be reverted from/not applied to the replay state builder (`aggregateWorld`) to maintain the required historical compatibility.
+    
+    ### 2. HIGH: COMPLETENESS GAPS / MECHANISM CORRECTNESS (Policy Downgrade Bypass)
+    **Section:** `Falsifiable acceptance criteria` (AC 1 & AC 2)
+    **Concrete failure scenario:** AC 2 mandates a strict typed review checkpoint for policies 2, 3, and 4, while allowing Policy 1 to preserve its older "optional" review grammar. The design fails to specify behavior for a cross-policy boundary: an attacker (or malformed client) can inject a `legacy_handoff` row that declares itself as `policy: 1` but cites a `policy: 4` standard parent. If the replay logic determines the review requirement based on the child row's declared policy version, the strict review checkpoint is bypassed entirely.
+    **Why it matters:** This provides a trivial bypass for the mandatory typed review checkpoints, allowing unauthorized child lineage and path hijacking by exploiting the legacy fallback.
+    **Fix:** Replay must enforce that a child handoff's effective policy for review requirements is evaluated as `MAX(child_policy, parent_policy)`, or explicitly reject any handoff row where the child attempts to downgrade the standard parent's policy version.
+    
+    ### 3. MEDIUM: CONCURRENCY / LOCK HAZARDS (Duplicated Path Authority Window)
+    **Section:** `Falsifiable acceptance criteria` (AC 1)
+    **Concrete failure scenario:** AC 1 states that the aggregate child "opens a panel, reaches STOP, reserves its paths, and leaves the standard parent retired after a later standard close." This wording explicitly sequences the path reservation at the child's *STOP* event, not at the `legacy_handoff` event itself. Because the parent remains active until a "later standard close," there is a window in the ledger between the handoff and the child's STOP where both the parent and the pending child panel are active and unconstrained on the same paths.
+    **Why it matters:** This creates a deterministic split-brain in the ledger. Interleaved rows from both the active parent and the un-STOPped child could mutate the same paths or emit competing STOPs, bypassing collision guards.
+    **Fix:** The `legacy_handoff` event itself must atomically lock or transfer the path reservations from the parent to the pending child lineage, ensuring the parent can only emit its clean retirement/close and cannot further mutate the paths during the child's open panel.
+    
+    ***
+    
+    **OVERALL ASSESSMENT:** NO-GO
+    **Highest-risk thing to resolve first:** The self-defeating implementation scope (Blocker #1). The candidate `588593e` adds the equality check to the replay layer, mathematically guaranteeing the regression the contract is trying to prevent. You must remove the check from `aggregateWorld` before this can proceed.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: docs/journal/legacy_handoff_replay_compat_contract.md (Mechanism and provenance, Falsifiable acceptance criteria, Mitigation claims to falsify)
+    PIL-DONE-174a15c3549aab2ebd1f1303
