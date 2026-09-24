@@ -1183,7 +1183,7 @@ test("tierless standard history permits only an explicit safeguarded T2 handoff"
   } finally { ctx.cleanup(); }
 });
 
-test("a legacy handoff cannot borrow T3 policy from an unrelated aggregate envelope", () => {
+test("an old cross-envelope T3 handoff replays at T3 strength while current admission refuses", () => {
   const ctx = repo();
   try {
     const standardCandidate = commit(ctx.dir, 1);
@@ -1233,9 +1233,184 @@ test("a legacy handoff cannot borrow T3 policy from an unrelated aggregate envel
     writeFileSync(ledger, `${JSON.stringify(planted)}\n`, { flag: "a" });
     const loaded = loadRepairEventsForProject(ctx.dir);
     assert.equal(loaded.ok, true, "the planted envelope is structurally readable");
-    assert.equal(derivePendingLineageBudgets(loaded.aggregate_events, { standardEvents: loaded.events })
-      .some((entry) => entry.task_id === "borrowed-t3"), false,
-    "a cross-parent envelope cannot mint lineage on replay");
+    assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events, { standardEvents: loaded.events })
+      .filter((entry) => entry.task_id === "borrowed-t3").map((entry) => entry.task_id), ["borrowed-t3"],
+    "the old recorder's accepted T3 child remains pending");
+    assert.deepEqual(activeRepairPathOwners(loaded.events, "src/x.mjs",
+      { aggregateEvents: loaded.aggregate_events }).owners, [],
+    "handoff retires standard path authority immediately");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "standard-parent", session_id: "historical-worker",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-program-handed-off");
+    for (const [name, change] of [
+      ["wrong parent", { parent_task_id: "unrelated" }],
+      ["wrong parent changeset", { parent_changeset_id: "unrelated-cs" }],
+      ["wrong anchor", { parent_disposition_event_id: "f".repeat(64) }],
+      ["missing Owner evidence", { owner_evidence: "" }],
+      ["child identity collision", { child: { ...planted.event.child, task_id: "unrelated" } }],
+    ]) {
+      const bad = stamped({ ...planted.event, ...change });
+      const pending = derivePendingLineageBudgets([...rows, bad],
+        { standardEvents: loaded.events });
+      assert.equal(Boolean(pending?.some((entry) => entry.task_id === bad.event.child.task_id)), false,
+        `${name} cannot mint historical lineage`);
+    }
+    const next = sideCandidate(ctx, "historical-t3-child", { "src/x.mjs": "export const x = 2;\n" });
+    const beforeOpen = readFileSync(ledger, "utf8");
+    const downgraded = openPanel(ctx, 1, next, { task: "borrowed-t3", changeset: "borrowed-t3-cs",
+      tier: "T2", baseCommit: standardCandidate.commit, lineage: { handoff: planted.event_id } });
+    assert.equal(downgraded.opened.ok, false, "the accepted T3 lineage cannot open at T2 strength");
+    assert.equal(readFileSync(ledger, "utf8"), beforeOpen);
+    const child = openPanel(ctx, 1, next, { task: "borrowed-t3", changeset: "borrowed-t3-cs",
+      tier: "T3", baseCommit: standardCandidate.commit, lineage: { handoff: planted.event_id } });
+    assert.equal(child.opened.ok, true, child.opened.state);
+    assert.equal(child.expected.length, expectedSeats(next.paths, "T3").length,
+      "the pending child owes the historical T3 roster");
+    assert.equal(derive(ctx, "borrowed-t3").policy_version, 3);
+    const closed = closePanel(ctx, child, next, ["T3-F1"],
+      { task: "borrowed-t3", changeset: "borrowed-t3-cs" });
+    assert.equal(closed.ok, true, closed.state);
+    const stopped = decide(ctx, closed, { task: "borrowed-t3", changeset: "borrowed-t3-cs",
+      accepted: ["T3-F1"], terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    assert.deepEqual(derive(ctx, "borrowed-t3").stopped_paths, ["src/x.mjs"]);
+    const competing = openPanel(ctx, 1, next, { task: "competing", changeset: "competing-cs",
+      baseCommit: standardCandidate.commit });
+    assert.equal(competing.opened.ok, false, "T3 STOP keeps the reviewed path reserved");
+  } finally { ctx.cleanup(); }
+});
+
+test("historical separate-ID handoffs retain child STOP and parent retirement across policies", () => {
+  for (const policy of [undefined, 2, 3, 4]) {
+    const ctx = repo();
+    try {
+      const candidate = commit(ctx.dir, 1);
+      const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
+      const parent = stamped({ type: "round_disposition", task_id: "standard-parent",
+        changeset_id: "standard-parent-cs", round: 1, candidate_sha: manifest.digest,
+        candidate_manifest: manifest.records, verdict: "NO-GO", disposition: "REMEDIATE",
+        finding_ids: ["F1"], finding_class: "legacy", ownership_area: "controller",
+        original_trigger: "active standard work", authorized_paths: candidate.paths,
+        introduced_by_prior_repair: false, new_scope: false, repair_dispatch_event_id: null,
+        root_cause_exit_event_id: null, adherence_audit_event_id: null,
+        owner_extension_event_id: null, owner_scope_event_id: null,
+        recorded_at: "2099-01-01T00:00:00.000Z", session_id: "historical-worker" });
+      const ledger = repairLedgerPath(ctx.dir);
+      mkdirSync(path.dirname(ledger), { recursive: true });
+      writeFileSync(ledger, `${JSON.stringify(parent)}\n`);
+      const proposal = { type: "aggregate_v2", kind: "legacy_handoff",
+        task_id: "old-outer", changeset_id: "old-outer-cs",
+        parent_task_id: "standard-parent", parent_changeset_id: "standard-parent-cs",
+        parent_candidate_sha: manifest.digest, authorized_paths: candidate.paths,
+        child: { task_id: "historical-child", changeset_id: "historical-child-cs", tier: "T2",
+          budget: "one Owner-authorized repair", authorized_paths: candidate.paths },
+        owner_evidence: "Owner authorized standard-parent handoff" };
+      const before = readFileSync(ledger, "utf8");
+      assert.equal(recordAggregateLegacyHandoff(proposal, options(ctx.dir)).ok, false,
+        `current recorder rejects a separate-ID request for policy ${policy ?? 1}`);
+      assert.equal(readFileSync(ledger, "utf8"), before);
+      const handoff = stamped({ ...proposal,
+        ...(policy === undefined ? {} : { policy_version: policy }),
+        parent_disposition_event_id: parent.event_id, parent_round: 1,
+        ...(policy === undefined ? {} : { process_review_event_id: null }),
+        recorded_at: "2099-01-01T00:00:01.000Z", session_id: "historical-owner" });
+      writeFileSync(ledger, `${JSON.stringify(handoff)}\n`, { flag: "a" });
+      let loaded = loadRepairEventsForProject(ctx.dir);
+      assert.deepEqual(derivePendingLineageBudgets(loaded.aggregate_events, { standardEvents: loaded.events })
+        .map((entry) => entry.task_id), ["historical-child"],
+      `policy ${policy ?? 1} child must hold its pending budget`);
+      assert.deepEqual(activeRepairPathOwners(loaded.events, "src/x.mjs",
+        { aggregateEvents: loaded.aggregate_events }).owners, [],
+      "standard parent retires at the handoff, before the later close");
+      assert.equal(verifyRepairWorkerWrite({ task_id: "standard-parent", session_id: "historical-worker",
+        target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-program-handed-off");
+      const extension = recordOwnerExtension({ task_id: "standard-parent",
+        changeset_id: "standard-parent-cs", after_round: 1, authority_kind: "close",
+        owner_evidence: "Owner closes the emptied standard program" }, options(ctx.dir, "owner"));
+      assert.equal(extension.ok, true, extension.state);
+      const stdClose = recordRepairClose({ task_id: "standard-parent", changeset_id: "standard-parent-cs",
+        after_round: 1, reason: "administrative close after durable handoff",
+        owner_close_event_id: extension.event_id }, options(ctx.dir, "owner"));
+      assert.equal(stdClose.ok, true, stdClose.state);
+      loaded = loadRepairEventsForProject(ctx.dir);
+      assert.equal(deriveRepairState(loaded.events, "standard-parent").active, false);
+      const next = commit(ctx.dir, 2);
+      const child = openPanel(ctx, 1, next, { task: "historical-child",
+        changeset: "historical-child-cs", lineage: { handoff: handoff.event_id } });
+      assert.equal(child.opened.ok, true, child.opened.state);
+      const closed = closePanel(ctx, child, next, ["CHILD-F1"],
+        { task: "historical-child", changeset: "historical-child-cs" });
+      assert.equal(closed.ok, true, closed.state);
+      const stop = decide(ctx, closed, { task: "historical-child",
+        changeset: "historical-child-cs", accepted: ["CHILD-F1"], terminal_state: "STOP",
+        remediation_kind: null, authorized_paths: [] });
+      assert.equal(stop.ok, true, stop.state);
+      assert.deepEqual(derive(ctx, "historical-child").stopped_paths, ["src/x.mjs"]);
+      assert.equal(openPanel(ctx, 1, next, { task: "unrelated", changeset: "unrelated-cs" }).opened.ok,
+        false, "child STOP preserves the path reservation");
+    } finally { ctx.cleanup(); }
+  }
+});
+
+test("a separate-ID historical handoff at ordinal four needs its exact typed review", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
+    const round = (number, dispatchId) => stamped({
+      type: "round_disposition", task_id: "legacy", changeset_id: "legacy-cs", round: number,
+      candidate_sha: manifest.digest, candidate_manifest: manifest.records, verdict: "NO-GO",
+      disposition: "REMEDIATE", finding_ids: [`F${number}`], finding_class: `class-${number}`,
+      ownership_area: "controller", original_trigger: `trigger-${number}`,
+      authorized_paths: candidate.paths, introduced_by_prior_repair: false, new_scope: false,
+      repair_dispatch_event_id: dispatchId, root_cause_exit_event_id: null,
+      adherence_audit_event_id: null, owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: `2099-01-01T00:00:0${2 * (number - 1)}.000Z`, session_id: "historical-worker" });
+    const dispatch = (source, finding) => stamped({
+      type: "repair_dispatch", task_id: "legacy", changeset_id: "legacy-cs",
+      source_round: source, next_round: source + 1, candidate_sha: manifest.digest,
+      finding_ids: [finding], authorized_paths: candidate.paths, target_kind: "brief",
+      target: `briefs/legacy-${source + 1}.md`, brief_sha256: String(source).repeat(64),
+      brief_size: 7, root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: `2099-01-01T00:00:0${2 * source - 1}.000Z`, session_id: "historical-worker" });
+    const r1 = round(1, null), d2 = dispatch(1, "F1"), r2 = round(2, d2.event_id);
+    const d3 = dispatch(2, "F2"), r3 = round(3, d3.event_id);
+    const ledger = repairLedgerPath(ctx.dir);
+    mkdirSync(path.dirname(ledger), { recursive: true });
+    writeFileSync(ledger, [r1, d2, r2, d3, r3].map(JSON.stringify).join("\n") + "\n");
+    const proposal = { parent_task_id: "legacy", parent_changeset_id: "legacy-cs",
+      parent_disposition_event_id: r3.event_id, parent_round: 3,
+      parent_candidate_sha: manifest.digest, authorized_paths: candidate.paths,
+      child: { task_id: "reviewed-child", changeset_id: "reviewed-child-cs", tier: "T2",
+        budget: "one reviewed handoff", authorized_paths: candidate.paths } };
+    assert.equal(deriveRepairState(loadRepairEventsForProject(ctx.dir).events, "legacy").latest?.event_id,
+      r3.event_id, "round-three standard parent must be the active latest anchor");
+    const review = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
+      task_id: "legacy", changeset_id: "legacy-cs", reviewer_role: "frontier",
+      purpose: "legacy_handoff", anchor: { kind: "standard_disposition",
+        event_id: r3.event_id, candidate_sha: manifest.digest },
+      proposed_transition: { ...proposal, policy_version: 4 },
+      review_evidence: "exact standard-parent handoff reviewed", zoom_out: "one bounded child",
+      ruling: "successor", bounded_scope: "one child", closure_evidence: "bounded",
+      next_gate_ordinal: 4 }, options(ctx.dir));
+    assert.equal(review.ok, true, review.state);
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    assert.equal(deriveRepairState(loaded.events, "legacy").latest.event_id, r3.event_id);
+    const row = { type: "aggregate_v2", kind: "legacy_handoff", policy_version: 4,
+      task_id: "old-outer", changeset_id: "old-outer-cs", ...proposal,
+      owner_evidence: "Owner exact historical handoff", process_review_event_id: review.event_id,
+      recorded_at: "2099-01-01T00:00:20.000Z", session_id: "historical-owner" };
+    const pending = (event) => derivePendingLineageBudgets([...loaded.aggregate_events, stamped(event)],
+      { standardEvents: loaded.events })?.some((entry) => entry.task_id === "reviewed-child") ?? false;
+    assert.equal(pending({ ...row, process_review_event_id: null }), false,
+      "ordinal four refuses an omitted review");
+    assert.equal(pending({ ...row, process_review_event_id: "f".repeat(64) }), false,
+      "a wrong review ID cannot authorize lineage");
+    assert.equal(pending({ ...row, parent_disposition_event_id: r2.event_id }), false,
+      "a stale standard anchor cannot authorize lineage");
+    assert.equal(pending({ ...row, child: { ...row.child, budget: "different transition" } }), false,
+      "the typed digest binds the exact proposed child");
+    assert.equal(pending(row), true, "exact permitted review admits the historical child");
   } finally { ctx.cleanup(); }
 });
 

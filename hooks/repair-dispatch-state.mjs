@@ -1612,7 +1612,6 @@ function aggregateWorld(events, standardEvents = []) {
       }
     } else if (row.kind === "legacy_handoff") {
       if (!text(row.parent_task_id, 120) || !text(row.parent_changeset_id, 120) ||
-          row.task_id !== row.parent_task_id || row.changeset_id !== row.parent_changeset_id ||
           !text(row.owner_evidence, 1000) || !aggregateChildShape(row.child) ||
           legacyHandedOff.has(row.parent_task_id) || usedTasks.has(row.child.task_id) ||
           stdTaskUsed(row.child.task_id, rowSeq) || childLineage.has(row.child.task_id) ||
