@@ -4,7 +4,7 @@
 // evidence shape, exact references, and transition order.
 
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   closeSync, constants as fsConstants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync,
   openSync, readFileSync, realpathSync, writeSync,
@@ -502,6 +502,47 @@ function safeLedgerDir(file) {
     const st = lstatSync(dir);
     return st.isDirectory() && !st.isSymbolicLink();
   } catch { return false; }
+}
+
+// Current writers share one Git-common ledger lock. The macOS fd form of lockf
+// locks the inherited open file description, so Node keeps the lock after lockf
+// exits and releases it by closing the fd (including on process death). The
+// inode is permanent: unlinking it would let waiters lock different files.
+function withRepairLedgerMutationLock(options, action) {
+  const file = repairLedgerPath(options?.projectRoot, { execGit: options?.execGit });
+  if (!file) return { ok: false, state: "repair-ledger-unavailable" };
+  if (process.platform !== "darwin") {
+    return { ok: false, state: "repair-ledger-lock-unsupported",
+      detail: "Current repair-controller transitions require a verified process-scoped fd lock; this host is unsupported. Read/replay remains available." };
+  }
+  if (!safeLedgerDir(file)) return { ok: false, state: "repair-ledger-unavailable" };
+  const lockFile = `${file}.lock`;
+  let fd, heldLock = false;
+  try {
+    fd = openSync(lockFile, fsConstants.O_CREAT | fsConstants.O_RDWR | fsConstants.O_NOFOLLOW, 0o600);
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) return { ok: false, state: "repair-ledger-lock-unavailable" };
+    const held = spawnSync("/usr/bin/lockf", ["-s", "-t", "2", "3"],
+      { stdio: ["ignore", "ignore", "ignore", fd], timeout: 3000 });
+    if (held.error || held.status !== 0) {
+      return { ok: false, state: held.status === 75 ? "repair-ledger-lock-busy" : "repair-ledger-lock-unavailable",
+        detail: "The Git-common repair ledger lock could not be acquired within two seconds; retry the recorder after the current writer finishes." };
+    }
+    const current = lstatSync(lockFile);
+    if (!current.isFile() || current.isSymbolicLink() ||
+        current.dev !== opened.dev || current.ino !== opened.ino) {
+      return { ok: false, state: "repair-ledger-lock-unavailable" };
+    }
+    heldLock = true;
+  } catch {
+    return { ok: false, state: "repair-ledger-lock-unavailable",
+      detail: "The Git-common repair ledger lock is unavailable; check host lockf capability and ledger permissions." };
+  } finally {
+    // Acquisition failures close below; successful acquisition stays held through action().
+    if (fd !== undefined && !heldLock) try { closeSync(fd); } catch {}
+  }
+  try { return action(); }
+  finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
 }
 
 function appendTypedEvent(file, event, allowed) {
@@ -2087,7 +2128,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
   return winner ? { ok: true, event_id: winner.event_id, idempotent: true } : { ok: false, state: conflictState };
 }
 
-export function recordAggregatePanelOpen(input,
+function recordAggregatePanelOpenUnlocked(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (input?.tier === "T3") {
@@ -2173,7 +2214,7 @@ export function recordAggregatePanelClose(input,
   return appendEligibleAggregate(file, event, "aggregate-panel-close-conflict");
 }
 
-export function recordAggregateDisposition(input,
+function recordAggregateDispositionUnlocked(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
@@ -2218,7 +2259,7 @@ export function recordAggregateRootExit(input,
     "aggregate-root-exit-conflict");
 }
 
-export function recordAggregateProcessReview(input,
+function recordAggregateProcessReviewUnlocked(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
@@ -2321,7 +2362,7 @@ export function recordAggregateWorkerHandoff(input,
     "aggregate-worker-handoff-conflict");
 }
 
-export function recordAggregateChildContinuation(input,
+function recordAggregateChildContinuationUnlocked(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
@@ -2412,7 +2453,7 @@ export function recordAggregateChildContinuation(input,
   return appendEligibleAggregate(file, event, "aggregate-continuation-conflict");
 }
 
-export function recordAggregateClose(input,
+function recordAggregateCloseUnlocked(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !text(input.reason, 1000) ||
@@ -2445,7 +2486,7 @@ export function recordAggregateClose(input,
   return appendEligibleAggregate(file, event, "aggregate-close-conflict");
 }
 
-export function recordAggregateLegacyHandoff(input,
+function recordAggregateLegacyHandoffUnlocked(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
@@ -2631,7 +2672,7 @@ export function recordOwnerExtension(input, { projectRoot, sessionId, now = new 
  * CLAIM plus the surrounding history, which is better for recovery and for audit than a deleted
  * file, and is not evidence of who did it. That, and nothing more, is the claim.
  */
-export function recordRepairClose(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
+function recordRepairCloseUnlocked(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   if (!text(sessionId, 200)) return { ok: false, state: "repair-session-missing" };
   const base = baseEvent("repair_close", input, sessionId, now);
   const file = repairLedgerPath(projectRoot, { execGit });
@@ -2978,6 +3019,19 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   if (owner && owner.task_id !== taskId) {
     return { ok: false, state: "repair-task-relabel-path-owned", owner_task_id: owner.task_id };
   }
+  // A declared child owns its exact budget before its first panel opens. The accepted
+  // lineage is already bound by the controller; its own program has not yet minted an
+  // active owner. Completion exceptions take the verified-worker path above instead.
+  const pendingChild = completionWorld.childLineage.get(taskId);
+  if (pendingChild && !completionWorld.programs.has(taskId)) {
+    if (!pendingChild.authorized_paths.includes(target)) {
+      return { ok: false, state: "repair-worker-path-unauthorized",
+        authorized_paths: pendingChild.authorized_paths };
+    }
+    if (!text(sessionId, 200)) return { ok: false, state: "repair-worker-session-missing" };
+    return { ok: true, state: "repair-pending-child-write-authorized",
+      lineage_event_id: pendingChild.event_id };
+  }
   // An inactive STOP/CLOSED program is absent from active owners. Its unlifted paths
   // still reserve the surface: a stale worker or relabeled task must not fall through
   // to the unrelated-write path. A live authorized child owns its own write above.
@@ -3052,3 +3106,25 @@ export function loadRepairEventsForProject(projectRoot, options = {}) {
   return { ok: false, state: subject ? "repair-ledger-unavailable" : "repair-ledger-no-subject",
     observed_overrides: gitLocationOverrides(options.env ?? process.env), events: null };
 }
+
+
+// The handoff's eligibility depends on these cooperating current writers only:
+// a panel open claims identities, a disposition/close changes path reservations,
+// a continuation declares pending children, a legacy review may hold admission,
+// and a standard close retires the cited parent. Other recorders retain their
+// existing availability on hosts without this lock capability.
+export const recordAggregatePanelOpen = (...args) => withRepairLedgerMutationLock(args[1],
+  () => recordAggregatePanelOpenUnlocked(...args));
+export const recordAggregateDisposition = (...args) => withRepairLedgerMutationLock(args[1],
+  () => recordAggregateDispositionUnlocked(...args));
+export const recordAggregateProcessReview = (...args) =>
+  args[0]?.purpose === "legacy_handoff" ? withRepairLedgerMutationLock(args[1],
+    () => recordAggregateProcessReviewUnlocked(...args)) : recordAggregateProcessReviewUnlocked(...args);
+export const recordAggregateChildContinuation = (...args) => withRepairLedgerMutationLock(args[1],
+  () => recordAggregateChildContinuationUnlocked(...args));
+export const recordAggregateClose = (...args) => withRepairLedgerMutationLock(args[1],
+  () => recordAggregateCloseUnlocked(...args));
+export const recordAggregateLegacyHandoff = (...args) => withRepairLedgerMutationLock(args[1],
+  () => recordAggregateLegacyHandoffUnlocked(...args));
+export const recordRepairClose = (...args) => withRepairLedgerMutationLock(args[1],
+  () => recordRepairCloseUnlocked(...args));

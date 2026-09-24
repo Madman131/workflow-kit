@@ -76,6 +76,9 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
           "aggregate-root-exit-unexpected": " — only a root-kind dispatch may carry a root_exit event id; drop the field or fix the disposition's remediation kind",
           "aggregate-process-review-required": " — record a fresh aggregate_v2 process_review with the transition's exact purpose, current typed anchor, and proposed_transition; then cite its event id. Only a dispatch-purpose finish_bounded_root authorizes repair dispatch",
           "aggregate-worker-superseded": " — this session's admission was REVOKED by an Owner-evidenced worker handoff; the replacement session holds the batch now",
+          "repair-ledger-lock-unsupported": " — this host cannot safely serialize current handoff-affecting mutations; use a verified macOS lockf host or hold the transition pending a supported platform cutover. Reads and replay remain available",
+          "repair-ledger-lock-busy": " — another current writer holds the Git-common ledger lock; retry the same event after that writer finishes. Never delete the lock file",
+          "repair-ledger-lock-unavailable": " — the Git-common lock could not be opened or held; check lockf capability, regular-file identity and ledger permissions. Never delete/recreate a supposedly stale lock file",
           "repair-history-invalid": " — the ledger's derivation failed CLOSED (a corrupt row, a hash mismatch, or a standard identity that no longer derives); this needs row-level repair, not a retry — preserve the file and inspect it",
         }[result.state] ?? (
           // The closed grammar makes the remaining two suffix classes total: shape refusals and

@@ -673,6 +673,19 @@ bodies still carry their `Word budget:` lines — in your repo those are declare
 mechanical enforcement unless you wire your own (copying the checker and re-pointing its class
 roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 
+## Current repair-ledger writer lock
+
+Current transitions that can change a legacy handoff's eligibility serialize their final read,
+validation and append on one lock file beside the **Git-common** repair ledger. On macOS the
+controller holds a BSD fd lock through `/usr/bin/lockf`; a crash releases it, while the lock
+file's inode stays in place for later writers. A busy writer refuses after two seconds. On hosts
+without this verified capability, these transitions refuse **before ledger mutation** with
+`repair-ledger-lock-unsupported`; read and historical replay still work. Do not remove the lock
+file as stale cleanup. Older installed recorders that do not acquire this lock must be held
+through cutover; they cannot safely write the same Git-common ledger concurrently. Linux and
+Windows mutation cutover remains held until their fd-lock lifetime, contention and crash
+behavior is proven and supported.
+
 ## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
 
 `/orchestrate` describes how a program too large for one thread is run as sequential **chips**: an

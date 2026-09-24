@@ -7,8 +7,8 @@
 // mechanism's original trigger goes red when its arm is removed.
 
 import { createHash } from "node:crypto";
-import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -2447,6 +2447,19 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
         budget: "one changeset", authorized_paths: ["src/x.mjs", "src/y.mjs"] }],
     }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "child-builder",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-pending-child-write-authorized",
+    "the accepted child may make its first write inside the exact Owner budget");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "child-builder",
+      target: "src/z.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-path-unauthorized",
+    "the pending child cannot expand its budget before the first panel");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-session-missing");
+    for (const task_id of ["task-1", "relabel"]) {
+      assert.equal(verifyRepairWorkerWrite({ task_id, session_id: "child-builder",
+        target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-stopped-path-reserved",
+      "the pending child's budget does not revive parent or relabeled authority");
+    }
     const childOpts = { task: "child", changeset: "child-cs" };
     // (a) An OUTSIDE-BUDGET first open refuses: the child's candidate touches a path the declared
     // budget never covered.
@@ -4268,4 +4281,176 @@ test("F2: the base-pin refusal is DIAGNOSED — a moved-base open names round 1'
         "the base pin never fires ahead of terminality");
     } finally { ctx2.cleanup(); }
   } finally { ctx.cleanup(); }
+});
+
+
+test("unsupported lock capability refuses before creating the ledger directory while replay remains readable", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "repair-lock-capability-"));
+  try {
+    const file = repairLedgerPath(ctx.dir);
+    assert.equal(existsSync(path.dirname(file)), false);
+    const unsupported = await importMutant(mutantDir, [[
+      'process.platform !== "darwin"', 'true',
+    ]]);
+    const result = unsupported.recordAggregateLegacyHandoff({ type: "aggregate_v2",
+      kind: "legacy_handoff" }, options(ctx.dir));
+    assert.equal(result.ok, false);
+    assert.equal(result.state, "repair-ledger-lock-unsupported");
+    assert.match(result.detail, /Read\/replay remains available/);
+    assert.equal(existsSync(path.dirname(file)), false,
+      "unsupported host must not even create the ledger directory");
+    assert.deepEqual(unsupported.loadRepairEventsForProject(ctx.dir).aggregate_events, []);
+  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
+});
+
+test("current legacy handoff and Owner-hold writers serialize at the Git-common ledger", async () => {
+  const scriptDir = mkdtempSync(path.join(os.tmpdir(), "repair-lock-writers-"));
+  const script = path.join(scriptDir, "writer.mjs");
+  writeFileSync(script, `import { execFileSync } from "node:child_process";
+import { existsSync, writeFileSync } from "node:fs";
+import { recordAggregateLegacyHandoff, recordAggregateProcessReview } from ${JSON.stringify(pathToFileURL(fileURLToPath(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url))).href)};
+const [kind, dir, inputJson, marker, release] = process.argv.slice(2);
+let calls = 0;
+const execGit = (command, args, options) => {
+  calls += 1;
+  if (calls === 2 && marker) {
+    writeFileSync(marker, "holding");
+    const word = new Int32Array(new SharedArrayBuffer(4));
+    while (!existsSync(release)) Atomics.wait(word, 0, 0, 10);
+  }
+  return execFileSync(command, args, options);
+};
+const options = { projectRoot: dir, sessionId: "owner", execGit };
+const result = kind === "review" ? recordAggregateProcessReview(JSON.parse(inputJson), options)
+  : recordAggregateLegacyHandoff(JSON.parse(inputJson), options);
+process.stdout.write(JSON.stringify(result));
+`);
+  const start = (ctx, kind, input, marker = "", release = "") => {
+    const child = spawn(process.execPath, [script, kind, ctx.dir, JSON.stringify(input), marker, release],
+      { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "", err = "";
+    child.stdout.on("data", (data) => { out += data; });
+    child.stderr.on("data", (data) => { err += data; });
+    const done = new Promise((resolve, reject) => child.on("close", (code, signal) => {
+      if (code !== 0 || signal) return reject(new Error(`writer ${kind}: ${code}/${signal} ${err}`));
+      try { resolve(JSON.parse(out)); } catch { reject(new Error(`writer ${kind}: ${out} ${err}`)); }
+    }));
+    return { child, done };
+  };
+  const waitFor = async (file) => {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (existsSync(file)) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(`writer did not reach locked barrier: ${file}`);
+  };
+  const fixture = () => {
+    const ctx = repo();
+    const candidate = commit(ctx.dir, 1);
+    const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
+    const parent = stamped({ type: "round_disposition", task_id: "legacy-parent",
+      changeset_id: "legacy-cs", round: 1, candidate_sha: manifest.digest,
+      candidate_manifest: manifest.records, verdict: "NO-GO", disposition: "REMEDIATE",
+      finding_ids: ["F1"], finding_class: "legacy", ownership_area: "controller",
+      original_trigger: "active standard work", authorized_paths: candidate.paths,
+      introduced_by_prior_repair: false, new_scope: false, repair_dispatch_event_id: null,
+      root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "pm" });
+    const ledger = repairLedgerPath(ctx.dir);
+    mkdirSync(path.dirname(ledger), { recursive: true });
+    writeFileSync(ledger, `${JSON.stringify(parent)}\n`);
+    const proposal = { parent_task_id: "legacy-parent", parent_changeset_id: "legacy-cs",
+      parent_disposition_event_id: parent.event_id, parent_round: 1,
+      parent_candidate_sha: manifest.digest, authorized_paths: candidate.paths,
+      child: { task_id: "held-child", changeset_id: "held-child-cs", tier: "T2",
+        budget: "one Owner child", authorized_paths: candidate.paths } };
+    const handoff = { type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy-parent",
+      changeset_id: "legacy-cs", ...proposal, owner_evidence: "Owner authorized handoff",
+      process_review_event_id: null };
+    const review = { type: "aggregate_v2", kind: "process_review", task_id: "legacy-parent",
+      changeset_id: "legacy-cs", reviewer_role: "frontier", purpose: "legacy_handoff",
+      anchor: { kind: "standard_disposition", event_id: parent.event_id,
+        candidate_sha: manifest.digest }, proposed_transition: { ...proposal, policy_version: 4 },
+      review_evidence: "Owner decision hold", zoom_out: "hold", ruling: "owner_decision",
+      bounded_scope: "exact child", closure_evidence: "Owner boundary" };
+    return { ...ctx, handoff, review };
+  };
+  try {
+    // Hold-first: the handoff's final read follows the already-admitted Owner hold.
+    {
+      const ctx = fixture();
+      try {
+        const marker = path.join(scriptDir, "hold-first.marker"), release = path.join(scriptDir, "hold-first.go");
+        const first = start(ctx, "review", ctx.review, marker, release);
+        await waitFor(marker);
+        const second = start(ctx, "handoff", ctx.handoff);
+        writeFileSync(release, "go");
+        assert.equal((await first.done).ok, true);
+        const rejected = await second.done;
+        assert.equal(rejected.state, "aggregate-legacy-handoff-conflict",
+          "handoff must see the prior hold, not merely time out on the lock");
+        assert.deepEqual(loadRepairEventsForProject(ctx.dir).aggregate_events
+          .map((row) => row.event.kind), ["process_review"]);
+        assert.deepEqual(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events,
+          { standardEvents: loadRepairEventsForProject(ctx.dir).events }), []);
+      } finally { ctx.cleanup(); }
+    }
+    // Handoff-first: a later hold cannot retroactively erase an admitted child.
+    {
+      const ctx = fixture();
+      try {
+        const marker = path.join(scriptDir, "handoff-first.marker"), release = path.join(scriptDir, "handoff-first.go");
+        const first = start(ctx, "handoff", ctx.handoff, marker, release);
+        await waitFor(marker);
+        const second = start(ctx, "review", ctx.review);
+        writeFileSync(release, "go");
+        assert.equal((await first.done).ok, true);
+        await second.done;
+        assert.deepEqual(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events,
+          { standardEvents: loadRepairEventsForProject(ctx.dir).events }).map((row) => row.task_id),
+          ["held-child"]);
+      } finally { ctx.cleanup(); }
+    }
+    // Two identical current handoffs converge on the same append, not duplicate rows.
+    {
+      const ctx = fixture();
+      try {
+        const marker = path.join(scriptDir, "twin.marker"), release = path.join(scriptDir, "twin.go");
+        const first = start(ctx, "handoff", ctx.handoff, marker, release);
+        await waitFor(marker);
+        const second = start(ctx, "handoff", ctx.handoff);
+        writeFileSync(release, "go");
+        const a = await first.done, b = await second.done;
+        assert.equal(a.ok, true); assert.equal(b.ok, true);
+        assert.equal(a.event_id, b.event_id);
+        assert.equal(loadRepairEventsForProject(ctx.dir).aggregate_events
+          .filter((row) => row.event.kind === "legacy_handoff").length, 1);
+      } finally { ctx.cleanup(); }
+    }
+    // Contention is bounded and SIGKILL releases the process-scoped fd lock.
+    {
+      const ctx = fixture();
+      try {
+        const marker = path.join(scriptDir, "crash.marker"), release = path.join(scriptDir, "crash.go");
+        const holder = start(ctx, "review", ctx.review, marker, release);
+        await waitFor(marker);
+        const busy = await start(ctx, "handoff", ctx.handoff).done;
+        assert.equal(busy.state, "repair-ledger-lock-busy");
+        const inputPath = path.join(scriptDir, "busy-event.json");
+        writeFileSync(inputPath, JSON.stringify({ ...ctx.handoff, session_id: "owner" }));
+        const cli = spawnSync(process.execPath,
+          [fileURLToPath(new URL("../scripts/record-repair-event.mjs", import.meta.url)),
+            "--event", inputPath], { cwd: ctx.dir, encoding: "utf8" });
+        assert.equal(cli.status, 1);
+        assert.match(cli.stderr, /repair-ledger-lock-busy.*retry/i,
+          "the recorder CLI names both the typed refusal and its safe retry");
+        holder.child.kill("SIGKILL");
+        await assert.rejects(holder.done);
+        const after = await start(ctx, "handoff", ctx.handoff).done;
+        assert.equal(after.ok, true, after.state);
+      } finally { ctx.cleanup(); }
+    }
+  } finally { rmSync(scriptDir, { recursive: true, force: true }); }
 });
