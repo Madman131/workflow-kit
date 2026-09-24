@@ -1655,13 +1655,9 @@ function aggregateWorld(events, standardEvents = []) {
         const anchor = { kind: "standard_disposition", event_id: standard.latest.event_id,
           candidate_sha: standard.latest.candidate_sha };
         const applicable = applicableTypedReviews(processReviews, "legacy_handoff", anchor, ordinal, row);
-        // A cited Owner decision can itself authorize the handoff under the older grammar,
-        // but a different applicable Owner hold must veto a cited successor permit.
-        const held = applicable.some((candidate) => candidate.ruling === "owner_decision" &&
-          candidate.event_id !== row.process_review_event_id);
         const authorized = review && applicable.some((candidate) => candidate.event_id === review.event_id) &&
           continuationReviewAllows(review);
-        if (held || ((required || applicable.length) && !authorized) ||
+        if (((required || applicable.length) && !authorized) ||
             (row.process_review_event_id !== null && !authorized)) continue;
       }
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
@@ -2453,6 +2449,18 @@ export function recordAggregateLegacyHandoff(input,
     parent_disposition_event_id: parent.latest.event_id, parent_round: parent.latest.round,
     authorized_paths: structuredClone(input.authorized_paths), child: structuredClone(input.child),
     owner_evidence: input.owner_evidence, process_review_event_id: input.process_review_event_id ?? null };
+  // Older replay cannot infer whether an uncited Owner decision's prose was a hold.
+  // Current admission can conservatively refuse that mixed-review ambiguity before append.
+  const world = aggregateWorld(rows.aggregate, rows.standard);
+  if (!world) return { ok: false, state: "aggregate-legacy-handoff-conflict" };
+  const anchor = { kind: "standard_disposition", event_id: parent.latest.event_id,
+    candidate_sha: parent.latest.candidate_sha };
+  const applicable = applicableTypedReviews(world.processReviews, "legacy_handoff", anchor,
+    parent.latest.round + 1, event);
+  if (applicable.some((candidate) => candidate.ruling === "owner_decision" &&
+      candidate.event_id !== event.process_review_event_id)) {
+    return { ok: false, state: "aggregate-legacy-handoff-conflict" };
+  }
   return appendEligibleAggregate(file, event, "aggregate-legacy-handoff-conflict");
 }
 

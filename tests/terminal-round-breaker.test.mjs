@@ -1446,9 +1446,8 @@ test("historical separate-ID handoffs retain child STOP and parent retirement ac
   }
 });
 
-test("a separate-ID historical handoff at ordinal four needs its exact typed review", async () => {
+test("a separate-ID historical handoff at ordinal four needs its exact typed review", () => {
   const ctx = repo();
-  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
   try {
     const candidate = commit(ctx.dir, 1);
     const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
@@ -1512,30 +1511,78 @@ test("a separate-ID historical handoff at ordinal four needs its exact typed rev
       assert.equal(pending({ ...row, child: { ...row.child, budget: "different transition" } }), false,
         "the typed digest binds the exact proposed child");
       assert.equal(pending(row), true, `policy ${policy} exact permitted review admits the child`);
-      if (policy === 4) {
-        // An older applicable Owner decision is a separate accepted review. Its
-        // hold cannot be hidden by citing the policy-4 successor permit.
-        const held = stamped({ ...typed.event, policy_version: 2,
-          transition_sha256: aggregateTransitionSha256("legacy_handoff",
-            { ...proposal, policy_version: 2 }), ruling: "owner_decision",
-          review_evidence: "Owner holds this handoff", recorded_at: "2099-01-01T00:00:19.000Z" });
-        const contested = [typed, held, stamped(row)];
-        assert.equal(derivePendingLineageBudgets([held,
-          stamped({ ...row, process_review_event_id: held.event_id })],
-        { standardEvents: loaded.events }).some((entry) => entry.task_id === "reviewed-child"), true,
-        "the older Owner-decision review is itself accepted when cited with Owner evidence");
-        assert.equal(derivePendingLineageBudgets(contested, { standardEvents: loaded.events })
-          .some((entry) => entry.task_id === "reviewed-child"), false,
-        "an uncited applicable Owner hold vetoes the cited successor permit");
-        const heldMutant = await importMutant(mutantDir, [[
-          'if (held || ((required || applicable.length) && !authorized) ||',
-          'if (((required || applicable.length) && !authorized) ||',
-        ]]);
-        assert.equal(heldMutant.derivePendingLineageBudgets(contested,
-          { standardEvents: loaded.events }).some((entry) => entry.task_id === "reviewed-child"), true,
-        "without the hold veto, the same contested child is minted");
-      }
     }
+  } finally { ctx.cleanup(); }
+});
+
+test("older mixed typed reviews replay their cited handoff while current admission refuses ambiguity", async () => {
+  const ctx = repo();
+  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
+    const parent = stamped({ type: "round_disposition", task_id: "standard-parent",
+      changeset_id: "standard-parent-cs", round: 1, candidate_sha: manifest.digest,
+      candidate_manifest: manifest.records, verdict: "NO-GO", disposition: "REMEDIATE",
+      finding_ids: ["F1"], finding_class: "legacy", ownership_area: "controller",
+      original_trigger: "active standard work", authorized_paths: candidate.paths,
+      introduced_by_prior_repair: false, new_scope: false, repair_dispatch_event_id: null,
+      root_cause_exit_event_id: null, adherence_audit_event_id: null,
+      owner_extension_event_id: null, owner_scope_event_id: null,
+      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "historical-worker" });
+    const ledger = repairLedgerPath(ctx.dir);
+    mkdirSync(path.dirname(ledger), { recursive: true });
+    const proposal = { parent_task_id: "standard-parent", parent_changeset_id: "standard-parent-cs",
+      parent_disposition_event_id: parent.event_id, parent_round: 1,
+      parent_candidate_sha: manifest.digest, authorized_paths: candidate.paths,
+      child: { task_id: "reviewed-child", changeset_id: "reviewed-child-cs", tier: "T2",
+        budget: "one handoff", authorized_paths: candidate.paths } };
+    const anchor = { kind: "standard_disposition", event_id: parent.event_id,
+      candidate_sha: manifest.digest };
+    const olderDecision = stamped({ type: "aggregate_v2", kind: "process_review", policy_version: 2,
+      task_id: "standard-parent", changeset_id: "standard-parent-cs",
+      recorded_at: "2099-01-01T00:00:01.000Z", session_id: "older-reviewer",
+      reviewer_role: "frontier", anchor, purpose: "legacy_handoff",
+      transition_sha256: aggregateTransitionSha256("legacy_handoff", { ...proposal, policy_version: 2 }),
+      next_gate_ordinal: 2, review_evidence: "permissive Owner review", zoom_out: "bounded",
+      ruling: "owner_decision", bounded_scope: "one child", closure_evidence: "bounded" });
+    writeFileSync(ledger, `${JSON.stringify(parent)}\n${JSON.stringify(olderDecision)}\n`);
+    const permit = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
+      task_id: "standard-parent", changeset_id: "standard-parent-cs", reviewer_role: "frontier",
+      purpose: "legacy_handoff", anchor, proposed_transition: { ...proposal, policy_version: 4 },
+      review_evidence: "successor permitted", zoom_out: "bounded", ruling: "successor",
+      bounded_scope: "one child", closure_evidence: "bounded" }, options(ctx.dir));
+    assert.equal(permit.ok, true, permit.state);
+    const loaded = loadRepairEventsForProject(ctx.dir);
+    const permitted = loaded.aggregate_events.find((entry) => entry.event_id === permit.event_id);
+    const historical = stamped({ type: "aggregate_v2", kind: "legacy_handoff", policy_version: 4,
+      task_id: "old-outer", changeset_id: "old-outer-cs", ...proposal,
+      owner_evidence: "Owner authorized the handoff", process_review_event_id: permitted.event_id,
+      recorded_at: "2099-01-01T00:00:20.000Z", session_id: "historical-owner" });
+    const oldRows = [...loaded.aggregate_events, historical];
+    assert.deepEqual(derivePendingLineageBudgets(oldRows, { standardEvents: loaded.events })
+      .map((entry) => entry.task_id), ["reviewed-child"],
+    "the older recorder-admitted p2 decision and p4 permit preserve the cited handoff");
+    assert.deepEqual(activeRepairPathOwners(loaded.events, "src/x.mjs",
+      { aggregateEvents: oldRows }).handed_off_task_ids, ["standard-parent"]);
+    const retroVeto = await importMutant(mutantDir, [[
+      'if (((required || applicable.length) && !authorized) ||',
+      'if (applicable.some((candidate) => candidate.ruling === "owner_decision" && ' +
+        'candidate.event_id !== row.process_review_event_id) || ' +
+        '((required || applicable.length) && !authorized) ||',
+    ]]);
+    assert.deepEqual(retroVeto.derivePendingLineageBudgets(oldRows,
+      { standardEvents: loaded.events }), [],
+    "retroactive uncited-decision veto loses the old public-recorder-admitted child");
+
+    const current = { type: "aggregate_v2", kind: "legacy_handoff",
+      task_id: "standard-parent", changeset_id: "standard-parent-cs", ...proposal,
+      owner_evidence: "Owner authorizes current T2 handoff", process_review_event_id: permitted.event_id };
+    const before = readFileSync(ledger, "utf8");
+    const refused = recordAggregateLegacyHandoff(current, options(ctx.dir));
+    assert.equal(refused.ok, false, "current admission refuses an uncited applicable Owner decision");
+    assert.equal(refused.state, "aggregate-legacy-handoff-conflict");
+    assert.equal(readFileSync(ledger, "utf8"), before, "current refusal does not append");
   } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
 });
 
