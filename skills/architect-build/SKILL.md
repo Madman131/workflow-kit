@@ -1,16 +1,14 @@
 ---
 name: architect-build
-description: Establish or recover a persistent architect for a multi-CHIP program, preserve its approved baseline, and hand execution to a separate orchestrator.
+description: Establish/recover a persistent architect, preserve the approved baseline, and hand execution to a separate orchestrator.
 ---
 
-# /architect-build — persistent architecture, separate execution
+# /architect-build — persistent Architect/Principal
 
 Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing and § Gate;
 `core/FOUNDATIONS.md` Roles; `.agents/skills/architect-build/ROUTING.md`; `.agents/skills/orchestrate/SKILL.md`.
 
-Use for a substantial program needing one continuing architectural view while a separate PM runs CHIPS.
-With recorded Owner delegation, the Architect is Project Principal: it owns continuity, design fit and
-completion, and its in-envelope decisions bind `/orchestrate`; PM retains execution, workers and reviews.
+Use for multi-CHIP programs. With recorded Owner delegation, Architect is Project Principal, accountable for continuity, blueprint/design fit, current outcomes and acceptance evidence, and authorized completion through one separate PM. Its in-envelope decisions bind `/orchestrate`; PM owns execution, workers and reviews. Resolve ordinary conflicts; return only unresolved reserved decisions to Owner. Reuse evidence, batch independent work where useful, and avoid unrelated work or repeated attempts without new evidence. Efficiency never reduces required gates.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If the
 harness supports task creation, establish/reuse the architect first and, after baseline approval,
@@ -20,8 +18,8 @@ does not need a renewed launch. Never duplicate an established architect or PM.
 
 ## Establish, reuse, or recover
 
-First locate the repository's existing architecture/current-state record. If none can carry the required
-fields, create one using the repository's normal docs/state convention and record its exact path. It names
+Locate an architecture/current-state record supporting required fields. Otherwise create one
+under repository docs/state conventions; record its exact path. Include
 the program/repository, architect and active-PM locator (or file-only equivalents), approved
 baseline/source pointers, Owner delegation/limits, decisions with id/type/source/scope/evidence/limits/status,
 pending or superseded advice kept distinct, current phase/CHIP, unresolved decisions, last alignment check,
@@ -40,7 +38,7 @@ and reconciliation owed.
 The handoff gives PM baseline, record/location, Principal locator, delegation/limits, phase/CHIP, open
 decisions, and next milestone. It does not authorize new scope, push, deployment, or live write.
 
-## Keep continuity without spending a consult
+## Quiet continuity
 
 The PM records routine CHIP progress, dispositions, outcomes, and evidence in the durable record without
 contacting the architect. Consult only at program inception/baseline, terminal STOP, a material pivot,

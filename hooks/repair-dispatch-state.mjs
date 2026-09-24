@@ -18,12 +18,12 @@ const EVENT_TYPES = new Set([
 ]);
 const REPLAY_ONLY_EVENT_TYPES = new Set(["panel_close", "evidence_rerun", "child_continuation"]);
 const AGGREGATE_EVENT_TYPE = "aggregate_v2";
-// Policy 1 is represented only by an absent field.  Policy 2 remains a supported
-// historical grammar; new rows are policy 3.  Keep these separate: treating the
-// current mint as the only live version silently demotes accepted v2 controls.
+// Policy 1 is represented only by an absent field. Policies 2 and 3 remain
+// historical grammars; new roots and children mint policy 4.
 const HISTORICAL_AGGREGATE_POLICY_VERSION = 1;
 const ESTABLISHED_AGGREGATE_POLICY_VERSION = 2;
-export const AGGREGATE_POLICY_VERSION = 3;
+const PRINCIPAL_AGGREGATE_POLICY_VERSION = 3;
+export const AGGREGATE_POLICY_VERSION = 4;
 const AGGREGATE_KINDS = new Set([
   "panel_open", "panel_close", "disposition", "root_exit", "dispatch", "worker",
   "worker_handoff", "process_review", "child_continuation", "legacy_handoff", "close",
@@ -89,18 +89,19 @@ function validManifest(records, digest) {
 function validAggregateEnvelope(event) {
   return plain(event) && event.type === AGGREGATE_EVENT_TYPE && AGGREGATE_KINDS.has(event.kind) &&
     (event.policy_version === undefined || event.policy_version === ESTABLISHED_AGGREGATE_POLICY_VERSION ||
-      event.policy_version === AGGREGATE_POLICY_VERSION) &&
+      event.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION || event.policy_version === AGGREGATE_POLICY_VERSION) &&
     text(event.task_id, 120) && text(event.changeset_id, 120) && text(event.recorded_at, 100) &&
     text(event.session_id, 200) && validAggregateKindShape(event);
 }
 
 const nullableId = (value) => value === null || ID64.test(value || "");
 const aggregatePolicyVersion = (event) => event?.policy_version === AGGREGATE_POLICY_VERSION
-  ? AGGREGATE_POLICY_VERSION : event?.policy_version === ESTABLISHED_AGGREGATE_POLICY_VERSION
-    ? ESTABLISHED_AGGREGATE_POLICY_VERSION : HISTORICAL_AGGREGATE_POLICY_VERSION;
+  ? AGGREGATE_POLICY_VERSION : event?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION
+    ? PRINCIPAL_AGGREGATE_POLICY_VERSION : event?.policy_version === ESTABLISHED_AGGREGATE_POLICY_VERSION
+      ? ESTABLISHED_AGGREGATE_POLICY_VERSION : HISTORICAL_AGGREGATE_POLICY_VERSION;
 const establishedAggregatePolicy = (event) =>
   aggregatePolicyVersion(event) >= ESTABLISHED_AGGREGATE_POLICY_VERSION;
-const currentAggregatePolicy = (event) => aggregatePolicyVersion(event) >= AGGREGATE_POLICY_VERSION;
+const currentAggregatePolicy = (event) => aggregatePolicyVersion(event) >= PRINCIPAL_AGGREGATE_POLICY_VERSION;
 const effectiveAggregatePolicyVersion = (state, incoming) =>
   Math.max(state?.policy_version ?? HISTORICAL_AGGREGATE_POLICY_VERSION, aggregatePolicyVersion(incoming));
 const continuationReviewAllows = (review) =>
@@ -170,16 +171,18 @@ function v3AuthorityRoute(input, { proposal = false } = {}) {
 function proposedTransitionProjection(purpose, input) {
   if (!plain(input)) return null;
   if (input.policy_version !== undefined && input.policy_version !== ESTABLISHED_AGGREGATE_POLICY_VERSION &&
+      input.policy_version !== PRINCIPAL_AGGREGATE_POLICY_VERSION &&
       input.policy_version !== AGGREGATE_POLICY_VERSION) return null;
   const policy = aggregatePolicyVersion(input);
   if (policy !== HISTORICAL_AGGREGATE_POLICY_VERSION &&
-      policy !== ESTABLISHED_AGGREGATE_POLICY_VERSION && policy !== AGGREGATE_POLICY_VERSION) return null;
+      policy !== ESTABLISHED_AGGREGATE_POLICY_VERSION &&
+      policy !== PRINCIPAL_AGGREGATE_POLICY_VERSION && policy !== AGGREGATE_POLICY_VERSION) return null;
   if (purpose === "dispatch") {
     const paths = sortedPaths(input.authorized_paths);
     if (!ID64.test(input.disposition_event_id || "") || !ID64.test(input.panel_close_event_id || "") ||
         !Number.isSafeInteger(input.source_round) || !Number.isSafeInteger(input.next_round) ||
         !nullableId(input.root_exit_event_id) || !paths) return null;
-    return { ...(policy === AGGREGATE_POLICY_VERSION ? { policy_version: AGGREGATE_POLICY_VERSION } : {}),
+    return { ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? { policy_version: policy } : {}),
       disposition_event_id: input.disposition_event_id, panel_close_event_id: input.panel_close_event_id,
       source_round: input.source_round, next_round: input.next_round,
       root_exit_event_id: input.root_exit_event_id ?? null, authorized_paths: paths };
@@ -191,7 +194,7 @@ function proposedTransitionProjection(purpose, input) {
         tier: child.tier, budget: child.budget, authorized_paths: paths } : null;
     }) : null;
     const completionValid = input.continuation_kind !== "completion_exception" ||
-      (policy === AGGREGATE_POLICY_VERSION
+      (policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION
         ? v3AuthorityRoute(input, { proposal: input.principal_evidence === undefined && input.authority_route === "principal" }) &&
           validActionScreen(input.action_screen) &&
           v3FinalBundle(input.completion_exception, input.authority_route === "principal" ? "T2" : children?.[0]?.tier) &&
@@ -199,6 +202,7 @@ function proposedTransitionProjection(purpose, input) {
         : text(input.owner_evidence, 1000) && validActionScreen(input.action_screen) &&
           completionExceptionShape(input.completion_exception) && completionBatchReviewProposalShape(input.completion_batch));
     if (!children || children.some((child) => !child) ||
+        (policy === AGGREGATE_POLICY_VERSION && children.some((child) => child.tier !== "T2")) ||
         !((ID64.test(input.parent_disposition_event_id || "") && input.parent_panel_open_event_id === undefined) ||
           (input.parent_disposition_event_id === null && ID64.test(input.parent_panel_open_event_id || ""))) ||
         !Array.isArray(input.trigger_ids) || !input.trigger_ids.every((id) => text(id, 300)) ||
@@ -206,19 +210,19 @@ function proposedTransitionProjection(purpose, input) {
         !completionValid ||
         (input.continuation_kind !== "completion_exception" &&
           (input.completion_exception !== undefined || input.completion_batch !== undefined))) return null;
-    if (policy === AGGREGATE_POLICY_VERSION && (!v3AuthorityRoute(input, {
+    if (policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION && (!v3AuthorityRoute(input, {
       proposal: input.principal_evidence === undefined && input.authority_route === "principal",
     }) || !validActionScreen(input.action_screen))) return null;
-    return { ...(policy === AGGREGATE_POLICY_VERSION ? { policy_version: AGGREGATE_POLICY_VERSION,
+    return { ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? { policy_version: policy,
       authority_route: input.authority_route,
       ...(input.authority_route === "owner" ? { owner_evidence: input.owner_evidence } : {}) } : {}),
       parent_disposition_event_id: input.parent_disposition_event_id,
       ...(input.parent_panel_open_event_id !== undefined
         ? { parent_panel_open_event_id: input.parent_panel_open_event_id } : {}),
       trigger_ids: [...input.trigger_ids].sort(), continuation_kind: input.continuation_kind,
-      ...(policy === AGGREGATE_POLICY_VERSION ? { action_screen: input.action_screen } : {}),
+      ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? { action_screen: input.action_screen } : {}),
       ...(input.continuation_kind === "completion_exception"
-        ? { ...(policy === AGGREGATE_POLICY_VERSION ? {} : { owner_evidence: input.owner_evidence,
+        ? { ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? {} : { owner_evidence: input.owner_evidence,
           action_screen: input.action_screen }),
           completion_exception: input.completion_exception,
           completion_batch: { worker_session_id: input.completion_batch.worker_session_id,
@@ -232,7 +236,8 @@ function proposedTransitionProjection(purpose, input) {
     if (!text(input.parent_task_id, 120) || !text(input.parent_changeset_id, 120) ||
         !ID64.test(input.parent_disposition_event_id || "") || !Number.isSafeInteger(input.parent_round) ||
         !ID64.test(input.parent_candidate_sha || "") || !paths || !aggregateChildShape(input.child)) return null;
-    return { ...(policy === AGGREGATE_POLICY_VERSION ? { policy_version: AGGREGATE_POLICY_VERSION } : {}),
+    if (policy === AGGREGATE_POLICY_VERSION && input.child.tier !== "T2") return null;
+    return { ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? { policy_version: policy } : {}),
       parent_task_id: input.parent_task_id, parent_changeset_id: input.parent_changeset_id,
       parent_disposition_event_id: input.parent_disposition_event_id, parent_round: input.parent_round,
       parent_candidate_sha: input.parent_candidate_sha, authorized_paths: paths,
@@ -253,6 +258,7 @@ function validAggregateKindShape(event) {
       { const paths = sortedPaths(event.changed_paths); return Number.isSafeInteger(event.round) &&
         event.round >= 1 && event.round <= 4 && ["repair_round", "final_bookend"].includes(event.phase) &&
         ["T2", "T3"].includes(event.tier) &&
+        (event.policy_version !== AGGREGATE_POLICY_VERSION || event.tier === "T2") &&
         GIT_SHA.test(event.frozen_commit || "") && GIT_SHA.test(event.frozen_tree || "") &&
         validBaseRef(event.base_ref) && GIT_SHA.test(event.base_commit || "") && paths &&
         same(paths, event.changed_paths) && expectedPanelShape(event.tier, event.expected_seats, paths) &&
@@ -327,6 +333,7 @@ function validAggregateKindShape(event) {
         event.trigger_ids.every((id) => text(id, 300)) &&
         CONTINUATION_KINDS.has(event.continuation_kind) &&
         Array.isArray(event.children) && event.children.length > 0 && event.children.every(aggregateChildShape) &&
+        (event.policy_version !== AGGREGATE_POLICY_VERSION || event.children.every((child) => child.tier === "T2")) &&
         (currentAggregatePolicy(event)
           ? v3AuthorityRoute(event) && (event.authority_route !== "principal" || principalEvidenceShape(event.principal_evidence, {
             transitionKind: event.continuation_kind, taskId: event.task_id, changesetId: event.changeset_id,
@@ -346,7 +353,9 @@ function validAggregateKindShape(event) {
       return text(event.parent_task_id, 120) && text(event.parent_changeset_id, 120) &&
         ID64.test(event.parent_disposition_event_id || "") && Number.isSafeInteger(event.parent_round) &&
         ID64.test(event.parent_candidate_sha || "") && Boolean(sortedPaths(event.authorized_paths)) &&
-        aggregateChildShape(event.child) && text(event.owner_evidence, 1000) &&
+        aggregateChildShape(event.child) &&
+        (event.policy_version !== AGGREGATE_POLICY_VERSION || event.child.tier === "T2") &&
+        text(event.owner_evidence, 1000) &&
         (establishedAggregatePolicy(event) ? nullableId(event.process_review_event_id)
           : event.process_review_event_id === undefined || nullableId(event.process_review_event_id));
     case "close":
@@ -757,10 +766,22 @@ function findingPartitionShape(partition) {
     new Set(partition.followup.map((entry) => entry.id)).size === partition.followup.length;
 }
 
-function baseEvent(type, input, sessionId, now) {
+function baseEvent(type, input, sessionId, now, policyVersion = AGGREGATE_POLICY_VERSION) {
   if (!text(input?.task_id, 120) || !text(input?.changeset_id, 120) || !text(sessionId, 200)) return null;
   return { type, task_id: input.task_id, changeset_id: input.changeset_id, recorded_at: now, session_id: sessionId,
-    ...(type === AGGREGATE_EVENT_TYPE ? { policy_version: AGGREGATE_POLICY_VERSION } : {}) };
+    ...(type === AGGREGATE_EVENT_TYPE ? { policy_version: policyVersion } : {}) };
+}
+
+// The only historical mint route is proven by an accepted T3 program or its pending
+// T3 child budget. A task-lane tier is deliberately not consulted: it is self-report.
+function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit) {
+  const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
+  const world = rows && aggregateWorld(rows.aggregate, rows.standard);
+  const program = world?.programs.get(input?.task_id);
+  const pending = world?.childLineage.get(input?.task_id);
+  const policy = program?.tier === "T3" || (!program && pending?.tier === "T3")
+    ? PRINCIPAL_AGGREGATE_POLICY_VERSION : AGGREGATE_POLICY_VERSION;
+  return baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now, policy);
 }
 
 function aggregateRows(events) {
@@ -1032,12 +1053,14 @@ function aggregateWorld(events, standardEvents = []) {
     const rowSeq = Number.isSafeInteger(row.seq) ? row.seq : Infinity;
     // Once the live policy is present, an absent-version historical shape cannot take a later
     // transition. Old rows still replay until a live mint upgrades that program.
+    if (state?.tier === "T3" && aggregatePolicyVersion(row) >= AGGREGATE_POLICY_VERSION) continue;
     if (state?.policy_version >= ESTABLISHED_AGGREGATE_POLICY_VERSION &&
         aggregatePolicyVersion(row) < state.policy_version) continue;
     if (row.kind === "panel_open") {
       const paths = sortedPaths(row.changed_paths);
       if (!Number.isSafeInteger(row.round) || row.round < 1 || row.round > 4 ||
           !["repair_round", "final_bookend"].includes(row.phase) || !["T2", "T3"].includes(row.tier) ||
+          (aggregatePolicyVersion(row) === AGGREGATE_POLICY_VERSION && row.tier !== "T2") ||
           !GIT_SHA.test(row.frozen_commit || "") || !GIT_SHA.test(row.frozen_tree || "") ||
           !validBaseRef(row.base_ref) || !GIT_SHA.test(row.base_commit || "") || !paths ||
           !same(paths, row.changed_paths) || !expectedPanelShape(row.tier, row.expected_seats, paths)) continue;
@@ -1064,8 +1087,7 @@ function aggregateWorld(events, standardEvents = []) {
           if (!lineage || lineage.event_id !== lineageId || lineage.changeset_id !== row.changeset_id ||
               lineage.tier !== row.tier ||
               aggregatePolicyVersion(row) < Math.max(lineage.policy_version ?? HISTORICAL_AGGREGATE_POLICY_VERSION,
-                completionWorker && aggregatePolicyVersion(completionWorker) === AGGREGATE_POLICY_VERSION
-                  ? AGGREGATE_POLICY_VERSION : HISTORICAL_AGGREGATE_POLICY_VERSION) ||
+                completionWorker ? aggregatePolicyVersion(completionWorker) : HISTORICAL_AGGREGATE_POLICY_VERSION) ||
               !(completionException ? paths.length > 0 && paths.every((entry) => lineage.authorized_paths.includes(entry))
                 : paths.every((entry) => lineage.authorized_paths.includes(entry)))) continue;
           if (stoppedPathOverlap(paths, lineageAncestors(row.task_id))) continue;
@@ -1358,8 +1380,8 @@ function aggregateWorld(events, standardEvents = []) {
             row.dispatch_event_id !== lineage.event_id || row.worker_session_id !== batch?.worker_session_id ||
             !same(row.authorized_paths, batch.authorized_paths) || row.brief_path !== batch.brief_path ||
             row.brief_sha256 !== batch.brief_sha256) continue;
-        if (lineage.policy_version === AGGREGATE_POLICY_VERSION &&
-            aggregatePolicyVersion(row) < AGGREGATE_POLICY_VERSION) continue;
+        if (lineage.policy_version >= PRINCIPAL_AGGREGATE_POLICY_VERSION &&
+            aggregatePolicyVersion(row) < lineage.policy_version) continue;
         completionBatchWorkers.set(row.task_id, accept(row));
         admitSession(row.task_id, row.worker_session_id);
         continue;
@@ -1401,6 +1423,7 @@ function aggregateWorld(events, standardEvents = []) {
       // routed follow-ups; CLOSED must CARRY the accepted set (a floor — an empty trigger list
       // must not inherit the exit while shedding the harms) and may add routed follow-ups.
       if (!state || state.changeset_id !== row.changeset_id || !state.terminal || state.completion_exception ||
+          (aggregatePolicyVersion(row) === AGGREGATE_POLICY_VERSION && row.children?.some((child) => child.tier !== "T2")) ||
           !CONTINUATION_KINDS.has(row.continuation_kind) ||
           !Array.isArray(row.children)) continue;
       const completionException = row.continuation_kind === "completion_exception";
@@ -2019,7 +2042,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
 
 export function recordAggregatePanelOpen(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   // The clean-candidate check brackets the evidence capture: BEFORE proves the caller stands at the
   // declared freeze when capture starts, AFTER proves nothing moved under it while it ran. The
   // evidence itself is commit-addressed (see panelGitEvidence), so the bracket closes the one
@@ -2085,7 +2108,7 @@ export function recordAggregatePanelClose(input,
   const evidence = open && panelGitEvidence(projectRoot, open.base_ref, open.base_commit, open.frozen_commit,
     { execGit, anchorToRef: false });
   const still = evidence && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !open || !candidate || !evidence || !still || !same(evidence.changed_paths, open.changed_paths) ||
       !Array.isArray(input.received_seats)) return { ok: false, state: "aggregate-panel-close-malformed" };
   const event = { ...base, kind: "panel_close", panel_open_event_id: input.panel_open_event_id,
@@ -2100,7 +2123,7 @@ export function recordAggregateDisposition(input,
   const close = rows?.aggregate.find((row) => row.event_id === input?.panel_close_event_id)?.event;
   const open = close && rows.aggregate.find((row) => row.event_id === close.panel_open_event_id)?.event;
   const candidate = open && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   const event = base && { ...base, kind: "disposition", panel_close_event_id: input.panel_close_event_id,
     pm_findings: input.pm_findings ?? [], finding_dispositions: input.finding_dispositions,
     same_mechanism_repeated: input.same_mechanism_repeated,
@@ -2124,7 +2147,7 @@ export function recordAggregateDisposition(input,
 
 export function recordAggregateRootExit(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !Array.isArray(input.removed_workarounds) || !Array.isArray(input.trigger_matrix)) {
     return { ok: false, state: "aggregate-root-exit-malformed" };
   }
@@ -2145,7 +2168,7 @@ export function recordAggregateProcessReview(input,
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
   const purpose = input?.purpose;
   const proposed = input?.proposed_transition;
-  if (purpose === "child_continuation" && proposed?.policy_version === AGGREGATE_POLICY_VERSION &&
+  if (purpose === "child_continuation" && currentAggregatePolicy(proposed) &&
       proposed.principal_evidence !== undefined) {
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
@@ -2154,7 +2177,8 @@ export function recordAggregateProcessReview(input,
     ? readRegularRepoFile(projectRoot, proposed.completion_batch.brief_path) : null;
   const reviewedProposal = batchBrief ? { ...proposed, completion_batch: { ...proposed.completion_batch,
     brief_sha256: batchBrief.sha256, brief_size: batchBrief.size } } : proposed;
-  if (aggregatePolicyVersion(reviewedProposal) !== AGGREGATE_POLICY_VERSION) {
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  if (aggregatePolicyVersion(reviewedProposal) !== base?.policy_version) {
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
   const projection = proposedTransitionProjection(purpose, reviewedProposal);
@@ -2166,7 +2190,7 @@ export function recordAggregateProcessReview(input,
     const disposition = state.latest;
     const root = state.root_exits.find((candidate) => candidate.disposition_event_id === disposition.event_id);
     const expected = proposedTransitionProjection("dispatch", {
-      policy_version: AGGREGATE_POLICY_VERSION,
+      policy_version: base.policy_version,
       disposition_event_id: disposition.event_id, panel_close_event_id: disposition.panel_close_event_id,
       source_round: disposition.round, next_round: disposition.round + 1,
       root_exit_event_id: root?.event_id ?? null, authorized_paths: disposition.authorized_paths,
@@ -2189,7 +2213,6 @@ export function recordAggregateProcessReview(input,
       same(projection.authorized_paths, standard.latest.authorized_paths) &&
       same(projection.child.authorized_paths, projection.authorized_paths);
   }
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
   const expectedChangeset = purpose === "legacy_handoff" ? standard?.changeset_id : state?.changeset_id;
   const transitionSha = projection && eventId(projection);
   if (!base || !projection || !contextOk || !processReviewRulingAllowed(purpose, input.ruling) ||
@@ -2210,7 +2233,7 @@ export function recordAggregateProcessReview(input,
 
 export function recordAggregateWorkerHandoff(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !((text(input.owner_evidence, 1000) && input.principal_evidence === undefined) ||
       (input.owner_evidence === undefined && plain(input.principal_evidence)))) {
     return { ok: false, state: "aggregate-worker-handoff-malformed" };
@@ -2238,7 +2261,7 @@ export function recordAggregateWorkerHandoff(input,
 
 export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
       !input.children.every(aggregateChildShape) ||
       (input.continuation_kind === "completion_exception" && input.children.length !== 1)) {
@@ -2260,7 +2283,7 @@ export function recordAggregateChildContinuation(input,
   if (!parentOpen) return { ok: false, state: "aggregate-continuation-malformed" };
   const completionException = input.continuation_kind === "completion_exception";
   const authorityRoute = input.authority_route;
-  if (!currentAggregatePolicy({ policy_version: AGGREGATE_POLICY_VERSION }) ||
+  if (!currentAggregatePolicy(base) ||
       !["owner", "principal"].includes(authorityRoute)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
@@ -2325,7 +2348,7 @@ export function recordAggregateChildContinuation(input,
 
 export function recordAggregateClose(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !text(input.reason, 1000) ||
       !((text(input.owner_evidence, 1000) && input.principal_evidence === undefined) ||
         (input.owner_evidence === undefined && plain(input.principal_evidence)))) {
@@ -2362,7 +2385,7 @@ export function recordAggregateLegacyHandoff(input,
   const rows = controllerRows(file);
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
   const parent = deriveRepairState(rows.standard, input?.parent_task_id);
-  const base = baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !parent.ok || !parent.active || !parent.latest ||
       !Array.isArray(input.authorized_paths) || !plain(input.child)) {
     return { ok: false, state: "aggregate-legacy-handoff-malformed" };
@@ -2599,8 +2622,8 @@ export function validateAggregateDispatch(declaration,
     const required = processReviewRequired(state, declaration.next_round);
     processReview = declaration.process_review_event_id == null ? null
       : state.process_reviews.find((row) => row.event_id === declaration.process_review_event_id);
-    const transition = { policy_version: AGGREGATE_POLICY_VERSION, disposition_event_id: disposition.event_id,
-      panel_close_event_id: disposition.panel_close_event_id, source_round: disposition.round,
+    const transition = { policy_version: state.tier === "T3" ? PRINCIPAL_AGGREGATE_POLICY_VERSION : AGGREGATE_POLICY_VERSION,
+      disposition_event_id: disposition.event_id, panel_close_event_id: disposition.panel_close_event_id, source_round: disposition.round,
       next_round: declaration.next_round, root_exit_event_id: declaration.root_exit_event_id ?? null,
       authorized_paths: disposition.authorized_paths };
     const authorized = processReview && typedReviewMatches(processReview, "dispatch",
@@ -2665,7 +2688,7 @@ export function confirmRepairBrief({ declaration, brief_path: briefPath } = {},
   }
   const r = validated.repair;
   if (declaration.aggregate_controller === AGGREGATE_EVENT_TYPE) {
-    const base = baseEvent(AGGREGATE_EVENT_TYPE, declaration, sessionId, now);
+    const base = aggregateBaseEvent(declaration, sessionId, now, projectRoot, execGit);
     const event = { ...base, kind: "dispatch", disposition_event_id: r.disposition_event_id,
       panel_close_event_id: r.panel_close_event_id, source_round: r.source_round, next_round: r.next_round,
       authorized_paths: [...r.authorized_paths], root_exit_event_id: r.root_exit_event_id,
@@ -2772,7 +2795,8 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
     const prior = state?.workers.find((row) => row.dispatch_event_id === eventId &&
       row.worker_session_id === sessionId);
     if (prior) return { ok: true, event_id: prior.event_id, idempotent: true };
-    const event = { type: AGGREGATE_EVENT_TYPE, policy_version: AGGREGATE_POLICY_VERSION,
+    const event = { type: AGGREGATE_EVENT_TYPE,
+      policy_version: aggregateBaseEvent(receipt, sessionId, now, projectRoot, execGit)?.policy_version,
       kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id,
       recorded_at: now, session_id: sessionId,
       dispatch_event_id: eventId, worker_session_id: sessionId,
@@ -2788,7 +2812,8 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
     if (prior?.worker_session_id === sessionId && prior.dispatch_event_id === eventId) {
       return { ok: true, event_id: prior.event_id, idempotent: true };
     }
-    const event = { type: AGGREGATE_EVENT_TYPE, policy_version: AGGREGATE_POLICY_VERSION,
+    const event = { type: AGGREGATE_EVENT_TYPE,
+      policy_version: aggregateBaseEvent(receipt, sessionId, now, projectRoot, execGit)?.policy_version,
       kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id, recorded_at: now, session_id: sessionId,
       dispatch_event_id: eventId, worker_session_id: sessionId, authorized_paths: [...receipt.authorized_paths],
       brief_path: receipt.target, brief_sha256: receipt.brief_sha256 };

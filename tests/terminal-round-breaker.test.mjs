@@ -176,7 +176,7 @@ function processReview(ctx, closeId, candidate, ruling = "finish_bounded_root") 
     reviewer_role: "frontier", purpose: "dispatch",
     anchor: { kind: "aggregate_panel_close", event_id: closeId,
       frozen_commit: candidate.commit, frozen_tree: candidate.tree },
-    proposed_transition: { policy_version: AGGREGATE_POLICY_VERSION,
+    proposed_transition: { policy_version: state.tier === "T3" ? 3 : AGGREGATE_POLICY_VERSION,
       disposition_event_id: state.latest.event_id, panel_close_event_id: closeId,
       source_round: state.latest.round, next_round: state.latest.round + 1,
       root_exit_event_id: root?.event_id ?? null, authorized_paths: state.latest.authorized_paths },
@@ -731,7 +731,12 @@ test("declared STOP at any round + the successor tier floor (no lower baseline)"
   const ctx = repo();
   try {
     const candidate = commit(ctx.dir, 1);
-    const p1 = openPanel(ctx, 1, candidate, { tier: "T3" });
+    const minted = openPanel(ctx, 1, candidate);
+    assert.equal(minted.opened.ok, true, minted.opened.state);
+    const historical = stamped({ ...loadRepairEventsForProject(ctx.dir).aggregate_events[0].event,
+      policy_version: 3, tier: "T3", expected_seats: expectedSeats(candidate.paths, "T3") });
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(historical)}\n`);
+    const p1 = { opened: { ok: true, event_id: historical.event_id }, expected: historical.event.expected_seats };
     assert.equal(p1.opened.ok, true, p1.opened.state);
     const c1 = closePanel(ctx, p1, candidate, ["CRIT-1"]);
     assert.equal(c1.ok, true, c1.state);
@@ -752,6 +757,147 @@ test("declared STOP at any round + the successor tier floor (no lower baseline)"
     assert.equal(successor("T2").ok, false, "a T3 parent's successor cannot declare a T2 baseline");
     const ok = successor("T3");
     assert.equal(ok.ok, true, ok.state);
+  } finally { ctx.cleanup(); }
+});
+
+test("new T3 root refuses; accepted v3 T3 mints its review, worker, R2, and unopened child at v3", () => {
+  const ctx = repo();
+  try {
+    const first = commit(ctx.dir, 1);
+    const denied = openPanel(ctx, 1, first, { tier: "T3" });
+    assert.equal(denied.opened.state, "aggregate-panel-open-malformed");
+    assert.equal(loadRepairEventsForProject(ctx.dir).aggregate_events.length, 0);
+    const minted = openPanel(ctx, 1, first);
+    assert.equal(minted.opened.ok, true, minted.opened.state);
+    const historical = stamped({ ...loadRepairEventsForProject(ctx.dir).aggregate_events[0].event,
+      policy_version: 3, tier: "T3", expected_seats: expectedSeats(first.paths, "T3") });
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(historical)}\n`);
+    const p1 = { opened: { ok: true, event_id: historical.event_id }, expected: historical.event.expected_seats };
+    const c1 = closePanel(ctx, p1, first, ["F1"]);
+    assert.equal(c1.ok, true, c1.state);
+    const d1 = decide(ctx, c1, { accepted: ["F1"] });
+    assert.equal(d1.ok, true, d1.state);
+    const review = processReview(ctx, c1.event_id, first);
+    assert.equal(review.ok, true, review.state);
+    const authority = dispatchBatch(ctx, d1.event_id, c1.event_id, 2, null,
+      { processReviewId: review.event_id });
+    const handoff = recordAggregateWorkerHandoff({ type: "aggregate_v2", kind: "worker_handoff",
+      task_id: "task-1", changeset_id: "cs-1", dispatch_event_id: authority.dispatch,
+      prior_worker_event_id: authority.worker, new_worker_session_id: "owner-replacement",
+      owner_evidence: "Owner authorized this historical worker handoff" }, options(ctx.dir));
+    assert.equal(handoff.ok, true, handoff.state);
+    const second = commit(ctx.dir, 2);
+    const p2 = openPanel(ctx, 2, second, { tier: "T3",
+      incoming: { dispatch: authority.dispatch, worker: handoff.event_id } });
+    assert.equal(p2.opened.ok, true, p2.opened.state);
+    const c2 = closePanel(ctx, p2, second, ["F2"]);
+    assert.equal(c2.ok, true, c2.state);
+    const stopped = decide(ctx, c2, { accepted: ["F2"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    const successor = recordAggregateChildContinuation({ type: "aggregate_v2", kind: "child_continuation",
+      task_id: "task-1", changeset_id: "cs-1", parent_disposition_event_id: stopped.event_id,
+      trigger_ids: ["F2"], continuation_kind: "new_changeset", owner_evidence: "Owner historical successor",
+      children: [{ task_id: "historical-child", changeset_id: "historical-child-cs", tier: "T3",
+        budget: "one historical continuation", authorized_paths: second.paths }] }, options(ctx.dir));
+    assert.equal(successor.ok, true, successor.state);
+    assert.deepEqual(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events)
+      .map((row) => row.task_id), ["historical-child"]);
+    for (const row of loadRepairEventsForProject(ctx.dir).aggregate_events) {
+      assert.equal(row.event.policy_version, 3, `${row.event.kind} retains the historical envelope`);
+    }
+    const childCandidate = commit(ctx.dir, 3);
+    const child = openPanel(ctx, 1, childCandidate, { task: "historical-child",
+      changeset: "historical-child-cs", tier: "T3", lineage: { continuation: successor.event_id } });
+    assert.equal(child.opened.ok, true, child.opened.state);
+    assert.equal(loadRepairEventsForProject(ctx.dir).aggregate_events.at(-1).event.policy_version, 3);
+  } finally { ctx.cleanup(); }
+});
+
+test("accepted v3 T3 R4 completion child mints under its historical Owner and review envelope", () => {
+  const ctx = repo();
+  try {
+    let candidate = commit(ctx.dir, 1);
+    const first = openPanel(ctx, 1, candidate);
+    assert.equal(first.opened.ok, true, first.opened.state);
+    const historical = stamped({ ...loadRepairEventsForProject(ctx.dir).aggregate_events[0].event,
+      policy_version: 3, tier: "T3", expected_seats: expectedSeats(candidate.paths, "T3") });
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(historical)}\n`);
+    let panel = { opened: { ok: true, event_id: historical.event_id }, expected: historical.event.expected_seats };
+    let terminal = null;
+    for (let round = 1; round <= 4; round++) {
+      const closed = closePanel(ctx, panel, candidate, [`F${round}`]);
+      assert.equal(closed.ok, true, closed.state);
+      terminal = decide(ctx, closed, { accepted: [`F${round}`],
+        terminal_state: round === 4 ? "STOP" : "CONTINUE",
+        remediation_kind: round === 4 ? null : round >= 2 ? "root_replacement" : "bounded",
+        authorized_paths: round === 4 ? [] : ["src/x.mjs"] });
+      assert.equal(terminal.ok, true, terminal.state);
+      if (round === 4) break;
+      let root = null;
+      if (round >= 2) {
+        root = recordAggregateRootExit({ type: "aggregate_v2", kind: "root_exit", task_id: "task-1",
+          changeset_id: "cs-1", disposition_event_id: terminal.event_id,
+          shared_mechanism: "one historical defect", symptom_explanation: "prior repairs treated symptoms",
+          owner_state_yield_seams: ["owner seam"], replacement: "one correction",
+          removed_workarounds: ["repeat patch"], trigger_matrix: ["original trigger closes"],
+          closure_evidence: "candidate closes the trigger" }, options(ctx.dir));
+        assert.equal(root.ok, true, root.state);
+      }
+      const review = round === 3 ? processReview(ctx, closed.event_id, candidate) : null;
+      if (review) assert.equal(review.ok, true, review.state);
+      const authority = dispatchBatch(ctx, terminal.event_id, closed.event_id, round + 1,
+        root?.event_id ?? null, { processReviewId: review?.event_id ?? null });
+      candidate = commit(ctx.dir, round + 1);
+      panel = openPanel(ctx, round + 1, candidate, { tier: "T3",
+        incoming: { dispatch: authority.dispatch, worker: authority.worker } });
+      assert.equal(panel.opened.ok, true, panel.opened.state);
+    }
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/completion.md"), "one final historical repair\n");
+    const parent = derive(ctx);
+    const completion = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
+      changeset_id: "cs-1", parent_disposition_event_id: terminal.event_id, trigger_ids: ["F4"],
+      continuation_kind: "completion_exception", owner_evidence: "Owner approved historical completion",
+      children: [{ task_id: "historical-finish", changeset_id: "historical-finish-cs", tier: "T3",
+        budget: "one repair and final panel", authorized_paths: [...candidate.paths, "briefs/completion.md"].sort() }],
+      completion_exception: { repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: "T3", coverage: "full" },
+        pm_recommendation: "one correction", surviving_harm: "F4", smallest_correction: "src/x.mjs",
+        completion_proof: "full final panel" },
+      completion_batch: { worker_session_id: "historical-finish-worker", brief_path: "briefs/completion.md" } };
+    const proposal = { policy_version: 3, authority_route: "owner", owner_evidence: completion.owner_evidence,
+      action_screen: _DEFAULT_CONTINUATION_SCREEN, ...completion };
+    const anchor = { kind: "aggregate_terminal", event_id: parent.latest.event_id,
+      panel_open_event_id: parent.panels_open.at(-1).event_id,
+      frozen_commit: parent.panels_open.at(-1).frozen_commit,
+      frozen_tree: parent.panels_open.at(-1).frozen_tree };
+    const review = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
+      task_id: "task-1", changeset_id: "cs-1", reviewer_role: "frontier",
+      purpose: "child_continuation", proposed_transition: proposal, anchor,
+      review_evidence: "historical T3 completion reviewed", zoom_out: "one bounded exit",
+      ruling: "owner_decision", bounded_scope: "one final repair", closure_evidence: "F4 closes" }, options(ctx.dir));
+    assert.equal(review.ok, true, review.state);
+    const child = recordAggregateChildContinuation({ ...completion,
+      process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(child.ok, true, child.state);
+    assert.deepEqual(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events)
+      .map((row) => row.task_id), ["historical-finish"]);
+    const worker = recordWorkerVerification({ task_id: "historical-finish",
+      repair_dispatch_event_id: child.event_id }, options(ctx.dir, "historical-finish-worker"));
+    assert.equal(worker.ok, true, worker.state);
+    const finalCandidate = commit(ctx.dir, 5);
+    const finalPanel = recordAggregatePanelOpen({ type: "aggregate_v2", kind: "panel_open",
+      task_id: "historical-finish", changeset_id: "historical-finish-cs", round: 1,
+      phase: "final_bookend", tier: "T3", frozen_commit: finalCandidate.commit,
+      frozen_tree: finalCandidate.tree, base_ref: "origin/main", base_commit: ctx.base,
+      expected_seats: expectedSeats(finalCandidate.paths, "T3"),
+      incoming_dispatch_event_id: null, incoming_worker_event_id: worker.event_id,
+      child_continuation_event_id: child.event_id, legacy_handoff_event_id: null }, options(ctx.dir));
+    assert.equal(finalPanel.ok, true, finalPanel.state);
+    for (const row of loadRepairEventsForProject(ctx.dir).aggregate_events) {
+      assert.equal(row.event.policy_version, 3, `${row.event.kind} retains v3 T3 obligations`);
+    }
   } finally { ctx.cleanup(); }
 });
 

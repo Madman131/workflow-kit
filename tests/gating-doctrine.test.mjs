@@ -155,7 +155,7 @@ test("execution roles, legacy slice provenance, and closeout preserve their auth
   const closeout = read("skills/closeout/SKILL.md");
   assert.match(foundations, /PM independently inspects its bytes and may commit\/integrate them, but does not replace its authoring role/);
   assert.match(foundations, /Frontier planning or a critical consult hands its approved plan to the active workhorse PM for implementation/);
-  assert.match(orchestrate, /PM may inspect\/integrate Builder bytes; never author designated T2\/T3 source/);
+  assert.match(orchestrate, /PM may inspect\/integrate Builder bytes; never author designated T2 or historical T3 source/);
   assert.match(orchestrate, /Owner terminal children use fixed\s+authorized scope; bounded T2 Principal children use opened-only scope\. This controller-record ceiling never narrows the\s+Principal's broader delegated program authority/,
     "Owner scope and the Principal controller-record ceiling remain distinct");
   assert.match(orchestrate, /failed\/STOP surface stays closed.*genuinely new Owner-approved work begins separately only on disjoint surfaces.*controller binds typed `owner_decision`\/`successor` review and exact continuation proposal.*runtime model\/effort is procedure, not controller-authenticated identity/s);
@@ -204,9 +204,9 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
     "the tier summary cannot narrow the universal remote-publication GO to code pushes");
   assert.doesNotMatch(workflow, /wording sign-off also stands as its push-GO/,
     "core-document wording sign-off is never equivalent to a remote-publication GO");
-  assert.match(workflow, /with recorded delegation, the Owner's Project Principal completes ordinary in-scope work through PM, including tier\/wording/,
+  assert.match(workflow, /recorded Principal delegation covers ordinary in-scope tier\/wording through PM/,
     "tier classification grants the Principal completion authority without an Owner-ratification mirror");
-  assert.match(workflow, /Owner decides critical intent\/outcome, material scope\/budget\/access, explicit risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/,
+  assert.match(workflow, /Owner retains critical intent, material scope\/budget\/access, risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/,
     "Owner retains the exact reserved actions without reclaiming ordinary review approval");
   assert.doesNotMatch(workflow, /review\/publication GO/,
     "the superseded combined Owner review/publication reservation cannot return");
@@ -264,8 +264,28 @@ test("the model·effort matrix names capability TIERS, not vendor model ids", ()
   assert.match(g, /Standing effort is `high`/);
   // A portable kit must not bind an adopter to one vendor's lineup in a [P] doc. The matrix rows
   // are the place that regresses first, so pin the rows themselves.
-  assert.match(g, /\*\*Any T2, or routine T3\*\*.*\|\s*\*\*workhorse · high\*\*\s*\|\s*\*\*workhorse · high\*\*\s*\|/);
+  assert.match(g, /\*\*Ordinary new T2, or routine historical T3\*\*.*\|\s*\*\*workhorse · high\*\*\s*\|\s*\*\*workhorse · high\*\*\s*\|/);
   assert.match(g, /\*\*Irreversible prod write.*\|\s*\*\*frontier · xhigh\*\*\s*\|\s*\*\*frontier · xhigh\*\*\s*\|/);
+});
+
+test("new T0/T1/T2 depth and historical T3 preserve separate action authority", () => {
+  const w = read("core/WORKFLOW.md");
+  const a = read("core/ARTIFACT_CLASS.md");
+  const g = read("core/GATES.md");
+  const o = read("core/OPERATE.md");
+  const r = read("core/REVIEW.md");
+  const bindings = raw("templates/BINDINGS.md.tmpl");
+  assert.match(w, /\*\*T0\*\* \| pre-flight → self-check/);
+  assert.match(w, /New T3-class work gets the full normal T2 panel/);
+  assert.match(w, /Historical T3.*Owner obligations through closure and descendants/);
+  assert.match(a, /controlling instructions are never T0/);
+  assert.match(a, /controlling-doc restructure = \*\*T2\*\*/);
+  assert.match(r, /new controlling-document restructure or irreversible action receives\s+the full normal T2 panel/);
+  assert.match(g, /rare cell follows the actual action, not the T2 label/);
+  assert.match(o, /irreversible write requires its own GO \*\*per write\*\*/);
+  assert.match(w, /unbounded production read.*Otherwise hold execution/s);
+  assert.match(bindings, /\{\{OWNER_RESERVED_ACTIONS\}\}/);
+  assert.doesNotMatch(bindings, /\{\{T3_SET\}\}/);
 });
 
 // ---------------------------------------------------------------- the entry rule (§ Steer step 0)
@@ -346,7 +366,7 @@ test("the hook's floor line defers to the doors on admission, and agrees with th
     "door 2's widening — not a door-1 change — is what admits a chain/stateful touch under the ruled form");
   // The decision tree's own T2 row is what makes the floor line true for the chain/stateful case
   // once door 2 admits it — without this row an admitted chain/stateful change would land nowhere.
-  assert.match(w, /changes \*\*live-behavior-path\*\* code, OR changes \*\*chain\/stateful control logic\*\* → \*\*T2 Major\*\*/);
+  assert.match(w, /\*\*live-behavior-path\*\* code, or \*\*chain\/stateful control logic\*\* → \*\*T2 Major\*\*/);
 });
 
 // ---------------------------------------------------------------- rung order (WORKFLOW)
@@ -392,7 +412,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   // with every test green (see scripts/check-doc-size.mjs's 2026-08-13 cap-record entry for the
   // full incident, corrected alongside this pin). Restored in § Steer, and now pinned on BOTH
   // surfaces that carry it, not only the one that happened to already have a pin.
-  assert.match(w, /cutting REPAIRS, never review DEPTH — cutting seats is the misreading/);
+  assert.match(w, /cuts REPAIRS, never review DEPTH — cutting seats is the misreading/);
   assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
   assert.match(w, /\*\*Blank ⇒ NOTE\*\* \*\(Precedence below and the carve-outs — irreversible · prod write · gate-ran-lighter-than-mandate — screen FIRST; none exit here\)\*: recorded here/);
   assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
@@ -409,7 +429,8 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
 
   // ⚠ THE EXECUTION AXIS. Without this sentence the chip ships a licence to loosen a DATA gate:
   // some readers hold no code/data separation, and "gates got cheaper" reads as "all gates".
-  assert.match(w, /it does NOT touch the EXECUTION gate — per-write Owner authorization at the moment of a live-data write is unchanged/);
+  assert.match(w, /RULE #1 cuts REPAIRS, never review DEPTH.*frontier\/xhigh action gates and Owner GO remain/);
+  assert.match(w, /irreversible: \*\*named Owner GO per write\*\*/);
 
   // The seat contract must apply the threshold WITHOUT inviting seats to self-censor: a suppressed
   // finding is deleted, not noted, and under-reporting is the failure mode this rule creates.
@@ -467,8 +488,8 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
   assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ wording approval under above authority/);
-  assert.match(w, /with recorded delegation, the Owner's Project Principal completes ordinary in-scope work through PM, including tier\/wording/);
-  assert.match(w, /Owner decides critical intent\/outcome, material scope\/budget\/access, explicit risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/);
+  assert.match(w, /recorded Principal delegation covers ordinary in-scope tier\/wording through PM/);
+  assert.match(w, /Owner retains critical intent, material scope\/budget\/access, risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/);
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
   // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
   // HARD. Pinned in the amended test above — this older pin named the retired sentence.

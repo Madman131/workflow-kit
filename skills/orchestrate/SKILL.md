@@ -21,7 +21,7 @@ ordered; each verifies its predecessor landed. Never let two chips write one rep
 | **Owner** | approved plan and the decisions § Routing reserves | asked to run the method |
 | **Principal** | delegated program direction, continuity and closeout | worker dispatch, protected source, remote GO |
 | **Workhorse PM** | worker/chip dispatch, briefs, rulings, fold-checks, local integration, lesson bank | authors designated Builder source or gives remote GO |
-| **Builder** | its raw T2/T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
+| **Builder** | its raw T2 and historical T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
 
 **A remote GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner instruction
 outranks any routing preference; the Builder acts and tells the PM promptly. **A GO
@@ -31,7 +31,7 @@ the new head. Pin heads by **SHA**, never by branch name — a chip's branch can
 ### Routing — the Owner is not a queue
 Within approved plan, access and budget, PM may dispatch ordinary workers/reviews, approve Gemini
 slices and in-scope transmission, disposition findings/repairs, test, make local commits/integration
-and draft tickets. PM may inspect/integrate Builder bytes; never author designated T2/T3 source. One
+and draft tickets. PM may inspect/integrate Builder bytes; never author designated T2 or historical T3 source. One
 approval captures routine authority; a ticket never authorizes implementation or relabels repair scope.
 
 For a delegated program, Principal decides nonreserved in-envelope questions; directives bind PM and reviews remain

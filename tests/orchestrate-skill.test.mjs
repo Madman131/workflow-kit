@@ -32,6 +32,18 @@ const BODY = path.join(KIT, "skills", "orchestrate", "SKILL.md");
 const ARCHITECT_SKILL = path.join(KIT, "skills", "architect-build", "SKILL.md");
 const ARCHITECT_ROUTING = path.join(KIT, "skills", "architect-build", "ROUTING.md");
 
+test("Architect completion mandate stays in both loaded skill and authoritative routing", () => {
+  const skill = readFileSync(ARCHITECT_SKILL, "utf8");
+  const routing = readFileSync(ARCHITECT_ROUTING, "utf8");
+  const foundations = readFileSync(path.join(KIT, "core", "FOUNDATIONS.md"), "utf8");
+  pin(skill, "authorized completion through one separate PM", "Architect drives completion through one PM");
+  pin(skill, "avoid unrelated work or repeated attempts without new evidence", "Architect avoids wasteful loops");
+  pin(skill, "return only unresolved reserved decisions to Owner", "ordinary decisions stay delegated");
+  pin(routing, "directs completion through that one PM", "routing preserves one execution chain");
+  pin(routing, "without weakening gates, resolves in-envelope conflicts", "efficiency preserves review");
+  pin(foundations, "directs completion\nthrough one PM", "role foundation agrees with the loaded skill");
+});
+
 // Whitespace-flatten before matching: a phrase that WRAPS a line is present to a reader and absent
 // to a naive substring search, which produces a false RED here and (worse) a false "already fixed"
 // when the same technique is used to check a repair.

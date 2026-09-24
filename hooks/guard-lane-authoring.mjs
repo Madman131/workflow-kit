@@ -344,6 +344,7 @@ function deny(projectRoot, rel, state, sessionId, envelopeNote = "") {
     `Remediate by writing ${path.join(projectRoot, DECLARATION)} as ONE of the two DOCUMENTED routes: ` +
     `\`{"mode":"in-thread","sessionId":"${session}","taskId":"<kebab-task>","tier":"T0"|"T1"|"T2"|"T3"}\` · ` +
     `\`{"mode":"exempt","sessionId":"${session}","taskId":"<kebab-task>","reason":"codex-down"|"codex-quota"|"trivial-edit","tier":"T0"|"T1"|"T2"|"T3"}\`; ` +
+    'New work uses T0/T1/T2. T3 is a historical declaration only; this self-report cannot establish its lineage. ' +
     'optional `"maxAgeHours"` defaults to 24. ' +
     'The declaration is session/task-bound and gitignored; each state change is appended and synced to ' +
     `${path.join(projectRoot, LEDGER)} for Owner spot-check.` +
@@ -351,7 +352,7 @@ function deny(projectRoot, rel, state, sessionId, envelopeNote = "") {
     // earlier text asserted only "MISSING" — false against a file visibly carrying `tier:"T9"`. A
     // control that misdescribes the input it just read teaches its reader to discount it.
     (state === "exempt-tier-missing"
-      ? ' This exemption\'s `"tier"` is MISSING OR INVALID. Set `"tier":"T0"|"T1"|"T2"|"T3"` — since kit v1.5.0 `exempt` declares one exactly as `in-thread` does: the reason names the unavailable SEAT, which says nothing about how risky the work is. A pre-v1.5 tier-less exemption is not grandfathered.'
+      ? ' This exemption\'s `"tier"` is MISSING OR INVALID. Set `"tier":"T0"|"T1"|"T2"` for new work; `"T3"` requires independently proven historical lineage. Since kit v1.5.0 `exempt` declares one exactly as `in-thread` does: the reason names the unavailable SEAT, which says nothing about how risky the work is. A pre-v1.5 tier-less exemption is not grandfathered.'
       : "") +
     (state === "lane-retired"
       ? " The `lane` route was RETIRED with the cost-inversion build lane (doctrine at kit v1.4.0, mechanism at v1.5.0) — it is not an available route. Declare `in-thread` with the tier."

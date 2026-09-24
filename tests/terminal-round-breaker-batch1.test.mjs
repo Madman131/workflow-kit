@@ -18,7 +18,7 @@ import {
   AGGREGATE_POLICY_VERSION, activeRepairPathOwners, confirmRepairBrief, deriveAggregateRepairState, gitSubjectPresent,
   loadRepairEventsForProject, recordAggregateChildContinuation as _rawChildContinuation, recordAggregateClose,
   recordAggregateDisposition, recordAggregatePanelClose, recordAggregatePanelOpen, recordAggregateProcessReview,
-  recordAggregateRootExit, recordWorkerVerification,
+  recordAggregateRootExit, recordWorkerVerification, repairLedgerPath,
 } from "../hooks/repair-dispatch-state.mjs";
 
 // A minted successor now REQUIRES a structured action_screen (screen-at-emission enforcement,
@@ -309,8 +309,12 @@ test("tier continuity: a later round may escalate the tier, never lower it", () 
   const ctx = repo();
   try {
     const candidate = commit(ctx.dir, 1);
-    const opened = recordAggregatePanelOpen(openInput(ctx, candidate, {
-      tier: "T3", expected_seats: seats(candidate.paths, "T3") }), options(ctx.dir));
+    const first = recordAggregatePanelOpen(openInput(ctx, candidate), options(ctx.dir));
+    assert.equal(first.ok, true, first.state);
+    const legacyOpen = stamped({ ...loadRepairEventsForProject(ctx.dir).aggregate_events[0].event,
+      policy_version: 3, tier: "T3", expected_seats: seats(candidate.paths, "T3") });
+    writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(legacyOpen)}\n`);
+    const opened = { ok: true, event_id: legacyOpen.event_id };
     assert.equal(opened.ok, true, opened.state);
     const closed = close(ctx, opened, seats(candidate.paths, "T3"), candidate, ["F1"]);
     assert.equal(closed.ok, true, closed.state);

@@ -28,4 +28,8 @@
 
 P3's pinned PM decider covers review evidence and disposition, not delegated program direction. Frontier planning or a critical consult hands its approved plan to the active workhorse PM for implementation; it does not replace that PM lifecycle role.
 
-*Delegation — how subagents **Gather / Review / Author** within the tiers (changing no tier and no gate), plus the **Retention guarantee** that keeps live-path/T2/T3 authoring in the Builder's own context — is `core/MULTI_AGENT.md` § Delegation.*
+*Delegation — how subagents **Gather / Review / Author** within the tiers (changing no tier and no gate), plus the **Retention guarantee** that keeps live-path/T2 and accepted historical T3 authoring in the Builder's own context — is `core/MULTI_AGENT.md` § Delegation.*
+
+The Project Principal maintains the approved blueprint and acceptance evidence and directs completion
+through one PM. It resolves ordinary delegated decisions, uses established evidence and efficient
+sequencing, and asks Owner only for unresolved reserved choices. The PM remains the sole execution chain.

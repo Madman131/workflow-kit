@@ -10,8 +10,8 @@ while running it, how the work is **closed**, and the norms the Owner and Builde
 Delegation, multi-writer staging, the task-lane declaration and onboarding are `core/MULTI_AGENT.md`.*
 
 ## Execution protocol — ad-hoc prod writes
-**Execution protocol — every *ad-hoc* prod write (T2 reversible / T3 irreversible), per write:**
-1. **Named GO** from the Owner (T3: per write; T2: may cover a *bounded batch* = a finite, pre-named set the Owner sees in full at GO-time).
+**Execution protocol — every *ad-hoc* prod write, per write:** New work is reviewed at T2; historical T3 keeps its old obligations. Reversibility determines execution authority independently of tier.
+1. **Named GO** from the Owner: an irreversible write requires its own GO **per write**; only a reversible write may use a *bounded batch* = a finite, pre-named set the Owner sees in full at GO-time. A code-review GO or ordinary T2 batch GO never implies an irreversible-write GO.
 2. **Preflight.** *Enter the maintenance window* — **capture the current flag state**, set the maintenance flags, and **wait for the service to quiesce** (it releases its own write lock; never delete a lock to *bypass a running service* — but clearing a *confirmed-orphaned* lock after an aborted write, service stopped, is recovery per the Runbook). Reversible → capture the restore handle + record its id. Irreversible → a pre-write backup is mandatory + the Owner explicitly acks *there is no rollback*. State expected postconditions + stop conditions.
 3. **One step** — the Builder emits one command; the **Owner runs it** + reports (destructive prod writes are Owner-run, never agent-autonomous).
 4. **Verify** with the standing mechanical gate; if it can't run or is suspect → **fail closed** + escalate.

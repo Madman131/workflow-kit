@@ -133,7 +133,7 @@ Index and layer model: `core/README.md`.
 ## Gates, deploy & data
 - **Standing mechanical gate** = {{MECHANICAL_GATE}} (must be 0-FAIL).
 - **Live behavior path** = {{LIVE_PATH}}.
-- **T3 set** = {{T3_SET}} — the irreversible / live-prod writes.
+- **Owner-reserved actions** = {{OWNER_RESERVED_ACTIONS}} — the irreversible / live-prod writes and other actions needing exact Owner authority. This binding identifies protected actions; it does not classify new work as T3.
 - **Deploy:** pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}. {{DEPLOY_MECHANISM}}.
 - **Core documents** (amendments gated cold + wording approval under recorded authority, no external gate for prose; executable
   content excepted to the code tiers): the `core/` set + `CLAUDE.md` + `AGENTS.md` + {{OTHER_CORE_DOCS}}.

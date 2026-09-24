@@ -651,10 +651,16 @@ test("v3 Principal close and worker replacement enforce exact evidence and idemp
   } finally { historical.cleanup(); }
 });
 
-test("v3 Principal successors require review, stay inside parent paths, and exclude material scope", () => {
+test("v4 T2 successors require review, stay inside parent paths, and exclude material scope", () => {
   const { ctx } = principalStoppedParent();
   try {
+    assert.equal(aggregateRows(ctx)[0].event.policy_version, 4,
+      "new T2 roots mint v4");
     const proposal = principalChildProposal(ctx);
+    const historicalClaim = { ...proposal, children: [{ ...proposal.children[0], tier: "T3" }] };
+    assert.equal(processReview(ctx, null, null, "successor", "task-1", "changeset-1",
+      "child_continuation", historicalClaim).ok, false,
+    "a new v4 child cannot claim T3 even with a proposed process review");
     const withEvidence = attachPrincipalEvidence(ctx, proposal);
     const beforeNoReview = ledgerBytes(ctx);
     assert.equal(recordAggregateChildContinuation(withEvidence, options(ctx.dir)).ok, false,
@@ -670,8 +676,18 @@ test("v3 Principal successors require review, stay inside parent paths, and excl
     const accepted = recordAggregateChildContinuation({ ...withEvidence,
       process_review_event_id: review.event_id }, options(ctx.dir));
     assert.equal(accepted.ok, true, accepted.state);
+    assert.equal(aggregateRows(ctx).at(-1).event.policy_version, 4,
+      "new T2 children mint v4");
     assert.deepEqual(derivePendingLineageBudgets(aggregateRows(ctx)).map((row) => row.task_id),
       ["principal-child"]);
+    const childCandidate = commitSource(ctx.dir, 2);
+    const child = openPanel(ctx, 1, childCandidate, {}, false, {
+      task_id: "principal-child", changeset_id: "principal-child-cs",
+      child_continuation_event_id: accepted.event_id,
+    });
+    assert.equal(child.opened.ok, true);
+    assert.equal(aggregateRows(ctx).at(-1).event.policy_version, 4,
+      "the child panel retains v4");
   } finally { ctx.cleanup(); }
 
   for (const continuationKind of ["new_changeset", "split"]) {
@@ -792,7 +808,7 @@ test("Principal split admits two bounded children and refuses otherwise-valid pa
 test("v3 version boundaries reject invalid projections and preserve historical opaque authority", () => {
   const proposal = { disposition_event_id: "1".repeat(64), panel_close_event_id: "2".repeat(64),
     source_round: 1, next_round: 2, root_exit_event_id: null, authorized_paths: ["src/x.mjs"] };
-  for (const policy_version of [1, null, "3", 4]) {
+  for (const policy_version of [1, null, "3", 5]) {
     assert.equal(aggregateTransitionSha256("dispatch", { ...proposal, policy_version }), null,
       `unsupported proposal version ${JSON.stringify(policy_version)} has no projection`);
   }
@@ -1523,7 +1539,7 @@ test("aggregate controller enforces PM authority, three batches, final STOP, han
       seat_id: "security", role: "angle:security", family: "codex", pass_type: "free",
       paths: candidate.paths,
     });
-    assert.equal(recordAggregatePanelOpen(wrongTier, options(ctx.dir)).state, "aggregate-panel-open-conflict");
+    assert.equal(recordAggregatePanelOpen(wrongTier, options(ctx.dir)).state, "aggregate-panel-open-malformed");
     assert.equal(openPanel(ctx, 1, candidate, {}, false, {
       task_id: "child-a", changeset_id: "child-a-change", child_continuation_event_id: continuation.event_id,
     }).opened.ok, true);

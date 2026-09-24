@@ -54,8 +54,8 @@ reservations, is `.agents/skills/orchestrate/SKILL.md` § Routing — do not cop
 |---|---|
 | **T0** | **Local, NON-CODE** — docs, comments, a log string, a memory pointer |
 | **T1** | **Local, touches no live prod** — a test, a local tool or script, a local-DB mutation, a *bounded* read-only prod query · prose and instruction artifacts changing **no** gate/emit/stop semantics |
-| **T2** | New or changed gate/emit/stop semantics · live control code · **a REVERSIBLE write to live prod** · live-behaviour-path or chain/stateful logic |
-| **T3** | Controlling-doc restructure · **an IRREVERSIBLE write to live prod** · an **unbounded** prod read |
+| **T2** | New or changed gate/emit/stop semantics · controlling-doc restructure · live control code · live-prod write (reversible or irreversible) · live-behaviour-path or chain/stateful logic |
+| **Historical T3** | Only a proven accepted legacy lineage; its old review and Owner obligations continue through closure |
 
 **⚠ THIS TABLE NAMES WHAT A TIER IS. IT DELIBERATELY DOES NOT NAME WHAT EACH TIER'S GATE RUNS.**
 A ladder is per-repo; a portable table that named one would be a **more convincing wrong answer** in
@@ -70,9 +70,12 @@ tier IS; it never needs a summary of the rungs.
 - **An instruction file that DIRECTS PROD WRITES tiers by the WRITE IT DIRECTS, never as "just
   docs"** — so it does not sit in the T0 row it otherwise matches, and its push is not free.
 
-**Reversibility splits the last two rows; "prod write" alone does not.** Reversible means a tested,
+**Reversibility sets execution authority, not the new-work review tier.** Reversible means a tested,
 named restore-to-prior-state handle the Owner confirmed at classify-time — not a backup you assume
-works.
+works. An irreversible ad-hoc write needs named Owner GO per write, backup and no-rollback acknowledgment;
+money/ledger and auth/credential work retain the action-triggered frontier/xhigh gate. An unbounded
+production read must be bounded or moved offline; if no safe method exists, hold it and route the
+concrete risk/budget decision through Principal to Owner. Re-tiering never grants execution.
 
 **PUSH IS A SEPARATE AXIS FROM THE TIER, AND THIS TABLE DOES NOT SET IT.** Read the target repo's own
 push rule; in this method, **every remote push or publication needs a fresh Owner GO for the exact head
@@ -80,7 +83,7 @@ and target regardless of tier or file type**. Do not infer from the rows above t
 may publish itself; that reading is wrong and it is the kind of wrong that pushes code.
 
 **Use T1. It is the honest tier for most instruction work and it is the one that goes unused.**
-**T3 is rare by construction:** a restructure or an irreversible write, not "this feels important."
+**New work uses T0/T1/T2.** A T3 task-lane declaration does not prove historical lineage.
 
 ## 0.2 TIER PURITY — one changeset, one tier
 

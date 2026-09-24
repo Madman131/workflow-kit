@@ -1,5 +1,9 @@
 # PORTABILITY — what the kit binds, and what it does not
 
+New work uses T0/T1/T2; accepted historical T3 lineages retain their original review and Owner
+obligations. An installed adopter needs a reviewed scoped update before relying on this change;
+installer retention of differing files is not migration proof.
+
 > Read this before you rely on any control. A kit that is *believed* to enforce something it does not
 > is worse than no kit — it manufactures assurance (`core/INVARIANTS.md` epistemic rules 2 & 10).
 

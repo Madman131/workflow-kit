@@ -123,7 +123,7 @@ const LADDER = {
   T0: "self-check → proceed",
   T1: "one blind cold reviewer → proceed",
   T2: "cold panel (≥2 angle seats + 1 free adversary) → cross-family lens [if available] → external gate → fresh Owner remote GO (exact head + target)",
-  T3: "cold panel (≥3 angle seats + 1 free adversary) → BOTH cross-family families (lens + external, lens REQUIRED) → fresh Owner remote GO (exact head + target)",
+  T3: "HISTORICAL T3 only: cold panel (≥3 angle seats + 1 free adversary) → BOTH cross-family families (lens + external, lens REQUIRED) → fresh Owner remote GO (exact head + target)",
 };
 
 function isPlainObject(v) {
@@ -188,7 +188,7 @@ function resolveTier(projectRoot, sessionId) {
   if (decl.mode !== "in-thread") return { tier: STRICTEST, failClosed: "no-tier", taskId: decl.taskId };
   if (!TIERS.includes(decl.tier)) return { tier: STRICTEST, failClosed: "no-tier", taskId: decl.taskId };
 
-  return { tier: decl.tier, taskId: decl.taskId };
+  return { tier: decl.tier, taskId: decl.taskId, historicalUnproven: decl.tier === "T3" };
 }
 
 // EXPORTED (KO15 repair): a source-text regex over this declaration was the mechanism tests used to
@@ -257,7 +257,8 @@ export const SELF_REPORT =
   `This tier is the declaration's SELF-REPORT, not a verified fact — this hook cannot tell a\n` +
   `correctly-tiered changeset from a mis-tiered one. Re-derive it against core/WORKFLOW.md § Steer\n` +
   `before relying on the row above: an ADMITTED change touching live-path, chain/stateful, schema,\n` +
-  `or deploy code is at least T2 — admission itself is § Steer step 0's four doors — and a T2/T3\n` +
+  `or deploy code is at least T2 — admission itself is § Steer step 0's four doors. New work uses T0/T1/T2;\n` +
+  `T3 requires independently proven accepted historical lineage. This declaration cannot prove it. A tier\n` +
   `tier is settled under core/WORKFLOW.md § Steer authority; recorded Principal delegation covers ordinary\n` +
   `in-scope tier/wording, while Owner retains its listed reserved decisions. The tier may be escalated mid-task at any\n` +
   `time; lowering one mid-task needs the Owner's confirmation (§ Steer's reversibility handle) and\n` +
@@ -289,7 +290,7 @@ process.stdin.on("end", () => {
   if (ev !== null && typeof ev === "object" && ("agent_id" in ev || "agent_type" in ev)) process.exit(0);
 
   const projectRoot = resolveProjectRoot(ev);
-  const { tier, failClosed, taskId } = resolveTier(projectRoot, ev?.session_id);
+  const { tier, failClosed, taskId, historicalUnproven } = resolveTier(projectRoot, ev?.session_id);
 
   // Guard (b): PM material goes ONLY to a confirmed PM — a declaration that is valid, current, and
   // bound to THIS session. Any other state (foreign session, undeclared, malformed, stale, missing
@@ -305,7 +306,8 @@ process.stdin.on("end", () => {
   // and session-bound — saying "no valid tier declaration" of it is simply false, and a sensor that
   // misdescribes the file it just read teaches its reader to discount it.
   const head = isDeclaredPM
-    ? `GATE LADDER — declared tier ${tier} · task ${taskId}\n`
+    ? `GATE LADDER — declared tier ${tier} · task ${taskId}\n` +
+      (historicalUnproven ? "T3 is a self-report only: prove accepted historical lineage independently; this declaration grants no new T3 classification.\n" : "")
     : failClosed === "exempt-tier-not-honoured"
       ? `GATE LADDER — FAIL-CLOSED to ${tier}: this task is declared \`exempt\`, whose tier is deliberately NOT honoured here (${failClosed}).\n` +
         `The exemption excuses a review seat; it does not lower the ladder.\n` +

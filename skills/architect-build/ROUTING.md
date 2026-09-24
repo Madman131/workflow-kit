@@ -1,8 +1,8 @@
-# Architect-build routing — reference layer
+# Architect-build routing
 
-Word budget: 900.
+Word budget: 900. Authoritative lookup reference: `core/WORKFLOW.md` § Architectural consult routing, installed `/architect-build`. Invocation: `SKILL.md`.
 
-## Establish, reuse, and recover
+## Lifecycle
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. On launch,
 `/architect-build` establishes, reuses, or recovers a persistent architect and, after baseline approval,
@@ -14,7 +14,7 @@ source pointers; accepted decisions separately from pending advice; current phas
 decisions with id/type/source, program/baseline/scope, evidence, delegation/limits, stop/supersession,
 execution/result and active/pending/superseded status; last alignment check; and reconciliation owed. Locate an existing architecture/current-state record first;
 otherwise create one through the repository's normal docs/state convention and record its exact path.
-Record both locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
+Record both task locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
 For existing config, set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
 other fields and read back. Plain init keeps existing config. Source tasks use reviewed scoped
 runtime setup, never init. Open approved blueprint/source; cite that read in the receipt. Hook
@@ -22,32 +22,31 @@ checks shape, not reasoning. Prove exact-send real-tool Source, Command and Trus
 checker does not prove interception.
 
 Recovery does not promote advice, create an acting architect or second PM, or block covered work.
-Without task creation or cross-session transport, launch uses file-only equivalents for the
+Without task creation or cross-session transport, a launch uses file-only equivalents for the
 approved-baseline handoff.
 
-## Quiet continuity and persistent triggers
+## Continuity
 
-Routine CHIP progress updates the durable record without contacting the persistent architect. Consult that
-architect only at program inception/baseline, terminal STOP, a material pivot, foundation/ownership/
-authority or major sequencing change, a meaningful milestone or planned phase boundary, or the first safe
-checkpoint after five active workdays since the last alignment review, or an unresolved in-envelope program
-decision or concrete PM authority, safety, or evidence conflict requiring Principal direction. Material changes accepted outcomes,
-acceptance criteria, foundation, ownership, dependency order, authority, or budget. Quiet means no routine
-polling/status messages or repeated review of one unresolved decision; it never suppresses a due alignment
-review. Coalesce a due alignment review with another qualifying checkpoint.
+Record routine CHIP progress without contacting the persistent architect. Consult only at program
+inception/baseline, terminal STOP, material pivot, foundation/ownership/authority or major sequencing
+change, meaningful milestone or planned phase boundary, first safe checkpoint after five active workdays
+since alignment review, or an unresolved in-envelope program decision or concrete PM authority, safety, or evidence conflict requiring Principal direction.
+Material changes accepted outcomes, acceptance criteria, foundation, ownership, dependency order,
+authority or budget. No routine polling/status messages or repeated review of one unresolved decision.
+Never suppress due alignment review; coalesce it with another qualifying checkpoint.
 
-## Packets, ordinary consults, and fourth-gate overlap
+## Packets and consults
 
 Every Principal packet carries, or consults in the durable record, baseline, delegation/limits, current
-directives, and alignment check. It names question, scope, evidence, alternatives, risks, and any exact
-Owner boundary. PM records advice as adopt/adapt/decline; a delegated decision as acknowledged/executing/
-completed/stopped or a concrete safety, gate, or evidence conflict. Pending or superseded advice never promotes;
-a current directive remains applicable only inside its recorded program, baseline and scope.
+directives, and alignment check. Name question, scope, evidence, alternatives, risks and exact Owner boundary. PM records advice as
+adopt/adapt/decline; delegated decisions as acknowledged/executing/completed/stopped or concrete
+safety/gate/evidence conflict. Pending/superseded advice never promotes; current directives apply only
+within recorded program, baseline and scope.
 
 An ordinary bounded current-CHIP question stays with the active in-thread consult. Below-trigger questions
 do not contact the persistent architect unless an existing gate independently requires its own seat.
 
-At a fourth-gate process checkpoint that also has a persistent trigger, combine the packet only if the
+Combine fourth-gate and persistent-trigger packets only if the
 persistent architect independently satisfies every existing process-review eligibility and freshness
 requirement. Then use the existing process-review procedure unchanged: eligible seat, verified model/effort,
 purpose/outcome, receipt, controller record, frozen candidate, panel close, lineage, and proposed action all
@@ -55,13 +54,18 @@ remain required. Otherwise run the existing fresh process review and route the a
 separately. A combined response adds no firing, round, batch, authority, or budget and may discharge both
 obligations only through that existing procedure.
 
-## Authority and unavailable architect
+## Authority
 
 With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for
 blueprint, acceptance, continuity and closeout; it decides nonreserved questions within approved outcome,
 baseline, access, risk and budget. Examples—never an allowlist—include direction, sequencing, topology,
 model/seat choice, tier/wording and approved-provider routing. PM is sole execution chain,
 proceeds automatically on covered work, and returns concrete conflicts.
+
+Within recorded delegation, Principal maintains the approved blueprint, outcomes and acceptance evidence;
+directs completion through one PM; avoids unrelated work and repeated attempts without new evidence;
+batches independent authorized work; saves time/tokens without weakening gates; resolves in-envelope
+conflicts; routes only unresolved reserved decisions to Owner.
 
 Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;
 credentials/access changes; destructive-or-irreversible acts; money/new-spend; max/ultra, second frontier firing/cap increases; terminal
