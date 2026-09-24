@@ -230,13 +230,20 @@ test("an Architect direction owes a prompt-bound action screen even when there a
     { evaluation: { observedEvidence: "receipt", noAction: "" } },
     { alternatives: undefined }, { alternatives: [] },
     { alternatives: [action.alternatives[0]] },
-    { alternatives: [action.alternatives[0], action.alternatives[0]] },
     { alternatives: [{ route: "proceed", tradeoff: "" }, action.alternatives[1]] },
     { choice: "approve" }, { choice: "stop" }, { choiceReason: "" },
   ]) {
     assert.equal(state({ ...base, architectScreen: architectScreen({ action: { ...action, ...invalid } }) },
       { dispatch }), "architect-screen-incomplete", JSON.stringify(invalid));
   }
+  assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
+    ...action, smallestAction: "Reuse the existing guard for this chip.",
+    choiceReason: "Both can deliver the chip; reuse has the smaller review surface.",
+    alternatives: [
+      { route: "proceed", tradeoff: "Reuse existing guard with a smaller review surface." },
+      { route: "proceed", tradeoff: "Replace coordinator with a larger migration." },
+    ],
+  } }) }, { dispatch }), "receipted", "distinct substantive options may share a proceed disposition");
   for (const choice of ["proceed", "simplify", "defer", "stop", "escalate"]) {
     assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
       ...action, choice, reservedBoundary: choice === "escalate" ? "New scope requires Owner approval." : undefined,

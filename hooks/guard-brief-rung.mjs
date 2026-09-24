@@ -237,7 +237,7 @@ export function architectScreenState(screen, prompt) {
   const routes = new Set();
   for (const alternative of alternatives) {
     if (!isPlainObject(alternative) || !ACTION_CHOICES.has(alternative.route) ||
-        routes.has(alternative.route) || !nonempty(alternative.tradeoff)) {
+        !nonempty(alternative.tradeoff)) {
       return { state: "architect-screen-incomplete" };
     }
     routes.add(alternative.route);
@@ -550,7 +550,7 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "architect-send-override": `this paired Architect-to-PM send carries \`model\` or \`thinking\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
     "architect-prompt-missing": `the covered Codex send has no readable string \`tool_input.prompt\`, so its decision screen cannot bind the exact message bytes.`,
     "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Evaluate observed evidence, no-action consequence, approved outcome, blueprint, KISS, zoom-out, root cause and cost; compare at least two routes, choose proceed/simplify/defer/stop/escalate, and state why (plus the reserved boundary for escalation). Then screen each finding HARM → REAL → SCOPE → WORTH IT with its first failed trigger. A decision with no findings still owes the action screen.`,
-    "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: observed evidence and no-action consequence, compared alternatives with tradeoffs, selected choice/reason, reserved boundary for escalation, prompt digest, and each finding's ordered first-exit evidence/disposition must be present. A screened-out finding needs its actual failed trigger and no filler downstream answers. See PORTABILITY.md's minimal \`architectScreen\` JSON example. This checks record shape, not judgment quality.`,
+    "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: observed evidence and no-action consequence, compared alternatives with tradeoffs, selected choice/reason, reserved boundary for escalation, prompt digest, and each finding's ordered first-exit evidence/disposition must be present. A screened-out finding needs its actual failed trigger and no filler downstream answers. See workflow-kit's PORTABILITY.md minimal \`architectScreen\` JSON example. This checks record shape, not judgment quality.`,
     "architect-screen-too-large": `${SIDECAR}'s Architect screen exceeds ${MAX_SCREEN_BYTES} UTF-8 bytes. Keep the current decision screen concise so its existing audit row remains a small single append.`,
     "architect-prompt-mismatch": `${SIDECAR}'s Architect screen does not name the SHA-256 of this exact prompt. Re-screen the message bytes being sent; one decision record cannot silently authorize a changed direction.`,
     "architect-status-conflict": `${SIDECAR} carries an Architect decision screen while declaring this send status. Keep the decision screen and send the PM hold as a screened non-status direction; \`class:"status"\` is informational only and cannot carry an escalation decision.`,

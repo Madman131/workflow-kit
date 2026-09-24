@@ -365,8 +365,11 @@ outside this Architect-pair scope. A material send to that target owes the exist
 session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
 prompt bytes. The Architect evaluates observed evidence, the no-action consequence, approved-outcome/blueprint
 alignment, smallest action, KISS, zoom-out, root cause/cost and each finding's first-exit
-HARM/REAL/SCOPE/WORTH IT result. Compare at least two distinct routes with tradeoffs; choose
-`proceed`, `simplify`, `defer`, `stop`, or `escalate`; state the choice reason and, for escalation,
+HARM/REAL/SCOPE/WORTH IT result. Compare at least two substantive options with tradeoffs;
+they may share a final route. For example, two viable `proceed` options could reuse the current guard
+(smaller review surface) or replace the coordinator (larger migration); `smallestAction` and
+`choiceReason` identify the selected approach. Choose `proceed`, `simplify`, `defer`, `stop`, or
+`escalate`; state the choice reason and, for escalation,
 the actual Owner-reserved boundary. Record the evaluation and choice before dispatch. Proceed/simplify
 may direct approved PM execution; defer/stop holds dependent work; escalate routes the reserved question
 to Owner. Any PM hold for that decision is a screened, non-status direction retaining `architectScreen`.
