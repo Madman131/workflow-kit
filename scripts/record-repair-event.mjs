@@ -14,7 +14,17 @@
 //     `policy_version` is minted by the recorder, never supplied.
 // A mismatch in either is reported as `aggregate-process-review-malformed` or
 // `aggregate-continuation-malformed`; the hint printed below names both fields.
+//
+// PRINCIPAL RECORD CHECK (v2.35.0). An event carrying `principal_evidence` is refused as
+// `principal-authority-record-unconfirmed` unless the evidence is a plain object, its `decision_id`
+// is non-empty, its `authority_record` is a git-TRACKED regular file of this repository, and the id
+// occurs in that file as a token (no [A-Za-z0-9_-] either side). Checked HERE, at write time, and
+// never at replay: the controller re-derives state from every row on every call, and a replay-time
+// read of a mutable file would make a past event's validity depend on today's file contents. It
+// proves an id is present in a tracked record, not that the record authorized this transition; a
+// hand-written ledger row bypasses it.
 
+import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -39,7 +49,29 @@ function readInput(file) {
   return parsed;
 }
 
+const TOKEN_CHAR = /[A-Za-z0-9_-]/;
+export function principalRecordConfirmed(evidence, projectRoot) {
+  if (evidence === null || typeof evidence !== "object" || Array.isArray(evidence)) return false;
+  const { authority_record: rel, decision_id: id } = evidence;
+  if (typeof id !== "string" || !id.trim() || typeof rel !== "string" || !rel || path.isAbsolute(rel)) return false;
+  try {
+    const root = realpathSync(projectRoot);
+    const abs = path.resolve(root, rel);
+    if (!abs.startsWith(root + path.sep) || realpathSync(abs) !== abs || !lstatSync(abs).isFile()) return false;
+    execFileSync("git", ["-C", root, "ls-files", "--error-unmatch", "--", path.relative(root, abs)], { stdio: "ignore" });
+    const text = readFileSync(abs, "utf8");
+    for (let at = text.indexOf(id); at !== -1; at = text.indexOf(id, at + 1)) {
+      if (!TOKEN_CHAR.test(text[at - 1] ?? "") && !TOKEN_CHAR.test(text[at + id.length] ?? "")) return true;
+    }
+  } catch { /* unreadable, untracked, or not a repository: unconfirmed */ }
+  return false;
+}
+
 export function recordEvent(input, options) {
+  if (input.type === "aggregate_v2" && Object.hasOwn(input, "principal_evidence") &&
+      !principalRecordConfirmed(input.principal_evidence, options?.projectRoot ?? process.cwd())) {
+    return { ok: false, state: "principal-authority-record-unconfirmed" };
+  }
   if (input.type === "aggregate_v2") {
     // An older installed controller predating the aggregate grammar exports no
     // recordAggregateEvent — a typed refusal, never a TypeError: version skew between the
@@ -91,6 +123,7 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
           "aggregate-worker-superseded": " — this session's admission was REVOKED by an Owner-evidenced worker handoff; the replacement session holds the batch now",
           "aggregate-process-review-malformed": " — check the transition's shape, and above all the two fields callers most often get wrong: proposed_transition.policy_version must EQUAL the version this task mints (3 for a policy-3 or T3 lineage, otherwise 4), and a child_continuation proposal must carry authority_route (\"owner\" with owner_evidence, or \"principal\" with no principal_evidence yet); see this script's header",
           "aggregate-continuation-malformed": " — check the continuation's shape, and above all authority_route: \"owner\" with owner_evidence, or \"principal\" (a bounded T2 Principal route) with principal_evidence matching the reviewed transition; see this script's header",
+          "principal-authority-record-unconfirmed": " — principal_evidence must be an object whose authority_record names a git-TRACKED file of this repository (repo-relative) and whose non-empty decision_id appears in that file as a whole token; commit the Principal's record into the checkout, then cite it",
           "repair-history-invalid": " — the ledger's derivation failed CLOSED (a corrupt row, a hash mismatch, or a standard identity that no longer derives); this needs row-level repair, not a retry — preserve the file and inspect it",
         }[result.state] ?? (
           // The closed grammar makes the remaining two suffix classes total: shape refusals and

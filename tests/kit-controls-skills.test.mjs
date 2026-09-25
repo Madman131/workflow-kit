@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adopt } from "./kit-controls-helpers.mjs";
+import { adopt, HERMETIC_ENV } from "./kit-controls-helpers.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -81,7 +81,7 @@ test("architect-build is a mechanism skill: a plain rerun names stale body and b
     }
     assert.equal((output.match(/KEPT BUT STALE/g) || []).length, 4, "every architect-build mechanism artifact is detected");
     const forced = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
-      "--repo-name", "adopter", "--codex-prompts-dir", codexDir, "--force"], { encoding: "utf8" });
+      "--repo-name", "adopter", "--codex-prompts-dir", codexDir, "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     assert.equal(forced.status, 1, "the hermetic forced rerun restores artifacts but remains honest about unverified Codex hook trust");
     const canonical = new Map([
       [body, path.join(KIT, "skills", "architect-build", "SKILL.md")],
@@ -309,7 +309,7 @@ test("init installs the frontier-review skill + reviewer agents; the tools: [] c
     // rerun exits 1 in a hermetic adopter (armed-check unverifiable) and DIFFERING [P] files get a
     // .bak — the subject here is the restored bytes, so run via spawnSync and read them.
     spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
-      "--codex-prompts-dir", codexDir, "--force"], { encoding: "utf8" });
+      "--codex-prompts-dir", codexDir, "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     assert.equal(readFileSync(consult, "utf8"), readFileSync(path.join(KIT, "agents", "frontier-consult.md"), "utf8"),
       "--force restores the kit's frontier-consult verbatim");
     assert.ok(!existsSync(`${consult}.bak`),
@@ -371,6 +371,6 @@ test("init verifies the INSTALLED shims, and a shim naming no body is a failure 
     assert.match(runOut([]), /names NO \.agents\/skills/, "a shim with zero body references is a failure, not a vacuous pass");
     // Restore for any later assertions in this test file (exit 1 is the hermetic norm — ignored).
     spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
-      "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--skip-codex-prompt", "--force"], { encoding: "utf8", env: HERMETIC_ENV });
   } finally { cleanup(); }
 });

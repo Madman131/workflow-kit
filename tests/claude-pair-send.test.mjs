@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { claudePairMatches, loadBriefConfig } from "../hooks/guard-brief-rung.mjs";
+import { claudePairMatches, denyReason, loadBriefConfig } from "../hooks/guard-brief-rung.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OK_CHECK = [{ command: "wc -w PROTOCOLS.md", output: "1987" }];
@@ -259,4 +259,38 @@ test("upgrading a 2.33.0 settings.json adds ONE SendMessage bucket and duplicate
     assert.equal(after.find((g) => g.matcher === "SendMessage").hooks.length, 1);
     assert.equal(after.find((g) => g.matcher === ".*send_message").hooks.length, 1, "the old bucket still runs the guard once");
   } finally { cleanup(); }
+});
+
+test("a non-string SendMessage address in a paired checkout DENIES; unpaired it stays outside the guard", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (toolInput) => spawnSync(process.execPath, [hook], { cwd: dir, encoding: "utf8",
+      input: JSON.stringify({ tool_name: "SendMessage", session_id: "s1", cwd: dir, tool_input: toolInput }) });
+    assert.equal(run({ to: { name: "PM" }, message: "x" }).stdout, "", "unpaired: outside the guard, as before");
+    const cfg = path.join(dir, ".claude", "kit.config.json");
+    writeFileSync(cfg, JSON.stringify({ ...JSON.parse(readFileSync(cfg, "utf8")), pairedPmClaudeTarget: "3fa9c1" }));
+    for (const to of [{ name: "PM" }, ["3fa9c1"], 7]) {
+      const r = run({ to, message: "x" });
+      assert.match(r.stdout, /"permissionDecision":"deny"/, `paired: to=${JSON.stringify(to)} denies`);
+      assert.match(r.stdout, /not a string/, "…naming why");
+    }
+    assert.match(run({ to: "Builder", recipient: { id: 1 }, message: "x" }).stdout, /"permissionDecision":"deny"/,
+      "a non-string recipient beside a string to also denies");
+  } finally { cleanup(); }
+});
+
+test("a malformed config deny names the KEY that failed", () => {
+  const read = (v) => () => v;
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeName":" x"}') }).key, "pairedPmClaudeName");
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeTarget":"a\\nb"}') }).key, "pairedPmClaudeTarget");
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"pairedPmThreadId":"a b"}') }).key, "pairedPmThreadId");
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"briefPathDirs":"d"}') }).key, "briefPathDirs");
+  assert.equal(loadBriefConfig("/r", { readConfig: read("{oops") }).key, undefined, "a whole-file failure names no key");
+  const msg = (state, config) => denyReason(state, { dispatch: { kind: "send", target: "x" }, config });
+  assert.match(msg("claude-pair-malformed", { ok: false, key: "pairedPmClaudeName" }), /`pairedPmClaudeName` is invalid/,
+    "the Claude pair message names the failing key, not always pairedPmClaudeTarget");
+  assert.match(msg("kit-config-malformed", { ok: false, key: "pairedPmClaudeName" }), /`pairedPmClaudeName` is invalid/);
+  assert.match(msg("architect-pair-malformed", { ok: false, key: "pairedPmThreadId" }), /`pairedPmThreadId` is invalid/);
+  assert.match(msg("claude-pair-malformed", { ok: false }), /not readable JSON, or not an object/);
 });

@@ -18,6 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { HERMETIC_ENV } from "./kit-controls-helpers.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CHECKER = path.join(KIT, "scripts", "check-skill-budgets.mjs");
@@ -518,7 +519,7 @@ test("a plain init re-run ships NONE of v1.7's edits to existing [P] files — s
     // Since v2.16.0 a hermetic forced rerun exits 1 (post-force armed-check unverifiable) and a
     // differing [P] file gets a .bak first — the subject here is the installed bytes.
     spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
-      "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--skip-codex-prompt", "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     for (const [t, src] of [
       [targets[0], path.join(KIT, "core", "ARTIFACT_CLASS.md")],
       [targets[1], path.join(KIT, "skills", "frontier-review", "INVOKE.md")],
@@ -604,7 +605,7 @@ test("v2.1.1's rule 8 reaches an existing adopter ONLY through --force, and the 
       "…and the write guard is still narrowed going in, so any change to it after this is --force's doing");
 
     const forced = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
-      "--repo-name", "adopter", "--owner-name", "Alex", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--repo-name", "adopter", "--owner-name", "Alex", "--skip-codex-prompt", "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     // Since v2.16.0 the hermetic forced rerun exits 1 — the post-force armed-check cannot verify
     // the Codex lane and says so, instead of exiting 0 with the lane silently disarmed.
     assert.equal(forced.status, 1, "the forced rerun exits 1 in a hermetic adopter (armed-check unverifiable)");

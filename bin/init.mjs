@@ -989,17 +989,24 @@ export function mixedControllerFindings(target, kitController = path.join(KIT_RO
   const want = sha(kitController);
   const top = existsSync(target) ? gitRevParse(target, "--show-toplevel") : null;
   if (!top) return { scanned: 0, findings: [], skipped: [], note: "the target is not inside a Git work tree, so there are no sibling worktrees to compare" };
-  let raw;
-  try { raw = execFileSync("git", ["-C", target, "worktree", "list", "--porcelain"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
-  catch { return { scanned: 0, findings: [], skipped: [], note: "git could not list this repository's worktrees" }; }
+  // NUL-separated (`-z`, git ≥ 2.36) so a worktree path holding a newline is one record, not two
+  // half-paths that each fail to exist and get skipped. Older git: the newline form, as before.
+  const list = (z) => execFileSync("git", ["-C", target, "worktree", "list", "--porcelain", ...(z ? ["-z"] : [])],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  let blocks;
+  try { blocks = list(true).split("\0\0").map((b) => b.split("\0")); }
+  catch {
+    try { blocks = list(false).split(/\n\n+/).map((b) => b.split("\n")); }
+    catch { return { scanned: 0, findings: [], skipped: [], note: "git could not list this repository's worktrees" }; }
+  }
   const real = (p) => { try { return realpathSync(p); } catch { return path.resolve(p); } };
   const self = real(top);
   const findings = [], skipped = [];
   let scanned = 0;
-  for (const block of raw.split(/\n\n+/)) {
-    const wt = /^worktree (.+)$/m.exec(block)?.[1];
-    if (!wt || /^bare$/m.test(block) || real(wt) === self) continue;
-    const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1] ?? "detached";
+  for (const fields of blocks) {
+    const wt = fields.find((f) => f.startsWith("worktree "))?.slice("worktree ".length);
+    if (!wt || fields.includes("bare") || real(wt) === self) continue;
+    const branch = fields.find((f) => f.startsWith("branch refs/heads/"))?.slice("branch refs/heads/".length) ?? "detached";
     if (!existsSync(wt)) { skipped.push(`${wt} (directory missing — prunable; it cannot run hooks)`); continue; }
     scanned++;
     for (const lane of [".claude", ".codex"]) {
@@ -1106,21 +1113,22 @@ function main() {
     ? `  .claude/hooks/: ${claudeHooks.installed} installed, ${claudeHooks.kept} EXISTING kept — may be STALE; re-run with --force to update`
     : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the sweep-owed, mutation-owed and context-pressure PreToolUse sensors (print, never deny), the guard-owner-comms and sensor-token-ledger Stop sensors (fail OPEN; the ledger writes .claude/metrics/tokens.jsonl, untracked), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
 
-  // 3. Harness-agnostic pre-commit hook + core.hooksPath (binds EVERY lane, not just Claude).
-  const pc = path.join(T, ".githooks", "pre-commit");
-  const kitPc = path.join(KIT_ROOT, "githooks", "pre-commit");
-  const pcResult = copyGuarded(kitPc, pc, force);
+  // 3. Harness-agnostic pre-commit + commit-msg hooks + core.hooksPath (bind EVERY lane, not just
+  // Claude). commit-msg (v2.35.0) requires the Step 0 `entry:` line — presence and shape only.
   // `pcTrusted` = the every-lane floor is provably the kit's control. Written ⇒ trusted; kept ⇒ trusted
   // ONLY if its CONTENT matches the kit's. A kept-but-different hook (stale / a no-op) must NEVER be
   // reported as "binds every lane" — that is the assurance-manufacturing fail this kit exists to stop.
-  let pcTrusted = pcResult === "written";
-  if (pcResult === "written") chmodX(pc);
-  else {
+  let pcTrusted = true;
+  for (const hook of ["pre-commit", "commit-msg"]) {
+    const pc = path.join(T, ".githooks", hook);
+    const kitPc = path.join(KIT_ROOT, "githooks", hook);
+    const pcResult = copyGuarded(kitPc, pc, force);
+    if (pcResult === "written") { chmodX(pc); continue; }
     let same = false;
     try { same = readFileSync(pc, "utf8") === readFileSync(kitPc, "utf8"); } catch { same = false; }
-    pcTrusted = same;
-    if (same) warn(`existing .githooks/pre-commit KEPT — its content matches the kit's version (OK).`);
-    else warn(`existing .githooks/pre-commit KEPT and its content DIFFERS from the kit's — the every-lane commit floor is NOT the kit's control (it may be stale or a no-op that lets undeclared commits through). Re-run with --force to install the kit's version.`);
+    if (!same) pcTrusted = false;
+    if (same) warn(`existing .githooks/${hook} KEPT — its content matches the kit's version (OK).`);
+    else warn(`existing .githooks/${hook} KEPT and its content DIFFERS from the kit's — the every-lane commit floor is NOT the kit's control (it may be stale or a no-op that lets undeclared commits through). Re-run with --force to install the kit's version.`);
   }
   // ENVIRONMENT BEFORE FILESYSTEM. `git config` resolves its subject from GIT_DIR /
   // GIT_COMMON_DIR / GIT_WORK_TREE before it ever looks for a `.git`, so with any of them set the
@@ -1150,8 +1158,8 @@ function main() {
       warn(`REFUSED to set core.hooksPath: this repo's git directory resolves OUTSIDE the install target (${escaped}) — ${path.join(T, ".git")} is a symlink, or a \`.git\` file holding \`gitdir: /elsewhere\`, that sends git's writes there. The setting would be written into ANOTHER repository's config, arming its commits with ${T}/.githooks and leaving this one unbound. Replace it with a real .git directory and re-run (a linked \`git worktree\` checkout, whose .git points under its primary's worktrees/, is unaffected).`);
     } else if (gitConfigVerified(T, "core.hooksPath", ".githooks")) {
       log(pcTrusted
-        ? `  .githooks/pre-commit installed + core.hooksPath=.githooks (binds every lane)`
-        : `  core.hooksPath=.githooks set — but the pre-commit is an EXISTING, UNVERIFIED hook (see warning above); the every-lane guarantee depends on it, NOT confirmed`);
+        ? `  .githooks/pre-commit + commit-msg installed + core.hooksPath=.githooks (binds every lane; every commit body now needs an \`entry: none\` or \`entry: class-N\` line)`
+        : `  core.hooksPath=.githooks set — but a .githooks hook is an EXISTING, UNVERIFIED file (see warning above); the every-lane guarantee depends on it, NOT confirmed`);
     } else {
       // The write into the target's OWN config, or the read-back from it, failed: git could not
       // resolve --git-common-dir, or could not write/read that file. The write is PINNED to it with
@@ -1486,6 +1494,10 @@ function main() {
   // THE ONE PROVENANCE THIS INSTALLER HAS: set at the single site that writes the path-baked Codex
   // registration this run. The .gitignore rule for that file follows this fact and nothing else.
   let kitWroteHooksJson = false;
+  // Did this run CHANGE a .codex/hooks.json ENTRY? Codex keys hook trust to each entry, and the
+  // armed check probes apply_patch only, so a changed entry (for a v2.32.x adopter: v2.33.0's new PM
+  // thread-send entry) can read ARMED while it is untrusted and skipped.
+  let hooksEntryChanged = false;
   if (args.skipCodexLane) {
     // Say what is TRUE of the tree, not merely what this run did. On a re-run over a repo adopted
     // WITHOUT the flag, a bare "SKIPPED" reads as "there is no .codex here" while both files sit on
@@ -1659,8 +1671,14 @@ function main() {
         // against an unverified payload shape would ship a control whose behaviour nobody has
         // watched. The file installs (the two trees stay byte-identical); only the registration is
         // withheld, and PORTABILITY.md says so.
+        let prior = null;
+        try { if (!isSymlinkAt(hooksJson)) prior = readFileSync(hooksJson, "utf8"); } catch { /* absent or unreadable */ }
         if (writeWithBackup(hooksJson, registrationText)) {
           kitWroteHooksJson = true;
+          // ENTRIES only: the file's `description` carries the kit version, so a whole-text compare
+          // would call every version bump an entry change and ask for a needless re-trust.
+          try { hooksEntryChanged = prior !== null && JSON.stringify(JSON.parse(prior).hooks) !== JSON.stringify(registration.hooks); }
+          catch { hooksEntryChanged = prior !== null; }
           log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · exact Codex app thread-send ⇒ brief-rung guard for the configured PM pair · Bash ⇒ gate-ladder sensor (never denies) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
@@ -2047,6 +2065,11 @@ function main() {
   // an adopter the upgrade completed while its Codex-lane controls were dead, which is the same
   // manufactured assurance the check itself exists to stop. An ABSTAIN counts as not-verified for
   // the same reason a clean `codex exec` proves nothing.
+  const RETRUST_STEP = `this --force CHANGED .codex/hooks.json entries (from v2.32.x or earlier, the v2.33.0 PM thread-send ` +
+    `entry is new). RE-TRUST NOW: run \`codex\` in this repo interactively and answer "Hooks need review" with "Trust all ` +
+    `and continue"; then run node scripts/check-codex-hooks-armed.mjs. That check probes apply_patch only, so ARMED ` +
+    `does not prove a changed entry is trusted`;
+  if (force && codexLaneOk && hooksEntryChanged) warn(`${RETRUST_STEP}.`);
   if (force && codexLaneOk) {
     const armedCheck = path.join(T, "scripts", "check-codex-hooks-armed.mjs");
     if (existsSync(armedCheck)) {
@@ -2057,8 +2080,8 @@ function main() {
         console.error(`\ninit: the Codex lane's hooks are NOT verified armed after this --force ` +
           `upgrade (${String(error?.stdout || error?.message || "check failed").toString().trim().split("\n")[0]}). ` +
           `Codex keys trust to each .codex/hooks.json entry, so an entry this upgrade changed is NOT ARMED ` +
-          `until a human re-trusts it interactively; \`codex exec\` skips untrusted hooks SILENTLY. Run ` +
-          `node scripts/check-codex-hooks-armed.mjs, and re-trust only if it reports NOT ARMED`);
+          `until a human re-trusts it interactively; \`codex exec\` skips untrusted hooks SILENTLY. ` +
+          (hooksEntryChanged ? `${RETRUST_STEP}` : `Run node scripts/check-codex-hooks-armed.mjs, and re-trust only if it reports NOT ARMED`));
         process.exitCode = 1;
       }
     }

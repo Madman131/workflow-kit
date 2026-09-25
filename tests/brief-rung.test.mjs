@@ -726,13 +726,13 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
   const { dir, cleanup } = adopt();
   try {
     execFileSync("git", ["add", "-A"], { cwd: dir });
-    execFileSync("git", ["commit", "-qm", "base"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "base", "-m", "entry: none"], { cwd: dir });
     const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
     execFileSync("git", ["update-ref", "refs/remotes/origin/main", base], { cwd: dir });
     mkdirSync(path.join(dir, "src"));
     writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
     execFileSync("git", ["add", "src/x.mjs"], { cwd: dir });
-    execFileSync("git", ["commit", "-qm", "candidate"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "candidate", "-m", "entry: none"], { cwd: dir });
     const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
     const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: dir, encoding: "utf8" }).trim();
     const paths = ["src/x.mjs"];

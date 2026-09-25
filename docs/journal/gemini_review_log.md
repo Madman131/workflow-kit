@@ -4651,3 +4651,64 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: Entirety of docs/journal/kit_v2340_c_doc_design.md including Invariants, §1-10, Draft Wordings, and Cut Lists.
     PIL-DONE-0ce4ae73504581e0be876e58
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-25T19:10:21Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1790363288-74460-3203924354`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=30706; instrumented_payload=30808; inline_combined=34625; file=30881
+- Ingestion proof: EOF receipt + 2 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/kit_v2350_c_code_design.md
+- HEAD: `882afa5d909b74dde553e7fefc20a5ece2663b3d`
+- Artifact-Base: `83688c9c5e8a9230b2e62e7afdf027333b6f3d8c`
+- Artifact-SHA: `882afa5d909b74dde553e7fefc20a5ece2663b3d`
+- Artifact-Ref: `refs/pil/gate-artifacts/882afa5d909b74dde553e7fefc20a5ece2663b3d`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: kit_v2350_c_code_design.md (Sections 0-11, focusing on invariant checks, mechanism correctness, and fail-closed logic)
+- Start: 2026-09-25T19:08:08Z
+- End: 2026-09-25T19:10:21Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-60efee939cf1c79901c58ff9
+    CANARIES: PIL-INGEST-016e68ee6271 PIL-INGEST-02cc9a22501d
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: kit_v2350_c_code_design.md (Sections 0-11, focusing on invariant checks, mechanism correctness, and fail-closed logic)
+    
+    Here are the decorrelated findings missed by the same-family review, ranked by severity:
+    
+    ### 1. BLOCKER: Migration silently disables PM guard for all other checkouts (Fail-Open)
+    **Section:** 3 · Pair scoping: the pair leaves the tracked config
+    **Concrete failure scenario:** Alice runs `init --force --paired-pm...`, which creates her local `kit.pair.json` and deletes the keys from the tracked `kit.config.json`. Alice commits and pushes. Bob (who works in a paired PM session) pulls this commit. Because Bob hasn't run `init --force`, he lacks `kit.pair.json`. His checkout now has no pair keys anywhere, so it silently falls back to "unpaired" mode. The PM screen (which only applies to paired checkouts) disables itself. Bob's PM agent can now send unscreened directions globally.
+    **Why it matters:** A local migration structurally uninstalls a security control globally for the rest of the team. This violates **Invariant 6 (Fail closed)** and **Invariant 5 (Contract / additive safety)**—removing the tracked key is a breaking flip for downstream checkouts.
+    **Fix:** Do not simply delete the legacy keys without a trace. Leave a tracked tombstone in `kit.config.json` (e.g., `requiresLocalPairConfig: true`). If the reader sees the tombstone but cannot find a local `kit.pair.json`, it must FAIL CLOSED and block all PM sends until the operator runs `init`, rather than failing open to unpaired mode.
+    
+    ### 2. HIGH: Empty or generic `decision_id` bypasses the authority check (False-PASS)
+    **Section:** 1 · Principal record check
+    **Concrete failure scenario:** An agent invents an authority by passing `authority_record: "package.json"` and `decision_id: ""`. Because the design specifies a literal substring match ("the file's bytes must contain `decision_id` as a substring") with "no schema beyond... id string occurs", an empty string trivially returns `true` for `bytes.includes("")` on any valid file. Alternatively, passing `authority_record: ".git/config"` and `decision_id: "core"` will universally pass.
+    **Why it matters:** The control relies entirely on the agent providing a high-entropy, honest ID. A hallucinating agent trivially bypasses the control by providing a zero-length string or citing internal Git plumbing that always exists.
+    **Fix:** Enforce a minimum length/format for `decision_id` (explicitly rejecting empty strings), and restrict `authority_record` from pointing inside `.git/` or other non-project plumbing.
+    
+    ### 3. HIGH: Type-mismatch fail-open on `principal_evidence`
+    **Section:** 1 · Principal record check
+    **Concrete failure scenario:** The design states the file checks execute "when `input.principal_evidence` is a plain object". If a drifting agent submits `principal_evidence: "I am the principal"` (a string) or an array instead of an object, it evaluates as not a plain object. The checks are skipped, and the malformed input is handed straight to the controller (which has "no schema beyond...").
+    **Why it matters:** Violates **Invariant 6 (Fail closed)**. Malformed input (a string instead of the expected object) must BLOCK the operation, not bypass the conditional check.
+    **Fix:** Assert type strictness: if `principal_evidence` is present, it MUST be a plain object. If it is any other type, return `{ ok: false, state: "principal-authority-record-unconfirmed" }` immediately.
+    
+    ### 4. MEDIUM: `fixup!` and `squash!` subjects bypass the triage classification entirely
+    **Section:** 2 · commit-msg hook: an `entry:` line
+    **Concrete failure scenario:** The hook exempts any commit subject starting with `fixup! `, `squash! `, or `amend! `. An agent trying to push an unclassified change without triggering the hook's rejection can simply use `git commit -m "fixup! bypassing triage"`. The hook ignores the commit entirely, and it lands successfully without the required Step 0 `entry:` line.
+    **Why it matters:** The exemptions rely on user-controlled text prefixes. A drifting agent can trivially bypass the required classification by prepending a standard Git string to the commit message.
+    **Fix:** Do not exempt `fixup!`, `squash!`, or `amend!` commits. Require the agent to provide the `entry:` line on all commits except true automated merges (`MERGE_HEAD`).
+    
+    ---
+    **Single highest-risk thing to resolve first:** The Item 3 migration strategy. Removing a tracked security configuration without leaving a fail-closed tombstone will systematically unpair every downstream team member on their next pull, leaving PM agents completely unscreened.
+    
+    PIL-DONE-1a09207c2e92b5afe9b21fce

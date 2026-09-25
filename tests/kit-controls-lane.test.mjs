@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adopt } from "./kit-controls-helpers.mjs";
+import { adopt, HERMETIC_ENV } from "./kit-controls-helpers.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -148,7 +148,7 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
       "`declaredTier` appears on tier-rejecting DENY rows and nowhere else (it feeds the dedupe key)");
 
     // COMMIT-TIME: the every-lane floor requires it too.
-    const commit = (msg) => spawnSync("git", ["-C", dir, "commit", "-q", "-m", msg], { encoding: "utf8" });
+    const commit = (msg) => spawnSync("git", ["-C", dir, "commit", "-q", "-m", msg, "-m", "entry: none"], { encoding: "utf8" });
     execFileSync("git", ["-C", dir, "add", "-A"]);
     write({ ...base, tier: "T1" });
     assert.equal(commit("baseline").status, 0, "baseline commit with a tiered exemption succeeds");
@@ -195,7 +195,7 @@ test("a plain init re-run KEEPS a stale installed [P] control and FAILS, naming 
     // the Codex lane, and an unverifiable lane is a named failure, not a silent success. The
     // subject here is the byte replacement, so assert the exit contract and read the bytes.
     const forcedRun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
-      "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     assert.equal(forcedRun.status, 1, "a hermetic forced rerun exits 1 (armed-check unverifiable)");
     assert.match(forcedRun.stdout + forcedRun.stderr, /NOT verified armed/, "…and says why");
     assert.ok(!readFileSync(installed, "utf8").startsWith(marker),

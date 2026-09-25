@@ -405,7 +405,8 @@ the Codex pair owes, with the sidecar's `target` set to the configured `pairedPm
 subscription) directs nothing and passes. Any other `SendMessage` is not screened — as before this
 release — but a paired checkout prints a notice saying it was not, so a renamed or mis-addressed PM send
 is never silent. A malformed kit config denies every Claude send, because it cannot say which one is the
-PM's. The matcher is a separate `SendMessage` registration in `.claude/settings.json`, beside the
+PM's, and the deny names the key that failed (v2.35.0). In a paired checkout a `SendMessage` whose `to` or
+`recipient` is present but not a string is denied (v2.35.0). The matcher is a separate `SendMessage` registration in `.claude/settings.json`, beside the
 unchanged `.*send_message` one: init merges registrations by exact matcher, so editing the old matcher
 would have run this guard twice per send on upgrade and spent a single-use receipt twice. Address
 matching is a string comparison: a PM addressed by an alias that carries neither its configured ref nor
@@ -465,7 +466,12 @@ contributor starts from. Mitigations, both shipped:
   goes **RED** on your standing mechanical gate rather than silently unguarded. **Wire
   `test:kit-controls` (`node --test tests/*.test.mjs`) into CI** — that is what makes FM1 loud.
 
-`--no-verify` bypasses the pre-commit hook, exactly as the PreToolUse guards are bypassable. That is an
+**The commit-msg hook (v2.35.0)** installs into the same `.githooks/` and binds the same way: a commit
+body must carry `entry: none` or `entry: class-N[,N…]` (N = 1–4), checked for presence and shape only.
+Merges and subjects starting `Merge `, `Revert "`, `fixup! `, `squash! ` or `amend! ` are exempt, which is
+also a way around it.
+
+`--no-verify` bypasses the pre-commit and commit-msg hooks, exactly as the PreToolUse guards are bypassable. That is an
 accepted class: gates are **seatbelts for cooperative-but-fallible agents, not intrusion detection**
 (`core/FOUNDATIONS.md` § Principles, Threat-model calibration). What the hook buys is that *forgetting* is caught
 while *deliberately overriding* is a visible, deliberate act.
@@ -788,6 +794,13 @@ from the upgraded branch.
 `proposed_transition.policy_version` equal to the version the recorder mints for that task: 3 when the
 task's program — or, with none, its pending child lineage — is a policy-3 lineage or tier T3,
 otherwise 4. The caller derives it; it does not choose it. A mismatch is refused as malformed.
+
+**The Principal record check (v2.35.0).** The recorder refuses an event that carries
+`principal_evidence` unless it is an object whose `authority_record` is a git-tracked regular file of
+this repository (repo-relative) and whose non-empty `decision_id` occurs in that file as a whole token
+(no letter, digit, `_` or `-` either side): `principal-authority-record-unconfirmed`. It runs at write
+time only — replay never re-reads a file that may since have changed — so a hand-written ledger row
+skips it. It proves an id is present in a tracked record, not that the record authorized the event.
 
 **Controller freeze.** No new controller feature lands without Owner approval. A change to the
 controller deletes about as much as it adds.

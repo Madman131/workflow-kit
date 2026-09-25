@@ -1,4 +1,4 @@
-# workflow-kit — v2.34.0
+# workflow-kit — v2.35.0
 
 ## How to start a build
 
@@ -11,6 +11,42 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults, no `pairedPm*` key is configured, and no send screen applies.
+
+## What's new in v2.35.0 — controls behind the v2.34.0 doctrine
+
+- **Every commit body carries the Step 0 entry line.** `init` installs `.githooks/commit-msg` beside
+  the pre-commit (same `core.hooksPath`, every lane). It refuses a commit whose body has no
+  `entry: none` or `entry: class-N[,N…]` line (N = 1–4). Presence and shape only — it never judges the
+  answer. Exempt: merges and subjects starting `Merge `, `Revert "`, `fixup! `, `squash! `, `amend! `.
+  Your first commit after upgrading needs the line.
+- **Principal-route repair events need a real record.** `scripts/record-repair-event.mjs` refuses an
+  event carrying `principal_evidence` unless its `authority_record` is a git-tracked file of the
+  repository and its non-empty `decision_id` appears there as a whole token
+  (`principal-authority-record-unconfirmed`). Commit the Principal's record into the checkout first.
+  Checked at write time only; the repair controller is unchanged.
+- **The gate-ladder sensor's T2 line** reads `cross-family lens [if avail; REQUIRED if flagged]`,
+  matching `core/WORKFLOW.md`.
+- **Smaller fixes.** A `SendMessage` whose `to` or `recipient` is not a string is denied in a paired
+  checkout. A malformed-config deny names the key that failed. `init`'s mixed-controller check reads
+  `git worktree list -z`, so a path holding a newline is still compared. `init --force` prints an
+  explicit Codex re-trust step when it changes a `.codex/hooks.json` entry (a version-only difference
+  is not one). The kit's own suite can no longer reach a real `codex`: `npm test` puts a stub first on
+  `PATH` and fails if any test calls it.
+- **Residual — the PM pair is repository-wide.** A tracked pair (`pairedPm*` in `.claude/kit.config.json`)
+  applies in every checkout that shares it. Any session there sending to the PM by a matched address
+  (e.g. a Builder reporting) needs a decision screen or the `ARCHITECT_STATUS_V1` status marker, or it
+  is denied with guidance. Unmatched sends get a notice.
+
+**Upgrading.** From **v2.33.x**, go straight to v2.35.0 with one `node <kit>/bin/init.mjs --target
+<repo> --force`, naming every kit-config family you hold (`--force` refuses and names any it would
+drop). The repair controller is byte-identical to v2.33.x, so worktrees need no ordered upgrade.
+**No `.codex/hooks.json` entry changes in v2.34.0 or v2.35.0:** only hook scripts change, and Codex
+keys trust to the entry, so a v2.33.x Codex lane stays armed — confirm with
+`node scripts/check-codex-hooks-armed.mjs`. From **v2.32.x or earlier**, v2.33.0 added the Codex PM
+thread-send entry and a new repair controller: upgrade every worktree in the order v2.33.1's note
+gives, and **re-trust Codex hooks interactively** (run `codex` in the repo, answer "Trust all and
+continue") even if the armed check reads ARMED — it probes `apply_patch` only. `init --force` prints
+that step whenever it changes an entry.
 
 ## What's new in v2.34.0 — action flags replace T3 for new work
 
