@@ -1000,3 +1000,24 @@ test("a --force that CHANGES a .codex/hooks.json entry prints the explicit re-tr
     assert.match(out2, /re-trust only if it reports NOT ARMED/, "…and keeps the probe-first text");
   } finally { cleanup(); }
 });
+
+test("across a VERSION bump the re-trust step keys on ENTRIES only: same entries ⇒ none; a changed entry ⇒ printed", () => {
+  const { dir, run, cleanup } = adopt();   // codex lane ENABLED; codex is off PATH (hermetic)
+  try {
+    const hooksJson = path.join(dir, ".codex", "hooks.json");
+    const current = JSON.parse(readFileSync(hooksJson, "utf8"));
+    assert.match(current.description, /workflow-kit v\d+\.\d+\.\d+/, "the description carries the kit version");
+    // The file an older kit wrote: identical entries, an older version in the description.
+    writeFileSync(hooksJson, JSON.stringify({ ...current, description: current.description.replace(/v\d+\.\d+\.\d+/, "v2.33.1") }, null, 2) + "\n");
+    const bumped = run(["--force"]);
+    assert.doesNotMatch(bumped.stdout + bumped.stderr, /RE-TRUST NOW|CHANGED \.codex\/hooks\.json entries/,
+      "a version-only difference is not an entry change");
+    assert.match(bumped.stdout + bumped.stderr, /re-trust only if it reports NOT ARMED/);
+    // The same older version AND a changed entry: now the explicit step prints.
+    const older = { ...current, description: current.description.replace(/v\d+\.\d+\.\d+/, "v2.32.0"),
+      hooks: { ...current.hooks, PreToolUse: current.hooks.PreToolUse.filter((e) => e.matcher !== "mcp__codex_app__send_message_to_thread") } };
+    writeFileSync(hooksJson, JSON.stringify(older, null, 2) + "\n");
+    const changed = run(["--force"]);
+    assert.match(changed.stdout + changed.stderr, /RE-TRUST NOW: run `codex` in this repo interactively/);
+  } finally { cleanup(); }
+});

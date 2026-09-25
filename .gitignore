@@ -21,8 +21,6 @@ node_modules
 .claude/brief-rung.json
 # the token ledger's metrics dir — per-turn rows carrying session and task ids
 .claude/metrics/
-# the PM pair (v2.35.0) is PER-CHECKOUT: committed, it travels on a branch into other checkouts
-.claude/kit.pair.json
 # .codex/hooks.json is PER-CHECKOUT: it bakes this checkout's absolute path into every hook command.
 # Committed, it registers hooks at a path other clones do not have, and a hook that fails to start
 # blocks nothing, silently. The rest of .codex/ stays tracked. This one is NOT redundant here —

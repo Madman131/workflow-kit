@@ -14,7 +14,7 @@ program/baseline/scope, evidence, delegation/limits, stop/supersession, executio
 active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
 record first; otherwise create one through normal docs/state convention and record its path.
 Pair keys: Codex `pairedPmThreadId`; Claude `pairedPmClaudeTarget` (ref/id) plus `pairedPmClaudeName`.
-Set them via `init` (per-checkout `.claude/kit.pair.json`); existing pair: edit only that lane's keys there in place; preserve
+Set them via `init`; existing config: edit only that lane's keys in `.claude/kit.config.json` in place; preserve
 other fields and read back. Plain init preserves config. Source tasks use reviewed scoped
 runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
 Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.

@@ -363,7 +363,7 @@ session- and dispatch-bound RECORD exists — a raised cost and an auditable tra
 **`guard-brief-rung` binds Codex brief writes and one paired thread send.** The brief-WRITE half
 uses the shared `apply_patch` envelope grammar. For the exact Codex app tool
 `mcp__codex_app__send_message_to_thread`, the optional, checkout-durable `pairedPmThreadId` in
-`.claude/kit.pair.json` selects one PM `threadId`; without that field, Codex sends are
+`.claude/kit.config.json` selects one PM `threadId`; without that field, Codex sends are
 outside this Architect-pair scope. A material send to that target owes the existing fresh,
 session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
 prompt bytes. The Architect evaluates observed evidence, the no-action consequence, approved-outcome/blueprint
@@ -391,7 +391,7 @@ intended task before relying on this guard.
 **The Claude lane's pair (v2.33.1).** Claude Code's `SendMessage` (addressed by `to`) and the older
 `mcp__ccd_session_mgmt__send_message` (addressed by `session_id`) reach the same screen when the optional
 `pairedPmClaudeTarget` (`init --paired-pm-claude-target`) and/or `pairedPmClaudeName`
-(`init --paired-pm-claude-name`) in `.claude/kit.pair.json` name the PM. Set the first to the PM's
+(`init --paired-pm-claude-name`) in `.claude/kit.config.json` name the PM. Set the first to the PM's
 **stable** `ListAgents` `[ref]` or session/agent id, which survives a rename, and the second to its
 current name, because a model addresses by bare name by default (observed live). A send is to the pair
 when either stored value equals the whole address, the content of one trailing ` [ref]`, or the name
@@ -405,23 +405,14 @@ the Codex pair owes, with the sidecar's `target` set to the configured `pairedPm
 subscription) directs nothing and passes. Any other `SendMessage` is not screened — as before this
 release — but a paired checkout prints a notice saying it was not, so a renamed or mis-addressed PM send
 is never silent. A malformed kit config denies every Claude send, because it cannot say which one is the
-PM's. The matcher is a separate `SendMessage` registration in `.claude/settings.json`, beside the
+PM's, and the deny names the key that failed (v2.35.0). In a paired checkout a `SendMessage` whose `to` or
+`recipient` is present but not a string is denied (v2.35.0). The matcher is a separate `SendMessage` registration in `.claude/settings.json`, beside the
 unchanged `.*send_message` one: init merges registrations by exact matcher, so editing the old matcher
 would have run this guard twice per send on upgrade and spent a single-use receipt twice. Address
 matching is a string comparison: a PM addressed by an alias that carries neither its configured ref nor
 its id (a new title with no ref, or `"parent"`) is outside the pair. **A mixed pair — Architect and PM in
 different harnesses — has no shared messaging tool and runs file-only:** directions and consults go
 through the durable program record, no `pairedPm*` key is configured, and no screen claims to bind it.
-
-**The pair is per-checkout (v2.35.0).** `init --paired-pm-*` writes `.claude/kit.pair.json`, which
-`init` gitignores, so a pairing cannot travel on a branch. When that file exists it is the checkout's
-whole pair; a key it lacks is never filled from the tracked config. Where it does not exist,
-`pairedPm*` keys in the tracked `.claude/kit.config.json` still screen — `init` never adds or deletes
-them — and every send that reads them carries a note that they travel. Migrate in this order: give
-every paired checkout its own `kit.pair.json`, **then** remove the tracked keys by hand in one commit;
-removing them first unpairs every checkout still reading them. A malformed pair file denies like a
-malformed config, and every such deny names the file and key that failed. In a paired checkout a
-`SendMessage` whose `to` or `recipient` is present but not a string is denied.
 
 Minimal `architectScreen` for the exact prompt `Hold chip pending Owner scope approval.` (the digest
 binds those bytes; other brief-rung sidecar fields and executed checks are still required):

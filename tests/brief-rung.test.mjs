@@ -630,7 +630,7 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
     const lane = JSON.parse(readFileSync(laneFile, "utf8"));
     const config = { ...JSON.parse(readFileSync(configFile, "utf8")), briefPathDirs: ["dispatches"] };
     writeFileSync(configFile, JSON.stringify(config));
-    const setPair = (value) => writeFileSync(path.join(dir, ".claude", "kit.pair.json"), JSON.stringify({ pairedPmThreadId: value }));
+    const setPair = (value) => writeFileSync(configFile, JSON.stringify({ ...config, pairedPmThreadId: value }));
     const setSidecar = (over = {}) => writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "pm-thread", nonce: "architect-1", dispatch_kind: "build", task_id: "task1",
       checks: OK_CHECK, architectScreen: architectScreen(), ...over,
@@ -643,14 +643,9 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
     assert.equal(plainInit.status, 0, plainInit.stderr);
     assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), config,
       "plain init keeps an existing config even when the new flag is present");
-    const pairFile = path.join(dir, ".claude", "kit.pair.json");
-    assert.deepEqual(JSON.parse(readFileSync(pairFile, "utf8")), { pairedPmThreadId: "pm-thread" },
-      "…and writes the pair to the per-checkout file instead (v2.35.0)");
-    // The rest repairs the pair IN PLACE in that per-checkout file (the tracked fallback, and its
-    // migration note, are pinned in claude-pair-send.test.mjs).
     const routing = readFileSync(path.join(KIT, "skills", "architect-build", "ROUTING.md"), "utf8");
-    assert.match(routing, /existing pair.*in place.*preserv.*other fields/is,
-      "the documented existing-adopter route edits the pair in place");
+    assert.match(routing, /existing.*config.*in place.*preserv.*other fields/is,
+      "the documented existing-adopter route must not rely on plain init to add the pair");
     setPair(123);
     const malformed = run(payload()).stdout;
     assert.match(malformed, /"permissionDecision":"deny"/, "a malformed selector cannot silently narrow coverage");
@@ -659,8 +654,8 @@ test("the installed Codex thread-send guard scopes one declared PM and checks cu
     setPair(" pm-thread ");
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "whitespace cannot turn a configured pair into an unmatched quiet route");
     setPair("pm-thread");
-    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), config, "repairing the pair in place leaves the unrelated config untouched");
-    assert.deepEqual(JSON.parse(readFileSync(pairFile, "utf8")), { pairedPmThreadId: "pm-thread" }, "…and holds the intended pair");
+    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), { ...config, pairedPmThreadId: "pm-thread" },
+      "repairing in place retains the unrelated field and the intended pair");
     writeFileSync(laneFile, JSON.stringify(lane));
     assert.match(run(payload()).stdout, /"permissionDecision":"deny"/,
       "a normal task-lane refresh retains the durable pair and still demands a sidecar");
@@ -782,7 +777,10 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T2",
     }));
-    writeFileSync(path.join(dir, ".claude", "kit.pair.json"), JSON.stringify({ pairedPmThreadId: "pm-thread" }));
+    const configFile = path.join(dir, ".claude", "kit.config.json");
+    writeFileSync(configFile, JSON.stringify({
+      ...JSON.parse(readFileSync(configFile, "utf8")), pairedPmThreadId: "pm-thread",
+    }));
     const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
     writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "pm-thread", nonce: "consult-rung", checks: OK_CHECK,

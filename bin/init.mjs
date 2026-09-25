@@ -219,15 +219,15 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --paired-pm-thread-id <id>
-                          checkout's one Architect-to-PM Codex send target ⇒ kit.pair.json
+                          checkout's one Architect-to-PM Codex send target ⇒ kit.config.json
                           pairedPmThreadId (optional; absent leaves ordinary sends outside scope)
   --paired-pm-claude-target <ref-or-id>
                           checkout's one Architect-to-PM Claude send target — the PM's stable
                           ListAgents [ref] or session/agent id, never its renameable title ⇒
-                          kit.pair.json pairedPmClaudeTarget (optional)
+                          kit.config.json pairedPmClaudeTarget (optional)
   --paired-pm-claude-name <name>
                           that PM's CURRENT session name, also matched (models address by bare
-                          name) ⇒ kit.pair.json pairedPmClaudeName; re-set it after a rename
+                          name) ⇒ kit.config.json pairedPmClaudeName; re-set it after a rename
   --allow-mixed-repair-controllers
                           proceed although another worktree of this repo has a different repair
                           controller installed (upgrade them all in the same step — see the refusal)
@@ -1494,9 +1494,9 @@ function main() {
   // THE ONE PROVENANCE THIS INSTALLER HAS: set at the single site that writes the path-baked Codex
   // registration this run. The .gitignore rule for that file follows this fact and nothing else.
   let kitWroteHooksJson = false;
-  // Did this run REPLACE an existing .codex/hooks.json with different bytes? Codex keys hook trust
-  // to each ENTRY, and the armed check probes apply_patch only, so a changed entry (for a v2.32.x
-  // adopter: v2.33.0's new PM thread-send entry) can read ARMED while it is untrusted and skipped.
+  // Did this run CHANGE a .codex/hooks.json ENTRY? Codex keys hook trust to each entry, and the
+  // armed check probes apply_patch only, so a changed entry (for a v2.32.x adopter: v2.33.0's new PM
+  // thread-send entry) can read ARMED while it is untrusted and skipped.
   let hooksEntryChanged = false;
   if (args.skipCodexLane) {
     // Say what is TRUE of the tree, not merely what this run did. On a re-run over a repo adopted
@@ -1675,7 +1675,10 @@ function main() {
         try { if (!isSymlinkAt(hooksJson)) prior = readFileSync(hooksJson, "utf8"); } catch { /* absent or unreadable */ }
         if (writeWithBackup(hooksJson, registrationText)) {
           kitWroteHooksJson = true;
-          hooksEntryChanged = prior !== null && prior !== registrationText;
+          // ENTRIES only: the file's `description` carries the kit version, so a whole-text compare
+          // would call every version bump an entry change and ask for a needless re-trust.
+          try { hooksEntryChanged = prior !== null && JSON.stringify(JSON.parse(prior).hooks) !== JSON.stringify(registration.hooks); }
+          catch { hooksEntryChanged = prior !== null; }
           log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · exact Codex app thread-send ⇒ brief-rung guard for the configured PM pair · Bash ⇒ gate-ladder sensor (never denies) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
@@ -1709,20 +1712,10 @@ function main() {
   if (args.stateDocs) config.stateDocs = args.stateDocs;
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
+  if (args.pairedPmThreadId) config.pairedPmThreadId = args.pairedPmThreadId;
+  if (args.pairedPmClaudeTarget) config.pairedPmClaudeTarget = args.pairedPmClaudeTarget;
+  if (args.pairedPmClaudeName) config.pairedPmClaudeName = args.pairedPmClaudeName;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  // THE PM PAIR IS PER-CHECKOUT (v2.35.0): the --paired-pm-* flags write the gitignored
-  // .claude/kit.pair.json, so a pairing cannot travel on a branch. A pair key ALREADY in the tracked
-  // file is carried forward from its flag exactly as before and never deleted — removing it would
-  // silently unpair every other checkout that still reads it. Nothing new is ever added there.
-  const PAIR_FLAGS = [["pairedPmThreadId", "--paired-pm-thread-id"], ["pairedPmClaudeTarget", "--paired-pm-claude-target"],
-    ["pairedPmClaudeName", "--paired-pm-claude-name"]];
-  const pair = Object.fromEntries(PAIR_FLAGS.filter(([key]) => args[key]).map(([key]) => [key, args[key]]));
-  let trackedPairKeys = [];
-  try {
-    const onDisk = JSON.parse(readFileSync(cfgPath, "utf8"));
-    if (isPlainObject(onDisk)) trackedPairKeys = PAIR_FLAGS.map(([key]) => key).filter((key) => Object.hasOwn(onDisk, key));
-  } catch { /* absent or unreadable: the refusal below owns that case */ }
-  for (const key of trackedPairKeys) if (key in pair) config[key] = pair[key];
   // The seven families this file is ALLOWED to hold, each with the flag that fills it. Names and
   // flags only: the refusal below reads this file to LIST what it holds and never to reprint what
   // is IN it (see there).
@@ -1804,25 +1797,6 @@ function main() {
       const cfgText = JSON.stringify(config, null, 2) + "\n";
       if (!writeWithBackup(cfgPath, cfgText)) cfgKept = true;
     }
-  }
-  const pairPath = path.join(T, ".claude", "kit.pair.json");
-  if (Object.keys(pair).length) {
-    let held = [];
-    try { const onDisk = JSON.parse(readFileSync(pairPath, "utf8")); held = isPlainObject(onDisk) ? Object.keys(onDisk) : ["<unreadable>"]; }
-    catch (e) { held = e && e.code === "ENOENT" ? [] : ["<unreadable>"]; }
-    const dropped = held.filter((key) => !(key in pair));
-    if (existsSync(pairPath) && !force) warn(`exists, kept (use --force to overwrite): ${pairPath} — the --paired-pm-* flags you passed were NOT applied`);
-    else if (dropped.length) {
-      backupRefused.push(pairPath);
-      warn(`REFUSED to overwrite ${pairPath}: it holds ${dropped.join(", ")}, which this run named no flag for (${PAIR_FLAGS.map(([, flag]) => flag).join(" / ")}). The file is UNCHANGED; name every pair key it holds, or edit it in place and read it back.`);
-    } else if (writeWithBackup(pairPath, JSON.stringify(pair, null, 2) + "\n")) {
-      log(`  .claude/kit.pair.json: ${Object.keys(pair).join(", ")} (per-checkout PM pair, gitignored)`);
-    }
-  }
-  if (trackedPairKeys.length) {
-    warn(`${cfgPath} holds ${trackedPairKeys.join(", ")} — a PM pair in the TRACKED config still screens, but it travels on branches into other checkouts. ` +
-      `Give every paired checkout its own gitignored .claude/kit.pair.json (init --paired-pm-* there), and only then remove the pairedPm* keys from the tracked file by hand, in one commit` +
-      (existsSync(pairPath) ? `. In THIS checkout ${pairPath} exists, so the tracked keys are IGNORED here.` : "."));
   }
   log(cfgRefused
     ? (cfgUnreadable
@@ -1953,8 +1927,6 @@ function main() {
   // sidecar lines, so the ONE new line lands under a header that describes exactly it.
   appendGitignore(T, [".claude/metrics/"], "workflow-kit: the token ledger's metrics dir is per-session, gitignored");
   certifyIgnored(T, ".claude/metrics/", ".claude/metrics/tokens.jsonl");
-  appendGitignore(T, [".claude/kit.pair.json"], "workflow-kit: the PM pair is per-checkout, gitignored");
-  certifyIgnored(T, ".claude/kit.pair.json", ".claude/kit.pair.json");
   // ONLY THE PATH-BAKED FILE, AND ONLY BECAUSE INIT WROTE IT. `.codex/hooks.json` carries the
   // ABSOLUTE path of THIS checkout in every registered command (it must — Codex runs a hook from a
   // working directory the kit does not control, and a wrong project root is a fail-OPEN). Committed,

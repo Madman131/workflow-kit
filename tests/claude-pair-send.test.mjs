@@ -8,7 +8,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,15 +61,15 @@ test("the pair matches the whole address, the ref inside a trailing [ref], or th
 test("pairedPmClaudeTarget: valid forms load; malformed ones fail CLOSED; a Codex-only config reads as before", () => {
   const read = (v) => () => v;
   assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeTarget":"PM Kit [3fa9c1]"}') }),
-    { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "PM Kit [3fa9c1]", pairSource: "tracked" }, "inner spaces are legal in a Claude name");
+    { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "PM Kit [3fa9c1]" }, "inner spaces are legal in a Claude name");
   assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeTarget":"3fa9c1","pairedPmClaudeName":"Probe PM"}') }),
-    { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM", pairSource: "tracked" }, "ref and current name load together");
+    { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" }, "ref and current name load together");
   for (const bad of ["", " Probe PM", "a\nb", 7]) {
     assert.equal(loadBriefConfig("/r", { readConfig: read(JSON.stringify({ pairedPmClaudeName: bad })) }).ok, false,
       `name ${JSON.stringify(bad)} must fail closed`);
   }
   assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"pairedPmThreadId":"pm-thread"}') }),
-    { ok: true, briefPathDirs: [], pairedPmThreadId: "pm-thread", pairSource: "tracked" }, "a 2.33.0 config still loads (read as the tracked fallback)");
+    { ok: true, briefPathDirs: [], pairedPmThreadId: "pm-thread" }, "a 2.33.0 config loads identically");
   for (const bad of [123, "", " x", "x ", "a\nb", "x".repeat(301), null]) {
     assert.equal(loadBriefConfig("/r", { readConfig: read(JSON.stringify({ pairedPmClaudeTarget: bad })) }).ok, false,
       `${JSON.stringify(bad)} must fail closed`);
@@ -89,110 +89,26 @@ function adopt(extraArgs = []) {
   return { dir, codexDir, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
-test("init writes the pair to the per-checkout kit.pair.json (gitignored), never adds it to the tracked config", () => {
+test("init writes pairedPmClaudeTarget and pairedPmClaudeName, and --force never silently drops them", () => {
   const { dir, codexDir, cleanup } = adopt(["--paired-pm-claude-target", "3fa9c1", "--paired-pm-claude-name", "Probe PM"]);
   try {
     const cfg = path.join(dir, ".claude", "kit.config.json");
-    const pairFile = path.join(dir, ".claude", "kit.pair.json");
-    assert.deepEqual(JSON.parse(readFileSync(pairFile, "utf8")), { pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" });
-    const tracked = existsSync(cfg) ? JSON.parse(readFileSync(cfg, "utf8")) : {};
-    assert.ok(!("pairedPmClaudeTarget" in tracked) && !("pairedPmClaudeName" in tracked), "no pair key is added to the tracked config");
-    assert.equal(spawnSync("git", ["-C", dir, "check-ignore", "-q", ".claude/kit.pair.json"]).status, 0, "the pair file is gitignored");
-    const init = (...extra) => spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--skip-codex-lane",
-      "--codex-prompts-dir", codexDir, ...extra], { encoding: "utf8" });
-    init("--force");
-    assert.deepEqual(JSON.parse(readFileSync(pairFile, "utf8")), { pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" },
-      "a --force run naming no pair flag leaves the per-checkout pair alone");
-    const partial = init("--force", "--paired-pm-claude-name", "Renamed PM");
-    assert.match(`${partial.stdout}${partial.stderr}`, /REFUSED to overwrite .*kit\.pair\.json: it holds pairedPmClaudeTarget/,
-      "a --force naming only part of the pair refuses rather than dropping the ref");
-    assert.equal(JSON.parse(readFileSync(pairFile, "utf8")).pairedPmClaudeName, "Probe PM", "…and leaves the file unchanged");
-    const renamed = init("--force", "--paired-pm-claude-target", "3fa9c1", "--paired-pm-claude-name", "Renamed PM");
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeTarget, "3fa9c1");
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeName, "Probe PM");
+    const again = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--force", "--skip-codex-lane",
+      "--codex-prompts-dir", codexDir], { encoding: "utf8" });
+    assert.match(`${again.stdout}${again.stderr}`, /--paired-pm-claude-target/, "the refusal names the flag that keeps the pair");
+    assert.match(`${again.stdout}${again.stderr}`, /--paired-pm-claude-name/, "…and the flag that keeps the name");
+    // The documented rename re-run: --force with every family named replaces the stale name.
+    const renamed = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--force", "--skip-codex-lane",
+      "--codex-prompts-dir", codexDir, "--paired-pm-claude-target", "3fa9c1", "--paired-pm-claude-name", "Renamed PM"], { encoding: "utf8" });
     assert.equal(renamed.status, 0, renamed.stderr);
-    assert.equal(JSON.parse(readFileSync(pairFile, "utf8")).pairedPmClaudeName, "Renamed PM", "the full re-run updates the name");
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeName, "Renamed PM", "the re-run command updates the name");
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeTarget, "3fa9c1", "the pair survives");
     const bad = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir,
       "--codex-prompts-dir", codexDir, "--paired-pm-claude-target", " padded"], { encoding: "utf8" });
     assert.equal(bad.status, 2, "an unusable address is refused before anything is written");
   } finally { cleanup(); }
-});
-
-test("a TRACKED pair is kept, still screens in a checkout with no kit.pair.json, and every such send says it travels", () => {
-  const { dir, codexDir, cleanup } = adopt();
-  const second = mkdtempSync(path.join(os.tmpdir(), "kit-claude-pair-wt-"));
-  try {
-    const cfg = path.join(dir, ".claude", "kit.config.json");
-    const base = existsSync(cfg) ? JSON.parse(readFileSync(cfg, "utf8")) : {};
-    writeFileSync(cfg, JSON.stringify({ ...base, pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Travelled PM" }));
-    execFileSync("git", ["-C", dir, "config", "user.email", "t@t"]); execFileSync("git", ["-C", dir, "config", "user.name", "t"]);
-    execFileSync("git", ["-C", dir, "add", "-A"]);
-    execFileSync("git", ["-C", dir, "commit", "-qm", "adopt with a tracked pair", "-m", "entry: none"]);
-    // A SECOND checkout of the same repo: the tracked pair arrives with the branch, no local file.
-    const wt = path.join(second, "wt");
-    execFileSync("git", ["-C", dir, "worktree", "add", "-q", "--detach", wt]);
-    assert.ok(!existsSync(path.join(wt, ".claude", "kit.pair.json")), "the second checkout has no per-checkout pair");
-    const hook = path.join(wt, ".claude", "hooks", "guard-brief-rung.mjs");
-    const run = (toolInput) => spawnSync(process.execPath, [hook], { cwd: wt, encoding: "utf8",
-      input: JSON.stringify({ tool_name: "SendMessage", session_id: "s1", cwd: wt, tool_input: toolInput }) });
-    const toPm = run({ to: "PM Kit [3fa9c1]", message: "Build the next item." });
-    assert.match(toPm.stdout, /"permissionDecision":"deny"/, "the tracked pair still screens an unscreened PM direction");
-    assert.match(toPm.stdout, /read from the TRACKED[\s\S]*kit\.pair\.json[\s\S]*only then remove/,
-      "…and the deny carries the migration notice once");
-    const other = run({ to: "Builder [aaaaaa]", message: "hi" });
-    assert.equal((other.stdout.match(/hookSpecificOutput/g) || []).length, 1, "one stdout object, notices folded");
-    assert.match(other.stdout, /NOT screened[\s\S]*kit\.config\.json[\s\S]*read from the TRACKED/);
-    // init keeps the tracked key: --force naming the flag writes it back AND writes the local file.
-    const forced = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--skip-codex-lane",
-      "--codex-prompts-dir", codexDir, "--force", "--paired-pm-claude-target", "3fa9c1", "--paired-pm-claude-name", "Travelled PM"], { encoding: "utf8" });
-    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeTarget, "3fa9c1", "init never deletes a tracked pair key");
-    assert.equal(JSON.parse(readFileSync(path.join(dir, ".claude", "kit.pair.json"), "utf8")).pairedPmClaudeTarget, "3fa9c1");
-    assert.match(`${forced.stdout}${forced.stderr}`, /TRACKED config still screens[\s\S]*only then remove[\s\S]*IGNORED here/,
-      "init warns, names the removal order, and says the tracked keys are ignored where a local file exists");
-    // Whole-file precedence: a local pair file is the pair; the tracked key does not also screen.
-    writeFileSync(path.join(wt, ".claude", "kit.pair.json"), JSON.stringify({ pairedPmClaudeTarget: "bbbbbb" }));
-    assert.doesNotMatch(run({ to: "PM Kit [3fa9c1]", message: "x" }).stdout, /"permissionDecision":"deny"/,
-      "with a local pair file, the travelled tracked key no longer screens here");
-    assert.match(run({ to: "Local PM [bbbbbb]", message: "x" }).stdout, /"permissionDecision":"deny"/, "the local pair screens");
-    assert.doesNotMatch(run({ to: "Travelled PM", message: "x" }).stdout, /"permissionDecision":"deny"/,
-      "WHOLE-FILE precedence: a tracked key the local file lacks does not fill the gap");
-  } finally {
-    try { execFileSync("git", ["-C", dir, "worktree", "remove", "--force", path.join(second, "wt")]); } catch {}
-    rmSync(second, { recursive: true, force: true }); cleanup();
-  }
-});
-
-test("a non-string SendMessage address in a paired checkout DENIES; unpaired it stays outside the guard", () => {
-  const { dir, cleanup } = adopt();
-  try {
-    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
-    const run = (toolInput) => spawnSync(process.execPath, [hook], { cwd: dir, encoding: "utf8",
-      input: JSON.stringify({ tool_name: "SendMessage", session_id: "s1", cwd: dir, tool_input: toolInput }) });
-    assert.equal(run({ to: { name: "PM" }, message: "x" }).stdout, "", "unpaired: outside the guard, as before");
-    writeFileSync(path.join(dir, ".claude", "kit.pair.json"), JSON.stringify({ pairedPmClaudeTarget: "3fa9c1" }));
-    for (const to of [{ name: "PM" }, ["3fa9c1"], 7]) {
-      const r = run({ to, message: "x" });
-      assert.match(r.stdout, /"permissionDecision":"deny"/, `paired: to=${JSON.stringify(to)} denies`);
-      assert.match(r.stdout, /not a string/, "…naming why");
-    }
-    assert.match(run({ to: "Builder", recipient: { id: 1 }, message: "x" }).stdout, /"permissionDecision":"deny"/,
-      "a non-string recipient beside a string to also denies");
-  } finally { cleanup(); }
-});
-
-test("a malformed pair or config names the FILE and the KEY that failed", () => {
-  const read = (v) => () => v;
-  const bad = (cfg, pair) => loadBriefConfig("/r", { readConfig: read(cfg), readPair: read(pair) });
-  assert.deepEqual(bad('{"pairedPmClaudeName":" x"}', undefined), { ok: false, file: ".claude/kit.config.json", key: "pairedPmClaudeName" });
-  assert.deepEqual(bad('{"briefPathDirs":"d"}', undefined), { ok: false, file: ".claude/kit.config.json", key: "briefPathDirs" });
-  assert.deepEqual(bad("{}", '{"pairedPmThreadId":"a b"}'), { ok: false, file: ".claude/kit.pair.json", key: "pairedPmThreadId" });
-  assert.deepEqual(bad("{}", "{oops"), { ok: false, file: ".claude/kit.pair.json", key: null });
-  assert.deepEqual(bad("{}", '{"pairedPmClaudeTarget":"abc"}'), { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "abc", pairSource: "local" });
-  const msg = (state, config) => denyReason(state, { dispatch: { kind: "send", target: "x" }, config });
-  assert.match(msg("claude-pair-malformed", { file: ".claude/kit.config.json", key: "pairedPmClaudeName" }),
-    /`pairedPmClaudeName` in \.claude\/kit\.config\.json/, "the Claude pair message names the failing key");
-  assert.match(msg("kit-config-malformed", { file: ".claude/kit.config.json", key: "briefPathDirs" }), /`briefPathDirs` in/);
-  assert.match(msg("architect-pair-malformed", { file: ".claude/kit.pair.json", key: "pairedPmThreadId" }),
-    /`pairedPmThreadId` in \.claude\/kit\.pair\.json/);
-  assert.match(msg("claude-pair-malformed", { file: ".claude/kit.pair.json", key: null }), /kit\.pair\.json as a whole/);
 });
 
 test("THE INSTALLED GUARD screens a Claude Architect's send to its PM — registered, and RUNS, both tools", () => {
@@ -211,7 +127,6 @@ test("THE INSTALLED GUARD screens a Claude Architect's send to its PM — regist
     const deny = (r) => /"permissionDecision":"deny"/.test(r.stdout);
     const configFile = path.join(dir, ".claude", "kit.config.json");
     const config = JSON.parse(readFileSync(configFile, "utf8"));
-    const pairFile = path.join(dir, ".claude", "kit.pair.json");
     const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
     const setSidecar = (over = {}) => writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "3fa9c1", nonce: `n-${Math.random()}`, dispatch_kind: "build", task_id: "task1",
@@ -222,7 +137,7 @@ test("THE INSTALLED GUARD screens a Claude Architect's send to its PM — regist
     const unpaired = run("SendMessage", { to: "PM Kit [3fa9c1]", message: PROMPT });
     assert.equal(unpaired.stdout, "", "no pair configured ⇒ no deny and no notice");
 
-    writeFileSync(pairFile, JSON.stringify({ pairedPmClaudeTarget: "3fa9c1" }));
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeTarget: "3fa9c1" }));
     assert.ok(deny(run("SendMessage", { to: "PM Kit [3fa9c1]", message: PROMPT })), "an unscreened direction to the pair is denied");
     assert.ok(deny(run("SendMessage", { to: "Renamed Title [3fa9c1]", message: PROMPT })),
       "a RENAMED title with the same ref is still the pair — the screen does not switch off");
@@ -274,7 +189,7 @@ test("THE INSTALLED GUARD screens a Claude Architect's send to its PM — regist
 
     // D-11: the pair also stores the PM's CURRENT name, because models address by bare name.
     rmSync(sidecarFile, { force: true });
-    writeFileSync(pairFile, JSON.stringify({ pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" }));
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" }));
     assert.ok(deny(run("SendMessage", captured("Probe PM", PROMPT))), "a bare-name `to` equal to the stored name is screened");
     assert.ok(deny(run("SendMessage", captured("Probe PM [ffffff]", PROMPT))), "the stored name before any ref is screened");
     setSidecar();
@@ -285,14 +200,14 @@ test("THE INSTALLED GUARD screens a Claude Architect's send to its PM — regist
     assert.doesNotMatch(renamedBare.stdout, /"permissionDecision":"deny"/, "a bare new title is unscreened (documented residual)…");
     assert.match(renamedBare.stdout, /NOT screened[\s\S]*update pairedPmClaudeName/, "…and the notice says how to repair the stale name");
     // Name only, no ref: the name still pairs.
-    writeFileSync(pairFile, JSON.stringify({ pairedPmClaudeName: "Probe PM" }));
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeName: "Probe PM" }));
     rmSync(sidecarFile, { force: true });
     assert.ok(deny(run("SendMessage", captured("Probe PM", PROMPT))), "a name-only pair still screens the bare name");
-    writeFileSync(pairFile, JSON.stringify({ pairedPmClaudeTarget: "3fa9c1" }));
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeTarget: "3fa9c1" }));
 
     const other = run("SendMessage", { to: "Builder [aaaaaa]", message: PROMPT });
     assert.doesNotMatch(other.stdout, /"permissionDecision":"deny"/, "a send to another agent is not denied");
-    assert.match(other.stdout, /NOT screened[\s\S]*3fa9c1[\s\S]*kit\.pair\.json/,
+    assert.match(other.stdout, /NOT screened[\s\S]*3fa9c1[\s\S]*kit\.config\.json/,
       "…but a paired checkout is TOLD it was not screened, so a mis-addressed PM send is never silent");
 
     writeFileSync(configFile, "{oops");
@@ -344,4 +259,38 @@ test("upgrading a 2.33.0 settings.json adds ONE SendMessage bucket and duplicate
     assert.equal(after.find((g) => g.matcher === "SendMessage").hooks.length, 1);
     assert.equal(after.find((g) => g.matcher === ".*send_message").hooks.length, 1, "the old bucket still runs the guard once");
   } finally { cleanup(); }
+});
+
+test("a non-string SendMessage address in a paired checkout DENIES; unpaired it stays outside the guard", () => {
+  const { dir, cleanup } = adopt();
+  try {
+    const hook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const run = (toolInput) => spawnSync(process.execPath, [hook], { cwd: dir, encoding: "utf8",
+      input: JSON.stringify({ tool_name: "SendMessage", session_id: "s1", cwd: dir, tool_input: toolInput }) });
+    assert.equal(run({ to: { name: "PM" }, message: "x" }).stdout, "", "unpaired: outside the guard, as before");
+    const cfg = path.join(dir, ".claude", "kit.config.json");
+    writeFileSync(cfg, JSON.stringify({ ...JSON.parse(readFileSync(cfg, "utf8")), pairedPmClaudeTarget: "3fa9c1" }));
+    for (const to of [{ name: "PM" }, ["3fa9c1"], 7]) {
+      const r = run({ to, message: "x" });
+      assert.match(r.stdout, /"permissionDecision":"deny"/, `paired: to=${JSON.stringify(to)} denies`);
+      assert.match(r.stdout, /not a string/, "…naming why");
+    }
+    assert.match(run({ to: "Builder", recipient: { id: 1 }, message: "x" }).stdout, /"permissionDecision":"deny"/,
+      "a non-string recipient beside a string to also denies");
+  } finally { cleanup(); }
+});
+
+test("a malformed config deny names the KEY that failed", () => {
+  const read = (v) => () => v;
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeName":" x"}') }).key, "pairedPmClaudeName");
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeTarget":"a\\nb"}') }).key, "pairedPmClaudeTarget");
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"pairedPmThreadId":"a b"}') }).key, "pairedPmThreadId");
+  assert.equal(loadBriefConfig("/r", { readConfig: read('{"briefPathDirs":"d"}') }).key, "briefPathDirs");
+  assert.equal(loadBriefConfig("/r", { readConfig: read("{oops") }).key, undefined, "a whole-file failure names no key");
+  const msg = (state, config) => denyReason(state, { dispatch: { kind: "send", target: "x" }, config });
+  assert.match(msg("claude-pair-malformed", { ok: false, key: "pairedPmClaudeName" }), /`pairedPmClaudeName` is invalid/,
+    "the Claude pair message names the failing key, not always pairedPmClaudeTarget");
+  assert.match(msg("kit-config-malformed", { ok: false, key: "pairedPmClaudeName" }), /`pairedPmClaudeName` is invalid/);
+  assert.match(msg("architect-pair-malformed", { ok: false, key: "pairedPmThreadId" }), /`pairedPmThreadId` is invalid/);
+  assert.match(msg("claude-pair-malformed", { ok: false }), /not readable JSON, or not an object/);
 });

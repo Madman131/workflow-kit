@@ -84,7 +84,7 @@ test("the reviewer availability route is stated BOTH ways round on all three sur
 test("R2-1: the existing-config instruction names BOTH lanes' pair keys, never Codex alone", () => {
   const routing = flat(read("skills/architect-build/ROUTING.md"));
   assert.match(routing, /Pair keys: Codex `pairedPmThreadId`; Claude `pairedPmClaudeTarget` \(ref\/id\) plus `pairedPmClaudeName`\./);
-  assert.match(routing, /existing pair: edit only that lane's keys there in place/);
+  assert.match(routing, /existing config: edit only that lane's keys in `\.claude\/kit\.config\.json` in place/);
   for (const rel of ["skills/architect-build/ROUTING.md", "skills/architect-build/SKILL.md", "README.md", "PORTABILITY.md",
     "templates/BINDINGS.md.tmpl", "templates/CLAUDE.md.tmpl", "templates/AGENTS.md.tmpl"]) {
     assert.doesNotMatch(flat(read(rel)), /set only `pairedPmThreadId`/, `${rel} must not tell a Claude Architect to set only the Codex key`);

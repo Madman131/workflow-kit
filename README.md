@@ -19,14 +19,6 @@
   `entry: none` or `entry: class-N[,N…]` line (N = 1–4). Presence and shape only — it never judges the
   answer. Exempt: merges and subjects starting `Merge `, `Revert "`, `fixup! `, `squash! `, `amend! `.
   Your first commit after upgrading needs the line.
-- **The PM pair is per-checkout.** `--paired-pm-thread-id`, `--paired-pm-claude-target` and
-  `--paired-pm-claude-name` now write `.claude/kit.pair.json`, which `init` gitignores, so a pairing
-  no longer travels on a branch. When that file exists it is this checkout's whole pair. A pair already
-  in the tracked `.claude/kit.config.json` **keeps working** where no local file exists, and `init`
-  never deletes it; every send that reads it prints a note, and `init` warns. To move: give every paired
-  checkout its own file (`init --paired-pm-…` there), **then** remove the `pairedPm*` keys from the
-  tracked file by hand in one commit. Until then the tracked pair still travels. To update a name after
-  a PM rename, edit `.claude/kit.pair.json` in place and read it back.
 - **Principal-route repair events need a real record.** `scripts/record-repair-event.mjs` refuses an
   event carrying `principal_evidence` unless its `authority_record` is a git-tracked file of the
   repository and its non-empty `decision_id` appears there as a whole token
@@ -35,21 +27,26 @@
 - **The gate-ladder sensor's T2 line** reads `cross-family lens [if avail; REQUIRED if flagged]`,
   matching `core/WORKFLOW.md`.
 - **Smaller fixes.** A `SendMessage` whose `to` or `recipient` is not a string is denied in a paired
-  checkout. A malformed-config deny names the file and key that failed. `init`'s mixed-controller
-  check reads `git worktree list -z`, so a path holding a newline is still compared. The kit's own
-  suite can no longer reach a real `codex`: `npm test` puts a stub first on `PATH` and fails if any
-  test calls it.
+  checkout. A malformed-config deny names the key that failed. `init`'s mixed-controller check reads
+  `git worktree list -z`, so a path holding a newline is still compared. `init --force` prints an
+  explicit Codex re-trust step when it changes a `.codex/hooks.json` entry (a version-only difference
+  is not one). The kit's own suite can no longer reach a real `codex`: `npm test` puts a stub first on
+  `PATH` and fails if any test calls it.
+- **Residual — the PM pair is repository-wide.** A tracked pair (`pairedPm*` in `.claude/kit.config.json`)
+  applies in every checkout that shares it. Any session there sending to the PM by a matched address
+  (e.g. a Builder reporting) needs a decision screen or the `ARCHITECT_STATUS_V1` status marker, or it
+  is denied with guidance. Unmatched sends get a notice.
 
 **Upgrading.** From **v2.33.x**, go straight to v2.35.0 with one `node <kit>/bin/init.mjs --target
-<repo> --force`, naming every kit-config family you hold (and each `--paired-pm-*` flag whose key
-your tracked config holds — `--force` refuses and names any it would drop). The repair controller is
-byte-identical to v2.33.x, so worktrees need no ordered upgrade. **No `.codex/hooks.json` entry
-changes in v2.34.0 or v2.35.0:** only hook scripts change, and Codex keys trust to the entry, so a
-v2.33.x Codex lane stays armed — confirm with `node scripts/check-codex-hooks-armed.mjs`. From
-**v2.32.x or earlier**, v2.33.0 added the Codex PM thread-send entry and a new repair controller:
-upgrade every worktree in the order v2.33.1's note gives, and **re-trust Codex hooks interactively**
-(run `codex` in the repo, answer "Trust all and continue") even if the armed check reads ARMED — it
-probes `apply_patch` only. `init --force` now prints that step whenever it changes an entry.
+<repo> --force`, naming every kit-config family you hold (`--force` refuses and names any it would
+drop). The repair controller is byte-identical to v2.33.x, so worktrees need no ordered upgrade.
+**No `.codex/hooks.json` entry changes in v2.34.0 or v2.35.0:** only hook scripts change, and Codex
+keys trust to the entry, so a v2.33.x Codex lane stays armed — confirm with
+`node scripts/check-codex-hooks-armed.mjs`. From **v2.32.x or earlier**, v2.33.0 added the Codex PM
+thread-send entry and a new repair controller: upgrade every worktree in the order v2.33.1's note
+gives, and **re-trust Codex hooks interactively** (run `codex` in the repo, answer "Trust all and
+continue") even if the armed check reads ARMED — it probes `apply_patch` only. `init --force` prints
+that step whenever it changes an entry.
 
 ## What's new in v2.34.0 — action flags replace T3 for new work
 

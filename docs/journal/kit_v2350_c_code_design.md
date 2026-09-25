@@ -17,8 +17,7 @@ surfaced judgment, or sends a PM direction that nothing screens.
 CLI, `git commit`, the PreToolUse send hook, `init`. They are not a security boundary. Out of model,
 unchanged by this release: `--no-verify`; shell or direct filesystem writes (including a hand-written
 ledger row or a hand-edited config file); importing controller functions directly; server-side merges
-on the forge (no local hooks run); an agent editing the per-checkout file that configures its own
-screen.
+on the forge (no local hooks run); an agent editing the config that configures its own screen.
 
 **Invariants this changeset must hold.**
 - I1 · No ledger row shape changes and no replay rule changes: every ledger valid under v2.34.0
@@ -29,9 +28,13 @@ screen.
   to v2.34.0's for the same checkout path.
 - I4 · Every new refusal fails closed with a named state or a message naming the file, the key or
   the line it wants; no new silent allow.
-- I5 · Old configuration still works: a pair held in the tracked `.claude/kit.config.json` keeps
-  screening in every checkout that has no per-checkout pair file, and nothing the kit runs ever
-  deletes it.
+- I5 · Pair handling is v2.34.0's: tracked `pairedPm*` keys in `.claude/kit.config.json`, read and
+  written exactly as before (items 4b and 4e change only a deny and a message).
+
+**Residual — the PM pair is repository-wide.** A tracked pair applies in every checkout that shares
+it. Any session there sending to the PM by a matched address (e.g. a Builder reporting) needs a
+decision screen or the `ARCHITECT_STATUS_V1` status marker, or it is denied with guidance. Unmatched
+sends get a notice.
 - I6 · No test in the suite invokes the operator's real `codex`.
 
 ## 1 · Principal record check
@@ -127,59 +130,10 @@ summary says so). A commit can skip the check by an exempt subject prefix (`fixu
 `amend! `, `Revert "`, `Merge `): the line is presence-only surfaced judgment, and an autosquashed
 fixup lands under a parent that carries it, so the exemptions stand.
 
-## 3 · Pair scoping: the pair leaves the tracked config
+## 3 · Pair scoping — dropped
 
-**Harm.** `pairedPm*` keys live in `.claude/kit.config.json`, which adopters track. A pairing
-committed in one checkout travels on a branch into another: that checkout then screens sends to a PM
-it does not work with and leaves its own PM unscreened (only a notice), and merges fight over the key.
-
-**Mechanism.** A new per-checkout, gitignored file **`.claude/kit.pair.json`** holds the three keys
-(`pairedPmThreadId`, `pairedPmClaudeTarget`, `pairedPmClaudeName`) with today's validation.
-- **Reader** (`hooks/guard-brief-rung.mjs` `loadBriefConfig`): if `kit.pair.json` exists it is the
-  whole pair for this checkout (same lstat / regular-file / JSON-object rules; malformed ⇒ `ok:false`
-  naming that file and key). If it does not exist, pair keys in `kit.config.json` are still read
-  (I5). Whole-file precedence, not per-key fallback: a per-key fallback would let a travelled key
-  fill a gap in the local pair.
-- **Writer** (`bin/init.mjs`): `--paired-pm-*` flags write `kit.pair.json`. `init` appends
-  `.claude/kit.pair.json` to `.gitignore` and certifies it ignored (existing `appendGitignore` +
-  `certifyIgnored`). Existing pair file: kept without `--force`; under `--force` it is rewritten
-  from the flags only when every key it holds is named (the FM-23 refusal rule, factored into one
-  helper used by both files).
-- **Old tracked keys are never deleted by the kit.** `init` never adds a pair key to
-  `kit.config.json` and never removes one: under `--force` the existing FM-23 rule is unchanged —
-  a tracked pair key must be named by its flag or the run refuses, and a named one is written back
-  to `kit.config.json` exactly as today (and also to `kit.pair.json`). A fresh adopt, or a checkout
-  whose `kit.config.json` holds no pair key, gets the pair only in `kit.pair.json`.
-- **Warning, once per run.** Whenever tracked pair keys exist, `init` warns once, and the guard adds
-  one notice per hook invocation that used the tracked fallback (appended to a deny's reason, or as
-  the PreToolUse notice on an allow): the tracked pair still screens but travels on branches; give
-  every paired checkout its own `kit.pair.json` (`init --paired-pm-…`), and **only then remove the
-  tracked `pairedPm*` keys by hand** in one commit. The same order is stated in `PORTABILITY.md`.
-  With both present, `init` also says the tracked keys are ignored in this checkout.
-
-**RED tests** (extend `tests/claude-pair-send.test.mjs`, `tests/codex-guard.test.mjs`,
-`tests/init-force.test.mjs`): a pair only in `kit.pair.json` screens a matching send · a pair in
-both files screens the `kit.pair.json` target and not the tracked one · **a second checkout (linked
-worktree) holding the tracked keys and no local `kit.pair.json` stays screened**, and its allow/deny
-carries the migration notice · malformed `kit.pair.json` denies, naming the file and the key ·
-`init --paired-pm-claude-target X` on a fresh adopt writes `kit.pair.json`, adds no pair key to
-`kit.config.json`, and `git check-ignore` confirms the ignore · `--force` over a tracked key without
-its flag refuses; with its flag, the tracked key is still present afterwards and `kit.pair.json`
-holds it too · the Codex thread-send path reads the same file. Mutation: make `init` drop the tracked
-key → the "still present afterwards" case goes RED.
-
-**Files.** `hooks/guard-brief-rung.mjs` (+~26 / −~4), `bin/init.mjs` (+~24 / −~4), templates
-`BINDINGS.md.tmpl`, `CLAUDE.md.tmpl`, `AGENTS.md.tmpl` (one clause each: the file name),
-`skills/architect-build/ROUTING.md` lines 16–17, `PORTABILITY.md` § Claude pair (+ the removal
-order), `README.md`.
-
-**Residuals.** **Until an operator removes the tracked keys by hand, the pair still travels on a
-branch** into any checkout that has no `kit.pair.json` — today's behaviour, now announced by the
-notice on every such send and by `init`. Removing the tracked keys before every paired checkout has
-its local file unpairs the checkouts that lack one; the documented order (local files first, then
-the one hand edit) is the only guard against that. A PM rename still leaves the name key stale (D-11
-residual, unchanged). An agent can edit the file that configures its own screen (out of model;
-unchanged from today).
+Item 3 is not built (D-27): the pair stays in the tracked `.claude/kit.config.json` exactly as in
+v2.34.0. Its residual is stated in § 0 and in the README note.
 
 ## 4 · CHIP B findings carried with a harm
 
@@ -202,8 +156,8 @@ checkout, `to: {…}` → deny; `to: ["pm"]` → deny; unpaired, same input → 
 v2.32.x or earlier gets a new `.codex/hooks.json` entry (the v2.33.0 thread-send entry). `init`
 prints "re-trust only if NOT ARMED", but the armed check probes `apply_patch` only, so it reads
 ARMED while the new send entry is untrusted and skipped silently. Mechanism: when `--force`
-rewrites `.codex/hooks.json` and the previous file existed with different bytes, record
-`hooksEntryChanged`; then print an explicit step — run `codex` here interactively and choose
+rewrites `.codex/hooks.json` and the previous file's `hooks` structure differs (the version-bearing
+`description` is ignored), record `hooksEntryChanged`; then print an explicit step — run `codex` here interactively and choose
 "Trust all and continue", then run the check — and state that the check covers `apply_patch` only.
 When the file was unchanged, keep today's text. RED: an adopt whose `hooks.json` is replaced by an
 older registration, then `--force` → output carries the explicit step; an unchanged `--force` →
@@ -243,8 +197,7 @@ key. RED: malformed `pairedPmClaudeName` → message names `pairedPmClaudeName`;
 
 ## 5 · Option B (per-checkout deny of unmatched SendMessage) — not in scope
 
-With the pair per-checkout (item 3), an unmatched send in a paired checkout reaches a different
-recipient or a mis-addressed PM. The notice already covers the mis-addressed case in the transcript,
+An unmatched send in a paired checkout reaches a different recipient or a mis-addressed PM. The notice already covers the mis-addressed case in the transcript,
 and a PM that receives an unscreened direction refuses it (program rule D-12). No harm remains that
 the notice does not cover; B would add one — every Architect send to a Builder or any non-PM
 session in that checkout would be denied. **B is not built.**
@@ -264,16 +217,15 @@ the surfaced ladder contains the clause read from the WORKFLOW.md T2 row itself.
 
 ## 7 · Codex hook trust
 
-No `.codex/hooks.json` entry changes (I3): items 3, 4b, 4e and 6 change hook **scripts** only, and
+No `.codex/hooks.json` entry changes (I3): items 4b, 4e and 6 change hook **scripts** only, and
 Codex keys trust to the registration entry. An adopter upgrading v2.34.0 → v2.35.0 stays armed and
-owes no re-trust; `init --force` will print the unchanged-entries text (item 4c). The commit-msg hook
+owes no re-trust; `init --force` prints the unchanged-entries text across that version bump (item 4c). The commit-msg hook
 is a Git hook and binds every lane without Codex trust. The release note says both.
 
 ## 8 · Wording sign-off (Owner, D-02)
 
-Required: `core/WORKFLOW.md` Step 0 entry-line sentence (item 2) · `templates/BINDINGS.md.tmpl`,
-`templates/CLAUDE.md.tmpl`, `templates/AGENTS.md.tmpl` pair-file clauses (item 3).
-For the same packet, not core: `skills/architect-build/ROUTING.md` 16–17 · the printed T2 ladder
+Required: `core/WORKFLOW.md` Step 0 entry-line sentence (item 2).
+For the same packet, not core: the printed T2 ladder
 string (item 6) · the new refusal/deny messages (items 1, 2, 4b, 4e) · `README.md` v2.35.0 note ·
 `PORTABILITY.md` edits.
 
@@ -297,25 +249,25 @@ string (item 6) · the new refusal/deny messages (items 1, 2, 4b, 4e) · `README
 | `hooks/repair-dispatch-state.mjs` (controller) | 0 | 0 |
 | `scripts/record-repair-event.mjs` | ~24 | 0 |
 | `githooks/commit-msg` (new) | ~55 | 0 |
-| `bin/init.mjs` | ~53 | ~13 |
-| `hooks/guard-brief-rung.mjs` | ~37 | ~7 |
+| `bin/init.mjs` | ~45 | ~21 |
+| `hooks/guard-brief-rung.mjs` | ~21 | ~11 |
 | `hooks/guard-gate-ladder.mjs` | 2 | 2 |
 | `scripts/run-checks.mjs` | ~18 | 0 |
 | test helpers and call-site hygiene | ~10 | ~1 |
-| **Code total** | **~199** | **~23** |
+| **Code total** | **~175** | **~35** |
 | Tests (new + extended) | ~280 | ~5 |
-| Docs (`core/WORKFLOW.md` byte-neutral, templates, ROUTING, PORTABILITY, README, VERSION) | ~50 | ~10 |
+| Docs (`core/WORKFLOW.md`, PORTABILITY, README, VERSION) | ~55 | ~5 |
 
-Against a ~150-line code plan this is ~1.3×, under the 2× trip wire. Controller delta 0 / 0.
+Against a ~150-line code plan this is ~1.2×, under the 2× trip wire. Controller delta 0 / 0.
 
 ## 11 · Rebase over C-DOC
 
 Shared files: `README.md` (release notes — additive), `VERSION` / `package.json` (2.34.0 → 2.35.0),
-`skills/architect-build/ROUTING.md` (C-DOC rewrites nearby lines; C-CODE edits lines 16–17 after
-rebase; budget 779 / 900 after C-DOC), `core/WORKFLOW.md` (C-DOC does not touch the Step 0
+`core/WORKFLOW.md` (C-DOC does not touch the Step 0
 paragraph; C-CODE's edit is byte-neutral against C-DOC's 25,588 B). No source, test, template, hook,
 script, core or skill file is edited before C-DOC lands. The hook string (item 6) matches C-DOC's
 final row text; if C-DOC's wording changes before landing, item 6 follows it.
 
 *Revision 1: item 1 adds the plain-object, non-empty-id, tracked-file and token-boundary conditions and fixes the recorder placement with its replay reason; item 3 never deletes tracked pair keys and adds the migration notice and hand-removal order; § 9 records settled choices.*
 *Revision 2: after rebasing on the landed C-DOC, item 6 uses the landed T2 row's clause verbatim; item 4d names the call sites the tripwire located.*
+*Revision 3: item 3 dropped (D-27); pair handling is v2.34.0's, with 4b and 4e on the tracked config; 4c compares hook entries only.*

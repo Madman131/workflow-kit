@@ -68,7 +68,7 @@ the Architect decision screen; and on Stop
 **two sensors** (Owner-comms, token ledger) that fail open. The Codex lane's generated
 `.codex/hooks.json` registers the three guards and first two sensors on `apply_patch`, the gate
 ladder on Bash, and brief-rung on the exact `mcp__codex_app__send_message_to_thread` tool. That
-send matcher covers the optional `pairedPmThreadId` in this checkout's `.claude/kit.pair.json`;
+send matcher covers the optional `pairedPmThreadId` in this checkout's `.claude/kit.config.json`;
 without a configured pair, ordinary Codex sends are outside this Architect-pair scope. A mixed
 Claude/Codex pair has no shared send tool and runs file-only.
 Context-pressure and both Stop sensors remain Claude-only. **In the Codex lane these hooks are

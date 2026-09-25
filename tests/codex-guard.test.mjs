@@ -895,28 +895,21 @@ test("a configured PM pair survives task-lane refresh and init --force without a
   const A = adoptCodex(["--skip-codex-lane", "--source-dirs", "src", "--paired-pm-thread-id", "pm-thread"]);
   try {
     const configFile = path.join(A.dir, ".claude", "kit.config.json");
-    const pairFile = path.join(A.dir, ".claude", "kit.pair.json");
     const laneFile = path.join(A.dir, ".claude", "task-lane.json");
-    const original = readFileSync(pairFile, "utf8");
-    assert.equal(JSON.parse(original).pairedPmThreadId, "pm-thread", "the Codex pair lands in the per-checkout file");
-    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")).executedPathDirs, ["src"],
+    const original = readFileSync(configFile, "utf8");
+    assert.equal(JSON.parse(original).pairedPmThreadId, "pm-thread");
+    assert.deepEqual(JSON.parse(original).executedPathDirs, ["src"],
       "first adoption can configure a pair alongside another durable field");
-    assert.ok(!("pairedPmThreadId" in JSON.parse(readFileSync(configFile, "utf8"))), "…and none lands in the tracked config");
     writeFileSync(laneFile, JSON.stringify({ mode: "in-thread", sessionId: "new-session", taskId: "task1", tier: "T2" }));
-    assert.equal(readFileSync(pairFile, "utf8"), original, "refreshing the ignored task declaration does not erase the pair");
-    spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", A.dir, "--repo-name", "adopter",
-      "--skip-codex-lane", "--skip-codex-prompt", "--force", "--source-dirs", "src"], { encoding: "utf8" });
-    assert.equal(readFileSync(pairFile, "utf8"), original, "a --force naming no pair flag leaves the pair bytes unchanged");
-    // A tracked 2.33-era pair is never dropped: --force without its flag still refuses.
-    writeFileSync(configFile, JSON.stringify({ executedPathDirs: ["src"], pairedPmThreadId: "pm-thread" }));
-    const trackedBytes = readFileSync(configFile, "utf8");
+    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread",
+      "refreshing the ignored task declaration does not erase the checkout's durable pair");
     const refused = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", A.dir,
-      "--repo-name", "adopter", "--skip-codex-lane", "--skip-codex-prompt", "--force", "--source-dirs", "src"], { encoding: "utf8" });
-    assert.equal(refused.status, 1, "a force run omitting a TRACKED pair refuses instead of dropping it");
+      "--repo-name", "adopter", "--skip-codex-lane", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+    assert.equal(refused.status, 1, "a force run omitting the configured pair refuses instead of dropping it");
     assert.match(refused.stderr, /pairedPmThreadId.*--paired-pm-thread-id/s);
-    assert.equal(readFileSync(configFile, "utf8"), trackedBytes, "the refused run leaves the tracked pair bytes unchanged");
+    assert.equal(readFileSync(configFile, "utf8"), original, "the refused run leaves the pair bytes unchanged");
     A.run(["--skip-codex-lane", "--force", "--source-dirs", "src", "--paired-pm-thread-id", "pm-thread"]);
-    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread", "named, it is carried forward, never deleted");
+    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread");
     assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")).executedPathDirs, ["src"]);
   } finally { A.cleanup(); }
 });
