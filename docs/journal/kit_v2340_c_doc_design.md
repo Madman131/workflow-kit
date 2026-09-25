@@ -423,3 +423,29 @@ Gemini design gate: NO-GO, receipt `PIL-RCPT-199cbfad00afa760f53c6a71` (artifact
 - **Q2** — confirmed.
 - **Q3** — (a) (D-22): cut ~65 words of rationale-not-rule from `CHIP_BRIEF.md`; rules only move.
 - **Q5** — include `core/README.md:76`, with a mutation-checked pin (K9).
+
+## 12 · Build deltas (recorded after the build, before the freeze)
+
+- **C1 wording kept the pinned phrases.** `tests/gating-doctrine.test.mjs` ("WORKFLOW describes the
+  gate-ladder sensor as it ACTUALLY behaves since v2.1") pins *"Since kit v2.1 it registers in **both**
+  lanes"* and *"the Codex-lane registration is inert until a human grants hook trust"*. The shipped C1
+  keeps both and drops only the `core/BINDINGS.md` pointer.
+- **C5 (new cut, for `WORKFLOW.md` bytes).** `WORKFLOW.md:62` *"…; T2 adds an external adversary; T3 stops
+  at the Owner."* → *"…; T2 adds an external adversary."* Still lives: `WORKFLOW.md:38` (historical T3's
+  *"Owner obligations through closure and descendants"*); for new work the flag's per-write Owner GO.
+  Unpinned. Final `WORKFLOW.md`: 25,588 B (−11), 3,868 words (−7).
+- **RUNG_ZERO row wording** shortened to keep the file at 2911/2925 (+1 word net; I5 said "at or below
+  today's count" — 2910 → 2911 is one word over that aim, still within budget).
+- **Pins moved (named, none silently weakened):**
+  - `gating-doctrine.test.mjs:432` *"RULE #1 cuts REPAIRS, never review DEPTH.*frontier/xhigh action gates
+    and Owner GO remain"* → *"…New work is never T3: it is T2 plus its action flags"*; the frontier/GO
+    half is pinned at its new home by K1.
+  - `orchestrate-skill.test.mjs` "the round controller pins the finite aggregate boundary": the body pins
+    for *"failed/STOP surface stays closed"* and *"genuinely new Owner-approved work begins separately only
+    on disjoint surfaces"* now pin PROTOCOLS (the home); *"After writing a repair brief, confirm its actual
+    bytes"* now pins CHIP_BRIEF § 5 *"The orchestrator confirms bytes (`confirm-repair-brief --confirm`)"*;
+    two new pins hold the body's pointers.
+  - The four moves listed in § 5.
+- **Suite:** 461/461 (451 + 10 new). The user-install parity rung is red because the installed
+  `/orchestrate` is v2.33.1 and the candidate is not — expected before landing; the post-merge sync
+  clears it.
