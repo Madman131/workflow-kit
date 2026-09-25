@@ -148,7 +148,7 @@ test("exempt declares a TIER (v1.5.0): tier-less is blocked in BOTH controls, no
       "`declaredTier` appears on tier-rejecting DENY rows and nowhere else (it feeds the dedupe key)");
 
     // COMMIT-TIME: the every-lane floor requires it too.
-    const commit = (msg) => spawnSync("git", ["-C", dir, "commit", "-q", "-m", msg], { encoding: "utf8" });
+    const commit = (msg) => spawnSync("git", ["-C", dir, "commit", "-q", "-m", msg, "-m", "entry: none"], { encoding: "utf8" });
     execFileSync("git", ["-C", dir, "add", "-A"]);
     write({ ...base, tier: "T1" });
     assert.equal(commit("baseline").status, 0, "baseline commit with a tiered exemption succeeds");

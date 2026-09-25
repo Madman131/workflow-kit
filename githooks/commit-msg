@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+// Harness-agnostic commit-message check (v2.35.0), installed beside the pre-commit and bound by the
+// same core.hooksPath, so it binds every lane. It requires the Step 0 triage answer
+// (`core/WORKFLOW.md` § Steer) as one line in the commit BODY:
+//
+//     entry: none            or            entry: class-N[,N…]      (N = 1–4, the four doors)
+//
+// PRESENCE AND SHAPE ONLY. The line is a judgment surfaced, never a predicate: this hook cannot tell
+// a true answer from a false one and does not try. Its only job is that the answer is never silently
+// absent.
+//
+// Exempt, because the message is Git's or the change is carried by another commit: a merge in
+// progress (MERGE_HEAD) or a subject starting `Merge `, `Revert "`, `fixup! `, `squash! `, `amend! `.
+// A revert is the gate for ungated work, so `git revert --no-edit` must never be blocked. An exempt
+// prefix is also a way around the check; that is a declared residual, like `--no-verify`.
+
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
+const ENTRY_RE = /^entry:\s*(?:none|class-[1-4](?:,[1-4])*)\s*$/;
+const EXEMPT_SUBJECT_RE = /^(?:Merge |Revert "|fixup! |squash! |amend! )/;
+
+function refuse(message) {
+  process.stderr.write(`commit-msg: ${message}\n`);
+  process.exit(1);
+}
+
+const file = process.argv[2];
+let raw;
+try { raw = readFileSync(file, "utf8"); } catch {
+  refuse(`cannot read the commit message file (${JSON.stringify(file)}), so its entry line cannot be checked.`);
+}
+
+// Git strips `#` comment lines under the default cleanup; drop them here so a template comment
+// cannot satisfy the check. Everything after the scissors line is also discarded by Git.
+const scissors = raw.search(/^# -+ >8 -+$/m);
+const lines = (scissors === -1 ? raw : raw.slice(0, scissors)).split(/\r?\n/).filter((l) => !l.startsWith("#"));
+const subjectAt = lines.findIndex((l) => l.trim() !== "");
+const subject = subjectAt === -1 ? "" : lines[subjectAt];
+
+let mergeInProgress = false;
+try {
+  const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  mergeInProgress = existsSync(path.join(gitDir, "MERGE_HEAD"));
+} catch { /* not answerable: fall through to the ordinary check */ }
+
+if (mergeInProgress || EXEMPT_SUBJECT_RE.test(subject)) process.exit(0);
+
+if (!lines.slice(subjectAt + 1).some((l) => ENTRY_RE.test(l))) {
+  refuse(
+    "this commit's BODY carries no Step 0 entry line (core/WORKFLOW.md § Steer). Add one line after " +
+    "the subject: `entry: none` (four no's) or `entry: class-N[,N…]` naming the doors that admitted it " +
+    "(1 irreversible/live · 2 silent failure · 3 multiplied radius · 4 text someone implements), e.g. " +
+    "`entry: class-2,4`. This hook checks presence and shape only; it never judges the answer.");
+}

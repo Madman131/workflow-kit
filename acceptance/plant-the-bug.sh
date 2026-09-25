@@ -761,28 +761,35 @@ assert_eq ".githooks" "$(git -C "$ADOPTER" config core.hooksPath)" "FM1: init se
 printf '# state\n\n> CLASS: STATE\n\nx\n' > "$ADOPTER/docs/state.md"
 printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
 git -C "$ADOPTER" add -A
-git -C "$ADOPTER" commit -q -m "adopt workflow-kit" && ok "baseline commit (with declaration) succeeded" || bad "baseline commit should have succeeded"
+git -C "$ADOPTER" commit -q -m "adopt workflow-kit" -m "entry: none" && ok "baseline commit (with declaration) succeeded" || bad "baseline commit should have succeeded"
 # WITHOUT the kit: unset core.hooksPath, drop the declaration, commit code -> SUCCEEDS.
 git -C "$ADOPTER" config --unset core.hooksPath
 rm -f "$DECL"
 printf 'export const x = 1;\n' > "$ADOPTER/src/feature.mjs"
 git -C "$ADOPTER" add src/feature.mjs
-if git -C "$ADOPTER" commit -q -m "undeclared code, no hook"; then ok "WITHOUT core.hooksPath: undeclared code commit SUCCEEDED (the danger)"; else bad "WITHOUT: expected the undeclared commit to succeed"; fi
+if git -C "$ADOPTER" commit -q -m "undeclared code, no hook" -m "entry: none"; then ok "WITHOUT core.hooksPath: undeclared code commit SUCCEEDED (the danger)"; else bad "WITHOUT: expected the undeclared commit to succeed"; fi
 git -C "$ADOPTER" reset -q --soft HEAD~1   # keep src/feature.mjs staged, undo the commit
 # WITH the kit: restore core.hooksPath, still no declaration, commit -> BLOCKED.
 git -C "$ADOPTER" config core.hooksPath .githooks
-if git -C "$ADOPTER" commit -q -m "undeclared code, hook on" 2>/dev/null; then bad "WITH: undeclared code commit should have been BLOCKED"; else ok "WITH core.hooksPath: undeclared code commit is BLOCKED (every lane)"; fi
+if git -C "$ADOPTER" commit -q -m "undeclared code, hook on" -m "entry: none" 2>/dev/null; then bad "WITH: undeclared code commit should have been BLOCKED"; else ok "WITH core.hooksPath: undeclared code commit is BLOCKED (every lane)"; fi
 # and a docs-only commit still passes with the hook on
 git -C "$ADOPTER" reset -q src/feature.mjs; rm -f "$ADOPTER/src/feature.mjs"
 printf 'note\n' > "$ADOPTER/docs/readme-note.md"; git -C "$ADOPTER" add docs/readme-note.md
-if git -C "$ADOPTER" commit -q -m "docs only"; then ok "WITH hook on: docs-only commit passes (no over-block)"; else bad "docs-only commit should pass"; fi
+if git -C "$ADOPTER" commit -q -m "docs only" -m "entry: none"; then ok "WITH hook on: docs-only commit passes (no over-block)"; else bad "docs-only commit should pass"; fi
+
+echo
+echo "(entry line, commit-msg) every commit body carries the Step 0 entry line — presence and shape only"
+printf 'note 2\n' > "$ADOPTER/docs/readme-note2.md"; git -C "$ADOPTER" add docs/readme-note2.md
+if ENTRY_ERR="$(git -C "$ADOPTER" commit -q -m "docs, no entry line" 2>&1)"; then bad "commit-msg: a commit with no entry line must be BLOCKED"; else ok "commit-msg: a commit with no entry line is BLOCKED"; fi
+printf '%s' "$ENTRY_ERR" | grep -q 'entry: class-N' && ok "the block names the line's forms" || bad "the commit-msg block must name entry: none / entry: class-N"
+if git -C "$ADOPTER" commit -q -m "docs, entry line" -m "entry: class-4"; then ok "commit-msg: the same commit passes with entry: class-4 (no over-block)"; else bad "a commit with a well-formed entry line should pass"; fi
 
 echo
 echo "(retired route, commit floor) mode:\"lane\" is REFUSED at commit time too — every lane"
 printf '{"mode":"lane","sessionId":"%s","taskId":"accept","allowedFiles":["src/feature2.mjs"]}\n' "$SID" > "$DECL"
 printf 'export const y = 2;\n' > "$ADOPTER/src/feature2.mjs"
 git -C "$ADOPTER" add src/feature2.mjs
-if LANE_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "retired route" 2>&1)"; then
+if LANE_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "retired route" -m "entry: none" 2>&1)"; then
   bad "commit floor: a mode:\"lane\" declaration must BLOCK a code commit"
 else
   ok "commit floor: mode:\"lane\" code commit is BLOCKED"
@@ -791,13 +798,13 @@ printf '%s' "$LANE_COMMIT_ERR" | grep -q 'retired `lane` route' && ok "the block
 printf '%s' "$LANE_COMMIT_ERR" | grep -q 'RETIRED' && ok "the block carries the retirement remediation (says WHY, points at in-thread)" || bad "the commit block must carry the retirement string"
 # the SAME staged file commits under a documented route (no over-block)
 printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
-if git -C "$ADOPTER" commit -q -m "same file, documented route"; then ok "the SAME staged file commits under in-thread (no over-block)"; else bad "in-thread commit of the same file should pass"; fi
+if git -C "$ADOPTER" commit -q -m "same file, documented route" -m "entry: none"; then ok "the SAME staged file commits under in-thread (no over-block)"; else bad "in-thread commit of the same file should pass"; fi
 
 echo
 echo "(exempt tier, commit floor) the every-lane floor requires the tier too"
 printf 'export const y3 = 3;\n' > "$ADOPTER/src/feature3.mjs"; git -C "$ADOPTER" add src/feature3.mjs
 printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down"}\n' "$SID" > "$DECL"
-if TIERLESS_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "tier-less exempt" 2>&1)"; then
+if TIERLESS_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "tier-less exempt" -m "entry: none" 2>&1)"; then
   bad "commit floor: a TIER-LESS exemption must BLOCK a code commit"
 else
   ok "commit floor: a pre-v1.5 TIER-LESS exemption is BLOCKED (not grandfathered)"
@@ -806,14 +813,14 @@ printf '%s' "$TIERLESS_COMMIT_ERR" | grep -q 'without a valid tier' && ok "the b
 # The commit floor told the SAME lie as the write-time guard: "without a tier" against a declaration
 # carrying tier:"T9". Both layers now admit both polarities.
 printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T9"}\n' "$SID" > "$DECL"
-if INVALID_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "invalid-tier exempt" 2>&1)"; then
+if INVALID_COMMIT_ERR="$(git -C "$ADOPTER" commit -q -m "invalid-tier exempt" -m "entry: none" 2>&1)"; then
   bad "commit floor: an INVALID exempt tier must BLOCK a code commit"
 else
   ok "commit floor: an INVALID exempt tier (T9) is BLOCKED"
 fi
 printf '%s' "$INVALID_COMMIT_ERR" | grep -q 'MISSING OR INVALID' && ok "…and the block does NOT claim the tier is missing from a file carrying T9" || bad "the commit block must admit both tier polarities"
 printf '{"mode":"exempt","sessionId":"%s","taskId":"accept","reason":"codex-down","tier":"T1"}\n' "$SID" > "$DECL"
-if git -C "$ADOPTER" commit -q -m "exempt with tier"; then ok "commit floor: the SAME commit passes once the tier is declared (no over-block)"; else bad "exempt+tier commit should pass"; fi
+if git -C "$ADOPTER" commit -q -m "exempt with tier" -m "entry: none"; then ok "commit floor: the SAME commit passes once the tier is declared (no over-block)"; else bad "exempt+tier commit should pass"; fi
 
 GOODCFG='{"executedPathDirs":["src","policy"],"laneRiskTokens":["billing"],"stateDocs":["docs/state.md"]}'
 # GOODCFG keeps the legacy laneRiskTokens key on purpose — every fail-closed proof below runs against
@@ -842,7 +849,7 @@ echo "(F5) pre-commit fails closed on a malformed config (code commit blocked)"
 printf '{"mode":"in-thread","sessionId":"%s","taskId":"accept","tier":"T2"}\n' "$SID" > "$DECL"
 printf 'NOT JSON{' > "$ADOPTER/.claude/kit.config.json"
 printf 'export const g=1;\n' > "$ADOPTER/src/g.mjs"; git -C "$ADOPTER" add src/g.mjs
-if git -C "$ADOPTER" commit -q -m "malformed cfg code" 2>/dev/null; then bad "pre-commit malformed-config: commit should be BLOCKED (with a VALID declaration, only the malformed config can block)"; else ok "pre-commit malformed-config: code commit BLOCKED despite a valid declaration (isolates the malformed-config branch)"; fi
+if git -C "$ADOPTER" commit -q -m "malformed cfg code" -m "entry: none" 2>/dev/null; then bad "pre-commit malformed-config: commit should be BLOCKED (with a VALID declaration, only the malformed config can block)"; else ok "pre-commit malformed-config: code commit BLOCKED despite a valid declaration (isolates the malformed-config branch)"; fi
 git -C "$ADOPTER" reset -q src/g.mjs 2>/dev/null; rm -f "$ADOPTER/src/g.mjs"
 
 echo
@@ -889,7 +896,7 @@ assert_eq deny "$(guard_decision "$H_LANE" '{"session_id":"'"$SID"'","tool_input
 rm -f "$DECL"
 # the write-time gate is a tripwire (a root .rego is NOT recognized) but the commit FLOOR catches it
 printf 'x\n' > "$ADOPTER/authz.rego"; git -C "$ADOPTER" add authz.rego
-if git -C "$ADOPTER" commit -q -m "undeclared root rego" 2>/dev/null; then bad "commit floor: an undeclared root .rego commit should be BLOCKED"; else ok "commit floor: undeclared root .rego (missed by the write-tripwire) is BLOCKED at commit (every-lane floor)"; fi
+if git -C "$ADOPTER" commit -q -m "undeclared root rego" -m "entry: none" 2>/dev/null; then bad "commit floor: an undeclared root .rego commit should be BLOCKED"; else ok "commit floor: undeclared root .rego (missed by the write-tripwire) is BLOCKED at commit (every-lane floor)"; fi
 git -C "$ADOPTER" reset -q authz.rego 2>/dev/null; rm -f "$ADOPTER/authz.rego"
 # CHARACTERIZATION (tripwire scope, NOT a lane-route hole): isGatedPath() early-exits before the
 # declaration is ever read, so on an UNGATED path the write guard permits regardless of what the
