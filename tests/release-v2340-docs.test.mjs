@@ -69,7 +69,7 @@ test("K11: the brief template names the Builder's model, seats at or ABOVE it, l
   const five = b.slice(b.indexOf("5. **Process**"), b.indexOf("6. **Standing rules**"));
   // R2-1: a STANDALONE sentence binding every brief, BEFORE the aggregate-repair list — inside that
   // list it binds only repair briefs, and a first-build brief escapes it (CHIP B's sub-peer incident).
-  const rule = /(?:^|[.:—] )\*\*Every brief names the Builder's model and effort; every same-family seat runs at or above that model\*\* \(`core\/REVIEW\.md` peer tier\)\./;
+  const rule = /(?:^|[.:—] )\*\*Every brief names the Builder's model and effort; every same-family seat runs at or above that model\*\* \(`core\/REVIEW\.md` peer tier\), \*\*reporting expected and observed/;
   assert.match(five, rule);
   assert.ok(five.search(rule) < five.indexOf("Aggregate repair briefs declare"), "the rule precedes the aggregate-repair list");
   const aggregate = five.slice(five.indexOf("Aggregate repair briefs declare"), five.indexOf("Stored standard programs"));
@@ -118,4 +118,31 @@ test("R2-2: the v2.34.0 upgrade note tells adopters to wait for v2.35.0 and run 
   assert.match(note, /\*\*Adopters: do not upgrade to v2\.34\.0 on its own\.\*\* Wait for v2\.35\.0 and run `init --force` once, on v2\.35\.0/);
   assert.match(note, /because the gate-ladder hook's printed T2 ladder changes in v2\.35\.0/);
   assert.doesNotMatch(note, /Re-run `init --force`/, "no instruction to upgrade to v2.34.0 alone");
+});
+
+test("R3 root exit: every seat model/tier default or floor in SKILL, CHIP_BRIEF and REVIEW carries the Builder floor", () => {
+  // A statement that names where a cold / same-family seat's model or tier DEFAULTS or RUNS must carry
+  // the peer-tier floor on the same clause, or the always-loaded skill line outranks core/REVIEW.md's
+  // rule (the R2 finding). Detected, not listed, so a new such statement is covered without an edit here.
+  const SUBJECT = /\b(?:cold seats?|cold reviewers?|same-family seats?)\s+(?:\S+\s+){0,2}?(?:default|defaults|run|runs)\b/i;
+  const FLOOR = /never below the Builder|at or above (?:that|the Builder's) model/i;
+  const clauses = (t) => flat(t).split(/(?<=[.;])\s+/);
+  const files = ["skills/orchestrate/SKILL.md", "skills/orchestrate/CHIP_BRIEF.md", "core/REVIEW.md"];
+  const found = new Set();
+  for (const rel of files) {
+    for (const c of clauses(read(rel)).filter((c) => SUBJECT.test(c))) {
+      found.add(rel);
+      assert.match(c, FLOOR, `${rel} states a seat default/floor without the Builder floor: "${c.slice(0, 160)}"`);
+    }
+  }
+  assert.deepEqual([...found].sort(), [...files].sort(), "each file must still state its seat floor (a vanished statement is not a pass)");
+  // Canary: the pre-R3 skill line is detected AND fails the floor.
+  const old = "Cold seats default to the workhorse tier at standard effort;";
+  assert.ok(SUBJECT.test(old) && !FLOOR.test(old), "canary: the detector must catch the pre-R3 line");
+  // (b): the mismatch-reporting clause binds EVERY brief — it sits in the standalone rule, not the aggregate list.
+  const b = flat(read("skills/orchestrate/CHIP_BRIEF.md"));
+  const five = b.slice(b.indexOf("5. **Process**"), b.indexOf("6. **Standing rules**"));
+  const at = five.indexOf("Aggregate repair briefs declare");
+  assert.match(five.slice(0, at), /\*\*reporting expected and observed model\+effort and any mismatch rather than silently substituting\.\*\*/);
+  assert.doesNotMatch(five.slice(at), /observed model\+effort/, "the mismatch clause must not sit in the aggregate-repair list");
 });

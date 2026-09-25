@@ -70,7 +70,8 @@ into a private worktree.
    its own NO-GO. Freeze compliance is checked by the panel, never promised by the author. **A
    receipt proves a reply COMPLETED, not that it judged** — demand a verdict and its inspected scope.
 4. **Decorrelate on four axes** — family, charter, ENVIRONMENT, installed LAYOUT. Cold seats
-   default to the workhorse tier at standard effort; **evidence escalates them, appetite does not.**
+   default to the workhorse tier at standard effort, **never below the Builder's model** (`core/REVIEW.md`
+   peer tier); **evidence escalates them, appetite does not.**
 5. **One discretionary frontier firing per changeset**; default is the PM's fold-check
    (`/frontier-review`). Required planning/process consults are outside it, never review loops.
    Precommit, collect, disposition one panel.
