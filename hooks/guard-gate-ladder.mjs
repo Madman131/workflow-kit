@@ -116,13 +116,13 @@ const PREFIX = String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s
 const RUNNERS = String.raw`(?:codex\s+exec\b|\S*codex-gate\.sh\b|\S*cold-review-gemini\.sh\b)`;
 const GATE_RE = new RegExp(CMD_START + PREFIX + RUNNERS);
 
-// The ladder each tier owes — a transcription of core/WORKFLOW.md § Gate's tier table, not an
+// The ladder each tier owes — a transcription of core/WORKFLOW.md § Steer's tier table, not an
 // inference. Concrete model families are a per-repo binding (core/BINDINGS.md § Roles → exact models), so
 // this text stays family-neutral and points there.
 const LADDER = {
   T0: "self-check → proceed",
   T1: "one blind cold reviewer → proceed",
-  T2: "cold panel (≥2 angle seats + 1 free adversary) → cross-family lens [if available] → external gate → fresh Owner remote GO (exact head + target)",
+  T2: "cold panel (≥2 angle seats + 1 free adversary) → cross-family lens [if avail; REQUIRED if flagged] → external gate → fresh Owner remote GO (exact head + target)",
   T3: "HISTORICAL T3 only: cold panel (≥3 angle seats + 1 free adversary) → BOTH cross-family families (lens + external, lens REQUIRED) → fresh Owner remote GO (exact head + target)",
 };
 
