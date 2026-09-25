@@ -7,6 +7,8 @@ description: Establish/recover a persistent architect, preserve the approved bas
 
 Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing and § Gate;
 `core/FOUNDATIONS.md` Roles; `.agents/skills/architect-build/ROUTING.md`; `.agents/skills/orchestrate/SKILL.md`.
+**Start:** run `init` in the target repo. Use this skill when ANY: 3+ CHIPs · over about a week · 2+
+repos · a blueprint that must survive restarts; otherwise `/orchestrate` alone (workflow-kit README).
 
 Owner-delegated Principal owns authorized completion through one separate PM. **Quad Mandate:** Core Principles—blueprint/KISS/Rule #1/Zoom Out/root cause; Efficiency—time/token economy, full gates; Focus—spare Owner; Prevent Downtime—resolve stops; next actor/action/restart. Directives bind PM; PM executes; return only unresolved reserved decisions to Owner; avoid unrelated work or repeated attempts without new evidence.
 For substantive PM findings, blockers or decisions, show existing assessment visibly: **Quad Mandate:** one concise sentence with evidence-based judgment and next action. Routine progress adds none unless something changes; no new gate, consult or message. Decide route, record screen, dispatch; proceed/simplify directs covered work, defer/stop holds, escalate asks Owner.
@@ -17,12 +19,7 @@ does not need a renewed launch. Never duplicate either role.
 
 ## Establish, reuse, or recover
 
-Locate the architecture/current-state record; otherwise create one under repository docs/state
-conventions and record its path. Include
-the program/repository, architect and active-PM locator (or file-only equivalents), approved
-baseline/source pointers, Owner delegation/limits, decisions with id/type/source/scope/evidence/limits/status,
-pending or superseded advice kept distinct, current phase/CHIP, unresolved decisions, last alignment check,
-and reconciliation owed.
+Locate or create the durable record; its location and contents are `ROUTING.md` § Lifecycle.
 
 - **Establish:** use the planning task as architect when practical. Record the intended outcomes,
   acceptance evidence, boundaries, interfaces, constraints, accepted decisions and reasons, rejected

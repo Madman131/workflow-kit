@@ -4550,3 +4550,48 @@
     VERDICT: NO-GO
     INSPECTED SCOPE: docs/journal/legacy_handoff_replay_compat_contract.md (Mechanism and provenance, Falsifiable acceptance criteria, Mitigation claims to falsify)
     PIL-DONE-174a15c3549aab2ebd1f1303
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-25T17:18:04Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1790356488-10696-21470792`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=49006; instrumented_payload=49159; inline_combined=52976; file=49232
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/kit_v2331_safe_adopt_design.md
+- HEAD: `0917549f0ab092a539df0a7389657ae734af6ca8`
+- Artifact-Base: `ca0c9220cc199055d0f457001c18c879142be48f`
+- Artifact-SHA: `0917549f0ab092a539df0a7389657ae734af6ca8`
+- Artifact-Ref: `refs/pil/gate-artifacts/0917549f0ab092a539df0a7389657ae734af6ca8`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: Entire design spec (`docs/journal/kit_v2331_safe_adopt_design.md` lines 1-177), invariants (`core/INVARIANTS.md`), and RED tests mapping.
+- Start: 2026-09-25T17:14:48Z
+- End: 2026-09-25T17:18:04Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-90aaf8df0c787293ddc93819
+    CANARIES: PIL-INGEST-01e6963e2001 PIL-INGEST-0258cafe00fe PIL-INGEST-0367d5d7ed06
+    
+    **1. BLOCKER: CONCURRENCY / LOCK HAZARDS (Mutual Exclusion Deadlock in B1)**
+    **§ B1 · Mixed-version ledger guard (Mechanism steps 2, 4 & 5)**
+    * **Concrete failure scenario:** An operator has a repository with two worktrees (`wt1` and `wt2`), both currently on kit v2.32. They attempt to upgrade sequentially by running `init` in `wt1`. The B1 guard reads `wt2`, hashes its v2.32 controller, compares it to the v2.33 kit bytes, finds a mismatch, and exits nonzero, refusing to write. The printed remedy instructs the operator to "upgrade every listed worktree in the same step (merge the upgrade commit... or re-run init --force there)". If the operator switches to `wt2` and runs `init`, the exact same guard checks `wt1`, finds its v2.32 controller, and exits nonzero.
+    * **Why it matters:** Neither worktree can be upgraded because each blocks the other, creating an unbreakable deadlock for local upgrades of multi-worktree repositories. The only escape is the `--allow-mixed-repair-controllers` flag, but the remedy text (Mechanism 4) fails to mention it. 
+    * **Fix:** Update the remedy message string in Mechanism 4 to explicitly state that the `--allow-mixed-repair-controllers` flag must be used on the first worktree to bypass the guard and break the deadlock when sequentially upgrading a multi-worktree repository.
+    
+    **2. HIGH: MECHANISM CORRECTNESS (P1 Destination Matching logic strips the required ID)**
+    **§ P1 · Claude Code send screen (Mechanism step 2) vs § P2 · Pairing records**
+    * **Concrete failure scenario:** P2 instructs operators to configure the Claude pair using the stable session ID (e.g., `local_123`). The Claude Code `SendMessage` tool schema (P1) formats the `to` field as `name [ref]`, meaning the agent will likely call the tool with `to: "PM Name [local_123]"`. P1's mechanism dictates: "destination = `to` with one trailing ` [ref]` suffix removed". If this logic strips the ` [local_123]` suffix, the resulting destination is `"PM Name"`. The guard then compares `"PM Name"` against the configured pair ID (`local_123`), which fails. The guard concludes this is a non-pair send and allows it unscreened.
+    * **Why it matters:** The stripping logic assumes the configured identifier is the prefix (the name), but P2 explicitly instructs configuring the ID (the suffix). This contradiction ensures legitimate Architect→PM directions will silently bypass the required T2 gate screen if the agent uses the schema-documented bracket format.
+    * **Fix:** The guard must extract the reference ID from inside the brackets (if present) and compare *that* against the configured `pairedPmClaudeTarget`. If no brackets are present, compare the whole string.
+    
+    VERDICT: NO-GO
+    Highest-risk thing to resolve first: The B1 deadlock, as it completely blocks the upgrade path for any user with multiple active worktrees.
+    
+    INSPECTED SCOPE: Entire design spec (`docs/journal/kit_v2331_safe_adopt_design.md` lines 1-177), invariants (`core/INVARIANTS.md`), and RED tests mapping.
+    PIL-DONE-f0ef765aded004c5402ecb74

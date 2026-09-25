@@ -1,4 +1,90 @@
-# workflow-kit — v2.33.0
+# workflow-kit — v2.33.1
+
+## How to start a build
+
+1. **Run `init` in the target repository first.** The skills are repo-local: `/orchestrate` and
+   `/architect-build` exist in a repository only after `node <kit>/bin/init.mjs --target <repo>` has
+   installed them there.
+2. **Choose the route.** Use **Architect-led** — `/architect-build`, then `/orchestrate` under it — when
+   ANY of these holds: 3 or more CHIPs · more than about a week · more than one repository · a blueprint
+   that must survive thread restarts. Otherwise use **PM-led**: `/orchestrate` alone.
+3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
+   harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
+   record carries directions and consults, no `pairedPm*` key is configured, and no send screen applies.
+
+## What's new in v2.33.1 — safe adoption of v2.33, and the Claude lane's Architect screen
+
+- **`init` refuses to mix repair-controller versions across worktrees.** All worktrees of a repository
+  share one repair ledger (in the Git common dir). Once any worktree records a gate round with the v2.33
+  controller, a worktree still running v2.32's controller rejects the whole ledger and is denied every
+  tool-bound source write — and no ledger row may be rewritten to undo it. `init` now compares the
+  controller it would install with every other worktree's `.claude/hooks/` and `.codex/hooks/` copy and,
+  before writing anything, refuses with the list and the upgrade order. Upgrade every worktree in one
+  step: pass `--allow-mixed-repair-controllers` on every run except the last. For tracked hooks, merging
+  the upgrade into a worktree's branch is its upgrade; per-checkout `.codex/hooks/` copies need
+  `init --force` there. A worktree already locked out recovers the same way — a `git merge` is a shell
+  operation the write guard does not bind. Never edit the ledger. Worktrees created after the upgrade are
+  not checked: create them from the upgraded branch.
+- **Claude Code's `SendMessage` now carries the Architect decision screen.** v2.33.0 screened only the
+  Codex app thread send; `SendMessage` was not even matched. Configure the Claude pair with
+  `init --paired-pm-claude-target <ref-or-id> --paired-pm-claude-name "<PM's current name>"` (kit
+  config `pairedPmClaudeTarget` and `pairedPmClaudeName`): the PM's **stable** `ListAgents` `[ref]` or
+  session/agent id, and its current name, because a model addresses by bare name by default (observed
+  live). A send whose `to` equals either value, carries either before or inside a trailing `[ref]`, is
+  screened exactly like the Codex pair (prompt-bound screen, or the `ARCHITECT_STATUS_V1` status
+  marker; `model`, `thinking` or `effort` in the send is denied). The older
+  `mcp__ccd_session_mgmt__send_message` to the pair is screened too (its field names are from its
+  schema; only `SendMessage` was observed live). Any other `SendMessage` is not screened, as before —
+  but in a paired checkout it prints a notice saying so. `pairedPmThreadId` is unchanged.
+  **Residual — after the PM is renamed, the name match is stale** until you re-set it: a bare new title
+  goes unscreened, with the notice; `"<new title> [<ref>]"` is still screened by the ref. Re-set it with
+  `node <kit>/bin/init.mjs --target <repo> --force --paired-pm-claude-target <ref-or-id>
+  --paired-pm-claude-name "<new name>"`, adding the flag for every other kit-config family you hold
+  (`--force` refuses and names any it would drop, and backs up the generated files it rewrites) — or
+  set `pairedPmClaudeName` in `.claude/kit.config.json` in place and read it back.
+- **Reviewer availability route, both ways round.** A Codex code-gate seat unavailable on a
+  Claude-built change now has a stated route (`core/REVIEW.md`, `core/GATES.md`, generated
+  `BINDINGS.md`): the Gemini lens when it covers the full artifact, otherwise a fresh cold Claude
+  frontier pass recorded `same-family-only`. A Claude lane reaches the GPT seat through
+  `scripts/codex-gate.sh`, installed by `init --with-gate-runners`.
+- **The recorder's two caller fields are documented.** `scripts/record-repair-event.mjs` needs
+  `authority_route` on a `child_continuation` (and in its process review's proposed transition), and
+  `proposed_transition.policy_version` must equal the version the recorder mints (3 for a policy-3 or
+  T3 lineage, otherwise 4). Its header says how to pick them and its refusal hint names both.
+  `core/WORKFLOW.md` no longer says new work mints v3.
+- **Controller freeze.** `PORTABILITY.md` § Retained repair-controller boundary now states it: no new
+  controller feature without Owner approval, and a controller change deletes about as much as it adds.
+
+**Missed in the v2.33.0 note — what v2.33.0 changed for adopters:**
+- **T3 is retired for new work.** New work declares T0, T1 or T2; a `T3` lane declaration is accepted
+  only as a historical lineage, and the lane guard, pre-commit hook and gate-ladder sensor now say that
+  `T3` requires independently proven historical lineage, which a declaration cannot supply.
+- **Required-review availability route.** Capacity, outage or an unsupported runtime is no verdict: use
+  the Gemini lens when it covers the full artifact, otherwise a fresh cold Astra seat, with a recorded
+  receipt (`core/REVIEW.md` § Required-review availability route; generated `BINDINGS.md`). v2.33.1
+  adds the mirror route above.
+- **Principal authority and completion children.** A recorded, Owner-delegated Project Principal can
+  decide in-envelope program questions, and after a terminal R4 STOP a bounded T2 Principal completion
+  child is available alongside the Owner route (`core/WORKFLOW.md` § Gate; the aggregate controller
+  mints policy 4 for this).
+- **The recorder API changed** — the two fields above; v2.33.0 required them without saying so.
+- **The mixed-version hazard** — the first bullet above; v2.33.0 created it without a warning.
+- **The retained-controller upgrade limit** already stated in `PORTABILITY.md` § Retained
+  repair-controller boundary: read the destination's ledger before activating this line over it.
+- **The paired Codex Architect send** (`init --paired-pm-thread-id`) needs a current, prompt-bound
+  decision screen; `/architect-build` itself is described below.
+
+Upgrading from v2.33.0: installed mechanism files changed (`hooks/guard-brief-rung.mjs`,
+`scripts/record-repair-event.mjs`, `bin/init.mjs`'s behaviour, the `/orchestrate` and `/architect-build`
+skills, the `core/` docs above), and the generated `.claude/settings.json` gains one `SendMessage`
+registration, so re-run `init --force` (with every kit-config family you hold, as before). Changed
+templates (`BINDINGS.md.tmpl`, `CLAUDE.md.tmpl`, `AGENTS.md.tmpl`) regenerate their files under
+`--force` with a backup; review the diff. **No Codex `.codex/hooks.json` entry changed since v2.33.0**,
+so a lane upgraded from v2.33.0 stays ARMED: run `node scripts/check-codex-hooks-armed.mjs` and re-trust
+only if it reports NOT ARMED. **Upgrading from v2.32.x: re-grant Codex hook trust interactively for the
+`mcp__codex_app__send_message_to_thread` entry v2.33.0 added — the armed check probes only
+`apply_patch`, so it cannot report that entry NOT ARMED.** Claude Code reads hook settings when a session starts, so the new `SendMessage` screen binds
+sessions started after the upgrade.
 
 ## What's new in v2.33.0 — persistent architecture, separate execution
 

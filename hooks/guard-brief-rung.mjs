@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// .claude/hooks/guard-brief-rung.mjs — PreToolUse(Write|Edit|MultiEdit|NotebookEdit · apply_patch · *send_message).
+// .claude/hooks/guard-brief-rung.mjs — PreToolUse(Write|Edit|MultiEdit|NotebookEdit · apply_patch · *send_message · SendMessage).
 //
 // WHY THIS EXISTS: `.agents/skills/orchestrate/PROTOCOLS.md` — "the pre-send verification rung" says
 // a load-bearing dispatch is verified BEFORE it is sent: every citation opened at its line, every
@@ -37,10 +37,14 @@
 //   · THE ATOMICITY ASSUMPTION IS INHERITED, NOT NEW. Adjudication rests on a single O_APPEND write
 //     of a small row being atomic — the property this ledger already stands on, with the same
 //     local-filesystem caveat it already carries. The kit gains no new platform surface here.
-//   · The SEND half binds Claude `…send_message` and the exact Codex app
-//     `mcp__codex_app__send_message_to_thread` tool. The Codex pair is scoped by the optional
-//     `pairedPmThreadId` in this checkout's kit config. An absent selector means no
-//     Architect pair is configured; status is still a sender declaration, not semantic proof.
+//   · The SEND half binds Claude `…send_message`, the exact Codex app
+//     `mcp__codex_app__send_message_to_thread` tool, and Claude Code's `SendMessage`. The Codex pair
+//     is scoped by the optional `pairedPmThreadId`, the Claude pair by the optional
+//     `pairedPmClaudeTarget` (the PM's stable ref or id), both in this checkout's kit config. An
+//     absent selector means no Architect pair is configured for that lane; a `SendMessage` outside
+//     the pair is not screened (a paired checkout gets a notice saying so). Address matching is a
+//     string comparison: a PM addressed by a form that carries neither its configured ref nor id is
+//     outside the pair. Status is still a sender declaration, not semantic proof.
 
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeSync } from "node:fs";
@@ -159,10 +163,27 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   if (!isPlainObject(parsed)) return { ok: false };
   const dirs = parsed.briefPathDirs === undefined ? [] : parsed.briefPathDirs;
   if (!isSegmentArray(dirs)) return { ok: false };
-  if (!Object.hasOwn(parsed, "pairedPmThreadId")) return { ok: true, briefPathDirs: dirs };
-  const pair = parsed.pairedPmThreadId;
-  if (!nonempty(pair, 120) || /\s/.test(pair)) return { ok: false };
-  return { ok: true, briefPathDirs: dirs, pairedPmThreadId: pair };
+  const out = { ok: true, briefPathDirs: dirs };
+  if (Object.hasOwn(parsed, "pairedPmThreadId")) {
+    const pair = parsed.pairedPmThreadId;
+    if (!nonempty(pair, 120) || /\s/.test(pair)) return { ok: false };
+    out.pairedPmThreadId = pair;
+  }
+  // The Claude-lane pair (v2.33.1): the PM's stable ListAgents `[ref]` or session/agent id. Names
+  // may hold inner spaces, so unlike a Codex thread id only line breaks and edge whitespace refuse.
+  if (Object.hasOwn(parsed, "pairedPmClaudeTarget")) {
+    const pair = parsed.pairedPmClaudeTarget;
+    if (!nonempty(pair, 300) || pair !== pair.trim() || /[\r\n\u2028\u2029]/.test(pair)) return { ok: false };
+    out.pairedPmClaudeTarget = pair;
+  }
+  // …and optionally the PM's CURRENT name (v2.33.1, Principal D-11): a model addresses by bare name
+  // by default, so the name is matched too. It goes stale when the PM is renamed; the ref does not.
+  if (Object.hasOwn(parsed, "pairedPmClaudeName")) {
+    const name = parsed.pairedPmClaudeName;
+    if (!nonempty(name, 300) || name !== name.trim() || /[\r\n\u2028\u2029]/.test(name)) return { ok: false };
+    out.pairedPmClaudeName = name;
+  }
+  return out;
 }
 
 export function loadTaskId(projectRoot, { readTaskLane } = {}) {
@@ -204,6 +225,25 @@ export function isSendTool(toolName) {
 }
 
 const ARCHITECT_SEND = "mcp__codex_app__send_message_to_thread";
+// Claude Code's send tool. Its settings matcher is a SEPARATE bucket from `.*send_message`: init
+// merges buckets by exact matcher string, so editing the old matcher would register this guard
+// twice on upgrade, and a second run on one send can spend a single-use receipt twice.
+const CLAUDE_SEND = "SendMessage";
+const OVERRIDE_KEYS = ["model", "thinking", "effort"];
+
+/**
+ * Is this Claude send addressed to the configured PM? A title is renamed; the listing `[ref]` and a
+ * session/agent id are not. So the send matches when the configured target equals the WHOLE address
+ * (an id sent bare, or a name sent bare), the CONTENT of one trailing ` [ref]` (a renamed title
+ * still carries the same ref), or the name before that ref (the bare-name fallback, which only an
+ * operator who configured a name relies on). Pure.
+ */
+export function claudePairMatches(dest, target) {
+  if (typeof dest !== "string" || !dest || typeof target !== "string" || !target) return false;
+  if (dest === target) return true;
+  const m = /^(.*\S) \[([^\[\]\s]+)\]$/.exec(dest);
+  return m !== null && (m[2] === target || m[1] === target);
+}
 const ARCHITECT_STATUS_MARKER = "ARCHITECT_STATUS_V1\n";
 // The screen is copied into one existing audit row. Keep that O_APPEND write small.
 const MAX_SCREEN_BYTES = 3072;
@@ -553,12 +593,15 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "architect-pair-malformed": `${KIT_CONFIG} has a malformed configured pair or cannot be read; \`pairedPmThreadId\` must name one non-empty PM thread id without whitespace. Repair this config in place: restore the intended \`pairedPmThreadId\`, preserve other valid fields, and read it back before a Codex thread send. Removing the config or this key would disable the pair guard.`,
     "architect-send-override": `this paired Architect-to-PM send carries \`model\` or \`thinking\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
     "architect-prompt-missing": `the covered Codex send has no readable string \`tool_input.prompt\`, so its decision screen cannot bind the exact message bytes.`,
+    "claude-pair-malformed": `${KIT_CONFIG} is present but MALFORMED or unreadable, so this guard cannot tell whether this Claude send goes to the configured PM (\`pairedPmClaudeTarget\`). A corrupt config must never silently narrow a control's scope. Repair it in place — \`pairedPmClaudeTarget\` is one line (at most 300 characters, no edge whitespace) naming the PM's stable ListAgents ref or session/agent id — preserve the other fields, and read it back.`,
+    "claude-send-override": `this paired Architect-to-PM Claude send carries \`model\`, \`thinking\` or \`effort\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
+    "claude-prompt-missing": `the paired Claude send has no single readable string body (\`tool_input.message\`, or an equal \`content\`), so its decision screen cannot bind the exact message bytes.`,
     "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Evaluate observed evidence, no-action consequence, approved outcome, blueprint, KISS, zoom-out, root cause and cost; compare at least two routes, choose proceed/simplify/defer/stop/escalate, and state why (plus the reserved boundary for escalation). Then screen each finding HARM → REAL → SCOPE → WORTH IT with its first failed trigger. A decision with no findings still owes the action screen.`,
     "architect-screen-incomplete": `${SIDECAR}'s Architect screen is incomplete: observed evidence and no-action consequence, compared alternatives with tradeoffs, selected choice/reason, reserved boundary for escalation, prompt digest, and each finding's ordered first-exit evidence/disposition must be present. A screened-out finding needs its actual failed trigger and no filler downstream answers. See workflow-kit's PORTABILITY.md minimal \`architectScreen\` JSON example. This checks record shape, not judgment quality.`,
     "architect-screen-too-large": `${SIDECAR}'s Architect screen exceeds ${MAX_SCREEN_BYTES} UTF-8 bytes. Keep the current decision screen concise so its existing audit row remains a small single append.`,
     "architect-prompt-mismatch": `${SIDECAR}'s Architect screen does not name the SHA-256 of this exact prompt. Re-screen the message bytes being sent; one decision record cannot silently authorize a changed direction.`,
     "architect-status-conflict": `${SIDECAR} carries an Architect decision screen while declaring this send status. Keep the decision screen and send the PM hold as a screened non-status direction; \`class:"status"\` is informational only and cannot carry an escalation decision.`,
-    "architect-status-marker-missing": `a configured-PM Codex send declared status, but its prompt does not start with the exact first line \`ARCHITECT_STATUS_V1\` followed by status text. Unmarked prompts are material directions and owe a current decision screen. The marker is a sender declaration, not semantic proof.`,
+    "architect-status-marker-missing": `a configured-PM send declared status, but its prompt does not start with the exact first line \`ARCHITECT_STATUS_V1\` followed by status text. Unmarked prompts are material directions and owe a current decision screen. The marker is a sender declaration, not semantic proof.`,
     "repair-declaration-malformed": `${SIDECAR} declares a repair dispatch but its repair record is incomplete or malformed. Supply the exact task, changeset, computed candidate digest, next round, finding ids/class, ownership area, original trigger, authorized paths, repair-introduced flag, new-scope flag, and required typed evidence event IDs. Semantic sameness remains author-declared.`,
     "repair-history-mismatch": `${SIDECAR}'s repair declaration does not exactly match the latest durable round disposition for this task and changeset. Refreezes may change the candidate, but never reset or relabel the round history.`,
     "repair-history-invalid": `the durable repair history is transition-invalid, so it cannot authorize another dispatch. Inspect the Git-common repair ledger; do not replace it with a fresh changeset.`,
@@ -598,7 +641,7 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "repair-worker-path-owner-conflict": `this exact source path is claimed by multiple active NO-GO repair programs. The ownership conflict fails closed; reconcile those programs before any worker writes the path.`,
     "repair-brief-changed": `the persisted repair brief no longer matches the bytes the worker verified. Restore or reconfirm the intended brief, then run \`--verify\` again before writing source.`,
     "repair-dispatch-invalid": `the exact repair dispatch could not be appended to the durable controller after nonce adjudication. No worker authority was issued.`,
-    "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, invalid \`briefPathDirs\`, or invalid \`pairedPmThreadId\`). This dispatch is BLOCKED (fail-closed) — corrupt config must never silently narrow a control's scope. Repair this config in place: if this checkout is paired, restore its intended \`pairedPmThreadId\`; preserve other valid fields and read it back. Removing a configured pair or its config would disable the pair guard.`,
+    "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, invalid \`briefPathDirs\`, or an invalid \`pairedPmThreadId\` or \`pairedPmClaudeTarget\`). This dispatch is BLOCKED (fail-closed) — corrupt config must never silently narrow a control's scope. Repair this config in place: if this checkout is paired, restore its intended \`pairedPmThreadId\` or \`pairedPmClaudeTarget\`; preserve other valid fields and read it back. Removing a configured pair or its config would disable the pair guard.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
   const base = state === "kit-config-malformed" || state === "ledger-error"
@@ -670,12 +713,60 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
           dispatches.push({ kind: "send", target: dest, architectPrompt: prompt });
         }
       }
-    } else if (isSendTool(input?.tool_name)) {
-      const dest = input?.tool_input?.session_id;
-      // A send whose destination cannot be read still owes the rung — it is positively send-shaped.
-      // `<unreadable-destination>` can never equal a sidecar's target, so it denies, which is the
-      // correct direction for a dispatch this guard cannot identify.
-      dispatches.push({ kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" });
+    } else if (input?.tool_name === CLAUDE_SEND || isSendTool(input?.tool_name)) {
+      // THE CLAUDE-LANE SENDS (v2.33.1). `SendMessage` addresses by `to`; the older ccd tool (and any
+      // other `…send_message`) by `session_id`. A send to the configured Claude PM owes exactly what
+      // the Codex pair owes — the prompt-bound Architect screen or the status marker. Any other
+      // `SendMessage` is outside this guard, as before this release; any other `…send_message` keeps
+      // the ordinary send rung, unchanged.
+      const claude = input.tool_name === CLAUDE_SEND;
+      const toolInput = isPlainObject(input?.tool_input) ? input.tool_input : {};
+      const dest = claude ? toolInput.to : toolInput.session_id;
+      // OBSERVED (v2.33.1 live capture, Claude Code 2.1.270): the harness hands this hook
+      // `SendMessage` input carrying `recipient` and `content` beside `to` and `message`, equal in
+      // the captured calls. Either address naming the PM makes the send the PM's; two different
+      // bodies make the screened bytes ambiguous, so that denies.
+      const addresses = claude ? [toolInput.to, toolInput.recipient] : [dest];
+      if (!config.ok) {
+        emit(denyReason("claude-pair-malformed", { dispatch: { kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" } }));
+        return exit(0);
+      }
+      const pairTarget = config.pairedPmClaudeTarget ?? config.pairedPmClaudeName;
+      const pairKeys = [config.pairedPmClaudeTarget, config.pairedPmClaudeName].filter((k) => k !== undefined);
+      if (pairTarget !== undefined && addresses.some((a) => pairKeys.some((k) => claudePairMatches(a, k)))) {
+        if (OVERRIDE_KEYS.some((k) => Object.hasOwn(toolInput, k))) {
+          emit(denyReason("claude-send-override", { dispatch: { kind: "send", target: dest } }));
+          return exit(0);
+        }
+        if (claude && typeof toolInput.message === "string" && typeof toolInput.content === "string" &&
+            toolInput.message !== toolInput.content) {
+          emit(denyReason("claude-prompt-missing", { dispatch: { kind: "send", target: pairTarget } }));
+          return exit(0);
+        }
+        const prompt = toolInput.message ?? (claude ? toolInput.content : undefined);
+        // Nothing to screen when nothing is said: an absent or empty message (a pure idle
+        // subscription) carries no direction to the PM.
+        if (prompt === undefined || prompt === "") return exit(0);
+        if (typeof prompt !== "string") {
+          emit(denyReason("claude-prompt-missing", { dispatch: { kind: "send", target: dest } }));
+          return exit(0);
+        }
+        // The CONFIGURED target, not the address form, is the dispatch identity: one PM, one
+        // sidecar target, however the sender spelled the address.
+        dispatches.push({ kind: "send", target: pairTarget, architectPrompt: prompt });
+      } else if (claude) {
+        // Outside the pair — but a paired checkout is told, so a renamed or mis-addressed PM send is
+        // never screened off in silence.
+        if (pairTarget !== undefined) {
+          notice(`guard-brief-rung.mjs: this SendMessage to ${JSON.stringify(dest)} was NOT screened as an Architect-to-PM send — it does not match the configured PM (${pairKeys.map((k) => JSON.stringify(k)).join(" / ")} in ${KIT_CONFIG}). If it IS the PM, address it by its ref or id (for a ref: "<name> [${config.pairedPmClaudeTarget ?? "<ref>"}]"); if the PM was renamed, update pairedPmClaudeName so its new name pairs.`);
+        }
+        return exit(0);
+      } else {
+        // A send whose destination cannot be read still owes the rung — it is positively send-shaped.
+        // `<unreadable-destination>` can never equal a sidecar's target, so it denies, which is the
+        // correct direction for a dispatch this guard cannot identify.
+        dispatches.push({ kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" });
+      }
     } else if (config.ok) {
       const briefs = new Set(briefTargets(input, { root, patchBase, briefPathDirs: config.briefPathDirs, toRepoRelative }));
       for (const rel of briefs) {

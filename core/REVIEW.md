@@ -73,6 +73,13 @@ and decorrelation level. Astra on a Codex build is **same-family-only**, never c
 diversity. A valid fallback discharges the seat: do not duplicate a running/completed seat or repeat it
 when Claude returns; use Claude for the next appropriate unstarted seat. Existing push/deploy/live,
 destructive, access/credential, new-spend, critical boundaries and T3 honesty remain.
+**The mirror, on a Claude build:** an unavailable Codex seat takes the same route and receipt —
+supported full-coverage Gemini first, otherwise a fresh cold Claude frontier pass recorded
+**same-family-only**, never cross-family; use Codex for the next unstarted seat when it returns. A
+Claude lane reaches the Codex seat through `scripts/codex-gate.sh` (`init --with-gate-runners`). The
+frontier pass spends the changeset's one discretionary frontier firing; if that firing is already
+spent, the fallback is a second firing and routes to the Owner (through the Architect/PM, rule-8
+form) — the existing Owner reservation, not a new rule.
 
 ## Artifact-class review physics
 *How findings are WEIGHED and TIERED once you have them is `core/ARTIFACT_CLASS.md`.*

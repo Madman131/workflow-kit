@@ -7,14 +7,14 @@ Word budget: 900. Authoritative lookup reference: `core/WORKFLOW.md` § Architec
 Only Owner launch may activate `/orchestrate` PM or execution handoff. On launch,
 `/architect-build` establishes or recovers a persistent architect and, after baseline approval,
 connects a separate PM. In file-only mode, a launch emits the same handoff through file-only
-equivalents. Without launch, preserve planning continuity only. Authorized execution needs no relaunch. Inspect the durable record first. It names the program/repository;
+equivalents. Without launch, preserve planning continuity only. Inspect the durable record first. It names the program/repository;
 architect and PM locators or file equivalents; Owner delegation/limits; approved baseline/source;
 accepted decisions versus pending advice; phase/CHIP; unresolved decisions with id/type/source,
 program/baseline/scope, evidence, delegation/limits, stop/supersession, execution/result and
 active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
 record first; otherwise create one through normal docs/state convention and record its path.
-Record locators. First adopters pass actual PM `threadId` via `init --paired-pm-thread-id`.
-Existing config: set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
+Pair keys: Codex `pairedPmThreadId`; Claude `pairedPmClaudeTarget` (ref/id) plus `pairedPmClaudeName`.
+Set them via `init`; existing config: edit only that lane's keys in `.claude/kit.config.json` in place; preserve
 other fields and read back. Plain init preserves config. Source tasks use reviewed scoped
 runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
 Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.

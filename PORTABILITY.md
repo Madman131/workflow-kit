@@ -238,6 +238,9 @@ this kit's. So the kit's arming path is **documentation plus a verification prob
    to `guard-lane-authoring.mjs` kept it ARMED; changing only that hook's `statusMessage` made it NOT
    ARMED until re-approved. The honest limit that follows: **an edited hook script runs WITHOUT
    re-approval**, so review a hook-script change like any other code that runs on your machine.
+   **The probe covers `apply_patch` only.** An upgrade that ADDS an entry on another matcher —
+   v2.33.0 added `mcp__codex_app__send_message_to_thread`, so every upgrade from v2.32.x — needs that
+   entry re-trusted interactively even when the check reports ARMED.
 
 **The probe observes the control, not the outcome — and that distinction is the whole design.** It
 does not ask "did the forbidden write fail?", because a write can fail for at least four reasons and
@@ -384,6 +387,31 @@ to drop it unless its flag is supplied. `check-codex-hooks-armed.mjs` proves the
 registration only. Generated registration and local command tests do not prove actual Codex task
 interception or hook trust; separately verify the exact send's Source, Command and Trust in the
 intended task before relying on this guard.
+
+**The Claude lane's pair (v2.33.1).** Claude Code's `SendMessage` (addressed by `to`) and the older
+`mcp__ccd_session_mgmt__send_message` (addressed by `session_id`) reach the same screen when the optional
+`pairedPmClaudeTarget` (`init --paired-pm-claude-target`) and/or `pairedPmClaudeName`
+(`init --paired-pm-claude-name`) in `.claude/kit.config.json` name the PM. Set the first to the PM's
+**stable** `ListAgents` `[ref]` or session/agent id, which survives a rename, and the second to its
+current name, because a model addresses by bare name by default (observed live). A send is to the pair
+when either stored value equals the whole address, the content of one trailing ` [ref]`, or the name
+before that ref. **After a rename the stored name is stale** until re-set (by `init --force` with every
+kit-config family named, or in place): a bare new title is unscreened and gets the notice, while
+`"<new title> [<ref>]"` still pairs by the ref. Claude Code 2.1.270 was
+observed passing `recipient` and `content` copies beside `to` and `message`: either address naming the
+PM makes it the PM's send, and two different bodies deny as ambiguous. The pair owes exactly what
+the Codex pair owes, with the sidecar's `target` set to the configured `pairedPmClaudeTarget` value
+(or `pairedPmClaudeName` when no ref is configured) whatever address form the send uses; `model`, `thinking` or `effort` in the send denies; an empty message (a pure idle
+subscription) directs nothing and passes. Any other `SendMessage` is not screened — as before this
+release — but a paired checkout prints a notice saying it was not, so a renamed or mis-addressed PM send
+is never silent. A malformed kit config denies every Claude send, because it cannot say which one is the
+PM's. The matcher is a separate `SendMessage` registration in `.claude/settings.json`, beside the
+unchanged `.*send_message` one: init merges registrations by exact matcher, so editing the old matcher
+would have run this guard twice per send on upgrade and spent a single-use receipt twice. Address
+matching is a string comparison: a PM addressed by an alias that carries neither its configured ref nor
+its id (a new title with no ref, or `"parent"`) is outside the pair. **A mixed pair — Architect and PM in
+different harnesses — has no shared messaging tool and runs file-only:** directions and consults go
+through the durable program record, no `pairedPm*` key is configured, and no screen claims to bind it.
 
 Minimal `architectScreen` for the exact prompt `Hold chip pending Owner scope approval.` (the digest
 binds those bytes; other brief-rung sidecar fields and executed checks are still required):
@@ -740,6 +768,29 @@ destination's separately authorized activation; a past snapshot is not proof of 
 Do not rewrite ledger rows to make this check pass. A held destination needs its own narrow
 diagnosis and decision. No integration, hook activation, live-ledger write, adopter update, or
 remote push follows from this description alone.
+
+**Upgrade every worktree of a repository together (v2.33.1).** All worktrees share one repair ledger in
+the Git common dir. Once any worktree records a gate round with a newer controller, a worktree still
+running an older one can reject the whole ledger and is denied every tool-bound source write, and no
+ledger row may be rewritten to undo it. `init` therefore compares the controller it would install with
+every other worktree's `.claude/hooks/` and `.codex/hooks/` copy and, before writing anything, refuses
+on a mismatch with the list and this order: upgrade each listed worktree now, one after another, before
+any worktree records a gate round, passing `--allow-mixed-repair-controllers` on every run except the
+last. For tracked hooks, merging the upgrade into a worktree's branch is its upgrade; per-checkout
+`.codex/hooks/` copies need `init --force` there. A worktree already locked out recovers the same way
+(a `git merge` is a shell operation the write guard does not bind). The check runs only at upgrade: a
+worktree created or checked out later from an old branch carries the old hooks, so create worktrees
+from the upgraded branch.
+
+**The recorder's caller fields.** `scripts/record-repair-event.mjs` requires `authority_route`
+(`"owner"` with `owner_evidence`, or `"principal"` for a bounded T2 Principal route) on a
+`child_continuation` and in the `proposed_transition` of the process review before it, and a
+`proposed_transition.policy_version` equal to the version the recorder mints for that task: 3 when the
+task's program — or, with none, its pending child lineage — is a policy-3 lineage or tier T3,
+otherwise 4. The caller derives it; it does not choose it. A mismatch is refused as malformed.
+
+**Controller freeze.** No new controller feature lands without Owner approval. A change to the
+controller deletes about as much as it adds.
 
 ## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
 
