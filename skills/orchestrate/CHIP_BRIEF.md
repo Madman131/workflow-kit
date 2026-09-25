@@ -12,11 +12,9 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    not only as a number: a printed number goes stale the moment another chip lands, and a worker
    that trusts it ships a wrong stamp.
 2. **The program record** — the one file holding the program's state and rulings. **NAME THE ENTRIES
-   this chip needs; never say "read it whole."** A record grows until reading it whole is most of a
-   context window spent on closed history. **The binding lessons are not there anyway** — they live
+   this chip needs; never say "read it whole."** **The binding lessons are not there anyway** — they live
    in `.agents/skills/orchestrate/PROTOCOLS.md` and `RUNG_ZERO.md`; the record is where they were
-   DISCOVERED, not where they live. A brief that says "read it whole" has not decided what its chip
-   needs.
+   DISCOVERED, not where they live.
 3. **Startup gate** — the sole-writer CHECK, never called a proof (lane declarations, main checkout
    and every worktree; it finds writers who DECLARED, and the body states what it misses),
    and a startup confirmation back to the orchestrator naming the base SHA, the version, and the
@@ -24,11 +22,13 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
    delivery failure that did not happen.
 4. **Scope** — what ships, user-visible done, its proof, and what does NOT. Name artifacts.
-5. **Process** — ordered rungs and pre-decided skips. Aggregate repair briefs declare
+5. **Process** — ordered rungs and pre-decided skips. **Every brief names the Builder's model and
+   effort; every same-family seat runs at or above that model** (`core/REVIEW.md` peer tier), **reporting expected and observed
+   model+effort and any mismatch rather than silently substituting.** Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
    event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
-   frontier process-review ID; expected **and observed** model+effort, reporting any mismatch rather
-   than silently substituting. Stored standard programs are
+   frontier process-review ID. **Review logs never ride in the changeset under review.** **A Builder the
+   Owner cannot address (a subagent) never holds a GO:** the PM pushes on the Owner's relayed GO and SHA. Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
    standard round. The orchestrator confirms bytes (`confirm-repair-brief --confirm`), sending
    receipt/path. Ordinary workers include `session_id` in `--verify`; guard binds authorized
@@ -50,8 +50,7 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    ships is short in every repo it is wrong about. **Short used to mean "ask the Owner"; keyed to a
    timeout it means "proceed without them", so the property is what binds, never the count.** A ratification that did not arrive did
    not happen: waiting on one, you keep building everything it does not touch and you seat nothing
-   that depends on it. Timing out an Owner rung is self-authorisation wearing initiative's clothes,
-   and the gate it skips is the one whose whole reason is that the call is not yours.
+   that depends on it.
    **For a delegated program, cite the Principal decision/record and its limits; it binds execution but
    never supplies Owner GO. Name target-repo Owner reservations, including merge/push GO, material intent
    or risk, live WRITE-GO, credentials, terminal exception and budget exceptions; all route THROUGH PM.**

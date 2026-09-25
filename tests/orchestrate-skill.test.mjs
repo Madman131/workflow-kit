@@ -201,15 +201,19 @@ test("the round controller pins the finite aggregate boundary", () => {
     "completion brief bytes are bound at continuation mint, not by a worker confirm step");
   pin(brief, "uses it as `repair_dispatch_event_id` for `--verify` with child task/session",
     "the completion worker handshake binds the child continuation event, task, and session");
-  pin(body, "failed/STOP surface stays closed", "completion exception terminal surface remains closed");
+  // v2.34.0 (C-DOC O3): the completion-child rules left the body for their homes; pinned there.
+  pin(protocols, "failed/STOP surface stays closed", "completion exception terminal surface remains closed");
+  pin(body, "R4 STOP completion children: `core/WORKFLOW.md` § Gate and", "the body points at the completion-child rules");
   pin(protocols, "a fresh frontier process review bound to the latest frozen panel",
     "the R4 process review is bound to the current frozen panel");
   pin(protocols, "each fourth gate repeats the review", "cumulative cadence retains the gate noun");
-  pin(body, "genuinely new Owner-approved work begins separately only on disjoint surfaces",
+  pin(protocols, "Genuinely new Owner-approved work starts separately only on disjoint surfaces",
     "new work is not a relabel of the stopped completion surface");
   pin(body, "runtime model/effort is procedure, not controller-authenticated identity",
     "controller evidence binding does not claim provider identity authentication");
-  pin(body, "After writing a repair brief, confirm its actual bytes", "pre-write allow is not authority");
+  // v2.34.0 (C-DOC O4): byte confirmation lives in CHIP_BRIEF § 5; the body points there.
+  pin(brief, "The orchestrator confirms bytes (`confirm-repair-brief --confirm`)", "pre-write allow is not authority");
+  pin(body, "repair-brief byte confirmation is CHIP_BRIEF § 5", "the body points at the byte confirmation");
 
   const workflow = readFileSync(path.join(KIT, "core", "WORKFLOW.md"), "utf8");
   assert.match(workflow, /R1 permits one bounded batch unless repeated/);

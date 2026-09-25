@@ -270,7 +270,7 @@ So, for dev gates:
 | Change class | Codex gate | Claude gate (when Codex builds) |
 |---|---|---|
 | **Ordinary new T2, or routine historical T3** (incl. reversible prod, chain/stateful) | **workhorse · high** | **workhorse · high** |
-| **Irreversible prod write · money-ledger · auth/credential** (rare, catastrophic-if-wrong) | **frontier · xhigh** | **frontier · xhigh** |
+| **Action flag: irreversible · money/ledger · auth/credential** (rare, catastrophic-if-wrong) | **frontier · xhigh** | **frontier · xhigh** |
 
 *Both columns are capability-equal per the vocabulary above. **Standing effort is `high`**, completing
 the DEFAULT-LOW ruling whose prose an all-`xhigh` matrix would contradict. A compute-weather mode that
@@ -286,10 +286,8 @@ more of the leaned-on family than it did; the verdict records the active binding
   `ultra` is retired from standing use; Owner-invoked last resort only. *(4A ground four rounds at the
   floor; under this policy it escalates once instead — which, since review dominates gate cost, plausibly
   costs less.)*
-- **The rare cell follows the actual action, not the T2 label.** Whether a change is irreversible,
-  money-ledger, or auth/credential work is decided from its concrete effects at classification
-  under `core/WORKFLOW.md` § Steer; the strong-gate cell cannot be dodged by re-labelling at the gate.
-  An ordinary T2 review or batch GO does not authorize an irreversible live operation.
+- **The rare cell follows the actual action, not the T2 label.** The flag is set from concrete effects
+  under `core/WORKFLOW.md` § Steer; re-labelling at the gate cannot dodge it.
 - **This policy sets the CROSS-FAMILY GATE seat's model·effort, not the same-family cold panel.** The
   blind cold panel (`core/BINDINGS.md` § Roles) is the same-family spine, a distinct seat; whether *it*
   also drops to the workhorse to conserve budget is a separate Owner call, not folded in here.

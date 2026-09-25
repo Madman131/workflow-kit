@@ -44,9 +44,7 @@ do not contact the persistent architect unless an existing gate independently re
 
 Combine fourth-gate and persistent-trigger packets only if the
 persistent architect independently satisfies every existing process-review eligibility and freshness
-requirement. Then use the existing process-review procedure unchanged: eligible seat, verified model/effort,
-purpose/outcome, receipt, controller record, frozen candidate, panel close, lineage, and proposed action all
-remain required. Otherwise run the existing fresh process review and route the architecture question
+requirement. Then use the existing process-review procedure unchanged. Otherwise run the existing fresh process review and route the architecture question
 separately. A combined response adds no firing, round, batch, authority, or budget and may discharge both
 obligations only through that existing procedure.
 
@@ -60,9 +58,8 @@ proceeds automatically on covered work, and returns concrete conflicts.
 
 Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause, alternatives;
 decides proceed/simplify/defer/stop/escalate; records prompt-bound screen. For proceed/simplify, Principal
-directs completion through one PM; defer/stop holds dependent work; escalate asks Owner; PM hold is screened non-status direction.
-Batch covered work; save time/tokens without weakening gates; resolves in-envelope conflicts;
-avoid unrelated work/retries without new evidence; route unresolved reserved decisions to Owner.
+directs completion through one PM; PM hold is screened non-status direction.
+Batch covered work; save time/tokens without weakening gates; resolves in-envelope conflicts.
 
 Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;
 credentials/access changes; destructive-or-irreversible acts; money/new-spend; max/ultra, second frontier firing/cap increases; terminal
@@ -70,16 +67,9 @@ exception except bounded T2 Principal controller completion; gate waiver; push/d
 frozen packet with redacted context, never publication, messaging, live data, secrets, or
 unrelated export. Principal evidence is not Owner evidence or a review verdict.
 
-Owner authorization: `core/OWNER_COMMS.md` rule 8 requires **AUTHORIZATION NEEDED**,
-concrete question, case-specific **Rule #1**, **KISS / Root cause**, **Zoom Out** bullets, and
-approve/decline/defer recommendation naming reserved boundary and actual host/budget limit.
-Links supplement; delegated work proceeds.
+Owner authorization form: `core/OWNER_COMMS.md` rule 8 alone; delegated work proceeds.
 
-Within recorded Owner availability policy, Principal routes a required unavailable review: no verdict
-for capacity/outage/unsupported runtime; supported full-coverage Gemini first, then fresh cold Astra.
-It records the actual family and reduced decorrelation, never bypasses host denial or relaxes transport
-controls, and returns to Claude for the next unstarted appropriate seat. A substantive `NO-GO` routes
-as a finding, not as availability; outside that policy, a reduced-family seat still needs Owner evidence.
+A required unavailable review follows `core/REVIEW.md` § Required-review availability route and its mirror.
 
 When Principal is unavailable, create no acting architect. Continue covered work and recorded decisions;
 hold only a new dependent decision. On a rejected execution method, hold its affected action and preserve

@@ -73,7 +73,7 @@ and in `GATES.md`) · `docs/journal/` (append-only history).
 
 The whole method as one line, for orientation — each stage is a section in the METHOD files above.
 
-**Pipeline (the map):** classify (Builder proposes → ratification under WORKFLOW § Steer) → code gate for tier (new T0 self-check · T1 cold · T2 full cold panel → cross-family capstone[if avail] → external; accepted historical T3 keeps its original ladder) → PM dispositions (remediate · defer · decline · escalate) → local closeout; **fresh Owner GO** for any remote push or publication → named execution-GO for any prod write → Garden (update memory + docs; ledger/remediation where adopted).
+**Pipeline (the map):** classify (Builder proposes → ratification under WORKFLOW § Steer) → code gate for tier (new T0 self-check · T1 cold · T2 full cold panel → cross-family capstone[if avail; REQUIRED if flagged] → external; accepted historical T3 keeps its original ladder) → PM dispositions (remediate · defer · decline · escalate) → local closeout; **fresh Owner GO** for any remote push or publication → named execution-GO for any prod write → Garden (update memory + docs; ledger/remediation where adopted).
 
 ## Size discipline
 

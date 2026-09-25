@@ -36,16 +36,10 @@ decisions and milestone. It does not authorize new scope, push, deployment, or l
 
 ## Quiet continuity
 
-PM records CHIP progress, dispositions, outcomes and evidence durably without contacting the architect. Consult only at program inception/baseline, terminal STOP, a material pivot,
-foundation/ownership/authority or major sequencing change, a meaningful milestone or planned phase
-boundary, a due five-active-workday alignment review, or an unresolved in-envelope program decision or
-concrete PM authority, safety, or evidence conflict requiring Principal direction. Every persistent packet carries, or explicitly
-consults in that record, the approved baseline, latest accepted decisions, and last alignment check. The
-reference layer has the exact material test, ordinary-consult boundary, combined fourth-gate rule, and
-degraded fallback; those rules have one authoritative home.
+PM records CHIP progress, dispositions, outcomes and evidence durably without contacting the architect.
+Consult only at the `ROUTING.md` § Continuity triggers, among them an unresolved in-envelope program decision or
+concrete PM authority, safety, or evidence conflict requiring Principal direction. Packet content, the material
+test, the ordinary-consult boundary, the combined fourth-gate rule and the degraded fallback live only in `ROUTING.md`.
 
-A packet identifies question, scope, evidence, alternatives, risks, and reserved boundary. Record advice
-as adopt/adapt/decline; a delegated decision as acknowledged/executing/completed/stopped with its result.
-For a rejected execution method, hold the affected action and send exact evidence to Principal for supported-method
-diagnosis; an ordinary valid retry proceeds under existing authority, while an unresolved reserved exception reaches
-Owner once through Principal. Do not create polling, scheduler, transport, review seat, or model binding.
+Advice recording and the rejected-method hold: `ROUTING.md` § Packets and consults, § Authority. Do not create
+polling, scheduler, transport, review seat, or model binding.

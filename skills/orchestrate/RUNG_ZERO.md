@@ -56,6 +56,7 @@ reservations, is `.agents/skills/orchestrate/SKILL.md` § Routing — do not cop
 | **T1** | **Local, touches no live prod** — a test, a local tool or script, a local-DB mutation, a *bounded* read-only prod query · prose and instruction artifacts changing **no** gate/emit/stop semantics |
 | **T2** | New or changed gate/emit/stop semantics · controlling-doc restructure · live control code · live-prod write (reversible or irreversible) · live-behaviour-path or chain/stateful logic |
 | **Historical T3** | Only a proven accepted legacy lineage; its old review and Owner obligations continue through closure |
+| **Action flag** *(not a tier)* | An irreversible, money/ledger or auth/credential effect; never below T2; adds what `core/WORKFLOW.md` § Steer says |
 
 **⚠ THIS TABLE NAMES WHAT A TIER IS. IT DELIBERATELY DOES NOT NAME WHAT EACH TIER'S GATE RUNS.**
 A ladder is per-repo; a portable table that named one would be a **more convincing wrong answer** in
@@ -72,8 +73,7 @@ tier IS; it never needs a summary of the rungs.
 
 **Reversibility sets execution authority, not the new-work review tier.** Reversible means a tested,
 named restore-to-prior-state handle the Owner confirmed at classify-time — not a backup you assume
-works. An irreversible ad-hoc write needs named Owner GO per write, backup and no-rollback acknowledgment;
-money/ledger and auth/credential work retain the action-triggered frontier/xhigh gate. An unbounded
+works. An irreversible ad-hoc write also needs backup and no-rollback acknowledgment. An unbounded
 production read must be bounded or moved offline; if no safe method exists, hold it and route the
 concrete risk/budget decision through Principal to Owner. Re-tiering never grants execution.
 
@@ -83,7 +83,7 @@ and target regardless of tier or file type**. Do not infer from the rows above t
 may publish itself; that reading is wrong and it is the kind of wrong that pushes code.
 
 **Use T1. It is the honest tier for most instruction work and it is the one that goes unused.**
-**New work uses T0/T1/T2.** A T3 task-lane declaration does not prove historical lineage.
+**New work uses T0/T1/T2.**
 
 ## 0.2 TIER PURITY — one changeset, one tier
 
