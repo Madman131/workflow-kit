@@ -4,7 +4,7 @@
 // evidence shape, exact references, and transition order.
 
 import { createHash } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   closeSync, constants as fsConstants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync,
   openSync, readFileSync, realpathSync, writeSync,
@@ -191,8 +191,7 @@ function proposedTransitionProjection(purpose, input) {
     const children = Array.isArray(input.children) ? input.children.map((child) => {
       const paths = sortedPaths(child?.authorized_paths);
       return aggregateChildShape(child) && paths ? { task_id: child.task_id, changeset_id: child.changeset_id,
-        tier: child.tier, budget: child.budget, authorized_paths: paths,
-        ...(child.initial_batch === undefined ? {} : { initial_batch: child.initial_batch }) } : null;
+        tier: child.tier, budget: child.budget, authorized_paths: paths } : null;
     }) : null;
     const completionValid = input.continuation_kind !== "completion_exception" ||
       (policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION
@@ -202,10 +201,7 @@ function proposedTransitionProjection(purpose, input) {
           completionBatchReviewProposalShape(input.completion_batch)
         : text(input.owner_evidence, 1000) && validActionScreen(input.action_screen) &&
           completionExceptionShape(input.completion_exception) && completionBatchReviewProposalShape(input.completion_batch));
-    if (!children || children.some((child) => !child ||
-          (child.initial_batch !== undefined &&
-            (!initialBatchRouteAllowed(policy, input.authority_route, input.continuation_kind) ||
-              !initialBatchShape(child.initial_batch, child.authorized_paths)))) ||
+    if (!children || children.some((child) => !child) ||
         (policy === AGGREGATE_POLICY_VERSION && children.some((child) => child.tier !== "T2")) ||
         !((ID64.test(input.parent_disposition_event_id || "") && input.parent_panel_open_event_id === undefined) ||
           (input.parent_disposition_event_id === null && ID64.test(input.parent_panel_open_event_id || ""))) ||
@@ -239,8 +235,7 @@ function proposedTransitionProjection(purpose, input) {
     const paths = sortedPaths(input.authorized_paths);
     if (!text(input.parent_task_id, 120) || !text(input.parent_changeset_id, 120) ||
         !ID64.test(input.parent_disposition_event_id || "") || !Number.isSafeInteger(input.parent_round) ||
-        !ID64.test(input.parent_candidate_sha || "") || !paths || !aggregateChildShape(input.child) ||
-        input.child.initial_batch !== undefined) return null;
+        !ID64.test(input.parent_candidate_sha || "") || !paths || !aggregateChildShape(input.child)) return null;
     if (policy === AGGREGATE_POLICY_VERSION && input.child.tier !== "T2") return null;
     return { ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? { policy_version: policy } : {}),
       parent_task_id: input.parent_task_id, parent_changeset_id: input.parent_changeset_id,
@@ -312,8 +307,7 @@ function validAggregateKindShape(event) {
     case "worker":
       return ID64.test(event.dispatch_event_id || "") && text(event.worker_session_id, 200) &&
         Boolean(sortedPaths(event.authorized_paths)) && strings([event.brief_path], { paths: true, itemMax: 500 }) &&
-        ID64.test(event.brief_sha256 || "") &&
-        (event.brief_size === undefined || (Number.isSafeInteger(event.brief_size) && event.brief_size >= 0));
+        ID64.test(event.brief_sha256 || "");
     case "worker_handoff":
       return ID64.test(event.dispatch_event_id || "") && ID64.test(event.prior_worker_event_id || "") &&
         text(event.new_worker_session_id, 200) && (currentAggregatePolicy(event)
@@ -340,9 +334,6 @@ function validAggregateKindShape(event) {
         CONTINUATION_KINDS.has(event.continuation_kind) &&
         Array.isArray(event.children) && event.children.length > 0 && event.children.every(aggregateChildShape) &&
         (event.policy_version !== AGGREGATE_POLICY_VERSION || event.children.every((child) => child.tier === "T2")) &&
-        event.children.every((child) => child.initial_batch === undefined ||
-          (initialBatchRouteAllowed(event.policy_version, event.authority_route, event.continuation_kind) &&
-            initialBatchShape(child.initial_batch, child.authorized_paths))) &&
         (currentAggregatePolicy(event)
           ? v3AuthorityRoute(event) && (event.authority_route !== "principal" || principalEvidenceShape(event.principal_evidence, {
             transitionKind: event.continuation_kind, taskId: event.task_id, changesetId: event.changeset_id,
@@ -362,7 +353,7 @@ function validAggregateKindShape(event) {
       return text(event.parent_task_id, 120) && text(event.parent_changeset_id, 120) &&
         ID64.test(event.parent_disposition_event_id || "") && Number.isSafeInteger(event.parent_round) &&
         ID64.test(event.parent_candidate_sha || "") && Boolean(sortedPaths(event.authorized_paths)) &&
-        aggregateChildShape(event.child) && event.child.initial_batch === undefined &&
+        aggregateChildShape(event.child) &&
         (event.policy_version !== AGGREGATE_POLICY_VERSION || event.child.tier === "T2") &&
         text(event.owner_evidence, 1000) &&
         (establishedAggregatePolicy(event) ? nullableId(event.process_review_event_id)
@@ -511,47 +502,6 @@ function safeLedgerDir(file) {
     const st = lstatSync(dir);
     return st.isDirectory() && !st.isSymbolicLink();
   } catch { return false; }
-}
-
-// Current writers share one Git-common ledger lock. The macOS fd form of lockf
-// locks the inherited open file description, so Node keeps the lock after lockf
-// exits and releases it by closing the fd (including on process death). The
-// inode is permanent: unlinking it would let waiters lock different files.
-function withRepairLedgerMutationLock(options, action) {
-  const file = repairLedgerPath(options?.projectRoot, { execGit: options?.execGit });
-  if (!file) return { ok: false, state: "repair-ledger-unavailable" };
-  if (process.platform !== "darwin") {
-    return { ok: false, state: "repair-ledger-lock-unsupported",
-      detail: "Current repair-controller transitions require a verified process-scoped fd lock; this host is unsupported. Read/replay remains available." };
-  }
-  if (!safeLedgerDir(file)) return { ok: false, state: "repair-ledger-unavailable" };
-  const lockFile = `${file}.lock`;
-  let fd, heldLock = false;
-  try {
-    fd = openSync(lockFile, fsConstants.O_CREAT | fsConstants.O_RDWR | fsConstants.O_NOFOLLOW, 0o600);
-    const opened = fstatSync(fd);
-    if (!opened.isFile()) return { ok: false, state: "repair-ledger-lock-unavailable" };
-    const held = spawnSync("/usr/bin/lockf", ["-s", "-t", "2", "3"],
-      { stdio: ["ignore", "ignore", "ignore", fd], timeout: 3000 });
-    if (held.error || held.status !== 0) {
-      return { ok: false, state: held.status === 75 ? "repair-ledger-lock-busy" : "repair-ledger-lock-unavailable",
-        detail: "The Git-common repair ledger lock could not be acquired within two seconds; retry the recorder after the current writer finishes." };
-    }
-    const current = lstatSync(lockFile);
-    if (!current.isFile() || current.isSymbolicLink() ||
-        current.dev !== opened.dev || current.ino !== opened.ino) {
-      return { ok: false, state: "repair-ledger-lock-unavailable" };
-    }
-    heldLock = true;
-  } catch {
-    return { ok: false, state: "repair-ledger-lock-unavailable",
-      detail: "The Git-common repair ledger lock is unavailable; check host lockf capability and ledger permissions." };
-  } finally {
-    // Acquisition failures close below; successful acquisition stays held through action().
-    if (fd !== undefined && !heldLock) try { closeSync(fd); } catch {}
-  }
-  try { return action(); }
-  finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
 }
 
 function appendTypedEvent(file, event, allowed) {
@@ -891,37 +841,6 @@ function completionBatchShape(value) {
     ID64.test(value.brief_sha256 || "") && Number.isSafeInteger(value.brief_size) && value.brief_size >= 0;
 }
 
-function initialBatchProposalShape(value) {
-  return plain(value) && same(Object.keys(value).sort(), ["brief_path", "worker_session_id"]) &&
-    text(value.worker_session_id, 200) && strings([value.brief_path], { paths: true, itemMax: 500 });
-}
-
-function initialBatchShape(value, paths) {
-  return plain(value) && same(Object.keys(value).sort(),
-    ["authorized_paths", "brief_path", "brief_sha256", "brief_size", "worker_session_id"]) &&
-    completionBatchShape(value) && same(value.authorized_paths, paths);
-}
-
-function initialBatchRouteAllowed(policy, route, kind) {
-  return policy === AGGREGATE_POLICY_VERSION && kind !== "completion_exception" &&
-    (route === "owner" || (route === "principal" && ["split", "new_changeset"].includes(kind)));
-}
-
-function materializeInitialChildren(children, projectRoot, policy, route, kind) {
-  if (!Array.isArray(children)) return null;
-  return children.map((child) => {
-    if (child?.initial_batch === undefined) return child;
-    if (!initialBatchRouteAllowed(policy, route, kind) ||
-        !initialBatchProposalShape(child.initial_batch) || !aggregateChildShape(child)) return null;
-    const brief = readRegularRepoFile(projectRoot, child.initial_batch.brief_path);
-    return brief ? { ...child, initial_batch: {
-      worker_session_id: child.initial_batch.worker_session_id, brief_path: brief.path,
-      brief_sha256: brief.sha256, brief_size: brief.size,
-      authorized_paths: [...child.authorized_paths],
-    } } : null;
-  });
-}
-
 function completedGateCount(state) {
   if (!state) return 0;
   const rounds = new Set(state.panels_close.map((close) =>
@@ -1000,7 +919,7 @@ function aggregateWorld(events, standardEvents = []) {
   if (!Array.isArray(events) || !events.every((row) => plain(row) && validAggregateEnvelope(row.event) &&
       row.event_id === eventId(row.event))) return null;
   const programs = new Map(), accepted = new Map(), continuations = new Map(), childLineage = new Map(),
-    completionBatchWorkers = new Map(), initialBatchWorkers = new Map();
+    completionBatchWorkers = new Map();
   const principalDecisionIds = new Set();
   const processReviews = [], processReviewKeys = new Set();
   const standardIdentities = standardEvents.filter((row) => row?.event?.type === "round_disposition" &&
@@ -1487,21 +1406,14 @@ function aggregateWorld(events, standardEvents = []) {
         const lineage = childLineage.get(row.task_id);
         const continuation = lineage && continuations.get(lineage.event_id);
         const batch = lineage?.completion_batch;
-        const initial = lineage?.initial_batch;
-        const ordinary = lineage && lineage.continuation_kind !== "completion_exception" && initial &&
-          !initialBatchWorkers.has(row.task_id);
-        const completion = lineage?.continuation_kind === "completion_exception" && batch &&
-          !completionBatchWorkers.has(row.task_id);
-        const selected = ordinary ? initial : completion ? batch : null;
-        if (!continuation || !selected || row.changeset_id !== lineage.changeset_id ||
-            row.dispatch_event_id !== lineage.event_id || row.worker_session_id !== selected.worker_session_id ||
-            (ordinary && row.session_id !== selected.worker_session_id) ||
-            !same(row.authorized_paths, selected.authorized_paths) || row.brief_path !== selected.brief_path ||
-            row.brief_sha256 !== selected.brief_sha256 ||
-            (ordinary && row.brief_size !== selected.brief_size)) continue;
+        if (!lineage || lineage.continuation_kind !== "completion_exception" || !continuation ||
+            completionBatchWorkers.has(row.task_id) || row.changeset_id !== lineage.changeset_id ||
+            row.dispatch_event_id !== lineage.event_id || row.worker_session_id !== batch?.worker_session_id ||
+            !same(row.authorized_paths, batch.authorized_paths) || row.brief_path !== batch.brief_path ||
+            row.brief_sha256 !== batch.brief_sha256) continue;
         if (lineage.policy_version >= PRINCIPAL_AGGREGATE_POLICY_VERSION &&
             aggregatePolicyVersion(row) < lineage.policy_version) continue;
-        (ordinary ? initialBatchWorkers : completionBatchWorkers).set(row.task_id, accept(row));
+        completionBatchWorkers.set(row.task_id, accept(row));
         admitSession(row.task_id, row.worker_session_id);
         continue;
       }
@@ -1745,10 +1657,7 @@ function aggregateWorld(events, standardEvents = []) {
         const applicable = applicableTypedReviews(processReviews, "legacy_handoff", anchor, ordinal, row);
         const authorized = review && applicable.some((candidate) => candidate.event_id === review.event_id) &&
           continuationReviewAllows(review);
-        // Earlier public recorders admitted uncited, nonmandatory handoffs even when a
-        // permissive typed review applied. Replay their ledger grammar; current admission
-        // separately requires the citation before it appends a new handoff.
-        if ((required && !authorized) ||
+        if (((required || applicable.length) && !authorized) ||
             (row.process_review_event_id !== null && !authorized)) continue;
       }
       const handoff = accept(row); legacyHandedOff.add(row.parent_task_id);
@@ -1757,18 +1666,8 @@ function aggregateWorld(events, standardEvents = []) {
       continuations.set(row.event_id, handoff);
     }
   }
-  const stoppedReservations = new Map();
-  for (const program of programs.values()) {
-    if (!(program.terminal === "STOP" || (program.terminal === "CLOSED" && program.stopped_paths?.length))) continue;
-    const lifted = liftedPaths(program);
-    for (const entry of program.stopped_paths) {
-      if (lifted.has(entry)) continue;
-      if (!stoppedReservations.has(entry)) stoppedReservations.set(entry, []);
-      stoppedReservations.get(entry).push(program.task_id);
-    }
-  }
-  return poisoned ? null : { programs, accepted, continuations, childLineage, completionBatchWorkers, initialBatchWorkers,
-    legacyHandedOff, processReviews, stoppedReservations };
+  return poisoned ? null : { programs, accepted, continuations, childLineage, completionBatchWorkers,
+    legacyHandedOff, processReviews };
 }
 
 export function deriveAggregateRepairState(events, taskId, { standardEvents = [] } = {}) {
@@ -2175,7 +2074,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
   return winner ? { ok: true, event_id: winner.event_id, idempotent: true } : { ok: false, state: conflictState };
 }
 
-function recordAggregatePanelOpenUnlocked(input,
+export function recordAggregatePanelOpen(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (input?.tier === "T3") {
@@ -2261,7 +2160,7 @@ export function recordAggregatePanelClose(input,
   return appendEligibleAggregate(file, event, "aggregate-panel-close-conflict");
 }
 
-function recordAggregateDispositionUnlocked(input,
+export function recordAggregateDisposition(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
@@ -2306,7 +2205,7 @@ export function recordAggregateRootExit(input,
     "aggregate-root-exit-conflict");
 }
 
-function recordAggregateProcessReviewUnlocked(input,
+export function recordAggregateProcessReview(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
@@ -2320,14 +2219,8 @@ function recordAggregateProcessReviewUnlocked(input,
   const batchBrief = purpose === "child_continuation" &&
     proposed?.continuation_kind === "completion_exception" && completionBatchProposalShape(proposed.completion_batch)
     ? readRegularRepoFile(projectRoot, proposed.completion_batch.brief_path) : null;
-  const initialChildren = purpose === "child_continuation" && proposed?.children?.some((child) =>
-    child?.initial_batch !== undefined) ? materializeInitialChildren(proposed.children, projectRoot,
-      aggregatePolicyVersion(proposed), proposed.authority_route, proposed.continuation_kind) : null;
-  if (initialChildren?.some((child) => !child)) return { ok: false, state: "aggregate-process-review-malformed" };
-  const reviewedProposal = { ...proposed,
-    ...(batchBrief ? { completion_batch: { ...proposed.completion_batch,
-      brief_sha256: batchBrief.sha256, brief_size: batchBrief.size } } : {}),
-    ...(initialChildren ? { children: initialChildren } : {}) };
+  const reviewedProposal = batchBrief ? { ...proposed, completion_batch: { ...proposed.completion_batch,
+    brief_sha256: batchBrief.sha256, brief_size: batchBrief.size } } : proposed;
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (aggregatePolicyVersion(reviewedProposal) !== base?.policy_version) {
     return { ok: false, state: "aggregate-process-review-malformed" };
@@ -2415,7 +2308,7 @@ export function recordAggregateWorkerHandoff(input,
     "aggregate-worker-handoff-conflict");
 }
 
-function recordAggregateChildContinuationUnlocked(input,
+export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
@@ -2462,10 +2355,6 @@ function recordAggregateChildContinuationUnlocked(input,
       return { ok: false, state: "aggregate-continuation-malformed" };
     }
   }
-  const initialChildren = input.children.some((child) => child.initial_batch !== undefined)
-    ? materializeInitialChildren(input.children, projectRoot, base.policy_version,
-      authorityRoute, input.continuation_kind) : input.children;
-  if (initialChildren?.some((child) => !child)) return { ok: false, state: "repair-brief-unconfirmed" };
   const batchBrief = completionException && completionBatchProposalShape(input.completion_batch)
     ? readRegularRepoFile(projectRoot, input.completion_batch.brief_path) : null;
   if (completionException && !batchBrief) return { ok: false, state: "repair-brief-unconfirmed" };
@@ -2482,7 +2371,7 @@ function recordAggregateChildContinuationUnlocked(input,
   const event = { ...base, kind: "child_continuation", ...anchor,
     parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
     trigger_ids: input.trigger_ids,
-    continuation_kind: input.continuation_kind, children: initialChildren,
+    continuation_kind: input.continuation_kind, children: input.children,
     authority_route: authorityRoute,
     ...(authorityRoute === "owner" ? { owner_evidence: input.owner_evidence } :
       { principal_evidence: input.principal_evidence }), action_screen: input.action_screen,
@@ -2510,7 +2399,7 @@ function recordAggregateChildContinuationUnlocked(input,
   return appendEligibleAggregate(file, event, "aggregate-continuation-conflict");
 }
 
-function recordAggregateCloseUnlocked(input,
+export function recordAggregateClose(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
   if (!base || !text(input.reason, 1000) ||
@@ -2543,7 +2432,7 @@ function recordAggregateCloseUnlocked(input,
   return appendEligibleAggregate(file, event, "aggregate-close-conflict");
 }
 
-function recordAggregateLegacyHandoffUnlocked(input,
+export function recordAggregateLegacyHandoff(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   const file = repairLedgerPath(projectRoot, { execGit });
   const rows = controllerRows(file);
@@ -2570,12 +2459,6 @@ function recordAggregateLegacyHandoffUnlocked(input,
     parent.latest.round + 1, event);
   if (applicable.some((candidate) => candidate.ruling === "owner_decision" &&
       candidate.event_id !== event.process_review_event_id)) {
-    return { ok: false, state: "aggregate-legacy-handoff-conflict" };
-  }
-  // Replay preserves older public-recorder output, but a new handoff must cite any
-  // applicable permissive review. The reader cannot distinguish those epochs by version.
-  if (applicable.length && !applicable.some((candidate) =>
-      candidate.event_id === event.process_review_event_id && continuationReviewAllows(candidate))) {
     return { ok: false, state: "aggregate-legacy-handoff-conflict" };
   }
   return appendEligibleAggregate(file, event, "aggregate-legacy-handoff-conflict");
@@ -2729,7 +2612,7 @@ export function recordOwnerExtension(input, { projectRoot, sessionId, now = new 
  * CLAIM plus the surrounding history, which is better for recovery and for audit than a deleted
  * file, and is not evidence of who did it. That, and nothing more, is the claim.
  */
-function recordRepairCloseUnlocked(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
+export function recordRepairClose(input, { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   if (!text(sessionId, 200)) return { ok: false, state: "repair-session-missing" };
   const base = baseEvent("repair_close", input, sessionId, now);
   const file = repairLedgerPath(projectRoot, { execGit });
@@ -2938,27 +2821,6 @@ export function verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_even
       brief_sha256: batch.brief_sha256, brief_size: batch.brief_size,
       worker_session_id: batch.worker_session_id }, brief };
   }
-  const initialRow = loaded.aggregate_events.find((row) => row.event_id === eventId &&
-    row.event.kind === "child_continuation" && row.event.continuation_kind !== "completion_exception");
-  if (initialRow) {
-    const world = aggregateWorld(loaded.aggregate_events, loaded.events);
-    const lineage = world?.childLineage.get(taskId);
-    const batch = lineage?.initial_batch;
-    if (!lineage || lineage.event_id !== eventId || world.programs.has(taskId) || !batch ||
-        !initialRow.event.children.some((child) => child.task_id === taskId &&
-          child.changeset_id === lineage.changeset_id && same(child.initial_batch, batch))) {
-      return { ok: false, state: "repair-brief-receipt-missing" };
-    }
-    const brief = readRegularRepoFile(projectRoot, batch.brief_path);
-    if (!brief || brief.sha256 !== batch.brief_sha256 || brief.size !== batch.brief_size) {
-      return { ok: false, state: "repair-brief-changed" };
-    }
-    return { ok: true, state: "repair-brief-confirmed", receipt: { ...initialRow.event,
-      event_id: eventId, kind: "initial_batch", task_id: taskId,
-      changeset_id: lineage.changeset_id, authorized_paths: [...batch.authorized_paths],
-      target: batch.brief_path, brief_sha256: batch.brief_sha256, brief_size: batch.brief_size,
-      worker_session_id: batch.worker_session_id }, brief };
-  }
   const state = deriveRepairState(loaded.events, taskId);
   if (!state.ok) return state;
   const receipt = state.dispatches.find((row) => row.event_id === eventId);
@@ -2970,7 +2832,7 @@ export function verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_even
   return { ok: true, state: "repair-brief-confirmed", receipt, brief };
 }
 
-function recordWorkerVerificationUnlocked({ task_id: taskId, repair_dispatch_event_id: eventId } = {},
+export function recordWorkerVerification({ task_id: taskId, repair_dispatch_event_id: eventId } = {},
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
   if (!text(sessionId, 200)) return { ok: false, state: "repair-worker-session-missing" };
   const verified = verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_event_id: eventId },
@@ -3004,21 +2866,6 @@ function recordWorkerVerificationUnlocked({ task_id: taskId, repair_dispatch_eve
       dispatch_event_id: eventId, worker_session_id: sessionId,
       authorized_paths: [...receipt.authorized_paths], brief_path: receipt.target,
       brief_sha256: receipt.brief_sha256 };
-    return appendEligibleAggregate(file, event, "aggregate-worker-conflict");
-  }
-  if (receipt.type === AGGREGATE_EVENT_TYPE && receipt.kind === "initial_batch") {
-    if (receipt.worker_session_id !== sessionId) return { ok: false, state: "repair-worker-verification-missing" };
-    const rows = controllerRows(file);
-    const world = rows && aggregateWorld(rows.aggregate, rows.standard);
-    const prior = world?.initialBatchWorkers.get(taskId);
-    if (prior?.worker_session_id === sessionId && prior.dispatch_event_id === eventId) {
-      return { ok: true, event_id: prior.event_id, idempotent: true };
-    }
-    const event = { type: AGGREGATE_EVENT_TYPE, policy_version: AGGREGATE_POLICY_VERSION,
-      kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id, recorded_at: now,
-      session_id: sessionId, dispatch_event_id: eventId, worker_session_id: sessionId,
-      authorized_paths: [...receipt.authorized_paths], brief_path: receipt.target,
-      brief_sha256: receipt.brief_sha256, brief_size: receipt.brief_size };
     return appendEligibleAggregate(file, event, "aggregate-worker-conflict");
   }
   if (receipt.type === AGGREGATE_EVENT_TYPE && receipt.kind === "completion_exception") {
@@ -3112,56 +2959,6 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   if (owner && owner.task_id !== taskId) {
     return { ok: false, state: "repair-task-relabel-path-owned", owner_task_id: owner.task_id };
   }
-  // Ordinary first writes require the accepted Owner- or Principal-bound brief and designated worker admission.
-  const pendingChild = completionWorld.childLineage.get(taskId);
-  if (pendingChild && !completionWorld.programs.has(taskId)) {
-    if (!pendingChild.authorized_paths.includes(target)) {
-      return { ok: false, state: "repair-worker-path-unauthorized",
-        authorized_paths: pendingChild.authorized_paths };
-    }
-    const batch = pendingChild.initial_batch;
-    const admission = completionWorld.initialBatchWorkers.get(taskId);
-    if (!batch || !text(sessionId, 200) || sessionId !== batch.worker_session_id ||
-        admission?.worker_session_id !== sessionId || admission.dispatch_event_id !== pendingChild.event_id ||
-        admission.changeset_id !== pendingChild.changeset_id) {
-      return { ok: false, state: "repair-worker-verification-missing" };
-    }
-    const verified = verifyRepairBriefReceipt({ task_id: taskId,
-      repair_dispatch_event_id: pendingChild.event_id }, { projectRoot, execGit });
-    if (!verified.ok) return verified;
-    return { ok: true, state: "repair-worker-write-authorized", admission, receipt: verified.receipt };
-  }
-  // An inactive STOP/CLOSED program is absent from active owners. Its unlifted paths
-  // still reserve the surface: a stale worker or relabeled task must not fall through
-  // to the unrelated-write path. A live authorized child owns its own write above.
-  if (!owner) {
-    const stoppedOwners = completionWorld.stoppedReservations.get(target) ?? [];
-    if (stoppedOwners.length) {
-      return { ok: false, state: "repair-stopped-path-reserved", owner_task_ids: stoppedOwners };
-    }
-  }
-  // A pending child reserves its declared budget. Once a panel opens, its winning
-  // undisposed freeze reserves the reviewed paths in EVERY round, including after
-  // panel_close but before disposition. The prior worker's dispatch does not permit
-  // writes to that frozen surface, even when it owns an active repair path.
-  const pendingOwners = [...completionWorld.childLineage.values()].filter((lineage) =>
-    !completionWorld.programs.has(lineage.task_id) && lineage.authorized_paths.includes(target));
-  const panelOwners = [...completionWorld.programs.values()].filter((program) => {
-    if (program.terminal) return false;
-    const open = program.panels_open.at(-1);
-    if (!open || program.dispositions.some((disposition) => disposition.round === open.round)) return false;
-    const paths = !program.latest
-      ? (completionWorld.childLineage.get(program.task_id)?.authorized_paths ?? open.changed_paths)
-      : open.changed_paths;
-    return paths.includes(target);
-  });
-  const reserved = [...pendingOwners, ...panelOwners];
-  if (reserved.length > 1) return { ok: false, state: "repair-worker-path-owner-conflict",
-    owner_task_ids: reserved.map((entry) => entry.task_id) };
-  if (reserved.length && reserved[0].task_id !== taskId) {
-    return { ok: false, state: "repair-task-relabel-path-owned", owner_task_id: reserved[0].task_id };
-  }
-  if (panelOwners.length) return { ok: false, state: "repair-worker-verification-missing" };
   if (!text(taskId, 120)) return { ok: true, state: "not-repair-write" };
   // RESOLVE THE ACTIVE AGGREGATE PROGRAM BY TASK FIRST. Ownership above is derived BY TARGET, so a
   // task whose active program authorizes only OTHER paths finds no owner here — and falling
@@ -3227,34 +3024,3 @@ export function loadRepairEventsForProject(projectRoot, options = {}) {
   return { ok: false, state: subject ? "repair-ledger-unavailable" : "repair-ledger-no-subject",
     observed_overrides: gitLocationOverrides(options.env ?? process.env), events: null };
 }
-
-
-// The handoff's eligibility depends on these cooperating current writers only:
-// a panel open claims identities, a disposition/close changes path reservations,
-// a continuation declares pending children, a legacy review may hold admission,
-// and a standard close retires the cited parent. Other recorders retain their
-// existing availability on hosts without this lock capability.
-export const recordWorkerVerification = (...args) => {
-  const loaded = loadRepairEventsForProject(args[1]?.projectRoot, { execGit: args[1]?.execGit });
-  const initial = loaded.ok && loaded.aggregate_events.some((row) =>
-    row.event_id === args[0]?.repair_dispatch_event_id && row.event.kind === "child_continuation" &&
-    row.event.continuation_kind !== "completion_exception" &&
-    row.event.children.some((child) => child.task_id === args[0]?.task_id && child.initial_batch));
-  return initial ? withRepairLedgerMutationLock(args[1], () => recordWorkerVerificationUnlocked(...args))
-    : recordWorkerVerificationUnlocked(...args);
-};
-export const recordAggregatePanelOpen = (...args) => withRepairLedgerMutationLock(args[1],
-  () => recordAggregatePanelOpenUnlocked(...args));
-export const recordAggregateDisposition = (...args) => withRepairLedgerMutationLock(args[1],
-  () => recordAggregateDispositionUnlocked(...args));
-export const recordAggregateProcessReview = (...args) =>
-  ["legacy_handoff", "child_continuation"].includes(args[0]?.purpose) ? withRepairLedgerMutationLock(args[1],
-    () => recordAggregateProcessReviewUnlocked(...args)) : recordAggregateProcessReviewUnlocked(...args);
-export const recordAggregateChildContinuation = (...args) => withRepairLedgerMutationLock(args[1],
-  () => recordAggregateChildContinuationUnlocked(...args));
-export const recordAggregateClose = (...args) => withRepairLedgerMutationLock(args[1],
-  () => recordAggregateCloseUnlocked(...args));
-export const recordAggregateLegacyHandoff = (...args) => withRepairLedgerMutationLock(args[1],
-  () => recordAggregateLegacyHandoffUnlocked(...args));
-export const recordRepairClose = (...args) => withRepairLedgerMutationLock(args[1],
-  () => recordRepairCloseUnlocked(...args));

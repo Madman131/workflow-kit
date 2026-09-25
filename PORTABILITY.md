@@ -709,28 +709,22 @@ bodies still carry their `Word budget:` lines — in your repo those are declare
 mechanical enforcement unless you wire your own (copying the checker and re-pointing its class
 roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 
-## Current repair-ledger writer lock
+## Retained repair-controller boundary
 
-Current transitions that can change a legacy handoff's eligibility serialize their final read,
-validation and append on one lock file beside the **Git-common** repair ledger. On macOS the
-controller holds a BSD fd lock through `/usr/bin/lockf`; a crash releases it, while the lock
-file's inode stays in place for later writers. A busy writer refuses after two seconds. On hosts
-without this verified capability, these transitions refuse **before ledger mutation** with
-`repair-ledger-lock-unsupported`; read and historical replay still work. Do not remove the lock
-file as stale cleanup. Older installed recorders that do not acquire this lock must be held
-through cutover; they cannot safely write the same Git-common ledger concurrently. Linux and
-Windows mutation cutover remains held until their fd-lock lifetime, contention and crash
-behavior is proven and supported.
+This simplified line retains the reviewed controller from `06e449e1bd0bec920a062de3a22a46536d39295b`
+(`hooks/repair-dispatch-state.mjs` blob `e2a61115c77d99b93ac88b3141a1b19438ee3363`).
+Its finite gate ladder, recorded Principal authority, typed reviews, existing brief/worker checks,
+and historical replay remain the supported controller behavior. The current Architect-to-PM
+prompt-bound decision screen above is separate and remains active where its hook is armed.
+Owner-reserved decisions and the recorded STOP history are unchanged.
 
-An ordinary pending child receives pre-panel source-write authority only when the current Owner
-or an authorized T2 Principal continuation records its exact path set, designated worker session,
-and SHA-256/size of a regular in-repository brief. A Principal continuation remains bound to the
-parent's opened paths, exact terminal anchor, and reserved-action screen; it cannot expand material
-scope or authorize Owner-reserved actions. The designated worker must verify the receipt in the
-ledger, and each write rechecks the session, target path, and unchanged brief. This authority ends
-at the first accepted child panel; subsequent writes use normal dispatch and worker checks.
-Historical pending children without the receipt and legacy handoffs remain held. Initial worker
-admission and the first panel open share the Git-common writer lock so their order is decisive.
+The later controller extensions are deferred: permissive uncited legacy-handoff migration,
+global stopped-path reservations, Git-common cross-process writer locking, ordinary pending-child
+first-write admission, and target-wide pending/open-panel write reservations. The retained
+controller must not be described as enforcing those extra protections. A pending ordinary child
+without an existing supported dispatch is not granted a new first-write receipt by this line.
+Existing ledgers are not rewritten, and a future extension needs its own design, gate evidence,
+and cutover decision. Shell/direct filesystem writes remain outside the tool-bound write guard.
 
 ## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
 

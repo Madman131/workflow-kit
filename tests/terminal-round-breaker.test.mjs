@@ -7,8 +7,8 @@
 // mechanism's original trigger goes red when its arm is removed.
 
 import { createHash } from "node:crypto";
-import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -1440,15 +1440,6 @@ test("historical separate-ID handoffs retain child STOP and parent retirement ac
         remediation_kind: null, authorized_paths: [] });
       assert.equal(stop.ok, true, stop.state);
       assert.deepEqual(derive(ctx, "historical-child").stopped_paths, ["src/x.mjs"]);
-      for (const task_id of ["historical-child", "relabel", ""]) {
-        const write = verifyRepairWorkerWrite({ task_id, session_id: "historical-worker",
-          target: "src/x.mjs" }, { projectRoot: ctx.dir });
-        assert.equal(write.ok, false, `${task_id || "undeclared"} cannot write a STOP reservation`);
-        assert.equal(write.state, "repair-stopped-path-reserved");
-      }
-      assert.equal(verifyRepairWorkerWrite({ task_id: "relabel", session_id: "historical-worker",
-        target: "src/unrelated.mjs" }, { projectRoot: ctx.dir }).state, "not-repair-write",
-      "a truly unrelated path stays available");
       assert.equal(openPanel(ctx, 1, next, { task: "unrelated", changeset: "unrelated-cs" }).opened.ok,
         false, "child STOP preserves the path reservation");
     } finally { ctx.cleanup(); }
@@ -1556,27 +1547,6 @@ test("older mixed typed reviews replay their cited handoff while current admissi
       next_gate_ordinal: 2, review_evidence: "permissive Owner review", zoom_out: "bounded",
       ruling: "owner_decision", bounded_scope: "one child", closure_evidence: "bounded" });
     writeFileSync(ledger, `${JSON.stringify(parent)}\n${JSON.stringify(olderDecision)}\n`);
-    // All three public-recorder epochs admitted an uncited nonmandatory handoff. A
-    // typed permissive review cannot retroactively erase that child on replay.
-    for (const policy of [2, 3, 4]) {
-      const review = stamped({ ...olderDecision.event, policy_version: policy,
-        transition_sha256: aggregateTransitionSha256("legacy_handoff", { ...proposal,
-          policy_version: policy }) });
-      const historicalUncited = stamped({ type: "aggregate_v2", kind: "legacy_handoff",
-        policy_version: policy, task_id: "standard-parent", changeset_id: "standard-parent-cs",
-        ...proposal, owner_evidence: "Owner authorized historical handoff",
-        process_review_event_id: null, recorded_at: "2099-01-01T00:00:20.000Z",
-        session_id: "historical-owner" });
-      const replay = derivePendingLineageBudgets([review, historicalUncited],
-        { standardEvents: loadRepairEventsForProject(ctx.dir).events });
-      assert.deepEqual(replay?.map((entry) => entry.task_id), ["reviewed-child"],
-        `policy ${policy} uncited nonmandatory public handoff keeps its child`);
-      const invalidCitation = stamped({ ...historicalUncited.event,
-        process_review_event_id: "f".repeat(64) });
-      assert.deepEqual(derivePendingLineageBudgets([review, invalidCitation],
-        { standardEvents: loadRepairEventsForProject(ctx.dir).events }), [],
-      "an invalid explicit citation remains rejected");
-    }
     const permit = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
       task_id: "standard-parent", changeset_id: "standard-parent-cs", reviewer_role: "frontier",
       purpose: "legacy_handoff", anchor, proposed_transition: { ...proposal, policy_version: 4 },
@@ -1596,10 +1566,10 @@ test("older mixed typed reviews replay their cited handoff while current admissi
     assert.deepEqual(activeRepairPathOwners(loaded.events, "src/x.mjs",
       { aggregateEvents: oldRows }).handed_off_task_ids, ["standard-parent"]);
     const retroVeto = await importMutant(mutantDir, [[
-      'if ((required && !authorized) ||',
+      'if (((required || applicable.length) && !authorized) ||',
       'if (applicable.some((candidate) => candidate.ruling === "owner_decision" && ' +
         'candidate.event_id !== row.process_review_event_id) || ' +
-        '(required && !authorized) ||',
+        '((required || applicable.length) && !authorized) ||',
     ]]);
     assert.deepEqual(retroVeto.derivePendingLineageBudgets(oldRows,
       { standardEvents: loaded.events }), [],
@@ -1618,7 +1588,7 @@ test("older mixed typed reviews replay their cited handoff while current admissi
 
 test("older exact typed legacy reviews bind a new T2 handoff at ordinal two", () => {
   for (const [policy, ruling] of [[2, "owner_decision"], [2, "successor"],
-    [3, "owner_decision"], [3, "successor"], [4, "owner_decision"], [4, "successor"]]) {
+    [3, "owner_decision"], [3, "successor"]]) {
     const ctx = repo();
     try {
       const candidate = commit(ctx.dir, 1);
@@ -1672,8 +1642,8 @@ test("older exact typed legacy reviews bind a new T2 handoff at ordinal two", ()
       writeFileSync(ledger, `${JSON.stringify(parent)}\n${JSON.stringify(oldReview)}\n${JSON.stringify(planted)}\n`);
       const replay = loadRepairEventsForProject(ctx.dir);
       assert.equal(derivePendingLineageBudgets(replay.aggregate_events, { standardEvents: replay.events })
-        .some((entry) => entry.task_id === "reviewed-t2"), true,
-      "older public p4 admission may be uncited at a nonmandatory ordinal; replay retains its child");
+        .some((entry) => entry.task_id === "reviewed-t2"), false,
+      "a planted v4 handoff cannot drop an accepted older exact review on replay");
     } finally { ctx.cleanup(); }
   }
 });
@@ -2447,19 +2417,6 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
         budget: "one changeset", authorized_paths: ["src/x.mjs", "src/y.mjs"] }],
     }, options(ctx.dir));
     assert.equal(continuation.ok, true, continuation.state);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "child-builder",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing",
-    "an unbound pending child has no first-write authority");
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "child-builder",
-      target: "src/z.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-path-unauthorized",
-    "the pending child cannot expand its budget before the first panel");
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing");
-    for (const task_id of ["task-1", "relabel"]) {
-      assert.equal(verifyRepairWorkerWrite({ task_id, session_id: "child-builder",
-        target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-stopped-path-reserved",
-      "the pending child's budget does not revive parent or relabeled authority");
-    }
     const childOpts = { task: "child", changeset: "child-cs" };
     // (a) An OUTSIDE-BUDGET first open refuses: the child's candidate touches a path the declared
     // budget never covered.
@@ -2487,14 +2444,6 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
       { ...childOpts, accepted: ["CF1"], authorized_paths: ["src/y.mjs"] });
     assert.equal(childDecided.ok, true, childDecided.state);
     const authority = dispatchBatch(ctx, childDecided.event_id, childClosed.event_id, 2, null, childOpts);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child", session_id: "worker-2",
-      target: "src/y.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-write-authorized",
-    "the valid Owner child retains its admitted write through the parent's STOP reservation");
-    for (const task_id of ["task-1", "relabel"]) {
-      assert.equal(verifyRepairWorkerWrite({ task_id, session_id: "worker-2",
-        target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-stopped-path-reserved",
-      "the unlifted parent slice refuses stale or relabeled writes");
-    }
     // …but the ROUND-2 candidate cannot expand past the budget: a child's later-round diff
     // including a path outside its declared lineage budget refuses (a measured defect — a
     // round-2 candidate is not a skeleton key over what round 1 could not touch).
@@ -2515,218 +2464,6 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
     const within = openPanel(ctx, 2, snap(["src/x.mjs", "src/y.mjs"]),
       { ...childOpts, incoming: authority });
     assert.equal(within.opened.ok, true, `within-budget widening opens: ${within.opened.state}`);
-  } finally { ctx.cleanup(); }
-});
-
-test("Principal ordinary child can verify an exact first batch and reach its first panel", () => {
-  const ctx = repo();
-  try {
-    const candidate = commit(ctx.dir, 1);
-    const panel = openPanel(ctx, 1, candidate);
-    assert.equal(panel.opened.ok, true, panel.opened.state);
-    const closed = closePanel(ctx, panel, candidate, ["F1"]);
-    assert.equal(closed.ok, true, closed.state);
-    const stopped = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
-      remediation_kind: null, authorized_paths: [] });
-    assert.equal(stopped.ok, true, stopped.state);
-    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
-    const brief = path.join(ctx.dir, "briefs/principal.md");
-    writeFileSync(brief, "Principal-bound child work\n");
-    const child = { task_id: "principal-child", changeset_id: "principal-child-cs", tier: "T2",
-      budget: "repair the reviewed x path", authorized_paths: ["src/x.mjs"],
-      initial_batch: { worker_session_id: "designated-principal-worker", brief_path: "briefs/principal.md" } };
-    const anchor = { kind: "aggregate_terminal", event_id: stopped.event_id,
-      panel_open_event_id: panel.opened.event_id, frozen_commit: candidate.commit,
-      frozen_tree: candidate.tree };
-    const proposal = { policy_version: AGGREGATE_POLICY_VERSION, authority_route: "principal",
-      parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
-      continuation_kind: "new_changeset", action_screen: _DEFAULT_CONTINUATION_SCREEN,
-      children: [child] };
-    const review = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
-      task_id: "task-1", changeset_id: "cs-1", reviewer_role: "frontier",
-      purpose: "child_continuation", anchor, proposed_transition: proposal,
-      review_evidence: "reviewed exact Principal child batch", zoom_out: "one repair",
-      ruling: "successor", bounded_scope: "reviewed x path", closure_evidence: "child panel" },
-    options(ctx.dir));
-    assert.equal(review.ok, true, review.state);
-    const reserved_action_screen = Object.fromEntries([
-      "remote_push", "remote_or_pr_merge", "deploy", "publication", "live_or_external_write",
-      "destructive_or_irreversible", "credential_or_access_change", "money_or_new_spend",
-      "material_scope_or_risk", "gate_waiver", "critical_or_fail_open_acceptance",
-      "reduced_family_acceptance",
-    ].map((key) => [key, false]));
-    const principal_evidence = { authority_record: "program-record:principal-first-batch",
-      decision_id: "principal-first-batch-1", transition_kind: "new_changeset",
-      task_id: "task-1", changeset_id: "cs-1", tier: "T2", anchor,
-      authorized_paths: ["src/x.mjs"], reserved_action_screen };
-    const input = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
-      changeset_id: "cs-1", parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
-      continuation_kind: "new_changeset", principal_evidence, children: [child],
-      process_review_event_id: review.event_id };
-    for (const altered of [
-      { principal_evidence: { ...principal_evidence, anchor: { ...anchor, event_id: "f".repeat(64) } } },
-      { principal_evidence: { ...principal_evidence,
-        reserved_action_screen: { ...reserved_action_screen, remote_push: true } } },
-      { children: [{ ...child, authorized_paths: ["src/outside.mjs"] }] },
-      { children: [{ ...child, initial_batch: { ...child.initial_batch,
-        brief_path: "briefs/missing.md" } }] },
-    ]) assert.equal(recordAggregateChildContinuation({ ...input, ...altered }, options(ctx.dir)).ok,
-      false, "invalid Principal authority, path, or brief cannot mint the batch");
-    const continuation = recordAggregateChildContinuation(input, options(ctx.dir));
-    assert.equal(continuation.ok, true, continuation.state);
-    const row = loadRepairEventsForProject(ctx.dir).aggregate_events.find((entry) =>
-      entry.event_id === continuation.event_id).event;
-    assert.equal(row.authority_route, "principal");
-    assert.deepEqual(row.children[0].initial_batch.authorized_paths, ["src/x.mjs"]);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
-      session_id: "designated-principal-worker", target: "src/x.mjs" },
-    { projectRoot: ctx.dir }).state, "repair-worker-verification-missing");
-    assert.equal(recordWorkerVerification({ task_id: "principal-child",
-      repair_dispatch_event_id: continuation.event_id },
-    options(ctx.dir, "wrong-worker")).ok, false);
-    const admitted = recordWorkerVerification({ task_id: "principal-child",
-      repair_dispatch_event_id: continuation.event_id },
-    options(ctx.dir, "designated-principal-worker"));
-    assert.equal(admitted.ok, true, admitted.state);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child", session_id: "wrong-worker",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).ok, false);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
-      session_id: "designated-principal-worker", target: "src/outside.mjs" },
-    { projectRoot: ctx.dir }).state, "repair-worker-path-unauthorized");
-    writeFileSync(brief, "changed brief\n");
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
-      session_id: "designated-principal-worker", target: "src/x.mjs" },
-    { projectRoot: ctx.dir }).state, "repair-brief-changed");
-    rmSync(brief);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
-      session_id: "designated-principal-worker", target: "src/x.mjs" },
-    { projectRoot: ctx.dir }).state, "repair-brief-changed");
-    writeFileSync(brief, "Principal-bound child work\n");
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
-      session_id: "designated-principal-worker", target: "src/x.mjs" },
-    { projectRoot: ctx.dir }).state, "repair-worker-write-authorized");
-    execFileSync("git", ["checkout", "-qb", "principal-child-line", "origin/main"], { cwd: ctx.dir });
-    writeFileSync(path.join(ctx.dir, "src/x.mjs"), "export const x = 2;\n");
-    execFileSync("git", ["add", "src/x.mjs"], { cwd: ctx.dir });
-    execFileSync("git", ["commit", "-qm", "principal-child-candidate"], { cwd: ctx.dir });
-    const childCandidate = {
-      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
-      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
-      paths: ["src/x.mjs"],
-    };
-    const first = openPanel(ctx, 1, childCandidate, { task: "principal-child",
-      changeset: "principal-child-cs", lineage: { continuation: continuation.event_id } });
-    assert.equal(first.opened.ok, true, first.opened.state);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
-      session_id: "designated-principal-worker", target: "src/x.mjs" },
-    { projectRoot: ctx.dir }).ok, false, "first panel retires pre-panel first-write authority");
-  } finally { ctx.cleanup(); }
-});
-
-test("Owner-bound pending child requires immutable brief and designated worker until first panel", () => {
-  const ctx = repo();
-  try {
-    const candidate = commit(ctx.dir, 1);
-    const panel = openPanel(ctx, 1, candidate);
-    assert.equal(panel.opened.ok, true, panel.opened.state);
-    const close = closePanel(ctx, panel, candidate, ["CRIT"]);
-    const stop = decide(ctx, close, { accepted: ["CRIT"], terminal_state: "STOP",
-      remediation_kind: null, authorized_paths: [] });
-    assert.equal(stop.ok, true, stop.state);
-    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
-    writeFileSync(path.join(ctx.dir, "briefs", "initial.md"), "Owner-bound child work\n");
-    const child = { task_id: "first-child", changeset_id: "first-cs", tier: "T2",
-      budget: "one changeset", authorized_paths: ["src/x.mjs"],
-      initial_batch: { worker_session_id: "designated", brief_path: "briefs/initial.md" } };
-    const input = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
-      changeset_id: "cs-1", parent_disposition_event_id: stop.event_id, trigger_ids: ["CRIT"],
-      continuation_kind: "new_changeset", owner_evidence: "Owner successor", children: [child] };
-    for (const altered of [
-      { initial_batch: { ...child.initial_batch, brief_sha256: "f".repeat(64) } },
-      { initial_batch: { ...child.initial_batch, brief_size: 99 } },
-      { initial_batch: { ...child.initial_batch, authorized_paths: ["src/y.mjs"] } },
-      { initial_batch: { ...child.initial_batch, brief_path: "briefs/missing.md" } },
-    ]) assert.equal(recordAggregateChildContinuation({ ...input, children: [{ ...child, ...altered }] },
-      options(ctx.dir)).ok, false, "forged or missing brief refuses mint");
-    assert.equal(recordAggregateChildContinuation({ ...input, authority_route: "principal" },
-      options(ctx.dir)).ok, false, "Principal route cannot borrow Owner evidence");
-    const review = recordAggregateProcessReview({
-      type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
-      reviewer_role: "frontier", purpose: "child_continuation",
-      anchor: { kind: "aggregate_terminal", event_id: stop.event_id,
-        panel_open_event_id: panel.opened.event_id, frozen_commit: candidate.commit,
-        frozen_tree: candidate.tree },
-      proposed_transition: { ...input, policy_version: AGGREGATE_POLICY_VERSION,
-        authority_route: "owner", action_screen: _DEFAULT_CONTINUATION_SCREEN },
-      review_evidence: "reviewed exact Owner child batch", zoom_out: "one successor",
-      ruling: "successor", bounded_scope: "one child", closure_evidence: "STOP carried",
-    }, options(ctx.dir));
-    assert.equal(review.ok, true, review.state);
-    const continuation = recordAggregateChildContinuation({ ...input,
-      process_review_event_id: review.event_id }, options(ctx.dir));
-    assert.equal(continuation.ok, true, continuation.state);
-    const loaded = loadRepairEventsForProject(ctx.dir);
-    const row = loaded.aggregate_events.find((entry) => entry.event_id === continuation.event_id).event;
-    const reviewed = loaded.aggregate_events.find((entry) => entry.event_id === review.event_id).event;
-    assert.equal(reviewed.transition_sha256, aggregateTransitionSha256("child_continuation", row),
-      "typed review binds the exact minted child batch and brief digest");
-    const persisted = row.children[0].initial_batch;
-    assert.equal(persisted.worker_session_id, "designated");
-    assert.equal(persisted.brief_size, Buffer.byteLength("Owner-bound child work\n"));
-    assert.deepEqual(persisted.authorized_paths, ["src/x.mjs"]);
-    const check = (task, session, target = "src/x.mjs") => verifyRepairWorkerWrite({
-      task_id: task, session_id: session, target }, { projectRoot: ctx.dir });
-    assert.equal(check("first-child", "designated").state, "repair-worker-verification-missing");
-    assert.equal(check("first-child", "wrong").state, "repair-worker-verification-missing");
-    assert.equal(check("first-child", "designated", "src/y.mjs").state, "repair-worker-path-unauthorized");
-    assert.equal(check("task-1", "designated").state, "repair-stopped-path-reserved");
-    assert.equal(check("relabel", "designated").state, "repair-stopped-path-reserved");
-    assert.equal(recordWorkerVerification({ task_id: "first-child",
-      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "wrong")).state,
-    "repair-worker-verification-missing");
-    const worker = recordWorkerVerification({ task_id: "first-child",
-      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "designated"));
-    assert.equal(worker.ok, true, worker.state);
-    const repeat = recordWorkerVerification({ task_id: "first-child",
-      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "designated"));
-    assert.equal(repeat.event_id, worker.event_id);
-    assert.equal(repeat.idempotent, true);
-    assert.equal(check("first-child", "designated").state, "repair-worker-write-authorized");
-    mkdirSync(path.join(ctx.dir, ".claude"), { recursive: true });
-    writeFileSync(path.join(ctx.dir, ".claude", "task-lane.json"),
-      JSON.stringify({ mode: "in-thread", sessionId: "designated", taskId: "first-child", tier: "T2" }));
-    const hook = (session) => spawnSync(process.execPath,
-      [fileURLToPath(new URL("../hooks/guard-brief-rung.mjs", import.meta.url))], {
-        cwd: ctx.dir, env: { ...process.env, CLAUDE_PROJECT_DIR: ctx.dir }, encoding: "utf8",
-        input: JSON.stringify({ tool_name: "Write", cwd: ctx.dir, session_id: session,
-          tool_input: { file_path: path.join(ctx.dir, "src", "x.mjs"), content: "export const x = 9;\n" } }),
-      });
-    assert.equal(hook("designated").stdout, "", "actual Write hook permits the verified first write");
-    assert.match(hook("wrong").stdout, /permissionDecision.*deny/,
-      "actual Write hook denies a different session");
-    writeFileSync(path.join(ctx.dir, "briefs", "initial.md"), "changed\n");
-    assert.equal(check("first-child", "designated").state, "repair-brief-changed");
-    rmSync(path.join(ctx.dir, "briefs", "initial.md"));
-    assert.equal(check("first-child", "designated").state, "repair-brief-changed",
-      "a deleted brief withdraws first-write authority");
-    writeFileSync(path.join(ctx.dir, "briefs", "initial.md"), "Owner-bound child work\n");
-    assert.equal(check("first-child", "designated").ok, true);
-    // First accepted panel retires the initial receipt, even for the same admitted session.
-    execFileSync("git", ["checkout", "-qb", "first-child-branch", "origin/main"], { cwd: ctx.dir });
-    writeFileSync(path.join(ctx.dir, "src", "x.mjs"), "export const x = 9;\n");
-    execFileSync("git", ["add", "src/x.mjs"], { cwd: ctx.dir });
-    execFileSync("git", ["commit", "-qm", "first-child-candidate"], { cwd: ctx.dir });
-    const candidate2 = { commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
-      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
-      paths: ["src/x.mjs"] };
-    const first = openPanel(ctx, 1, candidate2, { task: "first-child", changeset: "first-cs",
-      lineage: { continuation: continuation.event_id } });
-    assert.equal(first.opened.ok, true, first.opened.state);
-    assert.equal(check("first-child", "designated").ok, false,
-      "the first panel retires the pre-panel receipt");
-    assert.equal(recordWorkerVerification({ task_id: "first-child",
-      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "designated")).state,
-    "repair-brief-receipt-missing");
   } finally { ctx.cleanup(); }
 });
 
@@ -2780,72 +2517,6 @@ function sideCandidate(ctx, branch, files) {
   };
 }
 
-test("GO-parent child reserves its path before verification and through its undisposed first panel", () => {
-  const ctx = repo();
-  try {
-    const candidate = commit(ctx.dir, 1);
-    const panel = openPanel(ctx, 1, candidate);
-    assert.equal(panel.opened.ok, true, panel.opened.state);
-    const close = closePanel(ctx, panel, candidate);
-    const go = decide(ctx, close, { terminal_state: "GO", remediation_kind: null,
-      authorized_paths: [] });
-    assert.equal(go.ok, true, go.state);
-    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
-    writeFileSync(path.join(ctx.dir, "briefs", "go-child.md"), "Owner child\n");
-    const continuation = recordAggregateChildContinuation({
-      type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
-      parent_disposition_event_id: go.event_id, trigger_ids: [], continuation_kind: "new_changeset",
-      owner_evidence: "Owner GO successor", children: [{ task_id: "go-child", changeset_id: "go-child-cs",
-        tier: "T2", budget: "one changeset", authorized_paths: ["src/x.mjs"],
-        initial_batch: { worker_session_id: "go-worker", brief_path: "briefs/go-child.md" } }],
-    }, options(ctx.dir));
-    assert.equal(continuation.ok, true, continuation.state);
-    const write = (task, session, target = "src/x.mjs") => verifyRepairWorkerWrite({
-      task_id: task, session_id: session, target }, { projectRoot: ctx.dir });
-    const hook = (task, session) => {
-      mkdirSync(path.join(ctx.dir, ".claude"), { recursive: true });
-      writeFileSync(path.join(ctx.dir, ".claude", "task-lane.json"),
-        JSON.stringify({ mode: "in-thread", sessionId: session, taskId: task, tier: "T2" }));
-      return spawnSync(process.execPath,
-        [fileURLToPath(new URL("../hooks/guard-brief-rung.mjs", import.meta.url))], {
-          cwd: ctx.dir, env: { ...process.env, CLAUDE_PROJECT_DIR: ctx.dir }, encoding: "utf8",
-          input: JSON.stringify({ tool_name: "Write", cwd: ctx.dir, session_id: session,
-            tool_input: { file_path: path.join(ctx.dir, "src", "x.mjs"), content: "new bytes\n" } }),
-        });
-    };
-    assert.equal(write("go-child", "go-worker").state, "repair-worker-verification-missing");
-    for (const task of ["unrelated", undefined]) {
-      assert.equal(write(task, "intruder").ok, false, "pending child reserves path by target");
-    }
-    assert.match(hook("unrelated", "intruder").stdout, /permissionDecision.*deny/,
-      "actual Write hook denies an unrelated task on the child path");
-    const worker = recordWorkerVerification({ task_id: "go-child",
-      repair_dispatch_event_id: continuation.event_id }, options(ctx.dir, "go-worker"));
-    assert.equal(worker.ok, true, worker.state);
-    assert.equal(write("go-child", "go-worker").state, "repair-worker-write-authorized");
-    assert.equal(hook("go-child", "go-worker").stdout, "", "actual Write hook allows designated first write");
-    assert.equal(write("unrelated", "intruder", "src/other.mjs").state, "not-repair-write",
-      "ordinary unrelated source paths remain available");
-    const childCandidate = sideCandidate(ctx, "go-child-panel", { "src/x.mjs": "export const x = 9;\n" });
-    const first = openPanel(ctx, 1, childCandidate, { task: "go-child", changeset: "go-child-cs",
-      lineage: { continuation: continuation.event_id } });
-    assert.equal(first.opened.ok, true, first.opened.state);
-    assert.equal(write("go-child", "go-worker").ok, false,
-      "retired receipt cannot fall through during first panel");
-    assert.equal(write("unrelated", "intruder").ok, false,
-      "an unrelated task cannot write during the child's first panel");
-    assert.match(hook("go-child", "go-worker").stdout, /permissionDecision.*deny/,
-      "actual Write hook denies the retired worker during the frozen panel");
-    const childClose = closePanel(ctx, first, childCandidate, [], { task: "go-child", changeset: "go-child-cs" });
-    assert.equal(childClose.ok, true, childClose.state);
-    const childGo = decide(ctx, childClose, { task: "go-child", changeset: "go-child-cs",
-      terminal_state: "GO", remediation_kind: null, authorized_paths: [] });
-    assert.equal(childGo.ok, true, childGo.state);
-    assert.equal(write("unrelated", "intruder").state, "not-repair-write",
-      "completed GO child releases its legitimate path");
-  } finally { ctx.cleanup(); }
-});
-
 test("M35: the reservation lift is COVERAGE-SCOPED — a child's GO releases its own budget, never its siblings' surfaces", async () => {
   const ctx = repo();
   const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
@@ -2859,38 +2530,23 @@ test("M35: the reservation lift is COVERAGE-SCOPED — a child's GO releases its
     const stop = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
       remediation_kind: null, authorized_paths: [] });
     assert.equal(stop.ok, true, stop.state);
-    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
-    writeFileSync(path.join(ctx.dir, "briefs", "split-a.md"), "child a only\n");
     const split = recordAggregateChildContinuation({
       type: "aggregate_v2", kind: "child_continuation", task_id: "task-1", changeset_id: "cs-1",
       parent_disposition_event_id: stop.event_id, trigger_ids: ["F1"],
       continuation_kind: "split", owner_evidence: "Owner split",
       children: [
         { task_id: "child-a", changeset_id: "child-a-cs", tier: "T2", budget: "the x half",
-          authorized_paths: ["src/x.mjs"],
-          initial_batch: { worker_session_id: "split-a-worker", brief_path: "briefs/split-a.md" } },
+          authorized_paths: ["src/x.mjs"] },
         { task_id: "child-b", changeset_id: "child-b-cs", tier: "T2", budget: "the y half",
           authorized_paths: ["src/y.mjs"] },
       ],
     }, options(ctx.dir));
     assert.equal(split.ok, true, split.state);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child-a", session_id: "split-a-worker",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing");
-    const initial = recordWorkerVerification({ task_id: "child-a", repair_dispatch_event_id: split.event_id },
-      options(ctx.dir, "split-a-worker"));
-    assert.equal(initial.ok, true, initial.state);
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child-a", session_id: "split-a-worker",
-      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-write-authorized");
-    assert.equal(verifyRepairWorkerWrite({ task_id: "child-b", session_id: "split-a-worker",
-      target: "src/y.mjs" }, { projectRoot: ctx.dir }).state, "repair-worker-verification-missing",
-    "the unbound sibling cannot borrow the first-write receipt");
     // child-a runs to GO on x only.
     const aCand = sideCandidate(ctx, "a-line", { "src/x.mjs": "export const x = 'a';\n" });
     const aOpen = openPanel(ctx, 1, aCand, { task: "child-a", changeset: "child-a-cs",
       lineage: { continuation: split.event_id } });
     assert.equal(aOpen.opened.ok, true, aOpen.opened.state);
-    assert.equal(derive(ctx, "child-a").gate_base_ordinal, 1,
-      "the first-write receipt does not add or reset the inherited gate ordinal");
     const aClosed = closePanel(ctx, aOpen, aCand, [], { task: "child-a", changeset: "child-a-cs" });
     assert.equal(aClosed.ok, true, aClosed.state);
     const aGo = decide(ctx, aClosed, { task: "child-a", changeset: "child-a-cs",
@@ -3826,72 +3482,6 @@ test("M47: the trigger cap is the exact-carry bound — a 101-id ground ACCEPTS,
 
 // ── batch 4 · the accepted findings the shipped code now carries ─────────────────────────────────
 
-test("undisposed later-round panel reserves widened and previously owned paths until disposition", () => {
-  const ctx = repo();
-  try {
-    writeFileSync(path.join(ctx.dir, "src", "y.mjs"), "export const y = 1;\n");
-    const r1 = commit(ctx.dir, 1);
-    assert.deepEqual(r1.paths, ["src/x.mjs", "src/y.mjs"]);
-    const first = openPanel(ctx, 1, r1);
-    assert.equal(first.opened.ok, true, first.opened.state);
-    const closed1 = closePanel(ctx, first, r1, ["F1"]);
-    assert.equal(closed1.ok, true, closed1.state);
-    const decided1 = decide(ctx, closed1, { accepted: ["F1"], authorized_paths: ["src/x.mjs"] });
-    assert.equal(decided1.ok, true, decided1.state);
-    const authority = dispatchBatch(ctx, decided1.event_id, closed1.event_id, 2);
-
-    // The worker repairs only x. The pinned base makes x+y the next panel's reviewed surface;
-    // y is outside the prior dispatch, while x still has a valid prior worker admission.
-    writeFileSync(path.join(ctx.dir, "src", "x.mjs"), "export const x = 2;\n");
-    execFileSync("git", ["add", "src/x.mjs"], { cwd: ctx.dir });
-    execFileSync("git", ["commit", "-qm", "repair-x"], { cwd: ctx.dir });
-    const r2 = {
-      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
-      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
-      paths: ["src/x.mjs", "src/y.mjs"],
-    };
-    const second = openPanel(ctx, 2, r2, { incoming: authority });
-    assert.equal(second.opened.ok, true, second.opened.state);
-    assert.deepEqual(derive(ctx).panels_open.at(-1).changed_paths, r2.paths);
-    const check = (task, session, target) => verifyRepairWorkerWrite({
-      task_id: task, session_id: session, target }, { projectRoot: ctx.dir });
-    const held = () => {
-      assert.equal(check("intruder", "intruder", "src/y.mjs").ok, false,
-        "a relabeled task cannot write the widened reviewed path");
-      assert.equal(check(undefined, "intruder", "src/y.mjs").ok, false,
-        "a missing task cannot fall through on the widened reviewed path");
-      assert.equal(check("task-1", "worker-2", "src/y.mjs").ok, false,
-        "the prior dispatch never authorized y");
-      assert.equal(check("task-1", "worker-2", "src/x.mjs").ok, false,
-        "the prior x worker cannot mutate the frozen panel");
-      assert.equal(check("intruder", "intruder", "src/x.mjs").ok, false);
-    };
-    held();
-    const closed2 = closePanel(ctx, second, r2, ["F2"]);
-    assert.equal(closed2.ok, true, closed2.state);
-    held(); // collected but not yet dispositioned is still frozen
-
-    const decided2 = decide(ctx, closed2, { accepted: ["F2"],
-      remediation_kind: "root_replacement", authorized_paths: ["src/x.mjs"] });
-    assert.equal(decided2.ok, true, decided2.state);
-    assert.equal(check("task-1", "worker-2", "src/x.mjs").ok, false,
-      "old worker admission does not survive the new disposition");
-    const exit = recordAggregateRootExit({
-      type: "aggregate_v2", kind: "root_exit", task_id: "task-1", changeset_id: "cs-1",
-      disposition_event_id: decided2.event_id, shared_mechanism: "one shared root",
-      symptom_explanation: "earlier fixes were symptoms", owner_state_yield_seams: ["state seam"],
-      replacement: "one replacement", removed_workarounds: ["the cycle"],
-      trigger_matrix: ["later panel freeze"], closure_evidence: "the replacement closes the trigger",
-    }, options(ctx.dir));
-    assert.equal(exit.ok, true, exit.state);
-    dispatchBatch(ctx, decided2.event_id, closed2.event_id, 3, exit.event_id);
-    assert.equal(check("task-1", "worker-3", "src/x.mjs").state,
-      "repair-worker-write-authorized", "a fresh post-disposition dispatch restores x authority");
-    assert.equal(check("task-1", "worker-3", "src/y.mjs").ok, false,
-      "the fresh dispatch does not widen authority to y");
-  } finally { ctx.cleanup(); }
-});
-
 test("M48: THE CROSS-ROUND BASE PIN — every later round re-derives from ROUND 1's base, and a refreeze may not move it", async () => {
   const ctx = repo();
   const mutantDir = mkdtempSync(path.join(os.tmpdir(), "breaker-mutants-"));
@@ -4640,176 +4230,4 @@ test("F2: the base-pin refusal is DIAGNOSED — a moved-base open names round 1'
         "the base pin never fires ahead of terminality");
     } finally { ctx2.cleanup(); }
   } finally { ctx.cleanup(); }
-});
-
-
-test("unsupported lock capability refuses before creating the ledger directory while replay remains readable", async () => {
-  const ctx = repo();
-  const mutantDir = mkdtempSync(path.join(os.tmpdir(), "repair-lock-capability-"));
-  try {
-    const file = repairLedgerPath(ctx.dir);
-    assert.equal(existsSync(path.dirname(file)), false);
-    const unsupported = await importMutant(mutantDir, [[
-      'process.platform !== "darwin"', 'true',
-    ]]);
-    const result = unsupported.recordAggregateLegacyHandoff({ type: "aggregate_v2",
-      kind: "legacy_handoff" }, options(ctx.dir));
-    assert.equal(result.ok, false);
-    assert.equal(result.state, "repair-ledger-lock-unsupported");
-    assert.match(result.detail, /Read\/replay remains available/);
-    assert.equal(existsSync(path.dirname(file)), false,
-      "unsupported host must not even create the ledger directory");
-    assert.deepEqual(unsupported.loadRepairEventsForProject(ctx.dir).aggregate_events, []);
-  } finally { ctx.cleanup(); rmSync(mutantDir, { recursive: true, force: true }); }
-});
-
-test("current legacy handoff and Owner-hold writers serialize at the Git-common ledger", async () => {
-  const scriptDir = mkdtempSync(path.join(os.tmpdir(), "repair-lock-writers-"));
-  const script = path.join(scriptDir, "writer.mjs");
-  writeFileSync(script, `import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
-import { recordAggregateLegacyHandoff, recordAggregateProcessReview } from ${JSON.stringify(pathToFileURL(fileURLToPath(new URL("../hooks/repair-dispatch-state.mjs", import.meta.url))).href)};
-const [kind, dir, inputJson, marker, release] = process.argv.slice(2);
-let calls = 0;
-const execGit = (command, args, options) => {
-  calls += 1;
-  if (calls === 2 && marker) {
-    writeFileSync(marker, "holding");
-    const word = new Int32Array(new SharedArrayBuffer(4));
-    while (!existsSync(release)) Atomics.wait(word, 0, 0, 10);
-  }
-  return execFileSync(command, args, options);
-};
-const options = { projectRoot: dir, sessionId: "owner", execGit };
-const result = kind === "review" ? recordAggregateProcessReview(JSON.parse(inputJson), options)
-  : recordAggregateLegacyHandoff(JSON.parse(inputJson), options);
-process.stdout.write(JSON.stringify(result));
-`);
-  const start = (ctx, kind, input, marker = "", release = "") => {
-    const child = spawn(process.execPath, [script, kind, ctx.dir, JSON.stringify(input), marker, release],
-      { stdio: ["ignore", "pipe", "pipe"] });
-    let out = "", err = "";
-    child.stdout.on("data", (data) => { out += data; });
-    child.stderr.on("data", (data) => { err += data; });
-    const done = new Promise((resolve, reject) => child.on("close", (code, signal) => {
-      if (code !== 0 || signal) return reject(new Error(`writer ${kind}: ${code}/${signal} ${err}`));
-      try { resolve(JSON.parse(out)); } catch { reject(new Error(`writer ${kind}: ${out} ${err}`)); }
-    }));
-    return { child, done };
-  };
-  const waitFor = async (file) => {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      if (existsSync(file)) return;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error(`writer did not reach locked barrier: ${file}`);
-  };
-  const fixture = () => {
-    const ctx = repo();
-    const candidate = commit(ctx.dir, 1);
-    const manifest = fingerprintCandidate(ctx.dir, candidate.paths);
-    const parent = stamped({ type: "round_disposition", task_id: "legacy-parent",
-      changeset_id: "legacy-cs", round: 1, candidate_sha: manifest.digest,
-      candidate_manifest: manifest.records, verdict: "NO-GO", disposition: "REMEDIATE",
-      finding_ids: ["F1"], finding_class: "legacy", ownership_area: "controller",
-      original_trigger: "active standard work", authorized_paths: candidate.paths,
-      introduced_by_prior_repair: false, new_scope: false, repair_dispatch_event_id: null,
-      root_cause_exit_event_id: null, adherence_audit_event_id: null,
-      owner_extension_event_id: null, owner_scope_event_id: null,
-      recorded_at: "2099-01-01T00:00:00.000Z", session_id: "pm" });
-    const ledger = repairLedgerPath(ctx.dir);
-    mkdirSync(path.dirname(ledger), { recursive: true });
-    writeFileSync(ledger, `${JSON.stringify(parent)}\n`);
-    const proposal = { parent_task_id: "legacy-parent", parent_changeset_id: "legacy-cs",
-      parent_disposition_event_id: parent.event_id, parent_round: 1,
-      parent_candidate_sha: manifest.digest, authorized_paths: candidate.paths,
-      child: { task_id: "held-child", changeset_id: "held-child-cs", tier: "T2",
-        budget: "one Owner child", authorized_paths: candidate.paths } };
-    const handoff = { type: "aggregate_v2", kind: "legacy_handoff", task_id: "legacy-parent",
-      changeset_id: "legacy-cs", ...proposal, owner_evidence: "Owner authorized handoff",
-      process_review_event_id: null };
-    const review = { type: "aggregate_v2", kind: "process_review", task_id: "legacy-parent",
-      changeset_id: "legacy-cs", reviewer_role: "frontier", purpose: "legacy_handoff",
-      anchor: { kind: "standard_disposition", event_id: parent.event_id,
-        candidate_sha: manifest.digest }, proposed_transition: { ...proposal, policy_version: 4 },
-      review_evidence: "Owner decision hold", zoom_out: "hold", ruling: "owner_decision",
-      bounded_scope: "exact child", closure_evidence: "Owner boundary" };
-    return { ...ctx, handoff, review };
-  };
-  try {
-    // Hold-first: the handoff's final read follows the already-admitted Owner hold.
-    {
-      const ctx = fixture();
-      try {
-        const marker = path.join(scriptDir, "hold-first.marker"), release = path.join(scriptDir, "hold-first.go");
-        const first = start(ctx, "review", ctx.review, marker, release);
-        await waitFor(marker);
-        const second = start(ctx, "handoff", ctx.handoff);
-        writeFileSync(release, "go");
-        assert.equal((await first.done).ok, true);
-        const rejected = await second.done;
-        assert.equal(rejected.state, "aggregate-legacy-handoff-conflict",
-          "handoff must see the prior hold, not merely time out on the lock");
-        assert.deepEqual(loadRepairEventsForProject(ctx.dir).aggregate_events
-          .map((row) => row.event.kind), ["process_review"]);
-        assert.deepEqual(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events,
-          { standardEvents: loadRepairEventsForProject(ctx.dir).events }), []);
-      } finally { ctx.cleanup(); }
-    }
-    // Handoff-first: a later hold cannot retroactively erase an admitted child.
-    {
-      const ctx = fixture();
-      try {
-        const marker = path.join(scriptDir, "handoff-first.marker"), release = path.join(scriptDir, "handoff-first.go");
-        const first = start(ctx, "handoff", ctx.handoff, marker, release);
-        await waitFor(marker);
-        const second = start(ctx, "review", ctx.review);
-        writeFileSync(release, "go");
-        assert.equal((await first.done).ok, true);
-        await second.done;
-        assert.deepEqual(derivePendingLineageBudgets(loadRepairEventsForProject(ctx.dir).aggregate_events,
-          { standardEvents: loadRepairEventsForProject(ctx.dir).events }).map((row) => row.task_id),
-          ["held-child"]);
-      } finally { ctx.cleanup(); }
-    }
-    // Two identical current handoffs converge on the same append, not duplicate rows.
-    {
-      const ctx = fixture();
-      try {
-        const marker = path.join(scriptDir, "twin.marker"), release = path.join(scriptDir, "twin.go");
-        const first = start(ctx, "handoff", ctx.handoff, marker, release);
-        await waitFor(marker);
-        const second = start(ctx, "handoff", ctx.handoff);
-        writeFileSync(release, "go");
-        const a = await first.done, b = await second.done;
-        assert.equal(a.ok, true); assert.equal(b.ok, true);
-        assert.equal(a.event_id, b.event_id);
-        assert.equal(loadRepairEventsForProject(ctx.dir).aggregate_events
-          .filter((row) => row.event.kind === "legacy_handoff").length, 1);
-      } finally { ctx.cleanup(); }
-    }
-    // Contention is bounded and SIGKILL releases the process-scoped fd lock.
-    {
-      const ctx = fixture();
-      try {
-        const marker = path.join(scriptDir, "crash.marker"), release = path.join(scriptDir, "crash.go");
-        const holder = start(ctx, "review", ctx.review, marker, release);
-        await waitFor(marker);
-        const busy = await start(ctx, "handoff", ctx.handoff).done;
-        assert.equal(busy.state, "repair-ledger-lock-busy");
-        const inputPath = path.join(scriptDir, "busy-event.json");
-        writeFileSync(inputPath, JSON.stringify({ ...ctx.handoff, session_id: "owner" }));
-        const cli = spawnSync(process.execPath,
-          [fileURLToPath(new URL("../scripts/record-repair-event.mjs", import.meta.url)),
-            "--event", inputPath], { cwd: ctx.dir, encoding: "utf8" });
-        assert.equal(cli.status, 1);
-        assert.match(cli.stderr, /repair-ledger-lock-busy.*retry/i,
-          "the recorder CLI names both the typed refusal and its safe retry");
-        holder.child.kill("SIGKILL");
-        await assert.rejects(holder.done);
-        const after = await start(ctx, "handoff", ctx.handoff).done;
-        assert.equal(after.ok, true, after.state);
-      } finally { ctx.cleanup(); }
-    }
-  } finally { rmSync(scriptDir, { recursive: true, force: true }); }
 });
