@@ -363,7 +363,7 @@ session- and dispatch-bound RECORD exists — a raised cost and an auditable tra
 **`guard-brief-rung` binds Codex brief writes and one paired thread send.** The brief-WRITE half
 uses the shared `apply_patch` envelope grammar. For the exact Codex app tool
 `mcp__codex_app__send_message_to_thread`, the optional, checkout-durable `pairedPmThreadId` in
-`.claude/kit.config.json` selects one PM `threadId`; without that field, Codex sends are
+`.claude/kit.pair.json` selects one PM `threadId`; without that field, Codex sends are
 outside this Architect-pair scope. A material send to that target owes the existing fresh,
 session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
 prompt bytes. The Architect evaluates observed evidence, the no-action consequence, approved-outcome/blueprint
@@ -391,7 +391,7 @@ intended task before relying on this guard.
 **The Claude lane's pair (v2.33.1).** Claude Code's `SendMessage` (addressed by `to`) and the older
 `mcp__ccd_session_mgmt__send_message` (addressed by `session_id`) reach the same screen when the optional
 `pairedPmClaudeTarget` (`init --paired-pm-claude-target`) and/or `pairedPmClaudeName`
-(`init --paired-pm-claude-name`) in `.claude/kit.config.json` name the PM. Set the first to the PM's
+(`init --paired-pm-claude-name`) in `.claude/kit.pair.json` name the PM. Set the first to the PM's
 **stable** `ListAgents` `[ref]` or session/agent id, which survives a rename, and the second to its
 current name, because a model addresses by bare name by default (observed live). A send is to the pair
 when either stored value equals the whole address, the content of one trailing ` [ref]`, or the name
@@ -412,6 +412,16 @@ matching is a string comparison: a PM addressed by an alias that carries neither
 its id (a new title with no ref, or `"parent"`) is outside the pair. **A mixed pair — Architect and PM in
 different harnesses — has no shared messaging tool and runs file-only:** directions and consults go
 through the durable program record, no `pairedPm*` key is configured, and no screen claims to bind it.
+
+**The pair is per-checkout (v2.35.0).** `init --paired-pm-*` writes `.claude/kit.pair.json`, which
+`init` gitignores, so a pairing cannot travel on a branch. When that file exists it is the checkout's
+whole pair; a key it lacks is never filled from the tracked config. Where it does not exist,
+`pairedPm*` keys in the tracked `.claude/kit.config.json` still screen — `init` never adds or deletes
+them — and every send that reads them carries a note that they travel. Migrate in this order: give
+every paired checkout its own `kit.pair.json`, **then** remove the tracked keys by hand in one commit;
+removing them first unpairs every checkout still reading them. A malformed pair file denies like a
+malformed config, and every such deny names the file and key that failed. In a paired checkout a
+`SendMessage` whose `to` or `recipient` is present but not a string is denied.
 
 Minimal `architectScreen` for the exact prompt `Hold chip pending Owner scope approval.` (the digest
 binds those bytes; other brief-rung sidecar fields and executed checks are still required):
@@ -465,7 +475,12 @@ contributor starts from. Mitigations, both shipped:
   goes **RED** on your standing mechanical gate rather than silently unguarded. **Wire
   `test:kit-controls` (`node --test tests/*.test.mjs`) into CI** — that is what makes FM1 loud.
 
-`--no-verify` bypasses the pre-commit hook, exactly as the PreToolUse guards are bypassable. That is an
+**The commit-msg hook (v2.35.0)** installs into the same `.githooks/` and binds the same way: a commit
+body must carry `entry: none` or `entry: class-N[,N…]` (N = 1–4), checked for presence and shape only.
+Merges and subjects starting `Merge `, `Revert "`, `fixup! `, `squash! ` or `amend! ` are exempt, which is
+also a way around it.
+
+`--no-verify` bypasses the pre-commit and commit-msg hooks, exactly as the PreToolUse guards are bypassable. That is an
 accepted class: gates are **seatbelts for cooperative-but-fallible agents, not intrusion detection**
 (`core/FOUNDATIONS.md` § Principles, Threat-model calibration). What the hook buys is that *forgetting* is caught
 while *deliberately overriding* is a visible, deliberate act.
@@ -788,6 +803,13 @@ from the upgraded branch.
 `proposed_transition.policy_version` equal to the version the recorder mints for that task: 3 when the
 task's program — or, with none, its pending child lineage — is a policy-3 lineage or tier T3,
 otherwise 4. The caller derives it; it does not choose it. A mismatch is refused as malformed.
+
+**The Principal record check (v2.35.0).** The recorder refuses an event that carries
+`principal_evidence` unless it is an object whose `authority_record` is a git-tracked regular file of
+this repository (repo-relative) and whose non-empty `decision_id` occurs in that file as a whole token
+(no letter, digit, `_` or `-` either side): `principal-authority-record-unconfirmed`. It runs at write
+time only — replay never re-reads a file that may since have changed — so a hand-written ledger row
+skips it. It proves an id is present in a tracked record, not that the record authorized the event.
 
 **Controller freeze.** No new controller feature lands without Owner approval. A change to the
 controller deletes about as much as it adds.

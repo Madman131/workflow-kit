@@ -219,15 +219,15 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
   --paired-pm-thread-id <id>
-                          checkout's one Architect-to-PM Codex send target ⇒ kit.config.json
+                          checkout's one Architect-to-PM Codex send target ⇒ kit.pair.json
                           pairedPmThreadId (optional; absent leaves ordinary sends outside scope)
   --paired-pm-claude-target <ref-or-id>
                           checkout's one Architect-to-PM Claude send target — the PM's stable
                           ListAgents [ref] or session/agent id, never its renameable title ⇒
-                          kit.config.json pairedPmClaudeTarget (optional)
+                          kit.pair.json pairedPmClaudeTarget (optional)
   --paired-pm-claude-name <name>
                           that PM's CURRENT session name, also matched (models address by bare
-                          name) ⇒ kit.config.json pairedPmClaudeName; re-set it after a rename
+                          name) ⇒ kit.pair.json pairedPmClaudeName; re-set it after a rename
   --allow-mixed-repair-controllers
                           proceed although another worktree of this repo has a different repair
                           controller installed (upgrade them all in the same step — see the refusal)

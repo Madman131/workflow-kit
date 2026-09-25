@@ -40,7 +40,8 @@
 //   · The SEND half binds Claude `…send_message`, the exact Codex app
 //     `mcp__codex_app__send_message_to_thread` tool, and Claude Code's `SendMessage`. The Codex pair
 //     is scoped by the optional `pairedPmThreadId`, the Claude pair by the optional
-//     `pairedPmClaudeTarget` (the PM's stable ref or id), both in this checkout's kit config. An
+//     `pairedPmClaudeTarget` (the PM's stable ref or id), both in this checkout's `.claude/kit.pair.json`
+//     (a v2.33-era tracked kit.config.json pair is read only where that file is absent). An
 //     absent selector means no Architect pair is configured for that lane; a `SendMessage` outside
 //     the pair is not screened (a paired checkout gets a notice saying so). Address matching is a
 //     string comparison: a PM addressed by a form that carries neither its configured ref nor id is
