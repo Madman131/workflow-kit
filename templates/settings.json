@@ -63,6 +63,17 @@
             "statusMessage": "Checking the pre-send verification rung for this dispatch\u2026"
           }
         ]
+      },
+      {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-brief-rung.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking the Architect decision screen for a paired PM send\u2026"
+          }
+        ]
       }
     ],
     "Stop": [

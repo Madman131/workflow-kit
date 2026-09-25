@@ -5,11 +5,11 @@ description: Run a program as sequential CHIPS with an active workhorse PM, desi
 
 # /orchestrate — one writer, one ladder, one GO
 
-Word budget: 1400 (**Owner-ratified 2026-08-11**; body only — the three siblings each carry their own number. **Raising it again is an Owner call.**)
+Word budget: 1400 (**Owner-ratified 2026-08-11**. **Raising it again is an Owner call.**)
+**Start:** run `init` in the target repo; route per workflow-kit README § How to start a build.
 Doctrine:
 `core/MULTI_AGENT.md` § Delegation · § Multi-writer checkout · § Task-lane declaration ·
-`core/WORKFLOW.md` § Gate · `core/REVIEW.md` § Decorrelation · `core/OWNER_COMMS.md` (Owner-facing
-formatting).
+`core/WORKFLOW.md` § Gate · `core/REVIEW.md` § Decorrelation.
 
 ## When
 For a multi-thread program with gates. One chip = one changeset = one version,
@@ -49,7 +49,7 @@ consult or a wait:** send it, name what you do meanwhile, and do it. Review avai
 ## Standing duties
 - Before PM local integration in a primary clone: clean, on the target branch, pure fast-forward; otherwise
   Principal selects reconciliation or Owner decision.
-- Surface stale worktrees, use `.agents/skills/orchestrate/PROTOCOLS.md`, and route persistent-architect
+- Surface stale worktrees and route persistent-architect
   work through `core/WORKFLOW.md` § Architectural consult routing. Keep routine CHIP progress in its
   durable record; consult only at listed triggers. Principal's Quad Mandate directs completion; PM is the single execution chain.
 

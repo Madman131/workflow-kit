@@ -62,12 +62,15 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
 On Write, Edit, MultiEdit and NotebookEdit, `.claude/settings.json` registers **three fail-closed guards** — cross-repo writes,
 lane authoring, brief rung — and **three sensors** (sweep-owed, mutation-owed, context-pressure)
 that print and never deny; on Bash **one more sensor**, the gate ladder, which surfaces the tier's
-ladder and never denies; on a Claude cross-session send, the brief-rung guard's SEND half; and on Stop
+ladder and never denies; on a Claude cross-session send, the brief-rung guard's SEND half, which on a
+`SendMessage` to the optional `pairedPmClaudeTarget` (the PM's stable ref or id, never its title) owes
+the Architect decision screen; and on Stop
 **two sensors** (Owner-comms, token ledger) that fail open. The Codex lane's generated
 `.codex/hooks.json` registers the three guards and first two sensors on `apply_patch`, the gate
 ladder on Bash, and brief-rung on the exact `mcp__codex_app__send_message_to_thread` tool. That
 send matcher covers the optional `pairedPmThreadId` in this checkout's `.claude/kit.config.json`;
-without a configured pair, ordinary Codex sends are outside this Architect-pair scope.
+without a configured pair, ordinary Codex sends are outside this Architect-pair scope. A mixed
+Claude/Codex pair has no shared send tool and runs file-only.
 Context-pressure and both Stop sensors remain Claude-only. **In the Codex lane these hooks are
 INERT until a human grants hook trust interactively; an untrusted hook is skipped SILENTLY.**
 `node scripts/check-codex-hooks-armed.mjs` probes `apply_patch` only. The paired send needs

@@ -27,6 +27,13 @@ family, model/effort, artifact, pass/scope, known preload, verdict and decorrela
 Codex build is `same-family-only`. Do not bypass host denial or loosen transport controls; return to
 Claude for the next unstarted seat when available.
 
+The mirror, for a seat concretely bound to **Codex** on a **Claude**-built change: on the same failure
+classes, record no verdict; use **{{CROSS_FAMILY_LENS}}** only if its verified binding/transport covers
+the full artifact and scope, otherwise a fresh cold **{{FRONTIER_MODEL}}** pass recorded
+`same-family-only`, never cross-family. Same preserved seat, count, free payload and receipt fields. A
+Claude lane reaches the Codex seat through `scripts/codex-gate.sh` (`init --with-gate-runners`); return
+to Codex for the next unstarted seat when available.
+
 **Frontier consult (`/frontier-review`) — role bindings:** frontier judge = **{{FRONTIER_MODEL}}**
 (the most capable, most expensive tier; judges the packet, nothing else) · workhorse =
 **{{PM_MODEL_ID}}** (builds the packet, resumes as decider) · Codex-lane frontier =
@@ -82,7 +89,10 @@ in a denial, and note that it has TWO halves with different trigger conditions.
   need a fresh verification sidecar naming this session and dispatch. The exact Codex
   `mcp__codex_app__send_message_to_thread` send to the configured `pairedPmThreadId` also needs
   that receipt and a current Architect screen; without `pairedPmThreadId`, Codex sends are outside
-  this Architect-pair scope. No repair round is involved in this half.
+  this Architect-pair scope. The Claude lane's `SendMessage` (or older ccd send) to the configured
+  `pairedPmClaudeTarget` — the PM's stable ref or id, never its title — owes the same; other
+  `SendMessage` calls are not screened, with a notice in a paired checkout. A mixed Claude/Codex pair
+  runs file-only. No repair round is involved in this half.
 - **Live only during a repair:** source writes. This half is dormant until a gate round is recorded
   — and dormancy is a state with an instructed exit, never a property. Once a round stands at NO-GO
   with disposition REMEDIATE and no ELIGIBLE recorded close, writes to the paths that repair claimed need a

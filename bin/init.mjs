@@ -18,6 +18,7 @@
 // config (blueprint § Phase 6).
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, statSync, writeFileSync,
 } from "node:fs";
@@ -47,7 +48,7 @@ const KNOWN_FLAGS = new Set([
   "--codex-prompts-dir", "--skip-codex-prompt", "--codex-cold-model", "--skip-codex-lane",
   "--pm-model", "--pm-effort", "--builder-model", "--builder-effort", "--gather-model", "--gather-effort",
   "--astra-consult-model", "--astra-consult-effort",
-  "--force", "--print-package-scripts",
+  "--force", "--print-package-scripts", "--allow-mixed-repair-controllers", "--paired-pm-claude-target",
 ]);
 
 // Flags REMOVED in a major version, kept here only to fail HELPFULLY. A removed flag is still an
@@ -117,6 +118,17 @@ function parseArgs(argv) {
       }
       out.pairedPmThreadId = v;
     }
+    else if (a === "--paired-pm-claude-target") {
+      // A Claude PM is addressed by its stable listing ref or session/agent id, which never changes
+      // when a session title is renamed. Names may contain inner spaces; line breaks and edge
+      // whitespace are refused (they could never equal a SendMessage `to`).
+      const v = next();
+      if (v.length > 300 || /[\r\n\u2028\u2029]/.test(v) || v !== v.trim()) {
+        console.error(`init: --paired-pm-claude-target requires the Claude PM's stable ref or session/agent id: one line of at most 300 characters with no leading or trailing whitespace (got ${JSON.stringify(v)})`);
+        process.exit(2);
+      }
+      out.pairedPmClaudeTarget = v;
+    }
     else if (a === "--worktree-roots") {
       // VALIDATED HERE, not at the guard alone. guard-cross-repo-writes DENIES every write on a
       // config it cannot read, so a relative entry written by this installer would hand the adopter
@@ -131,6 +143,7 @@ function parseArgs(argv) {
       out.worktreeRoots = roots;
     }
     else if (a === "--with-gate-runners") out.withGateRunners = true;
+    else if (a === "--allow-mixed-repair-controllers") out.allowMixedRepairControllers = true;
     else if (a === "--codex-prompts-dir") out.codexPromptsDir = path.resolve(next());
     else if (a === "--skip-codex-prompt") out.skipCodexPrompt = true;
     else if (a === "--codex-cold-model") {
@@ -198,6 +211,13 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --paired-pm-thread-id <id>
                           checkout's one Architect-to-PM Codex send target ⇒ kit.config.json
                           pairedPmThreadId (optional; absent leaves ordinary sends outside scope)
+  --paired-pm-claude-target <ref-or-id>
+                          checkout's one Architect-to-PM Claude send target — the PM's stable
+                          ListAgents [ref] or session/agent id, never its renameable title ⇒
+                          kit.config.json pairedPmClaudeTarget (optional)
+  --allow-mixed-repair-controllers
+                          proceed although another worktree of this repo has a different repair
+                          controller installed (upgrade them all in the same step — see the refusal)
   --worktree-roots a,b    ABSOLUTE roots where THIS repo's private worktrees live ⇒ kit.config.json
                           worktreeRoots, which guard-cross-repo-writes adds to its allowed write
                           roots. Omitted ⇒ the shipped roots only (project dir, ~/.claude, /tmp,
@@ -936,6 +956,63 @@ function isGitRepo(target) {
   } catch { return false; }
 }
 
+// MIXED-VERSION REPAIR CONTROLLERS (v2.33.1). Every worktree of a repository shares ONE repair
+// ledger (it lives in the Git common dir), and an older controller rejects the whole ledger once a
+// newer one has appended a row it does not know — which denies every tool-bound source write in the
+// older worktree, permanently, because no ledger row may be rewritten. So before this run writes
+// anything, compare the controller it is about to install with the one installed in every OTHER
+// worktree of the target. A mismatch refuses unless the operator acknowledges it; the refusal names
+// the order that upgrades them all (one worktree per run, so all but the last run need the flag).
+// The controller itself is not consulted or changed: this is a byte comparison at the one moment
+// the operator chooses to create the mix. Returns { scanned, findings, skipped, note }.
+export function mixedControllerFindings(target, kitController = path.join(KIT_ROOT, "hooks", "repair-dispatch-state.mjs")) {
+  const sha = (file) => {
+    try {
+      const st = lstatSync(file);
+      if (st.isSymbolicLink() || !st.isFile()) return "unreadable";
+      return createHash("sha256").update(readFileSync(file)).digest("hex");
+    } catch (e) { return e && e.code === "ENOENT" ? null : "unreadable"; }
+  };
+  const want = sha(kitController);
+  const top = existsSync(target) ? gitRevParse(target, "--show-toplevel") : null;
+  if (!top) return { scanned: 0, findings: [], skipped: [], note: "the target is not inside a Git work tree, so there are no sibling worktrees to compare" };
+  let raw;
+  try { raw = execFileSync("git", ["-C", target, "worktree", "list", "--porcelain"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
+  catch { return { scanned: 0, findings: [], skipped: [], note: "git could not list this repository's worktrees" }; }
+  const real = (p) => { try { return realpathSync(p); } catch { return path.resolve(p); } };
+  const self = real(top);
+  const findings = [], skipped = [];
+  let scanned = 0;
+  for (const block of raw.split(/\n\n+/)) {
+    const wt = /^worktree (.+)$/m.exec(block)?.[1];
+    if (!wt || /^bare$/m.test(block) || real(wt) === self) continue;
+    const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1] ?? "detached";
+    if (!existsSync(wt)) { skipped.push(`${wt} (directory missing — prunable; it cannot run hooks)`); continue; }
+    scanned++;
+    for (const lane of [".claude", ".codex"]) {
+      const have = sha(path.join(wt, lane, "hooks", "repair-dispatch-state.mjs"));
+      if (have === null || have === want) continue;
+      findings.push({ worktree: wt, branch, copy: `${lane}/hooks/repair-dispatch-state.mjs`,
+        installed: have === "unreadable" ? "unreadable" : have.slice(0, 12), kit: want ? want.slice(0, 12) : "unreadable" });
+    }
+  }
+  return { scanned, findings, skipped, note: null };
+}
+
+export const MIXED_CONTROLLER_FLAG = "--allow-mixed-repair-controllers";
+
+function reportMixedControllers(result, acknowledged) {
+  const lines = result.findings.map((f) =>
+    `    ${f.worktree} [${f.branch}] ${f.copy}: installed ${f.installed} ≠ this kit's ${f.kit}`);
+  const why = `Every worktree of a repository shares one repair ledger. Once any worktree records a gate round with this kit's controller, a worktree still running a different (older) controller can reject the whole ledger and is denied every tool-bound source write — and no ledger row may be rewritten to undo it.`;
+  const order = `Upgrade every listed worktree now, one after another, before any worktree records a gate round: pass ${MIXED_CONTROLLER_FLAG} on every run except the last (the last run finds no mismatch). For a worktree whose hooks are tracked, merging this upgrade into its branch is its upgrade; per-checkout .codex/hooks/ copies need init --force in that worktree. Or finish and remove the worktree instead. Never edit the ledger.`;
+  if (acknowledged) {
+    warn(`${MIXED_CONTROLLER_FLAG}: proceeding with ${result.findings.length} mismatched repair controller(s) in other worktrees of this repository:\n${lines.join("\n")}\n    ${why}\n    ${order}`);
+  } else {
+    console.error(`init: REFUSED — ${result.findings.length} other worktree controller(s) of this repository differ from the one this run would install, and nothing was written:\n${lines.join("\n")}\n  ${why}\n  ${order}`);
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
@@ -962,6 +1039,16 @@ function main() {
   {
     const targetBlocked = resolveWithoutCreating(T).blocked;
     if (targetBlocked) { console.error(`init: cannot create the target ${T}: it ${targetBlocked}`); process.exit(1); }
+  }
+  // Before the first write: refuse a mixed-controller upgrade unless acknowledged (see
+  // mixedControllerFindings). A refusal exits here, so the target is left exactly as it was.
+  {
+    const mixed = mixedControllerFindings(T);
+    if (mixed.findings.length) {
+      reportMixedControllers(mixed, args.allowMixedRepairControllers);
+      if (!args.allowMixedRepairControllers) process.exit(1);
+    }
+    for (const s of mixed.skipped) log(`  worktree skipped by the repair-controller comparison: ${s}`);
   }
   ensureDir(T);
   staleKept = [];
@@ -1595,13 +1682,14 @@ function main() {
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
   if (args.pairedPmThreadId) config.pairedPmThreadId = args.pairedPmThreadId;
+  if (args.pairedPmClaudeTarget) config.pairedPmClaudeTarget = args.pairedPmClaudeTarget;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  // The five families this file is ALLOWED to hold, each with the flag that fills it. Names and
+  // The six families this file is ALLOWED to hold, each with the flag that fills it. Names and
   // flags only: the refusal below reads this file to LIST what it holds and never to reprint what
   // is IN it (see there).
   const CFG_FAMILIES = [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
     ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"],
-    ["pairedPmThreadId", "--paired-pm-thread-id"]];
+    ["pairedPmThreadId", "--paired-pm-thread-id"], ["pairedPmClaudeTarget", "--paired-pm-claude-target"]];
   let cfgKept = false, cfgRefused = false, cfgUnreadable = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else {

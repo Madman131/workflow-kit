@@ -119,6 +119,10 @@ material* failure at all; these two fire on a `DEFER` that is individually legit
 has capacity/outage/unsupported-runtime failure, record no verdict and apply `core/REVIEW.md` §
 External gate — supported full-coverage Gemini first, otherwise cold Astra. Host denial remains held;
 the route never weakens a Gemini binding, envelope, slice, tool, identity or permission control.
+**Mirror:** on a Claude build an unavailable Codex seat (`scripts/codex-gate.sh`, installed by
+`init --with-gate-runners`) takes the same route — full-coverage Gemini first, otherwise a fresh cold
+Claude frontier pass recorded `same-family-only`, which spends the changeset's one discretionary
+frontier firing (§ Model · effort matrix).
 
 ### ⚠ GEMINI REVIEWS DESIGNS, NOT DIFFS — pick by WHO BUILT the change (Owner ruling 2026-07-28; supersedes the 2026-07-15 routing)
 

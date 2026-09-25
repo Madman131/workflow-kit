@@ -43,7 +43,9 @@ route). The PM may split prose-only commits out if a reviewer shows one is separ
 - **I3** — Every existing `kit.config.json` stays valid; `pairedPmThreadId` keeps working unchanged. A
   config written by 2.33.0 is read identically by 2.33.1.
 - **I4** — No new send is DENIED that 2.33.0 allowed, except a send to a newly configured Claude PM pair
-  (which only exists if the operator configures it).
+  (which only exists if the operator configures it) and — build delta, § 10 — a Claude send in a checkout
+  whose `kit.config.json` is malformed (the guard cannot tell which send is the PM's, so it fails closed,
+  as it already does for brief writes).
 - **I5** — Skill word budgets are not raised: `skills/architect-build/SKILL.md` ≤ 550, `ROUTING.md` ≤ 900,
   `skills/orchestrate/SKILL.md` ≤ 1400 (all three at cap today — § 5).
 - **I6** — `core/WORKFLOW.md` stays within its doc-size cap (25,600 B; it is 25,599 B at `594cb73`).
@@ -480,13 +482,16 @@ edits hook files by hand; another repository's ledger (ledgers are per Git commo
   prints the list. Option (e) is the named upgrade path.
 - **R3 (B1)** Worktrees sharing the common dir from outside `git worktree list` (manual `GIT_DIR`/
   `GIT_COMMON_DIR` setups) are invisible to the guard.
-- **R4 (P1)** Alias addressing not covered by the three match forms (e.g. a title when a session id is
-  configured, or ccd `"parent"`) bypasses the pair screen (a non-pair `SendMessage` is allowed; a non-pair ccd
-  send gets only the generic rung). Mitigation is documentation: configure and use the stable id. This is the
-  hook's existing class — "a tripwire, not a floor".
+- **R4 (P1)** Alias addressing not covered by the match forms (a bare title when a ref or id is configured,
+  or ccd `"parent"`) is outside the pair screen (a non-pair `SendMessage` is allowed; a non-pair ccd send gets
+  only the generic rung). **P5 measured that this is the model's default:** asked to message "the agent named
+  Probe PM", it wrote `to: "Probe PM"` with no ref. Mitigation (Principal D-10): the pair is keyed to the
+  stable ref/id, so a rename never switches it off for a ref-form address; and in a paired checkout every
+  unmatched `SendMessage` prints a notice naming the configured ref and the `"<name> [<ref>]"` form, so an
+  unscreened PM send is never silent. It is still unscreened — see § 10 for the fail-closed alternative.
 - **R5 (P1)** Future override fields beyond `model`/`thinking`/`effort` are not blocked (D-P1c).
-- **R6 (P5)** If P5 can capture only one of the two tools live, the other's field names remain
-  schema-derived and the release note says which.
+- **R6 (P5)** `mcp__ccd_session_mgmt__send_message` is not exposed to a headless `claude -p` session, so
+  its hook field names (`session_id`, `message`) remain schema-derived; `SendMessage`'s were observed.
 - **R7 (P4)** A same-family fallback on a Claude build has no cross-family decorrelation; it is recorded
   `same-family-only` and never reported as cross-family.
 
@@ -535,3 +540,40 @@ proposed. D-B4a: pointer in the SKILL bodies, net-zero in all three files (a cut
 rule is a STOP-and-CONSULT, not a cut). D-P5a: routed to the Architect; P5 is the last proof before freeze.
 Gemini design-gate findings F1 (B1 sequential-upgrade refusal loop) and F2 (P1 address forms) remediated
 above in § B1 steps 4–5 and tests, § P1 step 2 and tests, and § 7 R4.
+
+## 10 · Build deltas (recorded after the build; each folds into the same commit series)
+
+- **Principal requirement D-10 (session-title rename must not silently switch off the screen).**
+  `pairedPmClaudeTarget` holds the PM's stable `ListAgents` `[ref]` or session/agent id. Match forms: the
+  whole address, the content of one trailing ` [ref]` (so `"<any title> [<ref>]"` pairs after a rename),
+  or the name before it (the bare-name fallback, used only if an operator configured a name). A paired
+  checkout gets a PreToolUse notice (`additionalContext`, never a deny) on every unmatched `SendMessage`,
+  naming the configured ref and the address form that pairs. RED test: pair configured by ref, `to` carries
+  a new title with the same ref ⇒ screened (`tests/claude-pair-send.test.mjs`). **Stronger alternative, not
+  built (CONSULT at freeze):** in a paired checkout, treat an unmatched bare-name `SendMessage` as possibly
+  the PM and require a screen or the status marker. It closes R4 but costs a status marker on every other
+  Architect send, and — because `.claude/kit.config.json` is tracked — could reach a PM checkout on the
+  same branch and gate the PM's own sends to builders.
+- **P5 capture (method (a), Principal D-10).** Scratch repo adopted with the candidate; a logging
+  PreToolUse hook on `.*` (denying every send after recording it, so nothing was delivered); headless
+  `claude -p` (Claude Code 2.1.270). Observed `tool_name: "SendMessage"`; `tool_input` keys `to`, `summary`,
+  `message`, `type`, `recipient`, `content`, with `recipient` = `to` and `content` = `message`. The ccd tool
+  was not exposed. Consequences built: an address in `to` **or** `recipient` naming the PM makes it the
+  PM's send; differing `message`/`content` deny as ambiguous; `content` is read when `message` is absent.
+  The captured shape is pinned in the test. Replay of the captured payloads through the candidate's
+  installed guard: ref-form without a screen ⇒ deny; with a prompt-bound screen ⇒ allow plus a
+  `brief-rung` ledger row (target = configured ref); bare-name form ⇒ allow with the notice.
+- **Deny message wording.** `architect-status-marker-missing` said "a configured-PM Codex send"; it now says
+  "a configured-PM send" because the Claude pair reaches it. Decision unchanged (I2 holds on decisions and on
+  every `.codex/hooks.json` entry).
+- **`kit-config-malformed` and three new deny states** (`claude-pair-malformed`, `claude-send-override`,
+  `claude-prompt-missing`) name `pairedPmClaudeTarget`; the Codex-pair states are unchanged.
+- **B4 cuts, all duplicates with a named surviving home:** `orchestrate/SKILL.md` — the budget line's
+  "body only — the three siblings each carry their own number" (the checker counts the whole file), the
+  Doctrine line's `core/OWNER_COMMS.md` pointer (rule 8 is still cited at the Routing paragraph), and the
+  Standing-duties PROTOCOLS pointer (still cited under the chip cycle). `architect-build/SKILL.md` — the
+  record-contents list, whose authoritative copy is `ROUTING.md` § Lifecycle. `ROUTING.md` — "Record
+  locators." (restated by the list above it) and "Authorized execution needs no relaunch." (pinned in
+  `SKILL.md`, the loaded layer). No test-pinned sentence was cut.
+- **`tests/kit-controls-init.test.mjs`** counted `guard-brief-rung` PreToolUse registrations as 5; the new
+  `SendMessage` bucket makes it 6 (three matchers). The count assertion was updated, not removed.

@@ -1,6 +1,19 @@
 #!/usr/bin/env node
 // Record one typed repair-controller event from a JSON file. The controller computes candidate
 // identity and evidence bindings; callers do not mint trusted pointers themselves.
+//
+// TWO FIELDS A CALLER MUST SUPPLY, AND HOW TO PICK THEM (aggregate_v2 events):
+//   · `authority_route` — "owner" or "principal". Required on a `child_continuation` and inside the
+//     `proposed_transition` of the `process_review` that precedes it. "owner" carries
+//     `owner_evidence` (and no `principal_evidence`); "principal" is a bounded T2 Principal route
+//     whose process-review proposal carries NO `principal_evidence` and whose continuation carries it.
+//   · `proposed_transition.policy_version` — must EQUAL the version the recorder is about to mint for
+//     this task, or the review is refused as malformed. The caller does not choose it; it derives it:
+//     3 when the task's existing program — or, with no program, its pending child lineage — is a
+//     policy-3 lineage or tier T3; otherwise 4 (every new program is 4). The event envelope's own
+//     `policy_version` is minted by the recorder, never supplied.
+// A mismatch in either is reported as `aggregate-process-review-malformed` or
+// `aggregate-continuation-malformed`; the hint printed below names both fields.
 
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -76,6 +89,8 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
           "aggregate-root-exit-unexpected": " — only a root-kind dispatch may carry a root_exit event id; drop the field or fix the disposition's remediation kind",
           "aggregate-process-review-required": " — record a fresh aggregate_v2 process_review with the transition's exact purpose, current typed anchor, and proposed_transition; then cite its event id. Only a dispatch-purpose finish_bounded_root authorizes repair dispatch",
           "aggregate-worker-superseded": " — this session's admission was REVOKED by an Owner-evidenced worker handoff; the replacement session holds the batch now",
+          "aggregate-process-review-malformed": " — check the transition's shape, and above all the two fields callers most often get wrong: proposed_transition.policy_version must EQUAL the version this task mints (3 for a policy-3 or T3 lineage, otherwise 4), and a child_continuation proposal must carry authority_route (\"owner\" with owner_evidence, or \"principal\" with no principal_evidence yet); see this script's header",
+          "aggregate-continuation-malformed": " — check the continuation's shape, and above all authority_route: \"owner\" with owner_evidence, or \"principal\" (a bounded T2 Principal route) with principal_evidence matching the reviewed transition; see this script's header",
           "repair-history-invalid": " — the ledger's derivation failed CLOSED (a corrupt row, a hash mismatch, or a standard identity that no longer derives); this needs row-level repair, not a retry — preserve the file and inspect it",
         }[result.state] ?? (
           // The closed grammar makes the remaining two suffix classes total: shape refusals and
