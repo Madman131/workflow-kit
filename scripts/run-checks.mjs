@@ -12,7 +12,7 @@
 // its output is at the top of the log where an author reads it, rather than buried under the suite.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,13 +44,39 @@ if (userOrchestrates.some((d) => existsSync(d)) && existsSync(syncScript)) {
   RUNGS.push({ name: "orchestrate user-install parity", argv: ["scripts/sync-user-orchestrate-skill.mjs", "--check"] });
 }
 
+// CODEX TRIPWIRE (FM-2026-09-25-41). `init --force` with the Codex lane on runs the arming probe,
+// which spawns `codex exec` — a real model call and a live-tool side effect when a test reaches it.
+// A lexical check of test sources cannot see flags passed through a helper, so the suite runs with
+// a stub `codex` first on PATH: it records its argv (to a log path baked into the stub, so a test
+// that rebuilds its env still logs) and exits nonzero, so the real binary is never reached. Any
+// line but the canary's fails the run. A test that sets its own PATH without the stub is its own
+// containment (the hermetic-PATH idiom). Limit: binds `npm test` only, not `node --test <file>`.
+const trip = mkdtempSync(path.join(os.tmpdir(), "kit-codex-tripwire-"));
+const tripLog = path.join(trip, "invocations.log");
+writeFileSync(path.join(trip, "codex"), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${tripLog.replace(/'/g, "'\\''")}'\nexit 97\n`);
+chmodSync(path.join(trip, "codex"), 0o755);
+const env = { ...process.env, PATH: `${trip}${path.delimiter}${process.env.PATH ?? ""}` };
+// Dead-sensor canary: the stub must be the `codex` PATH resolves, and must log, before it guards.
+spawnSync("codex", ["kit-tripwire-canary"], { env, stdio: "ignore" });
+const tripLines = () => (existsSync(tripLog) ? readFileSync(tripLog, "utf8").split("\n").filter(Boolean) : []);
+if (!tripLines().includes("kit-tripwire-canary")) {
+  console.error("run-checks: FAIL — the codex tripwire is not live (the stub did not log its canary).");
+  process.exit(1);
+}
+
 const failed = [];
 for (const rung of RUNGS) {
   console.log(`\n──── ${rung.name} ────`);
-  const r = spawnSync(process.execPath, rung.argv, { cwd: KIT, stdio: "inherit" });
+  const r = spawnSync(process.execPath, rung.argv, { cwd: KIT, stdio: "inherit", env });
   // A rung killed by a signal reports status null — that is a failure, not a pass. Treating only
   // `status !== 0` as failure would let a segfaulted or timed-out rung read as green.
   if (r.status !== 0) failed.push(`${rung.name} (${r.status === null ? `signal ${r.signal}` : `exit ${r.status}`})`);
+}
+
+const tripped = tripLines().filter((l) => l !== "kit-tripwire-canary");
+rmSync(trip, { recursive: true, force: true });
+if (tripped.length) {
+  failed.push(`codex tripwire (${tripped.length} test invocation(s) of \`codex\`: ${[...new Set(tripped)].slice(0, 3).join(" | ")})`);
 }
 
 if (failed.length) {

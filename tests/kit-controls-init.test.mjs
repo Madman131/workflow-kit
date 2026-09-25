@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adopt } from "./kit-controls-helpers.mjs";
+import { adopt, HERMETIC_ENV } from "./kit-controls-helpers.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -342,7 +342,7 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     // No --owner-name and no family flags this time. Exit 1 since v2.16.0 (hermetic armed-check);
     // the subject is the backups, which land regardless.
     spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
-      "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--skip-codex-prompt", "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     assert.ok(existsSync(`${doc}.bak`), "--force leaves a .bak of the previous OWNER_COMMS");
     assert.match(readFileSync(`${doc}.bak`, "utf8"), /They read fast and hate preamble\./,
       "the hand-written Owner profile is recoverable, not lost");
@@ -364,7 +364,7 @@ test("init --force backs up hand-authored [G] content instead of destroying it",
     // refuse. Without it the config refusal would ALSO produce exit 1 and the assertion below
     // would no longer be attributable to the failed backup it is about.
     const r = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
-      "--repo-name", "adopter", "--skip-codex-prompt", "--force", "--source-dirs", "app"], { encoding: "utf8" });
+      "--repo-name", "adopter", "--skip-codex-prompt", "--force", "--source-dirs", "app"], { encoding: "utf8", env: HERMETIC_ENV });
     // Since v2.16.0 a refused backup is COUNTED into a nonzero exit — a mixed-version tree must
     // not read as a clean adopt (the rest of the run still completes; the exit names the state).
     assert.equal(r.status, 1, "a run containing a refused backup exits 1, never 0");

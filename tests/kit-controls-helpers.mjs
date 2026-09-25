@@ -9,6 +9,10 @@ import { fileURLToPath } from "node:url";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// `codex` OFF the PATH for an init run that reaches the post-force arming probe, which would
+// otherwise spend a real `codex exec` (FM-2026-09-25-41). node and git stay reachable.
+export const HERMETIC_ENV = { ...process.env, PATH: [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter) };
+
 // Adopt into a fresh scratch repo. Codex prompts are user-global, so ALWAYS point init at a scratch
 // dir — a test that writes to a real ~/.codex/prompts is not hermetic.
 export function adopt(extraArgs = []) {

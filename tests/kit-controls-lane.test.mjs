@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adopt } from "./kit-controls-helpers.mjs";
+import { adopt, HERMETIC_ENV } from "./kit-controls-helpers.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -195,7 +195,7 @@ test("a plain init re-run KEEPS a stale installed [P] control and FAILS, naming 
     // the Codex lane, and an unverifiable lane is a named failure, not a silent success. The
     // subject here is the byte replacement, so assert the exit contract and read the bytes.
     const forcedRun = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", dir,
-      "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
+      "--repo-name", "adopter", "--skip-codex-prompt", "--force"], { encoding: "utf8", env: HERMETIC_ENV });
     assert.equal(forcedRun.status, 1, "a hermetic forced rerun exits 1 (armed-check unverifiable)");
     assert.match(forcedRun.stdout + forcedRun.stderr, /NOT verified armed/, "…and says why");
     assert.ok(!readFileSync(installed, "utf8").startsWith(marker),

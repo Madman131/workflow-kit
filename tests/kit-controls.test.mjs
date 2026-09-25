@@ -748,7 +748,11 @@ export function initInvocationOffenders(dir) {
         }
         const call = src.slice(m.index, end);
         if (!/init\.mjs/.test(call)) continue;
-        if (/--codex-prompts-dir|--skip-codex-prompt/.test(call)) continue;
+        // A forced run with the Codex lane on reaches the arming probe's `codex exec`
+        // (FM-2026-09-25-41): it also needs --skip-codex-lane or a codex-free PATH. A hint only —
+        // the suite-level codex tripwire in scripts/run-checks.mjs is the guard.
+        const probeSafe = !/--force/.test(call) || /--skip-codex-lane|HERMETIC_(?:ENV|PATH)|PATH:/.test(call);
+        if (/--codex-prompts-dir|--skip-codex-prompt/.test(call) && probeSafe) continue;
         // The marker must be a COMMENT, on the SINGLE line directly above, carrying a reason after
         // the dash. A bare token in a string does not exempt anything, and neither does a marker
         // written for a neighbouring call: a two-line window let one marker exempt the call beneath
@@ -820,6 +824,12 @@ test("the ~/.codex/prompts guard CAN FAIL — the REAL matcher catches a leak, i
       `  spawnSync("node", [path.join(K, "bin", "${F}"), "--bad"]);\n` +
       `  spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`), 1,
       "one marker exempts ONLY the call directly beneath it — the next call must still be caught");
+    assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "--skip-codex-prompt", "--force"]);`), 1,
+      "a forced run with the Codex lane on and codex on PATH must be caught");
+    assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "--skip-codex-prompt", "--force"], { env: HERMETIC_ENV });`), 0,
+      "…but not with a codex-free PATH");
+    assert.equal(only(`spawnSync("node", [path.join(K, "bin", "${F}"), "--skip-codex-prompt", "--skip-codex-lane", "--force"]);`), 0,
+      "…nor with the Codex lane skipped");
     // discovery: a nested file and a non-.mjs extension are both in scope
     rmSync(dir, { recursive: true, force: true }); mkdirSync(path.join(dir, "support"), { recursive: true });
     plant("support/helper.cjs", `spawnSync("node", [path.join(K, "bin", "${F}"), "--owner-name", "T"]);`);
