@@ -394,7 +394,8 @@ equals the whole address, the content of one trailing ` [ref]`, or the name befo
 bare-name fallback, which only an operator who configured a name relies on). Claude Code 2.1.270 was
 observed passing `recipient` and `content` copies beside `to` and `message`: either address naming the
 PM makes it the PM's send, and two different bodies deny as ambiguous. The pair owes exactly what
-the Codex pair owes; `model`, `thinking` or `effort` in the send denies; an empty message (a pure idle
+the Codex pair owes, with the sidecar's `target` set to the configured `pairedPmClaudeTarget` value
+whatever address form the send uses; `model`, `thinking` or `effort` in the send denies; an empty message (a pure idle
 subscription) directs nothing and passes. Any other `SendMessage` is not screened — as before this
 release — but a paired checkout prints a notice saying it was not, so a renamed or mis-addressed PM send
 is never silent. A malformed kit config denies every Claude send, because it cannot say which one is the

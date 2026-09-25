@@ -32,7 +32,7 @@
   whose `to` is that id, carries that `[ref]` (under any title), or names it bare is screened exactly
   like the Codex pair (prompt-bound screen, or the `ARCHITECT_STATUS_V1` status marker; `model`,
   `thinking` or `effort` in the send is denied). The older `mcp__ccd_session_mgmt__send_message` to the
-  pair is screened too. Any other `SendMessage` is not screened, as before — but in a paired checkout
+  pair is screened too (its field names are from its schema; only `SendMessage` was observed live). Any other `SendMessage` is not screened, as before — but in a paired checkout
   it prints a notice saying so, so a mis-addressed PM send is never silent. `pairedPmThreadId` is
   unchanged.
 - **Reviewer availability route, both ways round.** A Codex code-gate seat unavailable on a
@@ -50,8 +50,8 @@
 
 **Missed in the v2.33.0 note — what v2.33.0 changed for adopters:**
 - **T3 is retired for new work.** New work declares T0, T1 or T2; a `T3` lane declaration is accepted
-  only as a historical lineage, and the lane guard, pre-commit hook and gate-ladder sensor say that a
-  `T3` self-report proves no lineage.
+  only as a historical lineage, and the lane guard, pre-commit hook and gate-ladder sensor now say that
+  `T3` requires independently proven historical lineage, which a declaration cannot supply.
 - **Required-review availability route.** Capacity, outage or an unsupported runtime is no verdict: use
   the Gemini lens when it covers the full artifact, otherwise a fresh cold Astra seat, with a recorded
   receipt (`core/REVIEW.md` § Required-review availability route; generated `BINDINGS.md`). v2.33.1
