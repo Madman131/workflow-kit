@@ -713,18 +713,33 @@ roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 
 This simplified line retains the reviewed controller from `06e449e1bd0bec920a062de3a22a46536d39295b`
 (`hooks/repair-dispatch-state.mjs` blob `e2a61115c77d99b93ac88b3141a1b19438ee3363`).
-Its finite gate ladder, recorded Principal authority, typed reviews, existing brief/worker checks,
-and historical replay remain the supported controller behavior. The current Architect-to-PM
-prompt-bound decision screen above is separate and remains active where its hook is armed.
-Owner-reserved decisions and the recorded STOP history are unchanged.
+Its finite gate ladder, recorded Principal authority, typed reviews, and active-program brief/worker
+checks remain. The Architect-to-PM prompt-bound decision screen above is separate and remains
+active where its hook is armed. Owner-reserved decisions and recorded STOP history are unchanged.
 
-The later controller extensions are deferred: permissive uncited legacy-handoff migration,
-global stopped-path reservations, Git-common cross-process writer locking, ordinary pending-child
-first-write admission, and target-wide pending/open-panel write reservations. The retained
-controller must not be described as enforcing those extra protections. A pending ordinary child
-without an existing supported dispatch is not granted a new first-write receipt by this line.
-Existing ledgers are not rewritten, and a future extension needs its own design, gate evidence,
-and cutover decision. Shell/direct filesystem writes remain outside the tool-bound write guard.
+The later permissive uncited legacy-handoff migration, global stopped/pending/open-panel path-write
+interlocks, Git-common cross-process writer lock, and ordinary pending-child first-write admission
+are deferred. This is a behavioral limit, not just an omitted receipt: for a stopped program's path
+or a pending ordinary child without an active program, the tool-bound write guard can return
+`ok: true, state: "not-repair-write"`, and its hook allows the write. The workflow still forbids
+unauthorized rework of reserved paths; an allow from this guard does not grant that authority.
+Shell/direct filesystem writes remain outside the tool-bound guard.
+
+Replay also has an upgrade limit. If an existing ledger has an uncited, nonmandatory
+`legacy_handoff` with an applicable typed review, this retained controller can silently ignore
+that row: the retired standard parent can appear active again and the child can lose its lineage.
+Do not activate this line over such a ledger. An `initial_batch` child row from the deferred line
+or a pending child lineage is likewise not an admitted first-write state in this line.
+
+Before activating each destination, read its exact Git-common repair ledger with
+`loadRepairEventsForProject`, inspect its aggregate rows, and run `derivePendingLineageBudgets`
+on those rows and the loaded standard events. Hold that destination if the
+ledger is unreadable, if it contains an affected uncited handoff, any `child_continuation` row
+carrying `initial_batch`, or any pending child lineage. Recheck immediately before that
+destination's separately authorized activation; a past snapshot is not proof of current state.
+Do not rewrite ledger rows to make this check pass. A held destination needs its own narrow
+diagnosis and decision. No integration, hook activation, live-ledger write, adopter update, or
+remote push follows from this description alone.
 
 ## `/orchestrate` (v2.3) — a portable METHOD over plumbing the kit does not ship
 
