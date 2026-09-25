@@ -238,6 +238,9 @@ this kit's. So the kit's arming path is **documentation plus a verification prob
    to `guard-lane-authoring.mjs` kept it ARMED; changing only that hook's `statusMessage` made it NOT
    ARMED until re-approved. The honest limit that follows: **an edited hook script runs WITHOUT
    re-approval**, so review a hook-script change like any other code that runs on your machine.
+   **The probe covers `apply_patch` only.** An upgrade that ADDS an entry on another matcher —
+   v2.33.0 added `mcp__codex_app__send_message_to_thread`, so every upgrade from v2.32.x — needs that
+   entry re-trusted interactively even when the check reports ARMED.
 
 **The probe observes the control, not the outcome — and that distinction is the whole design.** It
 does not ask "did the forbidden write fail?", because a write can fail for at least four reasons and

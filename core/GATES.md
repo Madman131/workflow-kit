@@ -122,7 +122,7 @@ the route never weakens a Gemini binding, envelope, slice, tool, identity or per
 **Mirror:** on a Claude build an unavailable Codex seat (`scripts/codex-gate.sh`, installed by
 `init --with-gate-runners`) takes the same route — full-coverage Gemini first, otherwise a fresh cold
 Claude frontier pass recorded `same-family-only`, which spends the changeset's one discretionary
-frontier firing (§ Model · effort matrix).
+frontier firing (§ Model · effort matrix); spent ⇒ an Owner-routed second firing.
 
 ### ⚠ GEMINI REVIEWS DESIGNS, NOT DIFFS — pick by WHO BUILT the change (Owner ruling 2026-07-28; supersedes the 2026-07-15 routing)
 

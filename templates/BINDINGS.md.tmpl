@@ -32,7 +32,9 @@ classes, record no verdict; use **{{CROSS_FAMILY_LENS}}** only if its verified b
 the full artifact and scope, otherwise a fresh cold **{{FRONTIER_MODEL}}** pass recorded
 `same-family-only`, never cross-family. Same preserved seat, count, free payload and receipt fields. A
 Claude lane reaches the Codex seat through `scripts/codex-gate.sh` (`init --with-gate-runners`); return
-to Codex for the next unstarted seat when available.
+to Codex for the next unstarted seat when available. That frontier pass spends the changeset's one
+discretionary frontier firing; if it is already spent, the fallback is a second firing and goes to the
+Owner through the Architect/PM (rule-8 form) — the existing reservation, not a new rule.
 
 **Frontier consult (`/frontier-review`) — role bindings:** frontier judge = **{{FRONTIER_MODEL}}**
 (the most capable, most expensive tier; judges the packet, nothing else) · workhorse =
@@ -127,7 +129,8 @@ a test that goes RED when `core.hooksPath` is unset, so an unconfigured clone is
   `lane-retired` state (doctrine retired at kit v1.4.0, mechanism at v1.5.0 — history:
   `core/README.md` § Provenance). Rules: `core/MULTI_AGENT.md` § Task-lane declaration.
 - **Repo-specific families** live in `.claude/kit.config.json` (`executedPathDirs`, `stateDocs`,
-  `memoryDir`, `worktreeRoots`, optional `pairedPmThreadId`) — read by their relevant guards and
+  `memoryDir`, `worktreeRoots`, optional `pairedPmThreadId`, `pairedPmClaudeTarget`,
+  `pairedPmClaudeName`) — read by their relevant guards and
   `check-doc-size`. A structurally corrupt file
   fails CLOSED in every control that reads one: it blocks a gated write, a **code-bearing** commit
   (a docs-only commit exits before the check), and `doc:size`. A legacy `laneRiskTokens` entry from a

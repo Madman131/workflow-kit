@@ -79,9 +79,11 @@ Upgrading from v2.33.0: installed mechanism files changed (`hooks/guard-brief-ru
 skills, the `core/` docs above), and the generated `.claude/settings.json` gains one `SendMessage`
 registration, so re-run `init --force` (with every kit-config family you hold, as before). Changed
 templates (`BINDINGS.md.tmpl`, `CLAUDE.md.tmpl`, `AGENTS.md.tmpl`) regenerate their files under
-`--force` with a backup; review the diff. **No Codex `.codex/hooks.json` entry changed**, so an upgraded
-Codex lane stays ARMED: run `node scripts/check-codex-hooks-armed.mjs` and re-trust only if it reports
-NOT ARMED. Claude Code reads hook settings when a session starts, so the new `SendMessage` screen binds
+`--force` with a backup; review the diff. **No Codex `.codex/hooks.json` entry changed since v2.33.0**,
+so a lane upgraded from v2.33.0 stays ARMED: run `node scripts/check-codex-hooks-armed.mjs` and re-trust
+only if it reports NOT ARMED. **Upgrading from v2.32.x: re-grant Codex hook trust interactively for the
+`mcp__codex_app__send_message_to_thread` entry v2.33.0 added — the armed check probes only
+`apply_patch`, so it cannot report that entry NOT ARMED.** Claude Code reads hook settings when a session starts, so the new `SendMessage` screen binds
 sessions started after the upgrade.
 
 ## What's new in v2.33.0 — persistent architecture, separate execution

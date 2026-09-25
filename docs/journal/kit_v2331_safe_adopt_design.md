@@ -592,3 +592,11 @@ above in § B1 steps 4–5 and tests, § P1 step 2 and tests, and § 7 R4.
   `pairedPmClaudeName`; the ref match and the notice remain. R6 (ccd field names schema-derived) stands.
   Option B (screen every unmatched bare-name send) and moving the pair out of the tracked
   `kit.config.json` into per-checkout state are filed for CHIP C. `ROUTING.md` went 900 → 898 words.
+- **Round 2 batch (panel on `d3f7052`; three PM REMEDIATE findings, one batch).** R2-1: `ROUTING.md`'s
+  existing-config instruction named only `pairedPmThreadId`; it now names both lanes' keys (and the generated
+  `BINDINGS.md` family list names the Claude keys). R2-3: the upgrade note's "no entry changed" held only from
+  v2.33.0; README and PORTABILITY now tell a v2.32.x upgrade to re-trust the send entry, which the armed check
+  (apply_patch only) cannot see. R2-2 (Principal D-15, option (a)): D-P4a stands; `core/REVIEW.md` and
+  `BINDINGS.md.tmpl` add that a spent discretionary firing makes the mirror fallback an Owner-routed second
+  firing (the existing reservation), and `core/GATES.md` adds "spent ⇒ an Owner-routed second firing". Each
+  corrected sentence is pinned in `tests/release-v2331-docs.test.mjs` and mutation-checked.

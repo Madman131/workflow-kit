@@ -13,8 +13,8 @@ accepted decisions versus pending advice; phase/CHIP; unresolved decisions with 
 program/baseline/scope, evidence, delegation/limits, stop/supersession, execution/result and
 active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
 record first; otherwise create one through normal docs/state convention and record its path.
-First adopters pass the PM's Codex `threadId` or Claude ref/id plus name via `init`.
-Existing config: set only `pairedPmThreadId` in `.claude/kit.config.json` in place; preserve
+Pair keys: Codex `pairedPmThreadId`; Claude `pairedPmClaudeTarget` (ref/id) plus `pairedPmClaudeName`.
+Set them via `init`; existing config: edit only that lane's keys in `.claude/kit.config.json` in place; preserve
 other fields and read back. Plain init preserves config. Source tasks use reviewed scoped
 runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
 Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.
