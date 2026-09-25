@@ -1,4 +1,4 @@
-# workflow-kit — v2.33.1
+# workflow-kit — v2.34.0
 
 ## How to start a build
 
@@ -11,6 +11,29 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults, no `pairedPm*` key is configured, and no send screen applies.
+
+## What's new in v2.34.0 — action flags replace T3 for new work
+
+- **Three action flags — irreversible · money/ledger · auth/credential.** Set from a change's concrete
+  effects, never its label, and a flagged change is at least T2. Each flag adds a **required**
+  cross-family lens, the frontier · xhigh gate and a named Owner GO per write (`core/WORKFLOW.md`
+  § Steer). The lens is no longer "if available" for that work: a same-family-only fallback never
+  discharges it, and with no different family seated the change is not gradable and goes to the Owner
+  (`core/REVIEW.md`). Historical T3 keeps its original depth.
+- **`core/WORKFLOW.md` states the controller's v3 exception:** a v3 or T3 program (or, with none, a v3
+  or T3 pending lineage) keeps minting v3; otherwise v4.
+- **Skill headroom.** `/orchestrate` and `/architect-build` shed duplicated text to about 85% of their
+  word budgets; each cut sentence still lives in the core doc or reference layer it duplicated. The
+  stale-worktrees duty points at `PROTOCOLS.md` again (merge-type proof, occupancy refusal).
+- **Brief template** (`CHIP_BRIEF.md` § 5): name the Builder's model and effort; every same-family seat
+  at or above it; review logs never ride in the changeset under review; a subagent Builder never holds
+  a GO — the PM pushes on the Owner's relayed GO.
+
+Upgrading from v2.33.1: only prose changed — `core/WORKFLOW.md`, `core/REVIEW.md`, `core/GATES.md`,
+`core/README.md` and the `/orchestrate` and `/architect-build` skills. Re-run `init --force` (with every
+kit-config family you hold). No hook, script or template changed, so no Codex hook re-trust is owed.
+**Port this release together with the next one (v2.35.0), never alone:** the gate-ladder hook still
+prints the T2 lens as "[if available]" until v2.35.0 updates it.
 
 ## What's new in v2.33.1 — safe adoption of v2.33, and the Claude lane's Architect screen
 

@@ -156,9 +156,11 @@ test("execution roles, legacy slice provenance, and closeout preserve their auth
   assert.match(foundations, /PM independently inspects its bytes and may commit\/integrate them, but does not replace its authoring role/);
   assert.match(foundations, /Frontier planning or a critical consult hands its approved plan to the active workhorse PM for implementation/);
   assert.match(orchestrate, /PM may inspect\/integrate Builder bytes; never author designated T2 or historical T3 source/);
-  assert.match(orchestrate, /Owner terminal children use fixed\s+authorized scope; bounded T2 Principal children use opened-only scope\. This controller-record ceiling never narrows the\s+Principal's broader delegated program authority/,
-    "Owner scope and the Principal controller-record ceiling remain distinct");
-  assert.match(orchestrate, /failed\/STOP surface stays closed.*genuinely new Owner-approved work begins separately only on disjoint surfaces.*controller binds typed `owner_decision`\/`successor` review and exact continuation proposal.*runtime model\/effort is procedure, not controller-authenticated identity/s);
+  // v2.34.0 (C-DOC O2/O3): the Owner-vs-Principal completion-child scope and the closed STOP surface
+  // left the skill body for their homes — PROTOCOLS (pinned just below) and core/WORKFLOW.md:100.
+  // The body keeps a POINTER to them and the controller-identity limit, which has no other home.
+  assert.match(orchestrate, /R4 STOP completion children: `core\/WORKFLOW\.md` § Gate and\s+`\.agents\/skills\/orchestrate\/PROTOCOLS\.md`/);
+  assert.match(orchestrate, /controller binds typed\s+`owner_decision`\/`successor` review and exact continuation proposal.*runtime model\/effort is\s+procedure, not controller-authenticated identity/s);
   assert.match(protocols, /Owner terminal children use fixed authorized scope and bounded T2 Principal children opened-only scope;\s+this controller-record ceiling never narrows the Principal's broader delegated program authority/,
     "protocols retain the Owner-versus-Principal path distinction");
   assert.match(protocols, /terminal R4 STOP.*one Owner- or T2 Principal-evidenced completion child.*Owner-authorized or Principal-opened-only paths\/proof.*one verified batch and one real final full review.*final STOP, second batch, scope growth, repeat\/reset\/relabel STOP.*failed\/STOP surface stays closed.*Genuinely new Owner-approved work starts separately only on disjoint surfaces/s);
@@ -265,7 +267,7 @@ test("the model·effort matrix names capability TIERS, not vendor model ids", ()
   // A portable kit must not bind an adopter to one vendor's lineup in a [P] doc. The matrix rows
   // are the place that regresses first, so pin the rows themselves.
   assert.match(g, /\*\*Ordinary new T2, or routine historical T3\*\*.*\|\s*\*\*workhorse · high\*\*\s*\|\s*\*\*workhorse · high\*\*\s*\|/);
-  assert.match(g, /\*\*Irreversible prod write.*\|\s*\*\*frontier · xhigh\*\*\s*\|\s*\*\*frontier · xhigh\*\*\s*\|/);
+  assert.match(g, /\*\*Action flag: irreversible · money\/ledger · auth\/credential\*\*.*\|\s*\*\*frontier · xhigh\*\*\s*\|\s*\*\*frontier · xhigh\*\*\s*\|/);
 });
 
 test("new T0/T1/T2 depth and historical T3 preserve separate action authority", () => {
@@ -276,11 +278,11 @@ test("new T0/T1/T2 depth and historical T3 preserve separate action authority", 
   const r = read("core/REVIEW.md");
   const bindings = raw("templates/BINDINGS.md.tmpl");
   assert.match(w, /\*\*T0\*\* \| pre-flight → self-check/);
-  assert.match(w, /New T3-class work gets the full normal T2 panel/);
+  assert.match(w, /New work is never T3: it is T2 plus its action flags/);
   assert.match(w, /Historical T3.*Owner obligations through closure and descendants/);
   assert.match(a, /controlling instructions are never T0/);
   assert.match(a, /controlling-doc restructure = \*\*T2\*\*/);
-  assert.match(r, /new controlling-document restructure or irreversible action receives\s+the full normal T2 panel/);
+  assert.match(r, /new\s+controlling-document restructure receives the full normal T2 panel/);
   assert.match(g, /rare cell follows the actual action, not the T2 label/);
   assert.match(o, /irreversible write requires its own GO \*\*per write\*\*/);
   assert.match(w, /unbounded production read.*Otherwise hold execution/s);
@@ -429,7 +431,8 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
 
   // ⚠ THE EXECUTION AXIS. Without this sentence the chip ships a licence to loosen a DATA gate:
   // some readers hold no code/data separation, and "gates got cheaper" reads as "all gates".
-  assert.match(w, /RULE #1 cuts REPAIRS, never review DEPTH.*frontier\/xhigh action gates and Owner GO remain/);
+  assert.match(w, /RULE #1 cuts REPAIRS, never review DEPTH.*New work is never T3: it is T2 plus its action flags/);
+  // v2.34.0: the frontier·xhigh gate and Owner GO now ride on the action flag (pinned in release-v2340-docs K1).
   assert.match(w, /irreversible: \*\*named Owner GO per write\*\*/);
 
   // The seat contract must apply the threshold WITHOUT inviting seats to self-censor: a suppressed

@@ -49,9 +49,8 @@ consult or a wait:** send it, name what you do meanwhile, and do it. Review avai
 ## Standing duties
 - Before PM local integration in a primary clone: clean, on the target branch, pure fast-forward; otherwise
   Principal selects reconciliation or Owner decision.
-- Surface stale worktrees and route persistent-architect
-  work through `core/WORKFLOW.md` § Architectural consult routing. Keep routine CHIP progress in its
-  durable record; consult only at listed triggers. Principal's Quad Mandate directs completion; PM is the single execution chain.
+- Surface stale worktrees (merge-type proof, occupancy refusal: `.agents/skills/orchestrate/PROTOCOLS.md`)
+  and route persistent-architect work through `core/WORKFLOW.md` § Architectural consult routing.
 
 ## One writer per repo
 Before writing, a chip looks for competing writers in the repo's own **lane declarations** —
@@ -61,12 +60,8 @@ only**, so it is a check, not a proof: an undeclared lane is invisible to it. Un
 into a private worktree.
 
 ## The chip cycle
-0. **RUNG ZERO — six checks before any gate** (`.agents/skills/orchestrate/RUNG_ZERO.md`): the tier
-   is **SET IN THE BRIEF, never derived by the chip** · **one changeset, one tier — split before
-   gating, into separately-gated COMMITS by default and separate CHIPS only by a named exception**
-   (§ 0.2) · a control needing a JUDGMENT is a declaration or a sensor, never a predicate · the
-   target repo's mandated rungs enumerated BY CITATION · the packet dry-run and the neighbourhood
-   sweep. Define user-visible done and its proof. **Use T1: it is the honest tier for most instruction work.**
+0. **RUNG ZERO — six checks before any gate** (`.agents/skills/orchestrate/RUNG_ZERO.md` §§ 0.1–0.6).
+   Define user-visible done and its proof.
 1. **Startup gate** — the sole-writer check, the version confirmed against the repo's real head,
    the DECLARED tier verified against the artifact, scope acknowledged back.
 2. **Budget-free rungs first.** Every deterministic check runs and is fixed BEFORE any seat is
@@ -83,19 +78,12 @@ into a private worktree.
    non-blockers to parent-linked successors. R1 permits one bounded batch unless the mechanism
    repeated; harm-bearing R2 and repeated R1 require one root kind plus a root exit with closure
    proof. R3 tests that consolidated correction. Dispatch into R4 requires a fresh frontier process
-   review: finish once, successor after terminal close, or Owner decision with no dispatch. Owner terminal children use fixed
-   authorized scope; bounded T2 Principal children use opened-only scope. This controller-record ceiling never narrows the
-Principal's broader delegated program authority; never current-chip dispatch. Every fourth gate repeats it without granting a round.
-   R4 is the final GO/STOP bookend; no R5. One R4 STOP exception child fixes Owner-authorized or Principal-opened-only paths/proof: one verified batch then one full final
-   review; parent terminal and inherited checkpoints remain. Its failed/STOP surface stays closed: final STOP, second batch,
-scope growth, reset/relabel/repeat STOP; genuinely new Owner-approved work begins separately only on disjoint surfaces. The controller binds typed
+   review: finish once, successor after terminal close, or Owner decision with no dispatch. Every fourth gate repeats it without granting a round.
+   R4 is the final GO/STOP bookend; no R5. R4 STOP completion children: `core/WORKFLOW.md` § Gate and
+   `.agents/skills/orchestrate/PROTOCOLS.md`. The controller binds typed
    `owner_decision`/`successor` review and exact continuation proposal; runtime model/effort is
    procedure, not controller-authenticated identity.
-   **Conditional on its COMPANIONS** (`core/WORKFLOW.md` § Gate): both
-   lenses; zoom-out controls disagreement; KISS; carve-outs before RULE #1. Round events:
-   `scripts/record-repair-event.mjs`. After writing a repair brief, confirm its actual bytes
-   (`confirm-repair-brief.mjs --confirm`); worker `--verify` first. The write guard
-   rechecks session, candidate, bytes and paths.
+   Round events: `scripts/record-repair-event.mjs`; repair-brief byte confirmation is CHIP_BRIEF § 5.
 6. **PM diligence.** Re-run evidence on the final head, not the summary; remote stages await fresh GO.
 
 *What every brief must carry: `.agents/skills/orchestrate/CHIP_BRIEF.md`. The incident behind each
