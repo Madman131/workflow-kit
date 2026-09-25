@@ -23,14 +23,15 @@ screen.
 **Invariants this changeset must hold.**
 - I1 · No ledger row shape changes and no replay rule changes: every ledger valid under v2.34.0
   replays identically under v2.35.0, in both directions.
-- I2 · `hooks/repair-dispatch-state.mjs` is byte-unchanged (controller freeze; also keeps `init`'s
-  mixed-controller check silent for this upgrade — see item 1).
+- I2 · `hooks/repair-dispatch-state.mjs` is byte-unchanged (controller freeze; item 1 is a
+  write-time check outside it).
 - I3 · No `.codex/hooks.json` entry changes. The registration `init` generates is byte-identical
   to v2.34.0's for the same checkout path.
 - I4 · Every new refusal fails closed with a named state or a message naming the file, the key or
   the line it wants; no new silent allow.
 - I5 · Old configuration still works: a pair held in the tracked `.claude/kit.config.json` keeps
-  screening until it is moved.
+  screening in every checkout that has no per-checkout pair file, and nothing the kit runs ever
+  deletes it.
 - I6 · No test in the suite invokes the operator's real `codex`.
 
 ## 1 · Principal record check
@@ -41,37 +42,47 @@ cite a Principal decision that does not exist and open a successor or close a pr
 Owner-delegation boundary rests on a string nothing looks at.
 
 **Mechanism (smallest).** At record time only, in `scripts/record-repair-event.mjs` `recordEvent`,
-before handing an `aggregate_v2` input to the controller: when `input.principal_evidence` is a plain
-object, `authority_record` must name a **regular, non-symlinked file inside the project root**
-(repo-relative, resolved under the real root, no `..` escape) and the file's bytes must contain
-`decision_id` as a substring. Otherwise return `{ ok: false, state:
-"principal-authority-record-unconfirmed" }`, with a CLI hint naming both fields. No schema beyond
-"file exists + id string occurs". Replay is untouched (I1): a row already in a ledger is never
-re-checked against a file that may since have moved.
+before an `aggregate_v2` input that carries a `principal_evidence` key (any value) reaches the
+controller. Refused with `{ ok: false, state: "principal-authority-record-unconfirmed" }` and a CLI
+hint naming both fields, unless all four hold:
+1. `principal_evidence` is a plain object — a string, array, number or `null` is refused here even
+   where the controller's own shape check would also refuse it downstream;
+2. `decision_id` is a string, non-empty after trimming whitespace;
+3. `authority_record` names a **git-tracked, regular, non-symlinked file of this repository**:
+   repo-relative, resolved under the real project root with no `..` escape, and
+   `git ls-files --error-unmatch -- <path>` succeeds from the project root. Tracked-only excludes
+   `.git/` internals and untracked scratch; the bytes read are the working-tree file's;
+4. `decision_id` occurs in those bytes **on a token boundary** — the characters either side of the
+   occurrence (when present) are not `[A-Za-z0-9_-]`, so `D-1` does not match inside `D-12`, while
+   `D-12.` and `(D-12)` do.
+No ID-format schema beyond that. Records are repo-only: a file outside the checkout is refused.
 
-**Why the recorder, not the controller.** The recorder is the only production caller of the
-aggregate recorders; the controller's replay grammar needs no change. Placing the check in the
-controller would change its bytes, which (a) is a controller feature under the freeze and (b) makes
-`init`'s byte-compare mixed-controller check refuse every multi-worktree adopter until all worktrees
-upgrade together — a cost this check does not need. Controller delta: **+0 / −0**. The alternative
-placement (controller dispatcher `recordAggregateEvent`, reading bytes through an optional flag on
-`readRegularRepoFile`) costs +6 / −2 controller lines and triggers that ceremony; it is listed as a
-decision in § 9.
+**Why write time, in the recorder.** The controller REPLAYS history: every hook call re-derives
+program state from all ledger rows. A replay-time check reading a mutable file would make a past
+event's validity depend on today's contents of that file — replay would stop being deterministic,
+and an edited or moved record would retroactively invalidate a program. Write time is the only place
+the check can live without that. The recorder is the write path cooperative agents use; the
+controller's grammar and bytes are unchanged. **Controller delta +0 / −0.**
 
-**RED tests** (`tests/principal-record-check.test.mjs`, importing `recordEvent`): record missing →
-refused with the named state · file present without the id → refused · symlinked record → refused ·
-`../` escape or absolute path → refused · file with the id → the controller's own result is returned
-(not the new state) · an `owner_evidence` event is unaffected. Mutation: drop the substring test →
-the "without the id" case goes GREEN-wrong.
+**RED tests** (`tests/principal-record-check.test.mjs`, importing `recordEvent`; a temp git repo
+with a committed record file): refused with the named state — `principal_evidence` as a string /
+array / `null` on the Principal route · `decision_id` `""` and `"   "` · record missing · record
+present but untracked · `.git/config` · symlinked record · `../` or absolute path · tracked record
+without the id · `D-1` against a record holding only `D-12`. Passing — tracked record containing
+`D-12.` / `(D-12)` returns the controller's own result, not the new state. An `owner_evidence` event
+is unaffected. Mutations: drop the tracked query (untracked case goes wrong), drop the boundary (`D-1`
+case), drop the trim (whitespace case), drop the plain-object test (string case reaches the
+controller and returns its state, not the named one).
 
-**Files.** `scripts/record-repair-event.mjs` (+~16). Doc: the recorder's header comment;
-`PORTABILITY.md` § The recorder's caller fields (+2 lines).
+**Files.** `scripts/record-repair-event.mjs` (+~24). Doc: the recorder's header comment;
+`PORTABILITY.md` § The recorder's caller fields (+~3 lines: tracked record, id as a token).
 
-**Residuals.** A substring match accepts an id that is a prefix of another (`D-1` inside `D-12`);
-the check proves an id is *present in a record*, not that the record authorized *this* transition.
-A direct import of the controller, or a hand-appended row, bypasses it (out of model). Records kept
-outside the repository (for example an agent memory directory) are refused; the record must be
-copied or committed into the checkout (§ 9, D1).
+**Residuals.** The check proves an id is *present as a token in a tracked record*, not that the
+record authorized *this* transition; an agent could commit a record naming its own id (visible in
+history, where the doctrine's later reader looks). A hand-written ledger row, or a direct import of
+the controller's recorders, skips the check — outside the declared threat model, since
+cooperative-but-fallible agents write through the recorder. Records kept outside the repository
+(for example an agent memory directory) must be committed into the checkout to be citable.
 
 ## 2 · commit-msg hook: an `entry:` line
 
@@ -112,7 +123,9 @@ now has two hooks).
 
 **Residuals.** `--no-verify`; forge-side merges and squash messages; a false line (by doctrine,
 nothing catches it); an adopter's first commit after `init` must carry the line (the install
-summary says so).
+summary says so). A commit can skip the check by an exempt subject prefix (`fixup! `, `squash! `,
+`amend! `, `Revert "`, `Merge `): the line is presence-only surfaced judgment, and an autosquashed
+fixup lands under a parent that carries it, so the exemptions stand.
 
 ## 3 · Pair scoping: the pair leaves the tracked config
 
@@ -127,34 +140,46 @@ it does not work with and leaves its own PM unscreened (only a notice), and merg
   naming that file and key). If it does not exist, pair keys in `kit.config.json` are still read
   (I5). Whole-file precedence, not per-key fallback: a per-key fallback would let a travelled key
   fill a gap in the local pair.
-- **Writer** (`bin/init.mjs`): `--paired-pm-*` flags write `kit.pair.json`, never `kit.config.json`.
-  `init` appends `.claude/kit.pair.json` to `.gitignore` and certifies it ignored (existing
-  `appendGitignore` + `certifyIgnored`). Existing pair file: kept without `--force`; under `--force`
-  it is rewritten from the flags only when every key it holds is named (the FM-23 refusal rule,
-  factored into one helper used by both files).
-- **Upgrade of old tracked keys.** Under `--force`, a legacy pair key in `kit.config.json` whose flag
-  is passed is **moved** (written to `kit.pair.json`, left out of the rewritten `kit.config.json`);
-  one whose flag is not passed **refuses** the run with the flag names (existing refusal). Without
-  `--force`, `init` warns that the tracked pair still works but travels, and names the command.
-  When both files hold pair keys, `init` warns that the tracked ones are ignored.
+- **Writer** (`bin/init.mjs`): `--paired-pm-*` flags write `kit.pair.json`. `init` appends
+  `.claude/kit.pair.json` to `.gitignore` and certifies it ignored (existing `appendGitignore` +
+  `certifyIgnored`). Existing pair file: kept without `--force`; under `--force` it is rewritten
+  from the flags only when every key it holds is named (the FM-23 refusal rule, factored into one
+  helper used by both files).
+- **Old tracked keys are never deleted by the kit.** `init` never adds a pair key to
+  `kit.config.json` and never removes one: under `--force` the existing FM-23 rule is unchanged —
+  a tracked pair key must be named by its flag or the run refuses, and a named one is written back
+  to `kit.config.json` exactly as today (and also to `kit.pair.json`). A fresh adopt, or a checkout
+  whose `kit.config.json` holds no pair key, gets the pair only in `kit.pair.json`.
+- **Warning, once per run.** Whenever tracked pair keys exist, `init` warns once, and the guard adds
+  one notice per hook invocation that used the tracked fallback (appended to a deny's reason, or as
+  the PreToolUse notice on an allow): the tracked pair still screens but travels on branches; give
+  every paired checkout its own `kit.pair.json` (`init --paired-pm-…`), and **only then remove the
+  tracked `pairedPm*` keys by hand** in one commit. The same order is stated in `PORTABILITY.md`.
+  With both present, `init` also says the tracked keys are ignored in this checkout.
 
 **RED tests** (extend `tests/claude-pair-send.test.mjs`, `tests/codex-guard.test.mjs`,
 `tests/init-force.test.mjs`): a pair only in `kit.pair.json` screens a matching send · a pair in
-both files screens the `kit.pair.json` target and not the tracked one · a legacy-only pair still
-screens (I5) · malformed `kit.pair.json` denies, naming the file and the key · `init
---paired-pm-claude-target X` writes `kit.pair.json`, leaves `kit.config.json` without the key, and
-`git check-ignore` confirms the ignore · `--force` over a legacy key without its flag refuses; with
-its flag, moves it · the Codex thread-send path reads the same file.
+both files screens the `kit.pair.json` target and not the tracked one · **a second checkout (linked
+worktree) holding the tracked keys and no local `kit.pair.json` stays screened**, and its allow/deny
+carries the migration notice · malformed `kit.pair.json` denies, naming the file and the key ·
+`init --paired-pm-claude-target X` on a fresh adopt writes `kit.pair.json`, adds no pair key to
+`kit.config.json`, and `git check-ignore` confirms the ignore · `--force` over a tracked key without
+its flag refuses; with its flag, the tracked key is still present afterwards and `kit.pair.json`
+holds it too · the Codex thread-send path reads the same file. Mutation: make `init` drop the tracked
+key → the "still present afterwards" case goes RED.
 
-**Files.** `hooks/guard-brief-rung.mjs` (+~18 / −~4), `bin/init.mjs` (+~28 / −~6), templates
+**Files.** `hooks/guard-brief-rung.mjs` (+~26 / −~4), `bin/init.mjs` (+~24 / −~4), templates
 `BINDINGS.md.tmpl`, `CLAUDE.md.tmpl`, `AGENTS.md.tmpl` (one clause each: the file name),
-`skills/architect-build/ROUTING.md` lines 16–17, `PORTABILITY.md` § Claude pair, `README.md`.
+`skills/architect-build/ROUTING.md` lines 16–17, `PORTABILITY.md` § Claude pair (+ the removal
+order), `README.md`.
 
-**Residuals.** A checkout without `kit.pair.json` whose tracked keys were removed by another
-checkout's migration commit is unpaired after merging it (the release note tells operators to run
-the pairing in every paired checkout, which is normally one: the Architect's). A PM rename still
-leaves the name key stale (D-11 residual, unchanged). An agent can edit the file that configures its
-own screen (out of model; unchanged from today).
+**Residuals.** **Until an operator removes the tracked keys by hand, the pair still travels on a
+branch** into any checkout that has no `kit.pair.json` — today's behaviour, now announced by the
+notice on every such send and by `init`. Removing the tracked keys before every paired checkout has
+its local file unpairs the checkouts that lack one; the documented order (local files first, then
+the one hand edit) is the only guard against that. A PM rename still leaves the name key stale (D-11
+residual, unchanged). An agent can edit the file that configures its own screen (out of model;
+unchanged from today).
 
 ## 4 · CHIP B findings carried with a harm
 
@@ -254,42 +279,36 @@ For the same packet, not core: `skills/architect-build/ROUTING.md` 16–17 · th
 string (item 6) · the new refusal/deny messages (items 1, 2, 4b, 4e) · `README.md` v2.35.0 note ·
 `PORTABILITY.md` edits.
 
-## 9 · Decisions owed before build
+## 9 · Settled design choices
 
-- **D1 · Record location (item 1).** Records must be inside the checkout. This program's own Principal
-  record lives in an agent memory directory outside the repo; under this rule it must be copied or
-  committed into the checkout to be citable. Alternative: also accept a path under `memoryDir` from
-  `kit.config.json` (+~4 lines, a second root to validate). Recommendation: repo-only.
-- **D2 · Check placement (item 1).** Recorder (controller Δ 0; no mixed-controller ceremony) versus
-  controller dispatcher (+6 / −2 controller lines; every multi-worktree adopter must upgrade all
-  worktrees together). Recommendation: recorder. This departs from the brief's "touches
-  `repair-dispatch-state.mjs`".
-- **D3 · Match strictness (item 1).** Plain substring (brief) versus a token-boundary match (same
-  line count, rejects `D-1` inside `D-12`). Recommendation: token boundary.
-- **D4 · commit-msg exemptions (item 2).** Merge, `Revert "`, `fixup!`/`squash!`/`amend!`.
-  Recommendation: as listed.
-- **D5 · FM-41 guard shape (item 4d).** Suite tripwire plus helper fix (catches helper-routed calls)
-  versus the lexical guard alone (the brief's "guard test"; blind to the observed leak).
-  Recommendation: tripwire, lexical rule kept as a hint.
+- **D1 · Record location (item 1).** Repo-only: `authority_record` is a git-tracked file of the
+  checkout. A record kept elsewhere (an agent memory directory) must be committed to be citable.
+- **D2 · Check placement (item 1).** The recorder, at write time; controller delta 0 / 0. Reason:
+  § 1 "Why write time" — replay must stay deterministic.
+- **D3 · Match strictness (item 1).** Token boundary (`[A-Za-z0-9_-]` on neither side).
+- **D4 · commit-msg exemptions (item 2).** Merge, `Revert "`, `fixup!`/`squash!`/`amend!`; the
+  prefix dodge is a declared residual (§ 2).
+- **D5 · FM-41 guard shape (item 4d).** The stub-`codex` tripwire in `scripts/run-checks.mjs` fails
+  the suite whenever any test spawns `codex` that resolves to the stub (the real binary is never
+  reached while the stub is first on `PATH`); plus the helper fix. The lexical rule stays as a hint.
 
 ## 10 · Line plan
 
 | Area | Added | Deleted |
 |---|---:|---:|
 | `hooks/repair-dispatch-state.mjs` (controller) | 0 | 0 |
-| `scripts/record-repair-event.mjs` | ~16 | 0 |
+| `scripts/record-repair-event.mjs` | ~24 | 0 |
 | `githooks/commit-msg` (new) | ~55 | 0 |
-| `bin/init.mjs` | ~57 | ~15 |
-| `hooks/guard-brief-rung.mjs` | ~29 | ~7 |
+| `bin/init.mjs` | ~53 | ~13 |
+| `hooks/guard-brief-rung.mjs` | ~37 | ~7 |
 | `hooks/guard-gate-ladder.mjs` | 2 | 2 |
 | `scripts/run-checks.mjs` | ~18 | 0 |
 | test helpers and call-site hygiene | ~10 | ~1 |
-| **Code total** | **~187** | **~25** |
-| Tests (new + extended) | ~260 | ~5 |
-| Docs (`core/WORKFLOW.md` byte-neutral, templates, ROUTING, PORTABILITY, README, VERSION) | ~45 | ~10 |
+| **Code total** | **~199** | **~23** |
+| Tests (new + extended) | ~280 | ~5 |
+| Docs (`core/WORKFLOW.md` byte-neutral, templates, ROUTING, PORTABILITY, README, VERSION) | ~50 | ~10 |
 
-Against a ~150-line code plan this is ~1.25×, under the 2× trip wire. Controller delta 0 / 0 under
-D2's recommendation; +6 / −2 under the alternative.
+Against a ~150-line code plan this is ~1.3×, under the 2× trip wire. Controller delta 0 / 0.
 
 ## 11 · Rebase over C-DOC
 
@@ -299,3 +318,5 @@ rebase; budget 779 / 900 after C-DOC), `core/WORKFLOW.md` (C-DOC does not touch 
 paragraph; C-CODE's edit is byte-neutral against C-DOC's 25,588 B). No source, test, template, hook,
 script, core or skill file is edited before C-DOC lands. The hook string (item 6) matches C-DOC's
 final row text; if C-DOC's wording changes before landing, item 6 follows it.
+
+*Revision 1: item 1 adds the plain-object, non-empty-id, tracked-file and token-boundary conditions and fixes the recorder placement with its replay reason; item 3 never deletes tracked pair keys and adds the migration notice and hand-removal order; § 9 records settled choices.*
