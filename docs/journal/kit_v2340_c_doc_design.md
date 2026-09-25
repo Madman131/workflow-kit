@@ -186,8 +186,10 @@ stalled continuation at a terminal checkpoint. The code (`hooks/repair-dispatch-
 mints 3 for a policy-3 or T3 program (or, with none, pending child lineage), else 4; the recorder
 header (`scripts/record-repair-event.mjs:10-14`) and `PORTABILITY.md:785-790` already say so.
 
-**Draft:** *"absent/v2/v3 history replays unchanged; a v3 or T3 lineage keeps minting v3; otherwise v4
-mints explicitly."* — keeps the pinned phrase `v4 mints explicitly` (`tests/release-v2331-docs.test.mjs:18`).
+**Draft (revised at STOP 1, G2):** *"absent/v2/v3 history replays unchanged; a v3 or T3 program (or,
+with none, pending lineage) keeps minting v3; otherwise v4 mints explicitly."* — exactly the code: the
+pending lineage mints v3 only when it is itself policy-3 or T3. Keeps the pinned phrase `v4 mints
+explicitly` (`tests/release-v2331-docs.test.mjs:18`).
 
 ### Item 4 — brief template, `CHIP_BRIEF.md` § 5
 
@@ -246,13 +248,13 @@ enforcement and honest-limits paragraphs (all pinned as body rules).
 | R2 | Availability paragraph (*"Within recorded Owner availability policy, Principal routes a required unavailable review … still needs Owner evidence."*) → pointer to `core/REVIEW.md` § Required-review availability route and its mirror | `core/REVIEW.md:64-80` (no verdict; Gemini then Astra; receipt; never bypass host denial; NO-GO is not unavailability; next unstarted seat); `REVIEW.md:62` (Owner-evidenced reduction) | ~−52 |
 | R3 | The enumeration after *"use the existing process-review procedure unchanged:"* (*"eligible seat, verified model/effort, … proposed action all remain required."*) | "unchanged" already binds it; the requirements live in `core/WORKFLOW.md` § Gate (fresh frontier review bound to the latest close and frozen candidate) and `core/GATES.md` | ~−20 |
 | R4 | *"defer/stop holds dependent work; escalate asks Owner;"* and *"avoid unrelated work/retries without new evidence; route unresolved reserved decisions to Owner."* | `architect-build/SKILL.md:13-14` (pinned: *"avoid unrelated work or repeated attempts without new evidence"*, *"return only unresolved reserved decisions to Owner"*, *"defer/stop holds, escalate asks Owner"*) | ~−20 |
-| R5 | *"Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception."* | `templates/BINDINGS.md.tmpl:74-75` § Enforcement asymmetry (generated `core/BINDINGS.md`) | ~−12 |
 
 **`core/`** (word budget I2 and byte cap I3)
 
 | # | Cut | Still lives |
 |---|---|---|
-| C1 | `WORKFLOW.md:60` *"Since kit v2.1 it registers in **both** lanes, but read `core/BINDINGS.md` § Enforcement asymmetry as part of that: the Codex-lane registration is inert until a human grants hook trust, and an untrusted hook is skipped silently."* → *"Lanes and hook trust: `core/BINDINGS.md` § Enforcement asymmetry."* | `templates/BINDINGS.md.tmpl:70-75`, which calls itself *"the canonical statement"*; orchestrate `SKILL.md:113-116` |
+| C1 | `WORKFLOW.md:60` *"Since kit v2.1 it registers in **both** lanes, but read `core/BINDINGS.md` § Enforcement asymmetry as part of that: the Codex-lane registration is inert until a human grants hook trust, and an untrusted hook is skipped silently."* → *"It registers in **both** lanes; a Codex-lane registration is inert until a human grants hook trust, and an untrusted hook is skipped silently."* (revised at STOP 1, G1: the rule text stays; only the pointer to a file the kit repo does not generate goes) | the rule stays in place; also `templates/BINDINGS.md.tmpl:70-75` / generated `core/BINDINGS.md` in adopters |
+| C4 | `GATES.md:292` *"An ordinary T2 review or batch GO does not authorize an irreversible live operation."* | `WORKFLOW.md:36` T2 row execution gate (*"irreversible: named Owner GO per write"*), the new flag definition (*"named Owner GO per write"*), `OPERATE.md:13` |
 | C2 | `GATES.md:289-291` (item 1 text above) | the new flag definition in `WORKFLOW.md` § Steer |
 | C3 | `RUNG_ZERO.md:75-76`, `:86` (item 1 text above) | the flag definition and row; `WORKFLOW.md:38`; `lane-declare/SKILL.md` |
 
@@ -323,6 +325,9 @@ Compliant-yet-defeating paths for item 1, each with the text that closes it:
 - **R2** — `hooks/guard-gate-ladder.mjs:125` prints the T2 ladder with *"cross-family lens [if
   available]"* and does not mention flags. Not a regression (today's doctrine says the same); see **Q4**.
 - **R3** — Adopters see none of this until CHIP D ports it; the release note names the files.
+- **R4 (binding on CHIP D, PM ruling at STOP 1)** — port C-DOC and C-CODE **together, never C-DOC alone**,
+  so no adopter carries the REQUIRED-if-flagged doctrine beside a gate-ladder hook still printing
+  "[if available]".
 
 ---
 
@@ -345,8 +350,8 @@ Compliant-yet-defeating paths for item 1, each with the text that closes it:
 | this design doc | journal | no |
 
 Word arithmetic for `core/` (drafted on a scratch copy of `e764f38`, `wc -w`-equivalent split):
-WORKFLOW 3875 → ~3850 (−25; bytes 25,599 → ~25,478, headroom 122 B) · REVIEW 3595 → ~3628 (+33 with the
-`:75` clause; bytes → ~23,720) · GATES 12853 → ~12839 (−14) · README 2319 → ~2322 (+3) · **net ≈ −3**.
+(revised at STOP 1) WORKFLOW 3875 → ~3870 (−5; bytes 25,599 → ~25,594) · REVIEW 3595 → ~3614 (+19;
+bytes → ~23,652) · GATES 12853 → ~12825 (−28, incl. C4) · README 2319 → ~2322 (+3) · **net ≈ −11**.
 The build re-measures; if the net goes positive, the fallback is a further duplicate cut in `GATES.md`
 (REFERENCE, no byte cap), named in the build delta.
 
@@ -402,3 +407,19 @@ No external gate (pure prose). Never pushed by the Builder.
   (`core/WORKFLOW.md:66` exception), which the brief's C-DOC gate shape does not have.
 - **Q5 (scope note).** `core/README.md:76` is outside the brief's touch list; the claim sweep found it
   (it states the same "[if avail]" ladder). Recommend include (+3 words).
+
+---
+
+## 11 · STOP 1 dispositions (PM, and Principal ruling D-22)
+
+Gemini design gate: NO-GO, receipt `PIL-RCPT-199cbfad00afa760f53c6a71` (artifact `bf610ba`).
+- **G1** — R1: NOTE, cut kept (it removed a forbidden mirror of `OWNER_COMMS` rule 8). C1, R5: REMEDIATE —
+  a cut must leave the rule reachable in the kit repo AND in adopters. C1 keeps its rule text (§ 4);
+  R5 is withdrawn (ROUTING keeps the sentence). Rows revised above.
+- **G2** — DECLINE Gemini's wording (a pending lineage mints v3 only when itself policy-3 or T3,
+  `repair-dispatch-state.mjs:787-791`); clause rewritten exactly to the code (item 3).
+- **G3 / Q4** — DEFER the hook string to C-CODE; residual R4 binds CHIP D.
+- **Q1** — YES (D-22): no same-family discharge under a flag; not gradable → Owner.
+- **Q2** — confirmed.
+- **Q3** — (a) (D-22): cut ~65 words of rationale-not-rule from `CHIP_BRIEF.md`; rules only move.
+- **Q5** — include `core/README.md:76`, with a mutation-checked pin (K9).
