@@ -777,10 +777,7 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T2",
     }));
-    const configFile = path.join(dir, ".claude", "kit.config.json");
-    writeFileSync(configFile, JSON.stringify({
-      ...JSON.parse(readFileSync(configFile, "utf8")), pairedPmThreadId: "pm-thread",
-    }));
+    writeFileSync(path.join(dir, ".claude", "kit.pair.json"), JSON.stringify({ pairedPmThreadId: "pm-thread" }));
     const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
     writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "pm-thread", nonce: "consult-rung", checks: OK_CHECK,

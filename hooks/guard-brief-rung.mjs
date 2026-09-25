@@ -65,6 +65,9 @@ import {
 const SIDECAR = path.join(".claude", "brief-rung.json");
 const LEDGER = path.join(".claude", "lane-ledger.jsonl");
 const KIT_CONFIG = path.join(".claude", "kit.config.json");
+// v2.35.0: the PM pair is PER-CHECKOUT, in a gitignored file, so it cannot travel on a branch.
+const PAIR_FILE = path.join(".claude", "kit.pair.json");
+const PAIR_KEYS = ["pairedPmThreadId", "pairedPmClaudeTarget", "pairedPmClaudeName"];
 const TASK_LANE = path.join(".claude", "task-lane.json");
 const WRITE_BOOTSTRAP = new Set([SIDECAR, TASK_LANE]);
 
@@ -144,45 +147,53 @@ export function repairDeclarationState(sidecar, { events, aggregateEvents = [], 
 // Absent config ⇒ portable defaults (a legitimate minimal state). Present-but-corrupt ⇒ ok:false, and
 // the caller DENIES a dispatch in scope: a corrupt brief-path set must never silently narrow the
 // scope of a control, which is a fail-open wearing a config error's clothes.
-export function loadBriefConfig(projectRoot, { readConfig } = {}) {
-  const file = path.join(projectRoot, KIT_CONFIG);
-  let raw;
-  if (readConfig) {
-    raw = readConfig(file);
-    if (raw === undefined) return { ok: true, briefPathDirs: [] };
-    if (raw === null) return { ok: false };
-  } else {
+export function loadBriefConfig(projectRoot, { readConfig, readPair } = {}) {
+  // Each read: undefined = absent, null = present but unreadable, else the text. `readPair`
+  // defaults to "absent" whenever `readConfig` is injected, so a test double for one file never
+  // answers for the other.
+  const readFile = (rel) => {
+    const file = path.join(projectRoot, rel);
     let st;
     try { st = lstatSync(file); }
-    catch (e) { if (e && e.code === "ENOENT") return { ok: true, briefPathDirs: [] }; return { ok: false }; }
-    if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
-    try { raw = readFileSync(file, "utf8"); } catch { return { ok: false }; }
-  }
-  let parsed;
-  try { parsed = JSON.parse(raw); } catch { return { ok: false }; }
-  if (!isPlainObject(parsed)) return { ok: false };
+    catch (e) { return e && e.code === "ENOENT" ? undefined : null; }
+    if (st.isSymbolicLink() || !st.isFile()) return null;
+    try { return readFileSync(file, "utf8"); } catch { return null; }
+  };
+  const parse = (raw, file) => {
+    if (raw === null) return { ok: false, file, key: null };
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { return { ok: false, file, key: null }; }
+    return isPlainObject(parsed) ? parsed : { ok: false, file, key: null };
+  };
+  const rawConfig = readConfig ? readConfig(path.join(projectRoot, KIT_CONFIG)) : readFile(KIT_CONFIG);
+  const rawPair = readPair ? readPair(path.join(projectRoot, PAIR_FILE)) : readConfig ? undefined : readFile(PAIR_FILE);
+  const parsed = rawConfig === undefined ? {} : parse(rawConfig, KIT_CONFIG);
+  if (parsed.ok === false) return parsed;
   const dirs = parsed.briefPathDirs === undefined ? [] : parsed.briefPathDirs;
-  if (!isSegmentArray(dirs)) return { ok: false };
+  if (!isSegmentArray(dirs)) return { ok: false, file: KIT_CONFIG, key: "briefPathDirs" };
   const out = { ok: true, briefPathDirs: dirs };
-  if (Object.hasOwn(parsed, "pairedPmThreadId")) {
-    const pair = parsed.pairedPmThreadId;
-    if (!nonempty(pair, 120) || /\s/.test(pair)) return { ok: false };
+  // WHOLE-FILE precedence: a local pair file is this checkout's entire pair. The tracked keys are
+  // only a fallback when it is absent — a per-key fallback would let a travelled key fill a gap.
+  const local = rawPair === undefined ? null : parse(rawPair, PAIR_FILE);
+  if (local && local.ok === false) return local;
+  const source = local ?? parsed;
+  const sourceFile = local ? PAIR_FILE : KIT_CONFIG;
+  if (Object.hasOwn(source, "pairedPmThreadId")) {
+    const pair = source.pairedPmThreadId;
+    if (!nonempty(pair, 120) || /\s/.test(pair)) return { ok: false, file: sourceFile, key: "pairedPmThreadId" };
     out.pairedPmThreadId = pair;
   }
   // The Claude-lane pair (v2.33.1): the PM's stable ListAgents `[ref]` or session/agent id. Names
   // may hold inner spaces, so unlike a Codex thread id only line breaks and edge whitespace refuse.
-  if (Object.hasOwn(parsed, "pairedPmClaudeTarget")) {
-    const pair = parsed.pairedPmClaudeTarget;
-    if (!nonempty(pair, 300) || pair !== pair.trim() || /[\r\n\u2028\u2029]/.test(pair)) return { ok: false };
-    out.pairedPmClaudeTarget = pair;
-  }
   // …and optionally the PM's CURRENT name (v2.33.1, Principal D-11): a model addresses by bare name
   // by default, so the name is matched too. It goes stale when the PM is renamed; the ref does not.
-  if (Object.hasOwn(parsed, "pairedPmClaudeName")) {
-    const name = parsed.pairedPmClaudeName;
-    if (!nonempty(name, 300) || name !== name.trim() || /[\r\n\u2028\u2029]/.test(name)) return { ok: false };
-    out.pairedPmClaudeName = name;
+  for (const key of ["pairedPmClaudeTarget", "pairedPmClaudeName"]) {
+    if (!Object.hasOwn(source, key)) continue;
+    const v = source[key];
+    if (!nonempty(v, 300) || v !== v.trim() || /[\r\n\u2028\u2029]/.test(v)) return { ok: false, file: sourceFile, key };
+    out[key] = v;
   }
+  if (PAIR_KEYS.some((k) => Object.hasOwn(out, k))) out.pairSource = local ? "local" : "tracked";
   return out;
 }
 
@@ -560,7 +571,10 @@ const RITUAL =
   `were the right ones; a shell ` +
   `write bypasses it entirely, and it is a tripwire rather than a floor.`;
 
-export function denyReason(state, { dispatch, detail } = {}) {
+export function denyReason(state, { dispatch, detail, config } = {}) {
+  // The config diagnosis names the FILE and the KEY that failed (v2.35.0): told to repair the wrong
+  // key, an operator edits a valid one and the deny persists.
+  const bad = config?.key ? `\`${config.key}\` in ${config.file}` : config?.file ? `${config.file} as a whole (not readable JSON, or not an object)` : `${KIT_CONFIG} or ${PAIR_FILE}`;
   const what = dispatch?.kind === "send"
     ? `this cross-session send to ${dispatch.target}`
     : dispatch?.kind === "source"
@@ -590,10 +604,11 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "rung-already-spent": `${SIDECAR}'s nonce has ALREADY been spent — an earlier attempt (${detail}) claimed it first, and this attempt is recorded in the trail as a refused one. One ritual authorizes ONE dispatch: a repeat to the same target is exactly the case this closes, because a re-edited brief at that path carries text the original checks never saw. Re-run the rung and write a NEW nonce.`,
     "adjudication-unreadable": `the dispatch's own attempt row could not be read back from ${LEDGER}, so it is not possible to tell whether this attempt claimed the nonce first. An unadjudicated consume is not a consume — the guard denies rather than guess. Fix that file, re-run the rung, and retry.`,
     "no-executed-check": `${SIDECAR} carries no EXECUTED check — each entry needs a non-empty \`command\` AND its captured \`output\`. A bare declaration that the checks happened is precisely the assert-without-executing defect this rung exists to stop.`,
-    "architect-pair-malformed": `${KIT_CONFIG} has a malformed configured pair or cannot be read; \`pairedPmThreadId\` must name one non-empty PM thread id without whitespace. Repair this config in place: restore the intended \`pairedPmThreadId\`, preserve other valid fields, and read it back before a Codex thread send. Removing the config or this key would disable the pair guard.`,
+    "architect-pair-malformed": `the PM pair configuration is malformed or cannot be read: ${bad}. \`pairedPmThreadId\` must name one non-empty PM thread id without whitespace. Repair that file in place: restore the intended value, preserve other valid fields, and read it back before a Codex thread send. Removing the file or the key would disable the pair guard.`,
     "architect-send-override": `this paired Architect-to-PM send carries \`model\` or \`thinking\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
     "architect-prompt-missing": `the covered Codex send has no readable string \`tool_input.prompt\`, so its decision screen cannot bind the exact message bytes.`,
-    "claude-pair-malformed": `${KIT_CONFIG} is present but MALFORMED or unreadable, so this guard cannot tell whether this Claude send goes to the configured PM (\`pairedPmClaudeTarget\`). A corrupt config must never silently narrow a control's scope. Repair it in place — \`pairedPmClaudeTarget\` is one line (at most 300 characters, no edge whitespace) naming the PM's stable ListAgents ref or session/agent id — preserve the other fields, and read it back.`,
+    "claude-pair-malformed": `the PM pair configuration is MALFORMED or unreadable (${bad}), so this guard cannot tell whether this Claude send goes to the configured PM. A corrupt config must never silently narrow a control's scope. Repair it in place — \`pairedPmClaudeTarget\` / \`pairedPmClaudeName\` are one line each (at most 300 characters, no edge whitespace), naming the PM's stable ListAgents ref or id and its current name — preserve the other fields, and read it back.`,
+    "claude-send-address-unreadable": `this SendMessage names its recipient (\`to\` or \`recipient\`) with a value that is not a string, in a checkout paired with a PM, so this guard cannot tell whether it is the PM. Address the recipient by a plain string — the PM's name, its "<name> [<ref>]" form, or its id.`,
     "claude-send-override": `this paired Architect-to-PM Claude send carries \`model\`, \`thinking\` or \`effort\` in tool_input. A status or direction message must not quietly change the PM's model or reasoning effort; make that change as a separate explicit decision and operation.`,
     "claude-prompt-missing": `the paired Claude send has no single readable string body (\`tool_input.message\`, or an equal \`content\`), so its decision screen cannot bind the exact message bytes.`,
     "architect-screen-missing": `${SIDECAR} has no current \`architectScreen\` for this PM direction. Evaluate observed evidence, no-action consequence, approved outcome, blueprint, KISS, zoom-out, root cause and cost; compare at least two routes, choose proceed/simplify/defer/stop/escalate, and state why (plus the reserved boundary for escalation). Then screen each finding HARM → REAL → SCOPE → WORTH IT with its first failed trigger. A decision with no findings still owes the action screen.`,
@@ -641,7 +656,7 @@ export function denyReason(state, { dispatch, detail } = {}) {
     "repair-worker-path-owner-conflict": `this exact source path is claimed by multiple active NO-GO repair programs. The ownership conflict fails closed; reconcile those programs before any worker writes the path.`,
     "repair-brief-changed": `the persisted repair brief no longer matches the bytes the worker verified. Restore or reconfirm the intended brief, then run \`--verify\` again before writing source.`,
     "repair-dispatch-invalid": `the exact repair dispatch could not be appended to the durable controller after nonce adjudication. No worker authority was issued.`,
-    "kit-config-malformed": `${path.join(KIT_CONFIG)} is present but MALFORMED (not valid JSON, not an object, invalid \`briefPathDirs\`, or an invalid \`pairedPmThreadId\` or \`pairedPmClaudeTarget\`). This dispatch is BLOCKED (fail-closed) — corrupt config must never silently narrow a control's scope. Repair this config in place: if this checkout is paired, restore its intended \`pairedPmThreadId\` or \`pairedPmClaudeTarget\`; preserve other valid fields and read it back. Removing a configured pair or its config would disable the pair guard.`,
+    "kit-config-malformed": `the kit configuration is present but MALFORMED: ${bad}. This dispatch is BLOCKED (fail-closed) — corrupt config must never silently narrow a control's scope. Repair that file in place: if this checkout is paired, restore its intended \`pairedPmThreadId\`, \`pairedPmClaudeTarget\` or \`pairedPmClaudeName\` (each one line; \`briefPathDirs\` is a list of plain directory names); preserve other valid fields and read it back. Removing a configured pair or its file would disable the pair guard.`,
     "ledger-error": `the dispatch was otherwise satisfied, but its audit row could not be appended to ${LEDGER} (symlinked, unreadable, a corrupt row, or a missing trailing newline). This control fails CLOSED when it cannot record a trace — re-declaring will not clear it; fix that file.`,
   }[state] ?? `sidecar state is ${state}.`;
   const base = state === "kit-config-malformed" || state === "ledger-error"
@@ -685,13 +700,28 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     const root = resolveProjectRoot(input) || cwd;
     const patchBase = resolvePatchBase(input, root);
     const config = loadBriefConfig(root);
+    // A pair read from the TRACKED config still screens (v2.35.0 keeps it, and nothing deletes it),
+    // but it travels on branches. Every send that consulted it says so ONCE — folded into a deny's
+    // reason or a notice's text, else emitted as its own notice — never as a second stdout object.
+    if (config.pairSource === "tracked" && (input?.tool_name === ARCHITECT_SEND || input?.tool_name === CLAUDE_SEND ||
+        isSendTool(input?.tool_name))) {
+      const note = `guard-brief-rung.mjs: this checkout's PM pair is read from the TRACKED ${KIT_CONFIG}, so it travels on ` +
+        `branches into other checkouts. Give every paired checkout its own gitignored ${PAIR_FILE} (init ` +
+        `--paired-pm-claude-target / --paired-pm-claude-name / --paired-pm-thread-id), and only then remove the ` +
+        `pairedPm* keys from ${KIT_CONFIG} by hand, in one commit.`;
+      let spoke = false;
+      const [baseEmit, baseNotice, baseExit] = [emit, notice, exit];
+      emit = (reason) => { spoke = true; baseEmit(`${reason}\n\n${note}`); };
+      notice = (text) => { spoke = true; baseNotice(`${text}\n\n${note}`); };
+      exit = (code) => { if (!spoke) baseNotice(note); return baseExit(code); };
+    }
 
     const dispatches = [];
     const sourceTargets = [];
     if (input?.tool_name === ARCHITECT_SEND) {
       const pair = pairedPmThreadState(config);
       if (pair.state === "malformed") {
-        emit(denyReason("architect-pair-malformed", { dispatch: { kind: "send", target: "<unreadable-destination>" } }));
+        emit(denyReason("architect-pair-malformed", { dispatch: { kind: "send", target: "<unreadable-destination>" }, config }));
         return exit(0);
       }
       if (pair.state === "configured") {
@@ -728,10 +758,16 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       // bodies make the screened bytes ambiguous, so that denies.
       const addresses = claude ? [toolInput.to, toolInput.recipient] : [dest];
       if (!config.ok) {
-        emit(denyReason("claude-pair-malformed", { dispatch: { kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" } }));
+        emit(denyReason("claude-pair-malformed", { dispatch: { kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" }, config }));
         return exit(0);
       }
       const pairTarget = config.pairedPmClaudeTarget ?? config.pairedPmClaudeName;
+      // A present address that is not a string cannot be matched, so in a paired checkout it could
+      // carry a PM direction past the screen. Deny rather than notice-allow (v2.35.0).
+      if (claude && pairTarget !== undefined && addresses.some((a) => a !== undefined && typeof a !== "string")) {
+        emit(denyReason("claude-send-address-unreadable", { dispatch: { kind: "send", target: "<unreadable-destination>" } }));
+        return exit(0);
+      }
       const pairKeys = [config.pairedPmClaudeTarget, config.pairedPmClaudeName].filter((k) => k !== undefined);
       if (pairTarget !== undefined && addresses.some((a) => pairKeys.some((k) => claudePairMatches(a, k)))) {
         if (OVERRIDE_KEYS.some((k) => Object.hasOwn(toolInput, k))) {
@@ -758,7 +794,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
         // Outside the pair — but a paired checkout is told, so a renamed or mis-addressed PM send is
         // never screened off in silence.
         if (pairTarget !== undefined) {
-          notice(`guard-brief-rung.mjs: this SendMessage to ${JSON.stringify(dest)} was NOT screened as an Architect-to-PM send — it does not match the configured PM (${pairKeys.map((k) => JSON.stringify(k)).join(" / ")} in ${KIT_CONFIG}). If it IS the PM, address it by its ref or id (for a ref: "<name> [${config.pairedPmClaudeTarget ?? "<ref>"}]"); if the PM was renamed, update pairedPmClaudeName so its new name pairs.`);
+          notice(`guard-brief-rung.mjs: this SendMessage to ${JSON.stringify(dest)} was NOT screened as an Architect-to-PM send — it does not match the configured PM (${pairKeys.map((k) => JSON.stringify(k)).join(" / ")} in ${config.pairSource === "local" ? PAIR_FILE : KIT_CONFIG}). If it IS the PM, address it by its ref or id (for a ref: "<name> [${config.pairedPmClaudeTarget ?? "<ref>"}]"); if the PM was renamed, update pairedPmClaudeName so its new name pairs.`);
         }
         return exit(0);
       } else {
@@ -793,7 +829,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
           const rel = toRepoRelative(t, root, patchBase);
           if (rel === null) continue;
           if (!INSTRUCTION_ROOT_RE.test(rel) && /\.md$/i.test(rel)) {
-            emit(denyReason("kit-config-malformed", { dispatch: { kind: "brief", target: rel } }));
+            emit(denyReason("kit-config-malformed", { dispatch: { kind: "brief", target: rel }, config }));
             return exit(0);
           }
           if (!WRITE_BOOTSTRAP.has(rel)) sourceTargets.push(rel);

@@ -979,3 +979,24 @@ test("every skip-excluded mechanism family gets the read-only stale check: runne
     assert.doesNotMatch(r.stderr, /KEPT BUT STALE/);
   } finally { cleanup(); }
 });
+
+test("a --force that CHANGES a .codex/hooks.json entry prints the explicit re-trust step; an unchanged one keeps the probe-first text", () => {
+  const { dir, run, cleanup } = adopt();   // codex lane ENABLED; codex is off PATH (hermetic)
+  try {
+    const hooksJson = path.join(dir, ".codex", "hooks.json");
+    const reg = JSON.parse(readFileSync(hooksJson, "utf8"));
+    // A v2.32.x-shaped registration: no PM thread-send entry.
+    reg.hooks.PreToolUse = reg.hooks.PreToolUse.filter((e) => e.matcher !== "mcp__codex_app__send_message_to_thread");
+    writeFileSync(hooksJson, JSON.stringify(reg, null, 2) + "\n");
+    const changed = run(["--force"]);
+    const out = changed.stdout + changed.stderr;
+    assert.match(out, /CHANGED \.codex\/hooks\.json entries/, "the changed entry is named");
+    assert.match(out, /RE-TRUST NOW: run `codex` in this repo interactively/, "…with the explicit step");
+    assert.match(out, /probes apply_patch only, so ARMED does not prove a changed entry is trusted/);
+    assert.doesNotMatch(out, /re-trust only if it reports NOT ARMED/, "no probe-first advice when an entry changed");
+    const same = run(["--force"]);
+    const out2 = same.stdout + same.stderr;
+    assert.doesNotMatch(out2, /RE-TRUST NOW/, "an unchanged registration owes no explicit re-trust");
+    assert.match(out2, /re-trust only if it reports NOT ARMED/, "…and keeps the probe-first text");
+  } finally { cleanup(); }
+});

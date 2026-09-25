@@ -128,3 +128,15 @@ test("a target outside any Git work tree is not refused", () => {
     assert.ok(existsSync(path.join(dir, "fresh", ".claude")), "adoption proceeded");
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(prompts, { recursive: true, force: true }); }
 });
+
+test("a sibling worktree whose PATH holds a newline is still read (worktree list -z), and its old controller refuses", () => {
+  const { root, wt1, prompts, cleanup } = repoWithTwoWorktrees();
+  try {
+    const odd = path.join(root, "odd\nname");
+    execFileSync("git", ["-C", wt1, "worktree", "add", "-q", "-b", "odd", odd]);
+    plant(odd, ".claude", OLD_CONTROLLER);
+    const r = init(wt1, prompts);
+    assert.notEqual(r.status, 0, "the newline-path sibling is compared, not skipped");
+    assert.match(r.stderr, /\[odd\] \.claude\/hooks\/repair-dispatch-state\.mjs/, "…and named with its branch");
+  } finally { cleanup(); }
+});
