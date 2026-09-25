@@ -29,11 +29,10 @@
   at or above it; review logs never ride in the changeset under review; a subagent Builder never holds
   a GO — the PM pushes on the Owner's relayed GO.
 
-Upgrading from v2.33.1: only prose changed — `core/WORKFLOW.md`, `core/REVIEW.md`, `core/GATES.md`,
-`core/README.md` and the `/orchestrate` and `/architect-build` skills. Re-run `init --force` (with every
-kit-config family you hold). No hook, script or template changed, so no Codex hook re-trust is owed.
-**Port this release together with the next one (v2.35.0), never alone:** the gate-ladder hook still
-prints the T2 lens as "[if available]" until v2.35.0 updates it.
+**Adopters: do not upgrade to v2.34.0 on its own.** Wait for v2.35.0 and run `init --force` once, on
+v2.35.0 (with every kit-config family you hold), because the gate-ladder hook's printed T2 ladder
+changes in v2.35.0 to match these docs. v2.34.0 changes only prose — `core/WORKFLOW.md`, `core/REVIEW.md`,
+`core/GATES.md`, `core/README.md` and the `/orchestrate` and `/architect-build` skills.
 
 ## What's new in v2.33.1 — safe adoption of v2.33, and the Claude lane's Architect screen
 

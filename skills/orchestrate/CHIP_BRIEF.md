@@ -22,11 +22,11 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
    delivery failure that did not happen.
 4. **Scope** — what ships, user-visible done, its proof, and what does NOT. Name artifacts.
-5. **Process** — ordered rungs and pre-decided skips. Aggregate repair briefs declare
+5. **Process** — ordered rungs and pre-decided skips. **Every brief names the Builder's model and
+   effort; every same-family seat runs at or above that model** (`core/REVIEW.md` peer tier). Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
    event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
-   frontier process-review ID; the Builder's model and effort by name; every same-family seat at or above that model
-   (`core/REVIEW.md` peer tier); expected **and observed** model+effort, reporting any mismatch rather
+   frontier process-review ID; expected **and observed** model+effort, reporting any mismatch rather
    than silently substituting. **Review logs never ride in the changeset under review.** **A Builder the
    Owner cannot address (a subagent) never holds a GO:** the PM pushes on the Owner's relayed GO and SHA. Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another

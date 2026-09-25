@@ -67,7 +67,13 @@ test("K10: WORKFLOW states the v3 lineage clause, derived from the controller's 
 test("K11: the brief template names the Builder's model, seats at or ABOVE it, logs out, and GO routing", () => {
   const b = flat(read("skills/orchestrate/CHIP_BRIEF.md"));
   const five = b.slice(b.indexOf("5. **Process**"), b.indexOf("6. **Standing rules**"));
-  assert.match(five, /the Builder's model and effort by name; every same-family seat at or above that model \(`core\/REVIEW\.md` peer tier\)/);
+  // R2-1: a STANDALONE sentence binding every brief, BEFORE the aggregate-repair list — inside that
+  // list it binds only repair briefs, and a first-build brief escapes it (CHIP B's sub-peer incident).
+  const rule = /(?:^|[.:—] )\*\*Every brief names the Builder's model and effort; every same-family seat runs at or above that model\*\* \(`core\/REVIEW\.md` peer tier\)\./;
+  assert.match(five, rule);
+  assert.ok(five.search(rule) < five.indexOf("Aggregate repair briefs declare"), "the rule precedes the aggregate-repair list");
+  const aggregate = five.slice(five.indexOf("Aggregate repair briefs declare"), five.indexOf("Stored standard programs"));
+  assert.doesNotMatch(aggregate, /Builder's model/, "the aggregate-repair sentence must not carry the Builder-model rule");
   assert.match(five, /\*\*Review logs never ride in the changeset under review\.\*\*/);
   assert.match(five, /\*\*A Builder the Owner cannot address \(a subagent\) never holds a GO:\*\* the PM pushes on the Owner's relayed GO and SHA/);
 });
@@ -104,4 +110,12 @@ test("K13: no shipped surface still grants new work an optional lens under the r
   };
   for (const root of ["core", "skills", "templates"]) walk(root);
   assert.deepEqual(offenders, []);
+});
+
+test("R2-2: the v2.34.0 upgrade note tells adopters to wait for v2.35.0 and run init --force once, there", () => {
+  const readme = read("README.md");
+  const note = flat(readme.slice(readme.indexOf("## What's new in v2.34.0"), readme.indexOf("## What's new in v2.33.1")));
+  assert.match(note, /\*\*Adopters: do not upgrade to v2\.34\.0 on its own\.\*\* Wait for v2\.35\.0 and run `init --force` once, on v2\.35\.0/);
+  assert.match(note, /because the gate-ladder hook's printed T2 ladder changes in v2\.35\.0/);
+  assert.doesNotMatch(note, /Re-run `init --force`/, "no instruction to upgrade to v2.34.0 alone");
 });
