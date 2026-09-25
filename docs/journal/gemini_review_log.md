@@ -4595,3 +4595,59 @@
     
     INSPECTED SCOPE: Entire design spec (`docs/journal/kit_v2331_safe_adopt_design.md` lines 1-177), invariants (`core/INVARIANTS.md`), and RED tests mapping.
     PIL-DONE-f0ef765aded004c5402ecb74
+
+## Gemini gate attempt — PASS_VERDICT — 2026-09-25T18:47:58Z
+
+- Status: `PASS_VERDICT`
+- Attempt-ID: `PIL-GATE-1790361974-95248-3184121608`
+- Record-Kind: `FULL_REVIEW`
+- Release-Gate: `YES`
+- Delivery: `INLINE`
+- Bytes: raw_payload=41910; instrumented_payload=42063; inline_combined=45880; file=42136
+- Ingestion proof: EOF receipt + 3 distributed random canary token(s)
+- Model: Gemini 3.1 Pro (High)
+- Context/design: design:docs/journal/kit_v2340_c_doc_design.md
+- HEAD: `bf610bac9b612625fb1e6c90e46266ce8c15f830`
+- Artifact-Base: `585e6f38488f43aa6d5a30a2a66a58d6452932c9`
+- Artifact-SHA: `bf610bac9b612625fb1e6c90e46266ce8c15f830`
+- Artifact-Ref: `refs/pil/gate-artifacts/bf610bac9b612625fb1e6c90e46266ce8c15f830`
+- Artifact-Worktree: `detached`
+- Gate-Verdict: `NO-GO`
+- Inspected-Scope: INSPECTED SCOPE: Entirety of docs/journal/kit_v2340_c_doc_design.md including Invariants, §1-10, Draft Wordings, and Cut Lists.
+- Start: 2026-09-25T18:46:14Z
+- End: 2026-09-25T18:47:58Z
+- Slice: (none; full artifact)
+
+### Verified review verdict
+
+    PIL-RCPT-199cbfad00afa760f53c6a71
+    CANARIES: PIL-INGEST-013b9d79c529 PIL-INGEST-0205597e312a PIL-INGEST-03db36c8ba58
+    
+    Here are the critical blind spots and vulnerabilities missed in previous reviews, ranked by severity:
+    
+    ### 1. BLOCKER — INVARIANT VIOLATION & COMPLETENESS GAP
+    **Section:** § 4 Cut list (C1, R1, R5)
+    **Failure scenario:** The design cuts the definitions for the Owner authorization form (R1), exact-send proof (R5), and hook trust rules (C1) from the kit's portable docs (`ROUTING.md`, `WORKFLOW.md`). It delegates these definitions to `core/OWNER_COMMS.md` and `core/BINDINGS.md`. However, the repository invariants explicitly state that these generated identity files **never exist** in the `workflow-kit` template repository itself. When an agent acts as Principal within the `workflow-kit` repo (which "BUILDS with the method"), it will attempt to read these non-existent files to find the rules. It will either fail closed (deadlocking kit development) or hallucinate the missing rules.
+    **Why it matters:** It violates the core invariant that "This repository BUILDS with the method." The method becomes un-executable on itself because its operational rules have been moved to files that the repository is explicitly banned from containing.
+    **Fix:** Do not cut these definitions from the portable method files. Retain the literal rule definitions in `ROUTING.md` and `WORKFLOW.md`.
+    
+    ### 2. HIGH — MECHANISM CORRECTNESS / CONTRACT DRIFT
+    **Section:** § 3 Item 3 — `core/WORKFLOW.md:100`, the v3 lineage clause
+    **Failure scenario:** The drafted documentation states: *"absent/v2/v3 history replays unchanged; a v3 or T3 lineage keeps minting v3; otherwise v4 mints explicitly."* However, the design doc openly acknowledges that the underlying code (`hooks/repair-dispatch-state.mjs:787-791`) actually mints v3 for a "pending child lineage" with no policy as well. A reviewer verifying a pending child lineage against the new `WORKFLOW.md` contract will see "otherwise v4 mints explicitly", conclude the code is violating the contract by minting v3, and incorrectly reject the valid operation.
+    **Why it matters:** Contract-vs-design drift. The stated design draft fails to accurately document a critical branch of the underlying code it claims to summarize, manufacturing false-FAIL checks by reviewers.
+    **Fix:** Update the draft wording to match the code's reality exactly: *"absent/v2/v3 history replays unchanged; a v3, T3, or pending child lineage keeps minting v3; otherwise v4 mints explicitly."*
+    
+    ### 3. MEDIUM — INTER-SECTION CONTRADICTION / DEPLOY ORDERING
+    **Section:** § 7 Residuals (R2) & § 10 Q4
+    **Failure scenario:** The design introduces a strict new policy that flagged changes REQUIRE a cross-family lens (`core/WORKFLOW.md` § Steer). However, it defers updating the deterministic `guard-gate-ladder.mjs` hook's printed output to a future C-CODE release (Q4). In the interim, when an agent processes a flagged change, the hook will continue printing the T2 ladder as `cross-family lens [if available]`. The agent, reading this deterministic checklist, will likely trust the hook's output, treat the lens as optional, and ship flagged changes without it.
+    **Why it matters:** It manufactures a compliance gap where the system's own tooling directly contradicts the new binding policy, encouraging agents to skip a REQUIRED safety control. A dormant or misleading control is worse than no control.
+    **Fix:** Do not defer the hook string update. Include the one-line string change to `guard-gate-ladder.mjs` in this PR and accept the Codex code gate requirement, OR add a temporary instruction to the review prompt explicitly instructing agents to override the hook's `[if available]` output for flagged changes until C-CODE ships.
+    
+    ***
+    
+    **OVERALL DISPOSITION:**
+    The design correctly hardens the cross-family lens requirements for flagged changes, but breaks the kit's ability to self-build by moving operational rules to non-existent files. The single highest-risk thing to resolve first is the § 4 Cut List (C1, R1, R5) moving rules into `OWNER_COMMS.md` and `BINDINGS.md`.
+    
+    VERDICT: NO-GO
+    INSPECTED SCOPE: Entirety of docs/journal/kit_v2340_c_doc_design.md including Invariants, §1-10, Draft Wordings, and Cut Lists.
+    PIL-DONE-0ce4ae73504581e0be876e58
