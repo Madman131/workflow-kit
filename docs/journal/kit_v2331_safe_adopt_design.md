@@ -98,10 +98,14 @@ recorded as the upgrade path if byte-only controller patches become common.
 3. Compare each hash with the kit's own `hooks/repair-dispatch-state.mjs` (the bytes `init` would install).
    Any mismatch, or any present-but-unreadable file, is a **mixed-controller finding**.
 4. With ≥1 finding and no acknowledgement flag: print every finding (worktree path, branch or `detached`,
-   which copy, first 12 hex of its hash vs the kit's), the harm in one sentence, and the remedy — *upgrade
-   every listed worktree in the same step (merge the upgrade commit into its branch, or re-run `init --force`
-   there for per-checkout `.codex/hooks/` copies), or finish/remove it, before any worktree records a gate
-   round* — then **exit nonzero with nothing written**.
+   which copy, first 12 hex of its hash vs the kit's), the harm in one sentence, and the remedy — then
+   **exit nonzero with nothing written**. The remedy is an ORDER, because `init` upgrades one worktree per
+   run and each not-yet-upgraded worktree would otherwise refuse on the others (a sequential upgrade would
+   loop): *upgrade every listed worktree now, one after another, before any worktree records a gate round —
+   pass `--allow-mixed-repair-controllers` on every run except the last (the last run finds no mismatch);
+   for tracked hooks, merging the upgrade commit into a worktree's branch is that worktree's upgrade;
+   per-checkout `.codex/hooks/` copies need `init --force` there; or finish/remove the worktree instead.*
+   The refusal text names the flag verbatim.
 5. New flag **`--allow-mixed-repair-controllers`** (name open to the PM): proceeds, and prints the same list
    as a WARN so the acknowledgement is visible in the run's output. The flag is added to the known-flag
    table (`bin/init.mjs:46`) so the value-parsing guard treats it correctly.
@@ -122,6 +126,11 @@ recorded as the upgrade path if byte-only controller patches become common.
 - second worktree carries identical bytes ⇒ proceeds.
 - second worktree has no controller ⇒ proceeds.
 - differing bytes + `--allow-mixed-repair-controllers` ⇒ proceeds and prints the WARN list.
+- the refusal's stderr names `--allow-mixed-repair-controllers` verbatim (mutation: drop the flag from the
+  message ⇒ red).
+- **sequential upgrade** (Gemini design-gate F1): two worktrees both carrying an older controller; `init` in
+  wt1 with the flag ⇒ succeeds; `init` in wt2 without the flag ⇒ succeeds (wt1 now matches); a run without the
+  flag while wt2 is still old ⇒ refuses naming the flag.
 - the second worktree's directory deleted (prunable) ⇒ proceeds with a skip note.
 - a symlinked controller in the second worktree ⇒ refused (unreadable ⇒ finding).
 Each assertion is struck-phrase-checked (PROTOCOLS § Evidence: a pin is real only if mutating the guard
@@ -261,8 +270,10 @@ PM with no screen at all.
    the guard would run twice on every `*send_message` call, and the brief-rung receipt is single-use, so the
    second run could deny a correctly verified send. A separate bucket adds exactly one bucket on upgrade.
 2. `hooks/guard-brief-rung.mjs`: a Claude-pair branch beside the Codex one. Resolve the Claude pair from
-   config (P2). For `SendMessage`: destination = `to` with one trailing ` [ref]` suffix removed; prompt =
-   `message`. For `mcp__ccd_session_mgmt__send_message`: destination = `session_id`; prompt = `message`.
+   config (P2). For `SendMessage`: the send is **to the pair** if ANY of these equals the configured target —
+   the whole `to` string; `to` with one trailing ` [ref]` suffix removed; or the content inside that trailing
+   bracket (Gemini design-gate F2: a mismatch fails open, so the match takes every form the address can carry).
+   Prompt = `message`. The real `to` forms observed in the P5 capture are pinned in a test. For `mcp__ccd_session_mgmt__send_message`: destination = `session_id`; prompt = `message`.
    - Destination equals the configured Claude pair ⇒ identical handling to the Codex pair: deny if
      `tool_input` has `model`, `thinking` or `effort`; deny if the prompt is not a string; otherwise push the
      dispatch `{kind: "send", target, architectPrompt: prompt}` into the existing sidecar/screen path
@@ -287,7 +298,8 @@ PM with no screen at all.
 **RED tests (in `tests/brief-rung.test.mjs`, which CHIP A does not split — re-verify after rebase).**
 With a Claude pair configured: `SendMessage` to the pair, unscreened direction ⇒ deny (RED at `594cb73`:
 the hook's `SendMessage` path allows); screened direction with a valid sidecar ⇒ allow; `ARCHITECT_STATUS_V1`
-status ⇒ allow with a status receipt; `to: "<pair> [abc123]"` ⇒ treated as the pair; `model`/`thinking`/
+status ⇒ allow with a status receipt; `to: "<pair>"`, `to: "<pair> [abc123]"` and `to: "<name> [<pair>]"` ⇒ each treated as
+the pair; `to: "<other> [abc123]"` ⇒ not the pair; `model`/`thinking`/
 `effort` present ⇒ deny; `SendMessage` to another name ⇒ allow; ccd send to the pair unscreened ⇒ deny; ccd
 send elsewhere ⇒ generic rung exactly as before. Settings: the shipped template has a `SendMessage` bucket;
 merging the 2.33.1 template into a 2.33.0-generated `settings.json` yields exactly one bucket per matcher and
@@ -468,7 +480,8 @@ edits hook files by hand; another repository's ledger (ledgers are per Git commo
   prints the list. Option (e) is the named upgrade path.
 - **R3 (B1)** Worktrees sharing the common dir from outside `git worktree list` (manual `GIT_DIR`/
   `GIT_COMMON_DIR` setups) are invisible to the guard.
-- **R4 (P1)** Alias addressing bypasses the pair screen (a non-pair `SendMessage` is allowed; a non-pair ccd
+- **R4 (P1)** Alias addressing not covered by the three match forms (e.g. a title when a session id is
+  configured, or ccd `"parent"`) bypasses the pair screen (a non-pair `SendMessage` is allowed; a non-pair ccd
   send gets only the generic rung). Mitigation is documentation: configure and use the stable id. This is the
   hook's existing class — "a tripwire, not a floor".
 - **R5 (P1)** Future override fields beyond `model`/`thinking`/`effort` are not blocked (D-P1c).
@@ -516,3 +529,9 @@ edits hook files by hand; another repository's ledger (ledgers are per Git commo
 | D-P4a | Frontier fallback vs the one-firing cap | counts against the cap |
 | D-P5a | Who opens the P5 sessions | try headless first; else PM/Owner opens two scratch Desktop sessions |
 | D-T | Tier purity | one T2 changeset (prose documents the controls) unless a reviewer shows a separable prose commit |
+
+**PM rulings (2026-09-25):** D-B1a, D-B1b, D-B2a, D-P1a, D-P1b, D-P1c, D-P2a, D-P4a and D-T confirmed as
+proposed. D-B4a: pointer in the SKILL bodies, net-zero in all three files (a cut that would remove a binding
+rule is a STOP-and-CONSULT, not a cut). D-P5a: routed to the Architect; P5 is the last proof before freeze.
+Gemini design-gate findings F1 (B1 sequential-upgrade refusal loop) and F2 (P1 address forms) remediated
+above in § B1 steps 4–5 and tests, § P1 step 2 and tests, and § 7 R4.
