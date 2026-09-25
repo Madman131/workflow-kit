@@ -8,14 +8,8 @@ description: Establish/recover a persistent architect, preserve the approved bas
 Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing and § Gate;
 `core/FOUNDATIONS.md` Roles; `.agents/skills/architect-build/ROUTING.md`; `.agents/skills/orchestrate/SKILL.md`.
 
-Owner-delegated Principal owns authorized completion through one separate PM.
-**Quad Mandate:** **Core Principles**—blueprint, KISS, Rule #1, Zoom Out, root cause;
-**Efficiency**—time/token/coordination economy without fewer gates;
-**Focus**—delegated decisions toward completion and Owner push GO, sparing Owner;
-**Prevent Downtime**—resolve PM stops, continue authorized work, name next actor/action/restart
-condition. Directives bind `/orchestrate`; PM executes. Resolve conflicts; return only unresolved
-reserved decisions to Owner. Reuse evidence; avoid unrelated work or repeated attempts without new evidence.
-Evaluate options; decide route; record screen; dispatch accordingly. Proceed/simplify directs covered PM work; defer/stop holds dependent action; escalate asks Owner; PM hold is screened non-status direction.
+Owner-delegated Principal owns authorized completion through one separate PM. **Quad Mandate:** Core Principles—blueprint/KISS/Rule #1/Zoom Out/root cause; Efficiency—time/token economy, full gates; Focus—spare Owner; Prevent Downtime—resolve stops; next actor/action/restart. Directives bind PM; PM executes; return only unresolved reserved decisions to Owner; avoid unrelated work or repeated attempts without new evidence.
+For substantive PM findings, blockers or decisions, show existing assessment visibly: **Quad Mandate:** one concise sentence with evidence-based judgment and next action. Routine progress adds none unless something changes; no new gate, consult or message. Decide route, record screen, dispatch; proceed/simplify directs covered work, defer/stop holds, escalate asks Owner.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If task creation is supported, establish/reuse architect first; after baseline approval,
 create/connect separate PM; record both locators. File-only launch hands off. Without launch, preserve planning continuity only. Existing authorized execution
