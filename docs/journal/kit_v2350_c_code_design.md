@@ -212,26 +212,24 @@ today's "only if it reports NOT ARMED" line. Files: `bin/init.mjs` (+~10 / −~3
 
 **4d · FM-41 — the suite never runs the operator's `codex`.** Harm: tests that run `init --force`
 with the Codex lane enabled and `codex` on `PATH` make `init`'s arming probe call the real
-`codex exec` — spend and a live-tool side effect from `npm test`. Observed live on this machine on
-2026-09-25 at 14:57 EDT: a `codex exec … -C …/kit-adopt-…` process spawned by `bin/init.mjs` from a
-suite run, via the shared `adopt()` helper in `tests/kit-controls-helpers.mjs`. A lexical guard on
-`spawnSync`/`execFileSync` call text cannot see flags passed through a helper, so it would not have
-caught that process. Mechanism, containment first:
-- `scripts/run-checks.mjs` puts a stub `codex` first on `PATH` for the suite rung. The stub appends
-  its argv to a log named by an environment variable and exits nonzero. Before the rung, the runner
-  calls the stub once with a sentinel and checks the log shows it (dead-sensor canary); after the
-  rung, any non-sentinel line fails the run, naming the count. Tests that override `PATH`
-  (`init-force.test.mjs`'s hermetic `PATH`) are unaffected.
-- Fix the leaks it finds: `adopt()` in `tests/kit-controls-helpers.mjs` runs `init` with codex off
-  `PATH` (the `HERMETIC_PATH` idiom `init-force.test.mjs` already uses); the eight direct call sites
-  that pass `--force` without `--skip-codex-lane` get `--skip-codex-lane` unless they test the lane,
-  in which case they take the hermetic `PATH`.
+`codex` — spend and a live-tool side effect from `npm test`. A lexical guard on call text cannot see
+flags passed through a helper. Mechanism, containment first:
+- `scripts/run-checks.mjs` puts a stub `codex` first on `PATH` for every rung. The stub appends its
+  argv to a log whose path is baked into the stub (so a test that rebuilds its env still logs) and
+  exits nonzero, so the real binary is never reached. Before the rungs, the runner calls the stub once
+  with a sentinel and refuses to run unless the log shows it (dead-sensor canary); after the rungs,
+  any non-sentinel line fails `npm test`, naming the count. Tests that set their own codex-free `PATH`
+  are their own containment.
+- The tripwire located the reaching call sites: eight direct `init --force` calls in four test files.
+  They now run with a codex-free `PATH` (`HERMETIC_ENV`, exported by `tests/kit-controls-helpers.mjs`,
+  the same idiom `init-force.test.mjs` uses), which keeps their "armed check unverifiable ⇒ exit 1"
+  assertions true.
 - The lexical guard `initInvocationOffenders` gains one rule (a direct call with `--force` carries
-  `--skip-codex-lane` or a hermetic `PATH`), as a fast in-file hint; the tripwire is the guard.
-RED: with the tripwire and without the helper fix, `npm test` fails naming the invocations; after
-the fix, zero. Honest limit: the tripwire binds `npm test` only; `node --test <file>` runs without
-it. Files: `scripts/run-checks.mjs` (+~18), `tests/kit-controls-helpers.mjs` (+2 / −1), eight test
-call sites (+8), `tests/kit-controls.test.mjs` (+~6).
+  `--skip-codex-lane` or a codex-free `PATH`), as a fast in-file hint; the tripwire is the guard.
+RED: with the tripwire and before the call-site fix, `npm test` fails naming the invocations; after
+it, zero. Limit: the tripwire binds `npm test` only; `node --test <file>` runs without it. Files:
+`scripts/run-checks.mjs`, `tests/kit-controls-helpers.mjs`, the eight call sites,
+`tests/kit-controls.test.mjs`.
 
 **4e · The malformed-config message names the key that is wrong.** Harm: `claude-pair-malformed`
 always names `pairedPmClaudeTarget`, and `kit-config-malformed` never names `pairedPmClaudeName`; an
@@ -258,10 +256,10 @@ flagged]". `hooks/guard-gate-ladder.mjs` still prints "cross-family lens [if ava
 ladder surfaced at every gate invocation tells an agent the lens is optional on an action-flagged
 change.
 
-**Mechanism.** One string: `cross-family lens [if available; REQUIRED if action-flagged]`. The hook
+**Mechanism.** One string, copied exactly from the landed `core/WORKFLOW.md` T2 row: `cross-family lens [if avail; REQUIRED if flagged]`. The hook
 cannot know flags; the string carries the condition, as the doctrine row does. The comment above
 `LADDER` names § Steer (where the table now lives). RED: a T2 declaration plus a gate command →
-the surfaced ladder contains `REQUIRED if action-flagged`. Files: `hooks/guard-gate-ladder.mjs`
+the surfaced ladder contains the clause read from the WORKFLOW.md T2 row itself. Files: `hooks/guard-gate-ladder.mjs`
 (+1 / −1, comment +1 / −1), `tests/kit-controls-lane.test.mjs` (+~6).
 
 ## 7 · Codex hook trust
@@ -320,3 +318,4 @@ script, core or skill file is edited before C-DOC lands. The hook string (item 6
 final row text; if C-DOC's wording changes before landing, item 6 follows it.
 
 *Revision 1: item 1 adds the plain-object, non-empty-id, tracked-file and token-boundary conditions and fixes the recorder placement with its replay reason; item 3 never deletes tracked pair keys and adds the migration notice and hand-removal order; § 9 records settled choices.*
+*Revision 2: after rebasing on the landed C-DOC, item 6 uses the landed T2 row's clause verbatim; item 4d names the call sites the tripwire located.*
