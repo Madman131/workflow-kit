@@ -2518,6 +2518,111 @@ test("M29: the lineage budget binds EVERY round — an outside-budget first open
   } finally { ctx.cleanup(); }
 });
 
+test("Principal ordinary child can verify an exact first batch and reach its first panel", () => {
+  const ctx = repo();
+  try {
+    const candidate = commit(ctx.dir, 1);
+    const panel = openPanel(ctx, 1, candidate);
+    assert.equal(panel.opened.ok, true, panel.opened.state);
+    const closed = closePanel(ctx, panel, candidate, ["F1"]);
+    assert.equal(closed.ok, true, closed.state);
+    const stopped = decide(ctx, closed, { accepted: ["F1"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    const brief = path.join(ctx.dir, "briefs/principal.md");
+    writeFileSync(brief, "Principal-bound child work\n");
+    const child = { task_id: "principal-child", changeset_id: "principal-child-cs", tier: "T2",
+      budget: "repair the reviewed x path", authorized_paths: ["src/x.mjs"],
+      initial_batch: { worker_session_id: "designated-principal-worker", brief_path: "briefs/principal.md" } };
+    const anchor = { kind: "aggregate_terminal", event_id: stopped.event_id,
+      panel_open_event_id: panel.opened.event_id, frozen_commit: candidate.commit,
+      frozen_tree: candidate.tree };
+    const proposal = { policy_version: AGGREGATE_POLICY_VERSION, authority_route: "principal",
+      parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [child] };
+    const review = recordAggregateProcessReview({ type: "aggregate_v2", kind: "process_review",
+      task_id: "task-1", changeset_id: "cs-1", reviewer_role: "frontier",
+      purpose: "child_continuation", anchor, proposed_transition: proposal,
+      review_evidence: "reviewed exact Principal child batch", zoom_out: "one repair",
+      ruling: "successor", bounded_scope: "reviewed x path", closure_evidence: "child panel" },
+    options(ctx.dir));
+    assert.equal(review.ok, true, review.state);
+    const reserved_action_screen = Object.fromEntries([
+      "remote_push", "remote_or_pr_merge", "deploy", "publication", "live_or_external_write",
+      "destructive_or_irreversible", "credential_or_access_change", "money_or_new_spend",
+      "material_scope_or_risk", "gate_waiver", "critical_or_fail_open_acceptance",
+      "reduced_family_acceptance",
+    ].map((key) => [key, false]));
+    const principal_evidence = { authority_record: "program-record:principal-first-batch",
+      decision_id: "principal-first-batch-1", transition_kind: "new_changeset",
+      task_id: "task-1", changeset_id: "cs-1", tier: "T2", anchor,
+      authorized_paths: ["src/x.mjs"], reserved_action_screen };
+    const input = { type: "aggregate_v2", kind: "child_continuation", task_id: "task-1",
+      changeset_id: "cs-1", parent_disposition_event_id: stopped.event_id, trigger_ids: ["F1"],
+      continuation_kind: "new_changeset", principal_evidence, children: [child],
+      process_review_event_id: review.event_id };
+    for (const altered of [
+      { principal_evidence: { ...principal_evidence, anchor: { ...anchor, event_id: "f".repeat(64) } } },
+      { principal_evidence: { ...principal_evidence,
+        reserved_action_screen: { ...reserved_action_screen, remote_push: true } } },
+      { children: [{ ...child, authorized_paths: ["src/outside.mjs"] }] },
+      { children: [{ ...child, initial_batch: { ...child.initial_batch,
+        brief_path: "briefs/missing.md" } }] },
+    ]) assert.equal(recordAggregateChildContinuation({ ...input, ...altered }, options(ctx.dir)).ok,
+      false, "invalid Principal authority, path, or brief cannot mint the batch");
+    const continuation = recordAggregateChildContinuation(input, options(ctx.dir));
+    assert.equal(continuation.ok, true, continuation.state);
+    const row = loadRepairEventsForProject(ctx.dir).aggregate_events.find((entry) =>
+      entry.event_id === continuation.event_id).event;
+    assert.equal(row.authority_route, "principal");
+    assert.deepEqual(row.children[0].initial_batch.authorized_paths, ["src/x.mjs"]);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
+      session_id: "designated-principal-worker", target: "src/x.mjs" },
+    { projectRoot: ctx.dir }).state, "repair-worker-verification-missing");
+    assert.equal(recordWorkerVerification({ task_id: "principal-child",
+      repair_dispatch_event_id: continuation.event_id },
+    options(ctx.dir, "wrong-worker")).ok, false);
+    const admitted = recordWorkerVerification({ task_id: "principal-child",
+      repair_dispatch_event_id: continuation.event_id },
+    options(ctx.dir, "designated-principal-worker"));
+    assert.equal(admitted.ok, true, admitted.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child", session_id: "wrong-worker",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).ok, false);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
+      session_id: "designated-principal-worker", target: "src/outside.mjs" },
+    { projectRoot: ctx.dir }).state, "repair-worker-path-unauthorized");
+    writeFileSync(brief, "changed brief\n");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
+      session_id: "designated-principal-worker", target: "src/x.mjs" },
+    { projectRoot: ctx.dir }).state, "repair-brief-changed");
+    rmSync(brief);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
+      session_id: "designated-principal-worker", target: "src/x.mjs" },
+    { projectRoot: ctx.dir }).state, "repair-brief-changed");
+    writeFileSync(brief, "Principal-bound child work\n");
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
+      session_id: "designated-principal-worker", target: "src/x.mjs" },
+    { projectRoot: ctx.dir }).state, "repair-worker-write-authorized");
+    execFileSync("git", ["checkout", "-qb", "principal-child-line", "origin/main"], { cwd: ctx.dir });
+    writeFileSync(path.join(ctx.dir, "src/x.mjs"), "export const x = 2;\n");
+    execFileSync("git", ["add", "src/x.mjs"], { cwd: ctx.dir });
+    execFileSync("git", ["commit", "-qm", "principal-child-candidate"], { cwd: ctx.dir });
+    const childCandidate = {
+      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      tree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: ctx.dir, encoding: "utf8" }).trim(),
+      paths: ["src/x.mjs"],
+    };
+    const first = openPanel(ctx, 1, childCandidate, { task: "principal-child",
+      changeset: "principal-child-cs", lineage: { continuation: continuation.event_id } });
+    assert.equal(first.opened.ok, true, first.opened.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "principal-child",
+      session_id: "designated-principal-worker", target: "src/x.mjs" },
+    { projectRoot: ctx.dir }).ok, false, "first panel retires pre-panel first-write authority");
+  } finally { ctx.cleanup(); }
+});
+
 test("Owner-bound pending child requires immutable brief and designated worker until first panel", () => {
   const ctx = repo();
   try {
@@ -2544,7 +2649,7 @@ test("Owner-bound pending child requires immutable brief and designated worker u
     ]) assert.equal(recordAggregateChildContinuation({ ...input, children: [{ ...child, ...altered }] },
       options(ctx.dir)).ok, false, "forged or missing brief refuses mint");
     assert.equal(recordAggregateChildContinuation({ ...input, authority_route: "principal" },
-      options(ctx.dir)).ok, false, "Principal route cannot mint initial batch");
+      options(ctx.dir)).ok, false, "Principal route cannot borrow Owner evidence");
     const review = recordAggregateProcessReview({
       type: "aggregate_v2", kind: "process_review", task_id: "task-1", changeset_id: "cs-1",
       reviewer_role: "frontier", purpose: "child_continuation",

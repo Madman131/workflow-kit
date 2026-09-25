@@ -723,9 +723,12 @@ Windows mutation cutover remains held until their fd-lock lifetime, contention a
 behavior is proven and supported.
 
 An ordinary pending child receives pre-panel source-write authority only when the current Owner
-continuation records its exact path set, designated worker session, and SHA-256/size of a regular
-in-repository brief. The designated worker must verify that receipt in the ledger. This authority
-ends at the first accepted child panel; subsequent writes use normal dispatch and worker checks.
+or an authorized T2 Principal continuation records its exact path set, designated worker session,
+and SHA-256/size of a regular in-repository brief. A Principal continuation remains bound to the
+parent's opened paths, exact terminal anchor, and reserved-action screen; it cannot expand material
+scope or authorize Owner-reserved actions. The designated worker must verify the receipt in the
+ledger, and each write rechecks the session, target path, and unchanged brief. This authority ends
+at the first accepted child panel; subsequent writes use normal dispatch and worker checks.
 Historical pending children without the receipt and legacy handoffs remain held. Initial worker
 admission and the first panel open share the Git-common writer lock so their order is decisive.
 

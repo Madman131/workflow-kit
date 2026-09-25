@@ -204,8 +204,7 @@ function proposedTransitionProjection(purpose, input) {
           completionExceptionShape(input.completion_exception) && completionBatchReviewProposalShape(input.completion_batch));
     if (!children || children.some((child) => !child ||
           (child.initial_batch !== undefined &&
-            (policy !== AGGREGATE_POLICY_VERSION || input.authority_route !== "owner" ||
-              input.continuation_kind === "completion_exception" ||
+            (!initialBatchRouteAllowed(policy, input.authority_route, input.continuation_kind) ||
               !initialBatchShape(child.initial_batch, child.authorized_paths)))) ||
         (policy === AGGREGATE_POLICY_VERSION && children.some((child) => child.tier !== "T2")) ||
         !((ID64.test(input.parent_disposition_event_id || "") && input.parent_panel_open_event_id === undefined) ||
@@ -342,8 +341,7 @@ function validAggregateKindShape(event) {
         Array.isArray(event.children) && event.children.length > 0 && event.children.every(aggregateChildShape) &&
         (event.policy_version !== AGGREGATE_POLICY_VERSION || event.children.every((child) => child.tier === "T2")) &&
         event.children.every((child) => child.initial_batch === undefined ||
-          (event.policy_version === AGGREGATE_POLICY_VERSION && event.authority_route === "owner" &&
-            event.continuation_kind !== "completion_exception" &&
+          (initialBatchRouteAllowed(event.policy_version, event.authority_route, event.continuation_kind) &&
             initialBatchShape(child.initial_batch, child.authorized_paths))) &&
         (currentAggregatePolicy(event)
           ? v3AuthorityRoute(event) && (event.authority_route !== "principal" || principalEvidenceShape(event.principal_evidence, {
@@ -904,11 +902,16 @@ function initialBatchShape(value, paths) {
     completionBatchShape(value) && same(value.authorized_paths, paths);
 }
 
+function initialBatchRouteAllowed(policy, route, kind) {
+  return policy === AGGREGATE_POLICY_VERSION && kind !== "completion_exception" &&
+    (route === "owner" || (route === "principal" && ["split", "new_changeset"].includes(kind)));
+}
+
 function materializeInitialChildren(children, projectRoot, policy, route, kind) {
   if (!Array.isArray(children)) return null;
   return children.map((child) => {
     if (child?.initial_batch === undefined) return child;
-    if (policy !== AGGREGATE_POLICY_VERSION || route !== "owner" || kind === "completion_exception" ||
+    if (!initialBatchRouteAllowed(policy, route, kind) ||
         !initialBatchProposalShape(child.initial_batch) || !aggregateChildShape(child)) return null;
     const brief = readRegularRepoFile(projectRoot, child.initial_batch.brief_path);
     return brief ? { ...child, initial_batch: {
@@ -3109,7 +3112,7 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   if (owner && owner.task_id !== taskId) {
     return { ok: false, state: "repair-task-relabel-path-owned", owner_task_id: owner.task_id };
   }
-  // Ordinary first writes require the accepted Owner-bound brief and designated worker admission.
+  // Ordinary first writes require the accepted Owner- or Principal-bound brief and designated worker admission.
   const pendingChild = completionWorld.childLineage.get(taskId);
   if (pendingChild && !completionWorld.programs.has(taskId)) {
     if (!pendingChild.authorized_paths.includes(target)) {
