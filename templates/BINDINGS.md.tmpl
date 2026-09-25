@@ -90,7 +90,8 @@ in a denial, and note that it has TWO halves with different trigger conditions.
   `mcp__codex_app__send_message_to_thread` send to the configured `pairedPmThreadId` also needs
   that receipt and a current Architect screen; without `pairedPmThreadId`, Codex sends are outside
   this Architect-pair scope. The Claude lane's `SendMessage` (or older ccd send) to the configured
-  `pairedPmClaudeTarget` — the PM's stable ref or id, never its title — owes the same; other
+  `pairedPmClaudeTarget` (stable ref/id) or `pairedPmClaudeName` (current name; stale after a rename)
+  owes the same; other
   `SendMessage` calls are not screened, with a notice in a paired checkout. A mixed Claude/Codex pair
   runs file-only. No repair round is involved in this half.
 - **Live only during a repair:** source writes. This half is dormant until a gate round is recorded

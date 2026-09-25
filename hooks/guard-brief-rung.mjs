@@ -176,6 +176,13 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
     if (!nonempty(pair, 300) || pair !== pair.trim() || /[\r\n\u2028\u2029]/.test(pair)) return { ok: false };
     out.pairedPmClaudeTarget = pair;
   }
+  // …and optionally the PM's CURRENT name (v2.33.1, Principal D-11): a model addresses by bare name
+  // by default, so the name is matched too. It goes stale when the PM is renamed; the ref does not.
+  if (Object.hasOwn(parsed, "pairedPmClaudeName")) {
+    const name = parsed.pairedPmClaudeName;
+    if (!nonempty(name, 300) || name !== name.trim() || /[\r\n\u2028\u2029]/.test(name)) return { ok: false };
+    out.pairedPmClaudeName = name;
+  }
   return out;
 }
 
@@ -724,8 +731,9 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
         emit(denyReason("claude-pair-malformed", { dispatch: { kind: "send", target: typeof dest === "string" && dest ? dest : "<unreadable-destination>" } }));
         return exit(0);
       }
-      const pairTarget = config.pairedPmClaudeTarget;
-      if (pairTarget !== undefined && addresses.some((a) => claudePairMatches(a, pairTarget))) {
+      const pairTarget = config.pairedPmClaudeTarget ?? config.pairedPmClaudeName;
+      const pairKeys = [config.pairedPmClaudeTarget, config.pairedPmClaudeName].filter((k) => k !== undefined);
+      if (pairTarget !== undefined && addresses.some((a) => pairKeys.some((k) => claudePairMatches(a, k)))) {
         if (OVERRIDE_KEYS.some((k) => Object.hasOwn(toolInput, k))) {
           emit(denyReason("claude-send-override", { dispatch: { kind: "send", target: dest } }));
           return exit(0);
@@ -750,7 +758,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
         // Outside the pair — but a paired checkout is told, so a renamed or mis-addressed PM send is
         // never screened off in silence.
         if (pairTarget !== undefined) {
-          notice(`guard-brief-rung.mjs: this SendMessage to ${JSON.stringify(dest)} was NOT screened as an Architect-to-PM send — it does not match the configured PM (pairedPmClaudeTarget ${JSON.stringify(pairTarget)} in ${KIT_CONFIG}). If it IS the PM, address it by that ref or id (for a ref: "<name> [${pairTarget}]"); a session title can be renamed and never pairs on its own.`);
+          notice(`guard-brief-rung.mjs: this SendMessage to ${JSON.stringify(dest)} was NOT screened as an Architect-to-PM send — it does not match the configured PM (${pairKeys.map((k) => JSON.stringify(k)).join(" / ")} in ${KIT_CONFIG}). If it IS the PM, address it by its ref or id (for a ref: "<name> [${config.pairedPmClaudeTarget ?? "<ref>"}]"); if the PM was renamed, update pairedPmClaudeName so its new name pairs.`);
         }
         return exit(0);
       } else {

@@ -48,7 +48,7 @@ const KNOWN_FLAGS = new Set([
   "--codex-prompts-dir", "--skip-codex-prompt", "--codex-cold-model", "--skip-codex-lane",
   "--pm-model", "--pm-effort", "--builder-model", "--builder-effort", "--gather-model", "--gather-effort",
   "--astra-consult-model", "--astra-consult-effort",
-  "--force", "--print-package-scripts", "--allow-mixed-repair-controllers", "--paired-pm-claude-target",
+  "--force", "--print-package-scripts", "--allow-mixed-repair-controllers", "--paired-pm-claude-target", "--paired-pm-claude-name",
 ]);
 
 // Flags REMOVED in a major version, kept here only to fail HELPFULLY. A removed flag is still an
@@ -128,6 +128,16 @@ function parseArgs(argv) {
         process.exit(2);
       }
       out.pairedPmClaudeTarget = v;
+    }
+    else if (a === "--paired-pm-claude-name") {
+      // The PM's CURRENT session name, matched beside the stable ref because a model addresses by bare
+      // name by default. Stale after a rename until re-set; the ref match is what survives a rename.
+      const v = next();
+      if (v.length > 300 || /[\r\n\u2028\u2029]/.test(v) || v !== v.trim()) {
+        console.error(`init: --paired-pm-claude-name requires the Claude PM's current name: one line of at most 300 characters with no leading or trailing whitespace (got ${JSON.stringify(v)})`);
+        process.exit(2);
+      }
+      out.pairedPmClaudeName = v;
     }
     else if (a === "--worktree-roots") {
       // VALIDATED HERE, not at the guard alone. guard-cross-repo-writes DENIES every write on a
@@ -215,6 +225,9 @@ Usage: node bin/init.mjs [--target <dir>] [options]
                           checkout's one Architect-to-PM Claude send target — the PM's stable
                           ListAgents [ref] or session/agent id, never its renameable title ⇒
                           kit.config.json pairedPmClaudeTarget (optional)
+  --paired-pm-claude-name <name>
+                          that PM's CURRENT session name, also matched (models address by bare
+                          name) ⇒ kit.config.json pairedPmClaudeName; re-set it after a rename
   --allow-mixed-repair-controllers
                           proceed although another worktree of this repo has a different repair
                           controller installed (upgrade them all in the same step — see the refusal)
@@ -1683,13 +1696,15 @@ function main() {
   if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
   if (args.pairedPmThreadId) config.pairedPmThreadId = args.pairedPmThreadId;
   if (args.pairedPmClaudeTarget) config.pairedPmClaudeTarget = args.pairedPmClaudeTarget;
+  if (args.pairedPmClaudeName) config.pairedPmClaudeName = args.pairedPmClaudeName;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  // The six families this file is ALLOWED to hold, each with the flag that fills it. Names and
+  // The seven families this file is ALLOWED to hold, each with the flag that fills it. Names and
   // flags only: the refusal below reads this file to LIST what it holds and never to reprint what
   // is IN it (see there).
   const CFG_FAMILIES = [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
     ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"],
-    ["pairedPmThreadId", "--paired-pm-thread-id"], ["pairedPmClaudeTarget", "--paired-pm-claude-target"]];
+    ["pairedPmThreadId", "--paired-pm-thread-id"], ["pairedPmClaudeTarget", "--paired-pm-claude-target"],
+    ["pairedPmClaudeName", "--paired-pm-claude-name"]];
   let cfgKept = false, cfgRefused = false, cfgUnreadable = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else {

@@ -27,14 +27,21 @@
   not checked: create them from the upgraded branch.
 - **Claude Code's `SendMessage` now carries the Architect decision screen.** v2.33.0 screened only the
   Codex app thread send; `SendMessage` was not even matched. Configure the Claude pair with
-  `init --paired-pm-claude-target <ref-or-id>` (kit config `pairedPmClaudeTarget`) using the PM's
-  **stable** `ListAgents` `[ref]` or session/agent id — never its title, which can be renamed. A send
-  whose `to` is that id, carries that `[ref]` (under any title), or names it bare is screened exactly
-  like the Codex pair (prompt-bound screen, or the `ARCHITECT_STATUS_V1` status marker; `model`,
-  `thinking` or `effort` in the send is denied). The older `mcp__ccd_session_mgmt__send_message` to the
-  pair is screened too (its field names are from its schema; only `SendMessage` was observed live). Any other `SendMessage` is not screened, as before — but in a paired checkout
-  it prints a notice saying so, so a mis-addressed PM send is never silent. `pairedPmThreadId` is
-  unchanged.
+  `init --paired-pm-claude-target <ref-or-id> --paired-pm-claude-name "<PM's current name>"` (kit
+  config `pairedPmClaudeTarget` and `pairedPmClaudeName`): the PM's **stable** `ListAgents` `[ref]` or
+  session/agent id, and its current name, because a model addresses by bare name by default (observed
+  live). A send whose `to` equals either value, carries either before or inside a trailing `[ref]`, is
+  screened exactly like the Codex pair (prompt-bound screen, or the `ARCHITECT_STATUS_V1` status
+  marker; `model`, `thinking` or `effort` in the send is denied). The older
+  `mcp__ccd_session_mgmt__send_message` to the pair is screened too (its field names are from its
+  schema; only `SendMessage` was observed live). Any other `SendMessage` is not screened, as before —
+  but in a paired checkout it prints a notice saying so. `pairedPmThreadId` is unchanged.
+  **Residual — after the PM is renamed, the name match is stale** until you re-set it: a bare new title
+  goes unscreened, with the notice; `"<new title> [<ref>]"` is still screened by the ref. Re-set it with
+  `node <kit>/bin/init.mjs --target <repo> --force --paired-pm-claude-target <ref-or-id>
+  --paired-pm-claude-name "<new name>"`, adding the flag for every other kit-config family you hold
+  (`--force` refuses and names any it would drop, and backs up the generated files it rewrites) — or
+  set `pairedPmClaudeName` in `.claude/kit.config.json` in place and read it back.
 - **Reviewer availability route, both ways round.** A Codex code-gate seat unavailable on a
   Claude-built change now has a stated route (`core/REVIEW.md`, `core/GATES.md`, generated
   `BINDINGS.md`): the Gemini lens when it covers the full artifact, otherwise a fresh cold Claude

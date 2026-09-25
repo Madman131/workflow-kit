@@ -62,6 +62,12 @@ test("pairedPmClaudeTarget: valid forms load; malformed ones fail CLOSED; a Code
   const read = (v) => () => v;
   assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeTarget":"PM Kit [3fa9c1]"}') }),
     { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "PM Kit [3fa9c1]" }, "inner spaces are legal in a Claude name");
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"pairedPmClaudeTarget":"3fa9c1","pairedPmClaudeName":"Probe PM"}') }),
+    { ok: true, briefPathDirs: [], pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" }, "ref and current name load together");
+  for (const bad of ["", " Probe PM", "a\nb", 7]) {
+    assert.equal(loadBriefConfig("/r", { readConfig: read(JSON.stringify({ pairedPmClaudeName: bad })) }).ok, false,
+      `name ${JSON.stringify(bad)} must fail closed`);
+  }
   assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"pairedPmThreadId":"pm-thread"}') }),
     { ok: true, briefPathDirs: [], pairedPmThreadId: "pm-thread" }, "a 2.33.0 config loads identically");
   for (const bad of [123, "", " x", "x ", "a\nb", "x".repeat(301), null]) {
@@ -83,14 +89,21 @@ function adopt(extraArgs = []) {
   return { dir, codexDir, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
-test("init writes pairedPmClaudeTarget, and --force never silently drops it", () => {
-  const { dir, codexDir, cleanup } = adopt(["--paired-pm-claude-target", "3fa9c1"]);
+test("init writes pairedPmClaudeTarget and pairedPmClaudeName, and --force never silently drops them", () => {
+  const { dir, codexDir, cleanup } = adopt(["--paired-pm-claude-target", "3fa9c1", "--paired-pm-claude-name", "Probe PM"]);
   try {
     const cfg = path.join(dir, ".claude", "kit.config.json");
     assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeTarget, "3fa9c1");
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeName, "Probe PM");
     const again = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--force", "--skip-codex-lane",
       "--codex-prompts-dir", codexDir], { encoding: "utf8" });
     assert.match(`${again.stdout}${again.stderr}`, /--paired-pm-claude-target/, "the refusal names the flag that keeps the pair");
+    assert.match(`${again.stdout}${again.stderr}`, /--paired-pm-claude-name/, "…and the flag that keeps the name");
+    // The documented rename re-run: --force with every family named replaces the stale name.
+    const renamed = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--force", "--skip-codex-lane",
+      "--codex-prompts-dir", codexDir, "--paired-pm-claude-target", "3fa9c1", "--paired-pm-claude-name", "Renamed PM"], { encoding: "utf8" });
+    assert.equal(renamed.status, 0, renamed.stderr);
+    assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeName, "Renamed PM", "the re-run command updates the name");
     assert.equal(JSON.parse(readFileSync(cfg, "utf8")).pairedPmClaudeTarget, "3fa9c1", "the pair survives");
     const bad = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir,
       "--codex-prompts-dir", codexDir, "--paired-pm-claude-target", " padded"], { encoding: "utf8" });
@@ -174,9 +187,27 @@ test("THE INSTALLED GUARD screens a Claude Architect's send to its PM — regist
     assert.doesNotMatch(bareName.stdout, /"permissionDecision":"deny"/, "a bare title is not the ref-configured pair…");
     assert.match(bareName.stdout, /NOT screened/, "…and the paired checkout is told so");
 
+    // D-11: the pair also stores the PM's CURRENT name, because models address by bare name.
+    rmSync(sidecarFile, { force: true });
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeTarget: "3fa9c1", pairedPmClaudeName: "Probe PM" }));
+    assert.ok(deny(run("SendMessage", captured("Probe PM", PROMPT))), "a bare-name `to` equal to the stored name is screened");
+    assert.ok(deny(run("SendMessage", captured("Probe PM [ffffff]", PROMPT))), "the stored name before any ref is screened");
+    setSidecar();
+    assert.equal(run("SendMessage", captured("Probe PM", PROMPT)).stdout, "", "…and passes with a screen, target = the stored ref");
+    // After a rename, before the name is re-set: the ref still pairs; a bare new title is the residual.
+    assert.ok(deny(run("SendMessage", captured("New Title [3fa9c1]", PROMPT))), "after a rename, `<new title> [<ref>]` is still screened");
+    const renamedBare = run("SendMessage", captured("New Title", PROMPT));
+    assert.doesNotMatch(renamedBare.stdout, /"permissionDecision":"deny"/, "a bare new title is unscreened (documented residual)…");
+    assert.match(renamedBare.stdout, /NOT screened[\s\S]*update pairedPmClaudeName/, "…and the notice says how to repair the stale name");
+    // Name only, no ref: the name still pairs.
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeName: "Probe PM" }));
+    rmSync(sidecarFile, { force: true });
+    assert.ok(deny(run("SendMessage", captured("Probe PM", PROMPT))), "a name-only pair still screens the bare name");
+    writeFileSync(configFile, JSON.stringify({ ...config, pairedPmClaudeTarget: "3fa9c1" }));
+
     const other = run("SendMessage", { to: "Builder [aaaaaa]", message: PROMPT });
     assert.doesNotMatch(other.stdout, /"permissionDecision":"deny"/, "a send to another agent is not denied");
-    assert.match(other.stdout, /NOT screened[\s\S]*pairedPmClaudeTarget[\s\S]*3fa9c1/,
+    assert.match(other.stdout, /NOT screened[\s\S]*3fa9c1[\s\S]*kit\.config\.json/,
       "…but a paired checkout is TOLD it was not screened, so a mis-addressed PM send is never silent");
 
     writeFileSync(configFile, "{oops");

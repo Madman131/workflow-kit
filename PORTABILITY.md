@@ -387,15 +387,18 @@ intended task before relying on this guard.
 
 **The Claude lane's pair (v2.33.1).** Claude Code's `SendMessage` (addressed by `to`) and the older
 `mcp__ccd_session_mgmt__send_message` (addressed by `session_id`) reach the same screen when the optional
-`pairedPmClaudeTarget` in `.claude/kit.config.json` (`init --paired-pm-claude-target`) names the PM. Set
-it to the PM's **stable** `ListAgents` `[ref]` or session/agent id, never its title: titles are renamed,
-and a pair keyed to a title silently stops matching. A send is to the pair when the configured value
-equals the whole address, the content of one trailing ` [ref]`, or the name before that ref (the
-bare-name fallback, which only an operator who configured a name relies on). Claude Code 2.1.270 was
+`pairedPmClaudeTarget` (`init --paired-pm-claude-target`) and/or `pairedPmClaudeName`
+(`init --paired-pm-claude-name`) in `.claude/kit.config.json` name the PM. Set the first to the PM's
+**stable** `ListAgents` `[ref]` or session/agent id, which survives a rename, and the second to its
+current name, because a model addresses by bare name by default (observed live). A send is to the pair
+when either stored value equals the whole address, the content of one trailing ` [ref]`, or the name
+before that ref. **After a rename the stored name is stale** until re-set (by `init --force` with every
+kit-config family named, or in place): a bare new title is unscreened and gets the notice, while
+`"<new title> [<ref>]"` still pairs by the ref. Claude Code 2.1.270 was
 observed passing `recipient` and `content` copies beside `to` and `message`: either address naming the
 PM makes it the PM's send, and two different bodies deny as ambiguous. The pair owes exactly what
 the Codex pair owes, with the sidecar's `target` set to the configured `pairedPmClaudeTarget` value
-whatever address form the send uses; `model`, `thinking` or `effort` in the send denies; an empty message (a pure idle
+(or `pairedPmClaudeName` when no ref is configured) whatever address form the send uses; `model`, `thinking` or `effort` in the send denies; an empty message (a pure idle
 subscription) directs nothing and passes. Any other `SendMessage` is not screened — as before this
 release — but a paired checkout prints a notice saying it was not, so a renamed or mis-addressed PM send
 is never silent. A malformed kit config denies every Claude send, because it cannot say which one is the

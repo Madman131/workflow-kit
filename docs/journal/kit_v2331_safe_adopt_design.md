@@ -577,3 +577,18 @@ above in § B1 steps 4–5 and tests, § P1 step 2 and tests, and § 7 R4.
   `SKILL.md`, the loaded layer). No test-pinned sentence was cut.
 - **`tests/kit-controls-init.test.mjs`** counted `guard-brief-rung` PreToolUse registrations as 5; the new
   `SendMessage` bucket makes it 6 (three matchers). The count assertion was updated, not removed.
+- **Principal ruling D-11 (option C), built after the first freeze `064e45b` (no panel had run).** The pair
+  stores the stable ref/id (`pairedPmClaudeTarget`, `--paired-pm-claude-target`) AND the PM's current name
+  (`pairedPmClaudeName`, `--paired-pm-claude-name`; same validation: 1–300 characters, one line, no edge
+  whitespace; malformed fails closed; `--force` refuses to drop it). A `SendMessage` is the PM's when any
+  match form (whole address, name before a trailing ` [ref]`, bracket content) equals EITHER stored value,
+  in `to` or `recipient`. The sidecar target is the stored ref, or the stored name when no ref is set.
+  Unmatched sends keep the notice, which now also says to update `pairedPmClaudeName` after a rename. RED
+  tests, confirmed failing on the exact assertion at `064e45b`: a bare `to` equal to the stored name is
+  screened; after a rename `"<new title> [<ref>]"` is still screened; a bare new title is unscreened and
+  gets the notice (the residual). **R4 now reads:** after a PM rename the stored name is stale until
+  re-set — `node <kit>/bin/init.mjs --target <repo> --force --paired-pm-claude-target <ref-or-id>
+  --paired-pm-claude-name "<new name>"` plus every other kit-config family held, or an in-place edit of
+  `pairedPmClaudeName`; the ref match and the notice remain. R6 (ccd field names schema-derived) stands.
+  Option B (screen every unmatched bare-name send) and moving the pair out of the tracked
+  `kit.config.json` into per-checkout state are filed for CHIP C. `ROUTING.md` went 900 → 898 words.
