@@ -10,7 +10,7 @@ The append-only `aggregate_v2` v5 `child_continuation` has `continuation_kind: "
 
 ## Admission record and mechanical invariants
 
-The new event is legal only when its direct parent is a v4 T2 `completion_exception` child whose only panel is a `final_bookend` and whose terminal disposition is `STOP`. Parent terminality remains intact: existing child-continuation traversal already treats terminal parents as anchors.
+The new event is legal only within an accepted T2 `completion_exception` lineage, when its direct stopped completion child has one sole `final_bookend` panel recorded at policy v4 and a terminal `STOP` disposition. The founding continuation is not itself a v4 eligibility proof; the controller derives the stopped child's accepted lineage and final panel. Parent terminality remains intact: existing child-continuation traversal already treats terminal parents as anchors.
 
 The event binds, hash-included and shape-validated before state mutation:
 
@@ -22,7 +22,7 @@ The event binds, hash-included and shape-validated before state mutation:
 
 The stopped completion child has current ordinal **N**. Its reauthorization child takes **N** as base, and its single final-bookend panel is next ordinal **N+1**; the review binds **N+1**. After the named worker verifies the frozen brief, exactly one local correction batch and one full panel may occur. Its final disposition is GO or STOP. Admission itself releases no path. A final GO retains the controller's existing coverage-scoped direct-child lift: only paths in that child's authorized budget which its panels actually opened and reviewed are lifted from that direct parent's STOP reservation. STOP, unreviewed or unrelated paths, ancestor and independent reservations, and later descendants retain their existing behavior; no recursive lift, parent reopen, reset, dispatch, sibling, ordinary descendant, completion exception, terminal reauthorization, or publication authority follows.
 
-State derivation retains the append-only first-wins model. Per original root, only the first eligible terminal-reauthorization event wins; same-event retry is idempotent. A simultaneous two-decision synthetic fixture must accept one winner and refuse the loser. No database, lock service, or parallel authority is introduced.
+State derivation retains the append-only first-wins model. Per original root, only the first eligible terminal-reauthorization event wins; same-event retry is idempotent. The synthetic fixture exercises competing distinct decisions and proves that the first admitted row consumes the root while the other is refused. No database, lock service, or parallel authority is introduced.
 
 ## Acceptance matrix
 
@@ -33,7 +33,7 @@ Synthetic ledger fixtures—not production or imported history—will prove:
 3. Final freeze blocks writes, refreezes, dispatches, further panels, siblings, generic descendants, completion exceptions, terminal reauthorizations, resets, and publication effects.
 4. Existing v2–v4 replay fixtures retain their inputs and outcomes. Existing completion-child STOPs and unrelated stopped paths remain denied. A frozen v4 reader refuses a v5 row; before any real v5 mint, adoption follows the existing `bin/init.mjs` mixed-controller scan and `PORTABILITY.md` coordinated-upgrade procedure. That is a procedural hold, not a new compatibility record, flag, callback, or fleet-certification control.
 
-Mutation checks remove each new eligibility arm or binding comparison and require its corresponding refusal to fail. The harness uses temporary repositories, committed fixture candidates, and generated local briefs only.
+The harness uses temporary repositories, committed fixture candidates, and generated local briefs only. Its v5 cases cover the concrete admission and rejection boundaries above; this contract does not claim a mutation suite for every new binding comparison.
 
 ## Threat and mitigation boundary
 

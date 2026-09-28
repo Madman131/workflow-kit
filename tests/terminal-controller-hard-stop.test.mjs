@@ -126,6 +126,19 @@ async function importFrozenV2Reader(dir) {
   finally { rmSync(fixture, { recursive: true, force: true }); }
 }
 
+const FROZEN_V4_READER = "a4dd67464f3ef80948e3d3e51edb47397fac14e9";
+
+async function importFrozenV4Reader() {
+  const source = execFileSync("git", ["show", `${FROZEN_V4_READER}:hooks/repair-dispatch-state.mjs`], {
+    cwd: KIT, encoding: "utf8",
+  });
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "frozen-v4-reader-"));
+  const file = path.join(fixture, "repair-dispatch-state.mjs");
+  writeFileSync(file, source);
+  try { return await import(pathToFileURL(file).href); }
+  finally { rmSync(fixture, { recursive: true, force: true }); }
+}
+
 function historicalFixture(ctx, reader) {
   const rows = () => reader.loadRepairEventsForProject(ctx.dir).aggregate_events;
   const state = (taskId = "task-1") => reader.deriveAggregateRepairState(rows(), taskId);
@@ -1284,6 +1297,42 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
   } finally { ctx.cleanup(); }
 });
 
+test("ordinary recorder operations cannot select terminal v5 from caller markers", async () => {
+  const spoofedInputs = [
+    { continuation_kind: "terminal_reauthorization" },
+    { proposed_transition: { continuation_kind: "terminal_reauthorization" } },
+    { kind: "child_continuation", continuation_kind: "terminal_reauthorization" },
+    { purpose: "child_continuation", proposed_transition: { continuation_kind: "terminal_reauthorization" } },
+  ];
+  for (const spoof of spoofedInputs) {
+    const ctx = repo();
+    try {
+      const candidate = commit(ctx.dir, 1);
+      const panelInput = { ...openPanelInput(ctx, candidate), ...spoof };
+      const opened = recordAggregatePanelOpen(panelInput, options(ctx.dir));
+      assert.equal(opened.ok, true, opened.state);
+      let rows = aggregateRows(ctx);
+      assert.equal(rows.at(-1).event.policy_version, AGGREGATE_POLICY_VERSION,
+        "an ordinary panel remains v4 even when caller data imitates terminal reauthorization");
+      const frozen = await importFrozenV4Reader();
+      assert.equal(frozen.deriveAggregateRepairState(rows, "task-1").ok, true,
+        "the exact witness stays readable by the frozen v4 reader");
+
+      const closeInput = { type: "aggregate_v2", kind: "panel_close", task_id: "task-1",
+        changeset_id: "changeset-1", panel_open_event_id: opened.event_id,
+        received_seats: receivedSeats(panelInput.expected_seats).map((seat) => ({ ...seat,
+          reviewed_commit: candidate.commit, reviewed_tree: candidate.tree })), ...spoof };
+      const closed = recordAggregatePanelClose(closeInput, options(ctx.dir));
+      assert.equal(closed.ok, true, closed.state);
+      rows = aggregateRows(ctx);
+      assert.equal(rows.at(-1).event.policy_version, AGGREGATE_POLICY_VERSION,
+        "the shared selector keeps representative non-proposal operations at v4");
+      assert.equal(frozen.deriveAggregateRepairState(rows, "task-1").ok, true,
+        "ordinary spoofed panel and close rows preserve frozen-reader compatibility");
+    } finally { ctx.cleanup(); }
+  }
+});
+
 test("only an Owner-bound v5 review can reopen one stopped v4 completion child", async () => {
   const ctx = repo();
   try {
@@ -1374,6 +1423,10 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
         "aggregate-process-review-malformed");
       assert.deepEqual(ledgerBytes(ctx), before, "a malformed v5 review never appends a poison row");
     }
+    const beforeWrongPurpose = ledgerBytes(ctx);
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, purpose: "dispatch" }, options(ctx.dir)).state,
+      "aggregate-process-review-malformed", "a terminal proposal with a non-child purpose cannot select v5");
+    assert.deepEqual(ledgerBytes(ctx), beforeWrongPurpose, "a wrong-purpose terminal review appends no bytes");
     const corrected = { ...reauthorization, owner_evidence: "Owner authorized the corrected terminal batch",
       owner_decision_id: "owner-terminal-corrected-20260928", children: [{ ...reauthorization.children[0],
         task_id: "reauthorized-corrected", changeset_id: "reauthorized-corrected-cs" }], completion_batch: {
@@ -1395,8 +1448,25 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
     writeFileSync(repairLedgerPath(ctx.dir), `${JSON.stringify(v4Review)}\n`, { flag: "a" });
     assert.equal(_rawChildContinuation({ ...corrected, process_review_event_id: v4Review.event_id }, options(ctx.dir)).state,
       "aggregate-continuation-conflict", "a hash-valid v4 typed review cannot authorize terminal reauthorization");
-    const reviewA = recordAggregateProcessReview(reviewInput, options(ctx.dir));
-    assert.equal(reviewA.ok, true, reviewA.state);
+    const cliEvent = path.join(ctx.dir, "terminal-reauthorization-review.json");
+    const cli = path.join(KIT, "scripts", "record-repair-event.mjs");
+    const beforeCliRefusal = ledgerBytes(ctx);
+    writeFileSync(cliEvent, JSON.stringify({ ...reviewInput, session_id: "cli-invalid-policy",
+      proposed_transition: { ...reauthorization, policy_version: AGGREGATE_POLICY_VERSION } }));
+    const invalidCli = spawnSync(process.execPath, [cli, "--event", cliEvent], {
+      cwd: ctx.dir, encoding: "utf8",
+    });
+    assert.equal(invalidCli.status, 1, invalidCli.stderr);
+    assert.match(invalidCli.stderr, /aggregate-process-review-malformed/,
+      "the CLI refuses a caller-supplied v4 policy for an eligible terminal v5 proposal");
+    assert.deepEqual(ledgerBytes(ctx), beforeCliRefusal, "the invalid CLI policy case appends no bytes");
+    writeFileSync(cliEvent, JSON.stringify({ ...reviewInput, session_id: "cli-valid-policy" }));
+    const validCli = spawnSync(process.execPath, [cli, "--event", cliEvent], {
+      cwd: ctx.dir, encoding: "utf8",
+    });
+    assert.equal(validCli.status, 0, validCli.stderr);
+    const reviewA = JSON.parse(validCli.stdout);
+    assert.equal(reviewA.ok, true, validCli.stdout);
     const reviewRow = aggregateRows(ctx).find((row) => row.event_id === reviewA.event_id).event;
     assert.equal(reviewRow.policy_version, 5, "only the explicit special review mints v5");
     assert.deepEqual(reviewRow.terminal_reauthorization_proposal.opened_paths, openedPaths,

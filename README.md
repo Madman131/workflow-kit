@@ -107,8 +107,10 @@ changes in v2.35.0 to match these docs. v2.34.0 changes only prose — `core/WOR
   `scripts/codex-gate.sh`, installed by `init --with-gate-runners`.
 - **The recorder's two caller fields are documented.** `scripts/record-repair-event.mjs` needs
   `authority_route` on a `child_continuation` (and in its process review's proposed transition), and
-  `proposed_transition.policy_version` must equal the version the recorder mints (3 for a policy-3 or
-  T3 lineage, otherwise 4). Its header says how to pick them and its refusal hint names both.
+  `proposed_transition.policy_version` must equal the version the recorder mints: 3 for a policy-3 or
+  T3 lineage; 5 only for an eligible terminal-reauthorization proposal or admitted v5 lineage; otherwise
+  4. The recorder derives that version, so a caller cannot override it. Its header says how to pick them
+  and its refusal hint names both.
   `core/WORKFLOW.md` no longer says new work mints v3.
 - **Controller freeze.** `PORTABILITY.md` § Retained repair-controller boundary now states it: no new
   controller feature without Owner approval, and a controller change deletes about as much as it adds.

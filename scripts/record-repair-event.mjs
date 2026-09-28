@@ -10,8 +10,9 @@
 //   · `proposed_transition.policy_version` — must EQUAL the version the recorder is about to mint for
 //     this task, or the review is refused as malformed. The caller does not choose it; it derives it:
 //     3 when the task's existing program — or, with no program, its pending child lineage — is a
-//     policy-3 lineage or tier T3; otherwise 4 (every new program is 4). The event envelope's own
-//     `policy_version` is minted by the recorder, never supplied.
+//     policy-3 lineage or tier T3; 5 only for an eligible terminal-reauthorization proposal or admitted
+//     v5 lineage; otherwise 4. The event envelope's own `policy_version` is minted by the recorder,
+//     never supplied.
 // A mismatch in either is reported as `aggregate-process-review-malformed` or
 // `aggregate-continuation-malformed`; the hint printed below names both fields.
 //
@@ -121,7 +122,7 @@ if (entry && entry === realpathSync(fileURLToPath(import.meta.url))) {
           "aggregate-root-exit-unexpected": " — only a root-kind dispatch may carry a root_exit event id; drop the field or fix the disposition's remediation kind",
           "aggregate-process-review-required": " — record a fresh aggregate_v2 process_review with the transition's exact purpose, current typed anchor, and proposed_transition; then cite its event id. Only a dispatch-purpose finish_bounded_root authorizes repair dispatch",
           "aggregate-worker-superseded": " — this session's admission was REVOKED by an Owner-evidenced worker handoff; the replacement session holds the batch now",
-          "aggregate-process-review-malformed": " — check the transition's shape, and above all the two fields callers most often get wrong: proposed_transition.policy_version must EQUAL the version this task mints (3 for a policy-3 or T3 lineage, otherwise 4), and a child_continuation proposal must carry authority_route (\"owner\" with owner_evidence, or \"principal\" with no principal_evidence yet); see this script's header",
+          "aggregate-process-review-malformed": " — check the transition's shape, and above all the two fields callers most often get wrong: proposed_transition.policy_version must EQUAL the version this task mints (3 for a policy-3 or T3 lineage; 5 only for an eligible terminal-reauthorization proposal or admitted v5 lineage; otherwise 4), and a child_continuation proposal must carry authority_route (\"owner\" with owner_evidence, or \"principal\" with no principal_evidence yet); see this script's header",
           "aggregate-continuation-malformed": " — check the continuation's shape, and above all authority_route: \"owner\" with owner_evidence, or \"principal\" (a bounded T2 Principal route) with principal_evidence matching the reviewed transition; see this script's header",
           "principal-authority-record-unconfirmed": " — principal_evidence must be an object whose authority_record names a git-TRACKED file of this repository (repo-relative) and whose non-empty decision_id appears in that file as a whole token; commit the Principal's record into the checkout, then cite it",
           "repair-history-invalid": " — the ledger's derivation failed CLOSED (a corrupt row, a hash mismatch, or a standard identity that no longer derives); this needs row-level repair, not a retry — preserve the file and inspect it",

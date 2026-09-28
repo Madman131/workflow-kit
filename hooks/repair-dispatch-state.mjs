@@ -820,23 +820,29 @@ function baseEvent(type, input, sessionId, now, policyVersion = AGGREGATE_POLICY
 
 // Historical policy is inherited from accepted program or pending-child lineage, not a caller's
 // tier claim. Standard history records no tier: its activeness cannot authorize a NEW T3 handoff.
-function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit) {
+function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit,
+  { operation = null, terminalProposal = null } = {}) {
   const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
   const world = rows && aggregateWorld(rows.aggregate, rows.standard);
-  const legacy = input?.kind === "legacy_handoff" || input?.purpose === "legacy_handoff";
+  // The recorder selects an operation before it reads caller data. A payload cannot mint v5 by
+  // smuggling a continuation marker into an ordinary panel, close, or disposition request.
+  const legacy = operation === "legacy_handoff";
   const taskId = legacy ? input?.parent_task_id ?? input?.task_id : input?.task_id;
   const changesetId = legacy ? input?.parent_changeset_id ?? input?.changeset_id : input?.changeset_id;
   const actualProgram = world?.programs.get(taskId);
   const actualPending = world?.childLineage.get(taskId);
   const program = actualProgram?.changeset_id === changesetId ? actualProgram : null;
   const pending = actualPending?.changeset_id === changesetId ? actualPending : null;
-  const terminalProposal = input?.continuation_kind === "terminal_reauthorization" ||
-    input?.proposed_transition?.continuation_kind === "terminal_reauthorization";
+  const candidate = operation === "child_continuation" ? input :
+    operation === "process_review" ? terminalProposal : null;
+  const terminalReauthorization = candidate?.continuation_kind === "terminal_reauthorization" &&
+    terminalReauthorizationProposalShape(candidate, program);
   const historical = program?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION ||
     (!program && pending?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION) ||
     program?.tier === "T3" || (!program && pending?.tier === "T3");
   const policy = historical
-    ? PRINCIPAL_AGGREGATE_POLICY_VERSION : (terminalProposal || program?.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION ||
+    ? PRINCIPAL_AGGREGATE_POLICY_VERSION : (terminalReauthorization ||
+      program?.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION ||
       (!program && pending?.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION)
         ? TERMINAL_REAUTHORIZATION_POLICY_VERSION : AGGREGATE_POLICY_VERSION);
   return baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now, policy);
@@ -2160,7 +2166,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
 
 export function recordAggregatePanelOpen(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "panel_open" });
   if (input?.tier === "T3") {
     const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
     const world = rows && aggregateWorld(rows.aggregate, rows.standard);
@@ -2236,7 +2242,7 @@ export function recordAggregatePanelClose(input,
   const evidence = open && panelGitEvidence(projectRoot, open.base_ref, open.base_commit, open.frozen_commit,
     { execGit, anchorToRef: false });
   const still = evidence && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "panel_close" });
   if (!base || !open || !candidate || !evidence || !still || !same(evidence.changed_paths, open.changed_paths) ||
       !Array.isArray(input.received_seats)) return { ok: false, state: "aggregate-panel-close-malformed" };
   const event = { ...base, kind: "panel_close", panel_open_event_id: input.panel_open_event_id,
@@ -2251,7 +2257,7 @@ export function recordAggregateDisposition(input,
   const close = rows?.aggregate.find((row) => row.event_id === input?.panel_close_event_id)?.event;
   const open = close && rows.aggregate.find((row) => row.event_id === close.panel_open_event_id)?.event;
   const candidate = open && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "disposition" });
   const event = base && { ...base, kind: "disposition", panel_close_event_id: input.panel_close_event_id,
     pm_findings: input.pm_findings ?? [], finding_dispositions: input.finding_dispositions,
     same_mechanism_repeated: input.same_mechanism_repeated,
@@ -2275,7 +2281,7 @@ export function recordAggregateDisposition(input,
 
 export function recordAggregateRootExit(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "root_exit" });
   if (!base || !Array.isArray(input.removed_workarounds) || !Array.isArray(input.trigger_matrix)) {
     return { ok: false, state: "aggregate-root-exit-malformed" };
   }
@@ -2305,7 +2311,8 @@ export function recordAggregateProcessReview(input,
     ? readRegularRepoFile(projectRoot, proposed.completion_batch.brief_path) : null;
   const reviewedProposal = batchBrief ? { ...proposed, completion_batch: { ...proposed.completion_batch,
     brief_sha256: batchBrief.sha256, brief_size: batchBrief.size } } : proposed;
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent({ ...input, proposed_transition: reviewedProposal }, sessionId, now, projectRoot, execGit,
+    { operation: "process_review", terminalProposal: purpose === "child_continuation" ? reviewedProposal : null });
   if (aggregatePolicyVersion(reviewedProposal) !== base?.policy_version) {
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
@@ -2385,7 +2392,7 @@ export function recordAggregateProcessReview(input,
 
 export function recordAggregateWorkerHandoff(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "worker_handoff" });
   if (!base || !((text(input.owner_evidence, 1000) && input.principal_evidence === undefined) ||
       (input.owner_evidence === undefined && plain(input.principal_evidence)))) {
     return { ok: false, state: "aggregate-worker-handoff-malformed" };
@@ -2413,7 +2420,7 @@ export function recordAggregateWorkerHandoff(input,
 
 export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "child_continuation" });
   if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
       !input.children.every(aggregateChildShape) ||
       (completionBatchKind(input.continuation_kind) && input.children.length !== 1)) {
@@ -2517,7 +2524,7 @@ export function recordAggregateChildContinuation(input,
 
 export function recordAggregateClose(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "close" });
   if (!base || !text(input.reason, 1000) ||
       !((text(input.owner_evidence, 1000) && input.principal_evidence === undefined) ||
         (input.owner_evidence === undefined && plain(input.principal_evidence)))) {
@@ -2554,7 +2561,7 @@ export function recordAggregateLegacyHandoff(input,
   const rows = controllerRows(file);
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
   const parent = deriveRepairState(rows.standard, input?.parent_task_id);
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "legacy_handoff" });
   if (!base || !parent.ok || !parent.active || !parent.latest ||
       input.task_id !== input.parent_task_id || input.changeset_id !== input.parent_changeset_id ||
       input.child?.tier !== "T2" || !Array.isArray(input.authorized_paths) || !plain(input.child)) {
@@ -2868,7 +2875,7 @@ export function confirmRepairBrief({ declaration, brief_path: briefPath } = {},
   }
   const r = validated.repair;
   if (declaration.aggregate_controller === AGGREGATE_EVENT_TYPE) {
-    const base = aggregateBaseEvent(declaration, sessionId, now, projectRoot, execGit);
+    const base = aggregateBaseEvent(declaration, sessionId, now, projectRoot, execGit, { operation: "dispatch" });
     const event = { ...base, kind: "dispatch", disposition_event_id: r.disposition_event_id,
       panel_close_event_id: r.panel_close_event_id, source_round: r.source_round, next_round: r.next_round,
       authorized_paths: [...r.authorized_paths], root_exit_event_id: r.root_exit_event_id,
@@ -2976,7 +2983,7 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
       row.worker_session_id === sessionId);
     if (prior) return { ok: true, event_id: prior.event_id, idempotent: true };
     const event = { type: AGGREGATE_EVENT_TYPE,
-      policy_version: aggregateBaseEvent(receipt, sessionId, now, projectRoot, execGit)?.policy_version,
+      policy_version: aggregateBaseEvent(receipt, sessionId, now, projectRoot, execGit, { operation: "worker" })?.policy_version,
       kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id,
       recorded_at: now, session_id: sessionId,
       dispatch_event_id: eventId, worker_session_id: sessionId,
@@ -2994,7 +3001,7 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
     }
     const event = { type: AGGREGATE_EVENT_TYPE,
       policy_version: aggregateBaseEvent({ task_id: taskId, changeset_id: receipt.changeset_id },
-        sessionId, now, projectRoot, execGit)?.policy_version,
+        sessionId, now, projectRoot, execGit, { operation: "worker" })?.policy_version,
       kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id, recorded_at: now, session_id: sessionId,
       dispatch_event_id: eventId, worker_session_id: sessionId, authorized_paths: [...receipt.authorized_paths],
       brief_path: receipt.target, brief_sha256: receipt.brief_sha256 };
