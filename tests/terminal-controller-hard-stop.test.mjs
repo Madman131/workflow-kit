@@ -812,7 +812,7 @@ test("Principal split admits two bounded children and refuses otherwise-valid pa
 test("v3 version boundaries reject invalid projections and preserve historical opaque authority", () => {
   const proposal = { disposition_event_id: "1".repeat(64), panel_close_event_id: "2".repeat(64),
     source_round: 1, next_round: 2, root_exit_event_id: null, authorized_paths: ["src/x.mjs"] };
-  for (const policy_version of [1, null, "3", 5]) {
+  for (const policy_version of [1, null, "3", 6]) {
     assert.equal(aggregateTransitionSha256("dispatch", { ...proposal, policy_version }), null,
       `unsupported proposal version ${JSON.stringify(policy_version)} has no projection`);
   }
@@ -1278,6 +1278,178 @@ test("a terminal R4 STOP admits one verified completion batch and one final chil
         budget: "evade", authorized_paths: parent.candidate.paths }], completion_exception: undefined,
       completion_batch: undefined, process_review_event_id: null }, options(ctx.dir)).state,
     "aggregate-continuation-conflict", "an exception child cannot restart through a generic continuation");
+  } finally { ctx.cleanup(); }
+});
+
+test("only an Owner-bound v5 review can reopen one stopped v4 completion child", async () => {
+  const ctx = repo();
+  try {
+    const parent = fourGateStopParent(ctx);
+    mkdirSync(path.join(ctx.dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(ctx.dir, "briefs/completion.md"), "one stopped completion batch\n");
+    writeFileSync(path.join(ctx.dir, "briefs/reauthorization.md"), "one Owner-authorized correction batch\n");
+    const exception = {
+      type: "aggregate_v2", policy_version: AGGREGATE_POLICY_VERSION, kind: "child_continuation",
+      task_id: "task-1", changeset_id: "changeset-1", parent_disposition_event_id: parent.decided.event_id,
+      trigger_ids: ["FINAL"], continuation_kind: "completion_exception", authority_route: "owner",
+      owner_evidence: "Owner approved the completion batch",
+      action_screen: { ..._DEFAULT_CONTINUATION_SCREEN, surviving_finding_ids: ["FINAL"] },
+      children: [{ task_id: "finish-child", changeset_id: "finish-child-cs", tier: "T2", budget: "one batch",
+        authorized_paths: [...parent.candidate.paths, "briefs/completion.md", "briefs/reauthorization.md"].sort() }],
+      completion_exception: { repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: "T2", coverage: "full" },
+        pm_recommendation: "one bounded completion", surviving_harm: "FINAL remains",
+        smallest_correction: "the reviewed paths", completion_proof: "one final panel" },
+      completion_batch: { worker_session_id: "finish-worker", brief_path: "briefs/completion.md" },
+    };
+    const completionReview = processReview(ctx, null, parent.candidate, "owner_decision", "task-1", "changeset-1",
+      "child_continuation", exception);
+    const completion = recordAggregateChildContinuation({ ...exception,
+      process_review_event_id: completionReview.event_id }, options(ctx.dir));
+    assert.equal(completion.ok, true, completion.state);
+    const completionWorker = recordWorkerVerification({ task_id: "finish-child",
+      repair_dispatch_event_id: completion.event_id }, options(ctx.dir, "finish-worker"));
+    assert.equal(completionWorker.ok, true, completionWorker.state);
+    const completedCandidate = commitSelected(ctx.dir, 41, ["briefs/completion.md", "briefs/reauthorization.md"]);
+    const completedPanel = { ...openPanelInput(ctx, completedCandidate, {
+      task_id: "finish-child", changeset_id: "finish-child-cs", child_continuation_event_id: completion.event_id,
+    }, { worker: completionWorker.event_id }), phase: "final_bookend" };
+    const completedOpen = recordAggregatePanelOpen(completedPanel, options(ctx.dir));
+    assert.equal(completedOpen.ok, true, completedOpen.state);
+    const completedClose = closePanel(ctx, completedOpen, completedPanel.expected_seats, completedCandidate,
+      "FINAL-CHILD", { task_id: "finish-child", changeset_id: "finish-child-cs" });
+    const stopped = disposition(ctx, completedClose.closed, { task_id: "finish-child", changeset_id: "finish-child-cs",
+      accepted: ["FINAL-CHILD"], terminal_state: "STOP", remediation_kind: null, authorized_paths: [] });
+    assert.equal(stopped.ok, true, stopped.state);
+    const stoppedState = aggregateState(ctx, "finish-child");
+    const stoppedOpen = stoppedState.panels_open.at(-1);
+    assert.equal(stoppedOpen.policy_version, AGGREGATE_POLICY_VERSION,
+      "the direct stopped completion child remains a v4 final panel before v5 review admission");
+    const openedPaths = [...new Set(stoppedState.panels_open.flatMap((panel) => panel.changed_paths))].sort();
+    const reauthorization = {
+      type: "aggregate_v2", policy_version: 5, kind: "child_continuation", task_id: "finish-child",
+      changeset_id: "finish-child-cs", parent_disposition_event_id: stopped.event_id,
+      parent_frozen_commit: stoppedOpen.frozen_commit, parent_frozen_tree: stoppedOpen.frozen_tree,
+      trigger_ids: ["FINAL-CHILD"], continuation_kind: "terminal_reauthorization", authority_route: "owner",
+      owner_evidence: "Owner authorized exactly one terminal correction", owner_decision_id: "owner-terminal-20260928",
+      stopped_completion_child_event_id: stoppedState.lineage_event_id, surviving_finding_ids: ["FINAL-CHILD"],
+      opened_paths: openedPaths,
+      action_screen: { ..._DEFAULT_CONTINUATION_SCREEN, surviving_finding_ids: ["FINAL-CHILD"] },
+      children: [{ task_id: "reauthorized-child", changeset_id: "reauthorized-child-cs", tier: "T2",
+        budget: "one final corrective batch", authorized_paths: openedPaths }],
+      completion_exception: { repair_batches: 1, final_panels: 1,
+        final_panel: { phase: "final_bookend", tier: "T2", coverage: "full" },
+        pm_recommendation: "Owner approved one terminal correction", surviving_harm: "FINAL-CHILD remains",
+        smallest_correction: "the opened paths", completion_proof: "one full final panel" },
+      completion_batch: { worker_session_id: "reauthorization-worker", brief_path: "briefs/reauthorization.md" },
+    };
+    const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "finish-child",
+      changeset_id: "finish-child-cs", reviewer_role: "frontier", purpose: "child_continuation",
+      proposed_transition: reauthorization,
+      anchor: { kind: "aggregate_terminal", event_id: stopped.event_id, panel_open_event_id: stoppedOpen.event_id,
+        frozen_commit: stoppedOpen.frozen_commit, frozen_tree: stoppedOpen.frozen_tree },
+      review_evidence: "the exact Owner proposal has one bounded child", zoom_out: "the parent remains terminal",
+      ruling: "owner_decision", bounded_scope: "one correction batch", closure_evidence: "the final child closes it" };
+    for (const malformed of [
+      { ...reauthorization, owner_evidence: "" },
+      { ...reauthorization, authority_route: "principal", owner_evidence: undefined },
+      { ...reauthorization, stopped_completion_child_event_id: "f".repeat(64) },
+      { ...reauthorization, parent_frozen_commit: "f".repeat(40) },
+      { ...reauthorization, parent_frozen_tree: "f".repeat(40) },
+      { ...reauthorization, surviving_finding_ids: [] },
+      { ...reauthorization, surviving_finding_ids: ["FINAL-CHILD", "FINAL-CHILD"] },
+      { ...reauthorization, surviving_finding_ids: ["other"] },
+      { ...reauthorization, opened_paths: openedPaths.slice(1) },
+      { ...reauthorization, children: [{ ...reauthorization.children[0], authorized_paths: openedPaths.slice(1) }] },
+      { ...reauthorization, action_screen: { ...reauthorization.action_screen, surviving_finding_ids: [] } },
+      { ...reauthorization, completion_batch: { ...reauthorization.completion_batch, worker_session_id: "" } },
+      { ...reauthorization, completion_exception: { ...reauthorization.completion_exception, final_panels: 2 } },
+    ]) {
+      const before = ledgerBytes(ctx);
+      assert.equal(recordAggregateProcessReview({ ...reviewInput, proposed_transition: malformed }, options(ctx.dir)).state,
+        "aggregate-process-review-malformed");
+      assert.deepEqual(ledgerBytes(ctx), before, "a malformed v5 review never appends a poison row");
+    }
+    const review = recordAggregateProcessReview(reviewInput, options(ctx.dir));
+    assert.equal(review.ok, true, review.state);
+    const reviewRow = aggregateRows(ctx).find((row) => row.event_id === review.event_id).event;
+    assert.equal(reviewRow.policy_version, 5, "only the explicit special review mints v5");
+    assert.deepEqual(reviewRow.terminal_reauthorization_proposal.opened_paths, openedPaths,
+      "the stored review projection binds the stopped child surface");
+    const beforeRepeatReview = ledgerBytes(ctx);
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, proposed_transition: { ...reauthorization,
+      owner_decision_id: "another-owner-decision", children: [{ ...reauthorization.children[0],
+        task_id: "same-root-repeat", changeset_id: "same-root-repeat-cs" }] } }, options(ctx.dir)).state,
+    "aggregate-process-review-malformed", "one root cannot append a second v5 review before another child is admitted");
+    assert.deepEqual(ledgerBytes(ctx), beforeRepeatReview, "the root-wide review cap is enforced before append");
+    assert.equal(recordAggregateProcessReview({ ...reviewInput, proposed_transition: { ...reauthorization,
+      children: [{ ...reauthorization.children[0], task_id: "same-decision-repeat",
+        changeset_id: "same-decision-repeat-cs" }] } }, options(ctx.dir)).state,
+    "aggregate-process-review-malformed", "the Owner decision id cannot mint a second proposed child");
+    assert.deepEqual(ledgerBytes(ctx), beforeRepeatReview, "a repeated Owner decision leaves no v5 review row");
+    const replayedRepeat = stamped({ ...reviewRow, review_evidence: "a second accepted-looking v5 review" });
+    const replayState = deriveAggregateRepairState([...aggregateRows(ctx), replayedRepeat], "finish-child");
+    assert.equal(replayState.process_reviews.filter((entry) => entry.policy_version === 5).length, 1,
+      "replay retains only the first v5 review for the root and decision");
+    writeFileSync(path.join(ctx.dir, "briefs/reauthorization.md"), "changed after the v5 review\n");
+    assert.equal(_rawChildContinuation({ ...reauthorization, process_review_event_id: review.event_id }, options(ctx.dir)).state,
+      "aggregate-continuation-conflict", "the v5 review cannot authorize changed correction-brief bytes");
+    writeFileSync(path.join(ctx.dir, "briefs/reauthorization.md"), "one Owner-authorized correction batch\n");
+    const reauthorized = _rawChildContinuation({ ...reauthorization, process_review_event_id: review.event_id }, options(ctx.dir));
+    assert.equal(reauthorized.ok, true, reauthorized.state);
+    const beforeSibling = ledgerBytes(ctx);
+    assert.equal(_rawChildContinuation({ ...reauthorization, owner_decision_id: "sibling-owner-decision",
+      children: [{ ...reauthorization.children[0], task_id: "reauthorized-sibling",
+        changeset_id: "reauthorized-sibling-cs" }], process_review_event_id: review.event_id }, options(ctx.dir)).ok, false,
+    "the accepted terminal reauthorization consumes the direct stopped child's sole sibling slot");
+    assert.deepEqual(ledgerBytes(ctx), beforeSibling, "a post-admission sibling attempt appends no second terminal child");
+    const frozenSource = execFileSync("git", ["show", "a4dd67464f3ef80948e3d3e51edb47397fac14e9:hooks/repair-dispatch-state.mjs"], {
+      cwd: KIT, encoding: "utf8",
+    });
+    const frozenDir = mkdtempSync(path.join(os.tmpdir(), "frozen-v4-reader-"));
+    try {
+      const frozenFile = path.join(frozenDir, "repair-dispatch-state.mjs");
+      writeFileSync(frozenFile, frozenSource);
+      const frozen = await import(pathToFileURL(frozenFile).href);
+      assert.equal(frozen.deriveAggregateRepairState(aggregateRows(ctx), "finish-child").ok, false,
+        "a frozen v4 reader refuses the prospective v5 record instead of silently treating it as v4");
+    } finally { rmSync(frozenDir, { recursive: true, force: true }); }
+    assert.equal(recordWorkerVerification({ task_id: "reauthorized-child",
+      repair_dispatch_event_id: reauthorized.event_id }, options(ctx.dir, "wrong-terminal-worker")).state,
+    "repair-worker-verification-missing", "the v5 batch cannot substitute a worker session");
+    const reauthorizationWorker = recordWorkerVerification({ task_id: "reauthorized-child",
+      repair_dispatch_event_id: reauthorized.event_id }, options(ctx.dir, "reauthorization-worker"));
+    assert.equal(reauthorizationWorker.ok, true, reauthorizationWorker.state);
+    const correctionCandidate = commitSelected(ctx.dir, 42, []);
+    const correctionPanel = { ...openPanelInput(ctx, correctionCandidate, {
+      task_id: "reauthorized-child", changeset_id: "reauthorized-child-cs",
+      child_continuation_event_id: reauthorized.event_id,
+    }, { worker: reauthorizationWorker.event_id }), phase: "final_bookend" };
+    const correctionOpen = recordAggregatePanelOpen(correctionPanel, options(ctx.dir));
+    assert.equal(correctionOpen.ok, true, correctionOpen.state);
+    assert.equal(verifyRepairWorkerWrite({ task_id: "reauthorized-child", session_id: "reauthorization-worker",
+      target: "src/x.mjs" }, { projectRoot: ctx.dir }).state, "completion-batch-finished",
+    "opening the one final panel freezes the terminal correction worker");
+    const correctionClose = closePanel(ctx, correctionOpen, correctionPanel.expected_seats, correctionCandidate,
+      "REAUTHAUTH-FINAL", { task_id: "reauthorized-child", changeset_id: "reauthorized-child-cs" });
+    const final = disposition(ctx, correctionClose.closed, { task_id: "reauthorized-child",
+      changeset_id: "reauthorized-child-cs", accepted: ["REAUTHAUTH-FINAL"], terminal_state: "STOP",
+      remediation_kind: null, authorized_paths: [] });
+    assert.equal(final.ok, true, final.state);
+    const finalState = aggregateState(ctx, "reauthorized-child");
+    assert.equal(finalState.current_gate_ordinal, stoppedState.current_gate_ordinal + 1,
+      "the single final panel advances the inherited cumulative gate ordinal exactly once");
+    const refreezeCandidate = commitSelected(ctx.dir, 43, []);
+    assert.equal(recordAggregatePanelOpen({ ...correctionPanel, frozen_commit: refreezeCandidate.commit,
+      frozen_tree: refreezeCandidate.tree }, options(ctx.dir)).state, "aggregate-terminal",
+      "the terminal reauthorization child cannot open a second final panel");
+    assert.equal(_rawChildContinuation({ type: "aggregate_v2", policy_version: 5, kind: "child_continuation",
+      task_id: "reauthorized-child", changeset_id: "reauthorized-child-cs", parent_disposition_event_id: final.event_id,
+      trigger_ids: ["REAUTHAUTH-FINAL"], continuation_kind: "new_changeset", authority_route: "owner",
+      owner_evidence: "Owner cannot relabel the terminal child", action_screen: _DEFAULT_CONTINUATION_SCREEN,
+      children: [{ task_id: "post-terminal-child", changeset_id: "post-terminal-child-cs", tier: "T2",
+        budget: "forbidden restart", authorized_paths: openedPaths }] }, options(ctx.dir)).ok, false,
+    "a terminal reauthorization child cannot restart through an ordinary continuation");
   } finally { ctx.cleanup(); }
 });
 
