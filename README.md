@@ -1,4 +1,4 @@
-# workflow-kit — v2.35.0
+# workflow-kit — v2.36.0
 
 ## How to start a build
 
@@ -11,6 +11,25 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults, no `pairedPm*` key is configured, and no send screen applies.
+
+## What's new in v2.36.0 — one-use Owner terminal reauthorization
+
+- **A stopped completion child can take one Owner-authorized correction.** A new policy-v5 route in the
+  repair controller admits exactly one correction batch and one full final panel after a completion
+  child's final panel ends in `STOP`. It needs direct Owner evidence and a matching `owner_decision`
+  process review, and it binds every surviving finding and opened path. Ordinary work still mints v4.
+  Design: `docs/journal/terminal_reauthorization_design.md`.
+- **This release changes the repair controller.** v2.35.0's controller was byte-identical to v2.33.x;
+  v2.36.0's is not. **A v4 reader rejects a v5 ledger row, and rolling that ledger back to v4 is
+  unsupported.** Nothing mints v5 until someone records a terminal reauthorization.
+
+**Upgrading.** From **v2.33.x through v2.35.0**, run `node <kit>/bin/init.mjs --target <repo> --force`
+in **every worktree of the repository in one step**, in the order v2.33.1's note gives (pass
+`--allow-mixed-repair-controllers` on every run except the last). All worktrees share one ledger, so a
+worktree left on the old controller is locked out after the first v5 row. `init`'s mixed-controller
+check compares bytes, not version labels, and refuses a mixed install. Restart any long-lived session
+that has loaded the old hooks. No `.codex/hooks.json` entry changes. From v2.32.x or earlier, also
+follow the v2.35.0 note's Codex re-trust step.
 
 ## What's new in v2.35.0 — controls behind the v2.34.0 doctrine
 
