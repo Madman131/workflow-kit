@@ -179,7 +179,7 @@ function terminalReauthorizationProposalShape(input, state = null) {
       !text(input?.owner_evidence, 1000) || input?.principal_evidence !== undefined ||
       !text(input?.owner_decision_id, 200) || !ID64.test(input?.stopped_completion_child_event_id || "") ||
       !GIT_SHA.test(input?.parent_frozen_commit || "") || !GIT_SHA.test(input?.parent_frozen_tree || "") ||
-      !strings(input?.surviving_finding_ids) || !same(input.surviving_finding_ids, [...input.surviving_finding_ids].sort()) ||
+      !strings(input?.surviving_finding_ids, { max: 2600 }) || !same(input.surviving_finding_ids, [...input.surviving_finding_ids].sort()) ||
       !paths || !same(paths, input.opened_paths) || !Array.isArray(children) || children.length !== 1 ||
       !aggregateChildShape(children[0]) || children[0].tier !== "T2" ||
       !same(children[0].authorized_paths, paths) ||
@@ -392,7 +392,7 @@ function validAggregateKindShape(event) {
           : event.completion_exception === undefined && event.completion_batch === undefined) &&
         (event.continuation_kind !== "terminal_reauthorization" ||
           event.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION && text(event.owner_decision_id, 200) &&
-          ID64.test(event.stopped_completion_child_event_id || "") && strings(event.surviving_finding_ids) &&
+          ID64.test(event.stopped_completion_child_event_id || "") && strings(event.surviving_finding_ids, { max: 2600 }) &&
           same(event.surviving_finding_ids, [...event.surviving_finding_ids].sort()) &&
           Boolean(sortedPaths(event.opened_paths)) && same(event.opened_paths, sortedPaths(event.opened_paths)));
     case "legacy_handoff":
@@ -947,6 +947,13 @@ function typedReviewMatches(review, purpose, anchor, transition) {
     review.transition_sha256 === aggregateTransitionSha256(purpose, transition);
 }
 
+function terminalReauthorizationReviewMatches(review, purpose, anchor, transition) {
+  const proposal = proposedTransitionProjection(purpose, transition);
+  return aggregatePolicyVersion(review) === TERMINAL_REAUTHORIZATION_POLICY_VERSION &&
+    review.ruling === "owner_decision" && same(review.terminal_reauthorization_proposal, proposal) &&
+    typedReviewMatches(review, purpose, anchor, proposal);
+}
+
 function applicableTypedReviews(reviews, purpose, anchor, ordinal, transition) {
   // Policy 2's typed digest omitted its version; policies 3 and 4 include it. Compare the exact
   // action under each accepted older grammar, so a newer writer cannot hide an Owner hold merely
@@ -973,8 +980,6 @@ function aggregateWorld(events, standardEvents = []) {
   const principalDecisionIds = new Set();
   const terminalReauthorizationDecisionIds = new Set();
   const terminalReauthorizationRoots = new Set();
-  const terminalReauthorizationReviewDecisionIds = new Set();
-  const terminalReauthorizationReviewRoots = new Set();
   const processReviews = [], processReviewKeys = new Set();
   const standardIdentities = standardEvents.filter((row) => row?.event?.type === "round_disposition" &&
     row.event.round === 1).filter((row, index, all) => all.findIndex((candidate) =>
@@ -1412,8 +1417,6 @@ function aggregateWorld(events, standardEvents = []) {
               !terminalReauthorizationProposalShape(proposal, state) ||
               !same(proposedTransitionProjection("child_continuation", proposal), proposal) ||
               row.transition_sha256 !== eventId(proposal) ||
-              terminalReauthorizationReviewDecisionIds.has(proposal.owner_decision_id) ||
-              terminalReauthorizationReviewRoots.has(lineageRoot(row.task_id)) ||
               terminalReauthorizationDecisionIds.has(proposal.owner_decision_id) ||
               terminalReauthorizationRoots.has(lineageRoot(row.task_id))) continue;
         }
@@ -1421,10 +1424,6 @@ function aggregateWorld(events, standardEvents = []) {
         if (!anchor || !same(row.anchor, anchor) || row.next_gate_ordinal !== ordinal || processReviewKeys.has(key)) continue;
         processReviewKeys.add(key); processReviews.push(accept(row));
         if (state) state.process_reviews.push(row);
-        if (aggregatePolicyVersion(row) === TERMINAL_REAUTHORIZATION_POLICY_VERSION) {
-          terminalReauthorizationReviewDecisionIds.add(row.terminal_reauthorization_proposal.owner_decision_id);
-          terminalReauthorizationReviewRoots.add(lineageRoot(row.task_id));
-        }
       } else {
         // Historical untyped reviews keep their original replay semantics, including the one-row
         // ordinal slot. Current recorders never mint this shape.
@@ -1546,7 +1545,7 @@ function aggregateWorld(events, standardEvents = []) {
       if (row.continuation_kind === "terminal_reauthorization" && (row.authority_route !== "owner" || !text(row.owner_evidence, 1000) || row.principal_evidence !== undefined || !terminalReauthorizationStop ||
           !text(row.owner_decision_id, 200) || terminalReauthorizationDecisionIds.has(row.owner_decision_id) || terminalReauthorizationRoots.has(lineageRoot(row.task_id)) ||
           row.stopped_completion_child_event_id !== state.lineage_event_id ||
-          !strings(row.surviving_finding_ids) || !same(row.surviving_finding_ids, [...row.surviving_finding_ids].sort()) ||
+          !strings(row.surviving_finding_ids, { max: 2600 }) || !same(row.surviving_finding_ids, [...row.surviving_finding_ids].sort()) ||
           !same(row.surviving_finding_ids, [...state.latest.finding_dispositions.accepted].sort()) ||
           !same(row.action_screen?.surviving_finding_ids ?? [], row.surviving_finding_ids) ||
           !same(row.opened_paths ?? [], [...new Set(state.panels_open.flatMap((open) => open.changed_paths))].sort()) ||
@@ -1572,10 +1571,13 @@ function aggregateWorld(events, standardEvents = []) {
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
         const typedApplicable = applicableTypedReviews(state.process_reviews, "child_continuation",
           aggregateTerminalAnchor(state), ordinal, row);
+        const terminalApplicable = row.continuation_kind === "terminal_reauthorization"
+          ? typedApplicable.filter((candidate) => terminalReauthorizationReviewMatches(candidate,
+            "child_continuation", aggregateTerminalAnchor(state), row)) : typedApplicable;
         const allowed = (candidate) => principal ? candidate.ruling === "successor" : completionException
           ? completionExceptionReviewAllows(candidate) : continuationReviewAllows(candidate);
         const held = typedApplicable.some((candidate) => !allowed(candidate));
-        const typed = review && !held && typedApplicable.some((candidate) => candidate.event_id === review.event_id) &&
+        const typed = review && !held && terminalApplicable.some((candidate) => candidate.event_id === review.event_id) &&
           allowed(review);
         const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
           candidate.next_gate_ordinal === ordinal) || null;
@@ -2357,11 +2359,8 @@ export function recordAggregateProcessReview(input,
   };
   const terminalAlreadyUsed = terminalReauthorization && [...(world?.accepted.values() ?? [])].some((row) => {
     const existing = row;
-    const reviewDecision = existing?.terminal_reauthorization_proposal?.owner_decision_id;
     return (existing?.kind === "child_continuation" && existing.continuation_kind === "terminal_reauthorization" &&
-      (existing.owner_decision_id === reviewedProposal.owner_decision_id || root(existing.task_id) === root(input.task_id))) ||
-      (existing?.kind === "process_review" && existing.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION &&
-        (reviewDecision === reviewedProposal.owner_decision_id || root(existing.task_id) === root(input.task_id)));
+      (existing.owner_decision_id === reviewedProposal.owner_decision_id || root(existing.task_id) === root(input.task_id)));
   });
   const expectedChangeset = purpose === "legacy_handoff" ? standard?.changeset_id : state?.changeset_id;
   const transitionSha = projection && eventId(projection);
@@ -2501,10 +2500,12 @@ export function recordAggregateChildContinuation(input,
       : state.process_reviews.find((candidate) => candidate.event_id === event.process_review_event_id);
     const applicable = applicableTypedReviews(state.process_reviews, "child_continuation",
       aggregateTerminalAnchor(state), ordinal, event);
+    const terminalApplicable = terminalReauthorization ? applicable.filter((candidate) =>
+      terminalReauthorizationReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), event)) : applicable;
     const allowed = (candidate) => authorityRoute === "principal" ? candidate.ruling === "successor"
       : completionException ? completionExceptionReviewAllows(candidate) : continuationReviewAllows(candidate);
     const held = applicable.some((candidate) => !allowed(candidate));
-    const authorized = review && !held && applicable.some((candidate) => candidate.event_id === review.event_id) &&
+    const authorized = review && !held && terminalApplicable.some((candidate) => candidate.event_id === review.event_id) &&
       allowed(review);
     if (held || ((completionException || authorityRoute === "principal" || ordinal % 4 === 0 || applicable.length ||
         event.process_review_event_id !== null) && !authorized)) {
