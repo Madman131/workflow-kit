@@ -2420,8 +2420,7 @@ export function recordAggregateWorkerHandoff(input,
 
 export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "child_continuation" });
-  if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
+  if (!Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
       !input.children.every(aggregateChildShape) ||
       (completionBatchKind(input.continuation_kind) && input.children.length !== 1)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
@@ -2446,8 +2445,7 @@ export function recordAggregateChildContinuation(input,
   const authorityRoute = input.authority_route;
   const completionException = completionBatchKind(input.continuation_kind);
   const terminalReauthorization = input.continuation_kind === "terminal_reauthorization";
-  if (!currentAggregatePolicy(base) ||
-      !["owner", "principal"].includes(authorityRoute)) {
+  if (!["owner", "principal"].includes(authorityRoute)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
   if ((authorityRoute === "owner" && !text(input.owner_evidence, 1000)) ||
@@ -2469,13 +2467,27 @@ export function recordAggregateChildContinuation(input,
   const batchBrief = completionException && completionBatchProposalShape(input.completion_batch)
     ? readRegularRepoFile(projectRoot, input.completion_batch.brief_path) : null;
   if (completionException && !batchBrief) return { ok: false, state: "repair-brief-unconfirmed" };
+  // The special child envelope is derived here, after the recorder has loaded the stopped parent
+  // and frozen brief. Its outer policy is never caller authority: the review proposal remains the
+  // explicit v5 declaration, while this eventual continuation mints v5 only from this operation.
   const terminalProposal = terminalReauthorization && batchBrief ? {
-    ...input, parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
+    ...input, policy_version: TERMINAL_REAUTHORIZATION_POLICY_VERSION,
+    parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
     completion_batch: { ...input.completion_batch, brief_sha256: batchBrief.sha256, brief_size: batchBrief.size },
   } : null;
   if (terminalReauthorization && !terminalReauthorizationProposalShape(terminalProposal, state)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
+  // A review is an accepted row in the derived parent state. Only its exact frozen projection
+  // permits the recorder to select the v5 envelope; a supplied outer policy field is discarded.
+  const reviewedTerminalProposal = terminalReauthorization && state.process_reviews.some((review) =>
+    review.event_id === input.process_review_event_id && terminalReauthorizationReviewMatches(review,
+      "child_continuation", aggregateTerminalAnchor(state), terminalProposal));
+  const ordinaryInput = terminalReauthorization
+    ? Object.fromEntries(Object.entries(input).filter(([key]) => key !== "policy_version")) : input;
+  const base = aggregateBaseEvent(reviewedTerminalProposal ? terminalProposal : ordinaryInput,
+    sessionId, now, projectRoot, execGit, { operation: "child_continuation" });
+  if (!base || !currentAggregatePolicy(base)) return { ok: false, state: "aggregate-continuation-malformed" };
   if (completionException && !v3FinalBundle(input.completion_exception,
     authorityRoute === "principal" ? "T2" : input.children[0]?.tier)) {
     return { ok: false, state: "aggregate-continuation-malformed" };

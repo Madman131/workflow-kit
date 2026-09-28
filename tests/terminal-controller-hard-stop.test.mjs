@@ -1380,7 +1380,7 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
       "the direct stopped completion child remains a v4 final panel before v5 review admission");
     const openedPaths = [...new Set(stoppedState.panels_open.flatMap((panel) => panel.changed_paths))].sort();
     const reauthorization = {
-      type: "aggregate_v2", policy_version: 5, kind: "child_continuation", task_id: "finish-child",
+      type: "aggregate_v2", kind: "child_continuation", task_id: "finish-child",
       changeset_id: "finish-child-cs", parent_disposition_event_id: stopped.event_id,
       parent_frozen_commit: stoppedOpen.frozen_commit, parent_frozen_tree: stoppedOpen.frozen_tree,
       trigger_ids: survivors, continuation_kind: "terminal_reauthorization", authority_route: "owner",
@@ -1398,7 +1398,7 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
     };
     const reviewInput = { type: "aggregate_v2", kind: "process_review", task_id: "finish-child",
       changeset_id: "finish-child-cs", reviewer_role: "frontier", purpose: "child_continuation",
-      proposed_transition: reauthorization,
+      proposed_transition: { ...reauthorization, policy_version: 5 },
       anchor: { kind: "aggregate_terminal", event_id: stopped.event_id, panel_open_event_id: stoppedOpen.event_id,
         frozen_commit: stoppedOpen.frozen_commit, frozen_tree: stoppedOpen.frozen_tree },
       review_evidence: "the exact Owner proposal has one bounded child", zoom_out: "the parent remains terminal",
@@ -1419,7 +1419,7 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
       { ...reauthorization, completion_exception: { ...reauthorization.completion_exception, final_panels: 2 } },
     ]) {
       const before = ledgerBytes(ctx);
-      assert.equal(recordAggregateProcessReview({ ...reviewInput, proposed_transition: malformed }, options(ctx.dir)).state,
+      assert.equal(recordAggregateProcessReview({ ...reviewInput, proposed_transition: { ...malformed, policy_version: 5 } }, options(ctx.dir)).state,
         "aggregate-process-review-malformed");
       assert.deepEqual(ledgerBytes(ctx), before, "a malformed v5 review never appends a poison row");
     }
@@ -1431,7 +1431,7 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
       owner_decision_id: "owner-terminal-corrected-20260928", children: [{ ...reauthorization.children[0],
         task_id: "reauthorized-corrected", changeset_id: "reauthorized-corrected-cs" }], completion_batch: {
         ...reauthorization.completion_batch, worker_session_id: "reauthorization-corrected-worker" } };
-    const correctedReviewInput = { ...reviewInput, proposed_transition: corrected,
+    const correctedReviewInput = { ...reviewInput, proposed_transition: { ...corrected, policy_version: 5 },
       review_evidence: "the corrected Owner proposal has a distinct child identity" };
     const reauthorizationBrief = readFileSync(path.join(ctx.dir, "briefs/reauthorization.md"));
     const v4Transition = { ...corrected, policy_version: AGGREGATE_POLICY_VERSION, completion_batch: {
@@ -1475,15 +1475,26 @@ test("only an Owner-bound v5 review can reopen one stopped v4 completion child",
     assert.equal(_rawChildContinuation({ ...reauthorization, process_review_event_id: reviewA.event_id }, options(ctx.dir)).state,
       "aggregate-continuation-conflict", "the v5 review cannot authorize changed correction-brief bytes");
     writeFileSync(path.join(ctx.dir, "briefs/reauthorization.md"), reauthorizationBrief);
-    assert.equal(_rawChildContinuation({ ...corrected, process_review_event_id: reviewA.event_id }, options(ctx.dir)).state,
-      "aggregate-continuation-conflict", "the unused A review never becomes generic authority for corrected B");
+    assert.equal(_rawChildContinuation({ ...corrected, policy_version: 5, process_review_event_id: reviewA.event_id }, options(ctx.dir)).state,
+      "aggregate-continuation-conflict", "a caller-supplied outer v5 cannot make unused A review generic authority for corrected B");
     const reviewB = recordAggregateProcessReview(correctedReviewInput, options(ctx.dir));
     assert.equal(reviewB.ok, true, reviewB.state, "a corrected unused proposal can receive fresh exact Owner review evidence");
     assert.equal(_rawChildContinuation({ ...corrected, process_review_event_id: reviewB.event_id }, options(ctx.dir)).state,
       "aggregate-continuation-conflict", "an older matching successor hold cannot be bypassed by a later v5 Owner review");
     setAggregateRows(ctx, aggregateRows(ctx).filter((row) => row.event_id !== v4Review.event_id));
-    const reauthorized = _rawChildContinuation({ ...corrected, process_review_event_id: reviewB.event_id }, options(ctx.dir));
-    assert.equal(reauthorized.ok, true, reauthorized.state);
+    writeFileSync(cliEvent, JSON.stringify({ ...corrected, process_review_event_id: reviewB.event_id,
+      session_id: "cli-terminal-child" }));
+    const childCli = spawnSync(process.execPath, [cli, "--event", cliEvent], { cwd: ctx.dir, encoding: "utf8" });
+    assert.equal(childCli.status, 0, childCli.stderr);
+    const reauthorized = JSON.parse(childCli.stdout);
+    assert.equal(reauthorized.ok, true, childCli.stdout);
+    const storedReauthorization = aggregateRows(ctx).find((row) => row.event_id === reauthorized.event_id)?.event;
+    assert.equal(storedReauthorization?.policy_version, 5,
+      "the CLI child omits its outer policy but the recorder persists the derived v5 envelope");
+    const childRetry = spawnSync(process.execPath, [cli, "--event", cliEvent], { cwd: ctx.dir, encoding: "utf8" });
+    assert.equal(childRetry.status, 0, childRetry.stderr);
+    assert.equal(JSON.parse(childRetry.stdout).idempotent, true,
+      "the same outer-policy-free terminal child retries against its persisted v5 row");
     const beforeSibling = ledgerBytes(ctx);
     assert.equal(_rawChildContinuation({ ...reauthorization, process_review_event_id: reviewA.event_id }, options(ctx.dir)).ok, false,
       "A and B race for one child: admission of B refuses A");
