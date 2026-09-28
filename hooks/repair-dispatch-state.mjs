@@ -23,6 +23,7 @@ const AGGREGATE_EVENT_TYPE = "aggregate_v2";
 const HISTORICAL_AGGREGATE_POLICY_VERSION = 1;
 const ESTABLISHED_AGGREGATE_POLICY_VERSION = 2;
 const PRINCIPAL_AGGREGATE_POLICY_VERSION = 3;
+const TERMINAL_REAUTHORIZATION_POLICY_VERSION = 5;
 export const AGGREGATE_POLICY_VERSION = 4;
 const AGGREGATE_KINDS = new Set([
   "panel_open", "panel_close", "disposition", "root_exit", "dispatch", "worker",
@@ -89,13 +90,14 @@ function validManifest(records, digest) {
 function validAggregateEnvelope(event) {
   return plain(event) && event.type === AGGREGATE_EVENT_TYPE && AGGREGATE_KINDS.has(event.kind) &&
     (event.policy_version === undefined || event.policy_version === ESTABLISHED_AGGREGATE_POLICY_VERSION ||
-      event.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION || event.policy_version === AGGREGATE_POLICY_VERSION) &&
+      event.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION || event.policy_version === AGGREGATE_POLICY_VERSION || event.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION) &&
     text(event.task_id, 120) && text(event.changeset_id, 120) && text(event.recorded_at, 100) &&
     text(event.session_id, 200) && validAggregateKindShape(event);
 }
 
 const nullableId = (value) => value === null || ID64.test(value || "");
-const aggregatePolicyVersion = (event) => event?.policy_version === AGGREGATE_POLICY_VERSION
+const aggregatePolicyVersion = (event) => event?.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION
+  ? TERMINAL_REAUTHORIZATION_POLICY_VERSION : event?.policy_version === AGGREGATE_POLICY_VERSION
   ? AGGREGATE_POLICY_VERSION : event?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION
     ? PRINCIPAL_AGGREGATE_POLICY_VERSION : event?.policy_version === ESTABLISHED_AGGREGATE_POLICY_VERSION
       ? ESTABLISHED_AGGREGATE_POLICY_VERSION : HISTORICAL_AGGREGATE_POLICY_VERSION;
@@ -107,7 +109,8 @@ const effectiveAggregatePolicyVersion = (state, incoming) =>
 const continuationReviewAllows = (review) =>
   ["successor", "owner_decision"].includes(review?.ruling);
 const completionExceptionReviewAllows = (review) => review?.ruling === "owner_decision";
-const CONTINUATION_KINDS = new Set(["split", "new_changeset", "material_scope", "completion_exception"]);
+const CONTINUATION_KINDS = new Set(["split", "new_changeset", "material_scope", "completion_exception", "terminal_reauthorization"]);
+const completionBatchKind = (kind) => kind === "completion_exception" || kind === "terminal_reauthorization";
 const PROCESS_REVIEW_PURPOSES = new Set(["dispatch", "child_continuation", "legacy_handoff"]);
 function processReviewRulingAllowed(purpose, ruling) {
   return purpose === "dispatch"
@@ -168,15 +171,44 @@ function v3AuthorityRoute(input, { proposal = false } = {}) {
   return false;
 }
 
+function terminalReauthorizationProposalShape(input, state = null) {
+  const paths = sortedPaths(input?.opened_paths);
+  const children = input?.children;
+  if (aggregatePolicyVersion(input) !== TERMINAL_REAUTHORIZATION_POLICY_VERSION ||
+      input?.continuation_kind !== "terminal_reauthorization" || input?.authority_route !== "owner" ||
+      !text(input?.owner_evidence, 1000) || input?.principal_evidence !== undefined ||
+      !text(input?.owner_decision_id, 200) || !ID64.test(input?.stopped_completion_child_event_id || "") ||
+      !GIT_SHA.test(input?.parent_frozen_commit || "") || !GIT_SHA.test(input?.parent_frozen_tree || "") ||
+      !strings(input?.surviving_finding_ids, { max: 2600 }) || !same(input.surviving_finding_ids, [...input.surviving_finding_ids].sort()) ||
+      !paths || !same(paths, input.opened_paths) || !Array.isArray(children) || children.length !== 1 ||
+      !aggregateChildShape(children[0]) || children[0].tier !== "T2" ||
+      !same(children[0].authorized_paths, paths) ||
+      !same(input?.action_screen?.surviving_finding_ids ?? [], input.surviving_finding_ids) ||
+      !v3FinalBundle(input?.completion_exception, "T2") ||
+      !completionBatchReviewProposalShape(input?.completion_batch)) return false;
+  if (!state) return true;
+  const open = state.panels_open?.[0];
+  const accepted = state.latest?.finding_dispositions?.accepted;
+  return open?.policy_version === AGGREGATE_POLICY_VERSION && state.tier === "T2" &&
+    state.completion_exception && state.terminal === "STOP" && state.panels_open?.length === 1 &&
+    open?.phase === "final_bookend" && open.tier === "T2" &&
+    input.parent_disposition_event_id === state.latest?.event_id &&
+    input.stopped_completion_child_event_id === state.lineage_event_id &&
+    input.parent_frozen_commit === open.frozen_commit && input.parent_frozen_tree === open.frozen_tree &&
+    same(input.surviving_finding_ids, [...(accepted ?? [])].sort()) &&
+    same(input.trigger_ids ?? [], [...(accepted ?? [])].sort()) &&
+    same(paths, [...new Set(state.panels_open.flatMap((panel) => panel.changed_paths))].sort());
+}
+
 function proposedTransitionProjection(purpose, input) {
   if (!plain(input)) return null;
   if (input.policy_version !== undefined && input.policy_version !== ESTABLISHED_AGGREGATE_POLICY_VERSION &&
       input.policy_version !== PRINCIPAL_AGGREGATE_POLICY_VERSION &&
-      input.policy_version !== AGGREGATE_POLICY_VERSION) return null;
+      input.policy_version !== AGGREGATE_POLICY_VERSION && input.policy_version !== TERMINAL_REAUTHORIZATION_POLICY_VERSION) return null;
   const policy = aggregatePolicyVersion(input);
   if (policy !== HISTORICAL_AGGREGATE_POLICY_VERSION &&
       policy !== ESTABLISHED_AGGREGATE_POLICY_VERSION &&
-      policy !== PRINCIPAL_AGGREGATE_POLICY_VERSION && policy !== AGGREGATE_POLICY_VERSION) return null;
+      policy !== PRINCIPAL_AGGREGATE_POLICY_VERSION && policy !== AGGREGATE_POLICY_VERSION && policy !== TERMINAL_REAUTHORIZATION_POLICY_VERSION) return null;
   if (purpose === "dispatch") {
     const paths = sortedPaths(input.authorized_paths);
     if (!ID64.test(input.disposition_event_id || "") || !ID64.test(input.panel_close_event_id || "") ||
@@ -193,7 +225,7 @@ function proposedTransitionProjection(purpose, input) {
       return aggregateChildShape(child) && paths ? { task_id: child.task_id, changeset_id: child.changeset_id,
         tier: child.tier, budget: child.budget, authorized_paths: paths } : null;
     }) : null;
-    const completionValid = input.continuation_kind !== "completion_exception" ||
+    const completionValid = !completionBatchKind(input.continuation_kind) ||
       (policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION
         ? v3AuthorityRoute(input, { proposal: input.principal_evidence === undefined && input.authority_route === "principal" }) &&
           validActionScreen(input.action_screen) &&
@@ -208,7 +240,7 @@ function proposedTransitionProjection(purpose, input) {
         !Array.isArray(input.trigger_ids) || !input.trigger_ids.every((id) => text(id, 300)) ||
         !CONTINUATION_KINDS.has(input.continuation_kind) ||
         !completionValid ||
-        (input.continuation_kind !== "completion_exception" &&
+        (!completionBatchKind(input.continuation_kind) &&
           (input.completion_exception !== undefined || input.completion_batch !== undefined))) return null;
     if (policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION && (!v3AuthorityRoute(input, {
       proposal: input.principal_evidence === undefined && input.authority_route === "principal",
@@ -221,7 +253,7 @@ function proposedTransitionProjection(purpose, input) {
         ? { parent_panel_open_event_id: input.parent_panel_open_event_id } : {}),
       trigger_ids: [...input.trigger_ids].sort(), continuation_kind: input.continuation_kind,
       ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? { action_screen: input.action_screen } : {}),
-      ...(input.continuation_kind === "completion_exception"
+      ...(completionBatchKind(input.continuation_kind)
         ? { ...(policy >= PRINCIPAL_AGGREGATE_POLICY_VERSION ? {} : { owner_evidence: input.owner_evidence,
           action_screen: input.action_screen }),
           completion_exception: input.completion_exception,
@@ -229,6 +261,10 @@ function proposedTransitionProjection(purpose, input) {
             brief_path: input.completion_batch.brief_path,
             brief_sha256: input.completion_batch.brief_sha256,
             brief_size: input.completion_batch.brief_size } } : {}),
+      ...(input.continuation_kind === "terminal_reauthorization" ? { owner_decision_id: input.owner_decision_id,
+        stopped_completion_child_event_id: input.stopped_completion_child_event_id,
+        surviving_finding_ids: input.surviving_finding_ids, opened_paths: input.opened_paths,
+        parent_frozen_commit: input.parent_frozen_commit, parent_frozen_tree: input.parent_frozen_tree } : {}),
       children: children.sort((a, b) => `${a.task_id}\0${a.changeset_id}`.localeCompare(`${b.task_id}\0${b.changeset_id}`)) };
   }
   if (purpose === "legacy_handoff") {
@@ -293,7 +329,12 @@ function validAggregateKindShape(event) {
             ID64.test(event.panel_close_event_id || "") && GIT_SHA.test(event.frozen_commit || "") &&
             GIT_SHA.test(event.frozen_tree || "")) ||
           (processReviewAnchorShape(event.anchor) && PROCESS_REVIEW_PURPOSES.has(event.purpose) &&
-            ID64.test(event.transition_sha256 || "")));
+            ID64.test(event.transition_sha256 || ""))) &&
+        (event.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION
+          ? event.purpose === "child_continuation" && event.ruling === "owner_decision" &&
+            plain(event.terminal_reauthorization_proposal) &&
+            terminalReauthorizationProposalShape(event.terminal_reauthorization_proposal)
+          : event.terminal_reauthorization_proposal === undefined);
     case "dispatch":
       return ID64.test(event.disposition_event_id || "") && ID64.test(event.panel_close_event_id || "") &&
         Number.isSafeInteger(event.source_round) && Number.isSafeInteger(event.next_round) &&
@@ -344,11 +385,16 @@ function validAggregateKindShape(event) {
         // shape so rows minted before this field keep validating on replay (never re-minted here).
         (currentAggregatePolicy(event) ? validActionScreen(event.action_screen) :
           event.action_screen === undefined || validActionScreen(event.action_screen)) &&
-        (event.continuation_kind === "completion_exception"
+        (completionBatchKind(event.continuation_kind)
           ? (currentAggregatePolicy(event)
             ? v3FinalBundle(event.completion_exception, event.authority_route === "principal" ? "T2" : event.children?.[0]?.tier)
             : completionExceptionShape(event.completion_exception)) && completionBatchShape(event.completion_batch)
-          : event.completion_exception === undefined && event.completion_batch === undefined);
+          : event.completion_exception === undefined && event.completion_batch === undefined) &&
+        (event.continuation_kind !== "terminal_reauthorization" ||
+          event.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION && text(event.owner_decision_id, 200) &&
+          ID64.test(event.stopped_completion_child_event_id || "") && strings(event.surviving_finding_ids, { max: 2600 }) &&
+          same(event.surviving_finding_ids, [...event.surviving_finding_ids].sort()) &&
+          Boolean(sortedPaths(event.opened_paths)) && same(event.opened_paths, sortedPaths(event.opened_paths)));
     case "legacy_handoff":
       return text(event.parent_task_id, 120) && text(event.parent_changeset_id, 120) &&
         ID64.test(event.parent_disposition_event_id || "") && Number.isSafeInteger(event.parent_round) &&
@@ -774,21 +820,31 @@ function baseEvent(type, input, sessionId, now, policyVersion = AGGREGATE_POLICY
 
 // Historical policy is inherited from accepted program or pending-child lineage, not a caller's
 // tier claim. Standard history records no tier: its activeness cannot authorize a NEW T3 handoff.
-function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit) {
+function aggregateBaseEvent(input, sessionId, now, projectRoot, execGit,
+  { operation = null, terminalProposal = null } = {}) {
   const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
   const world = rows && aggregateWorld(rows.aggregate, rows.standard);
-  const legacy = input?.kind === "legacy_handoff" || input?.purpose === "legacy_handoff";
+  // The recorder selects an operation before it reads caller data. A payload cannot mint v5 by
+  // smuggling a continuation marker into an ordinary panel, close, or disposition request.
+  const legacy = operation === "legacy_handoff";
   const taskId = legacy ? input?.parent_task_id ?? input?.task_id : input?.task_id;
   const changesetId = legacy ? input?.parent_changeset_id ?? input?.changeset_id : input?.changeset_id;
   const actualProgram = world?.programs.get(taskId);
   const actualPending = world?.childLineage.get(taskId);
   const program = actualProgram?.changeset_id === changesetId ? actualProgram : null;
   const pending = actualPending?.changeset_id === changesetId ? actualPending : null;
+  const candidate = operation === "child_continuation" ? input :
+    operation === "process_review" ? terminalProposal : null;
+  const terminalReauthorization = candidate?.continuation_kind === "terminal_reauthorization" &&
+    terminalReauthorizationProposalShape(candidate, program);
   const historical = program?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION ||
     (!program && pending?.policy_version === PRINCIPAL_AGGREGATE_POLICY_VERSION) ||
     program?.tier === "T3" || (!program && pending?.tier === "T3");
   const policy = historical
-    ? PRINCIPAL_AGGREGATE_POLICY_VERSION : AGGREGATE_POLICY_VERSION;
+    ? PRINCIPAL_AGGREGATE_POLICY_VERSION : (terminalReauthorization ||
+      program?.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION ||
+      (!program && pending?.policy_version === TERMINAL_REAUTHORIZATION_POLICY_VERSION)
+        ? TERMINAL_REAUTHORIZATION_POLICY_VERSION : AGGREGATE_POLICY_VERSION);
   return baseEvent(AGGREGATE_EVENT_TYPE, input, sessionId, now, policy);
 }
 
@@ -897,12 +953,19 @@ function typedReviewMatches(review, purpose, anchor, transition) {
     review.transition_sha256 === aggregateTransitionSha256(purpose, transition);
 }
 
+function terminalReauthorizationReviewMatches(review, purpose, anchor, transition) {
+  const proposal = proposedTransitionProjection(purpose, transition);
+  return aggregatePolicyVersion(review) === TERMINAL_REAUTHORIZATION_POLICY_VERSION &&
+    review.ruling === "owner_decision" && same(review.terminal_reauthorization_proposal, proposal) &&
+    typedReviewMatches(review, purpose, anchor, proposal);
+}
+
 function applicableTypedReviews(reviews, purpose, anchor, ordinal, transition) {
   // Policy 2's typed digest omitted its version; policies 3 and 4 include it. Compare the exact
   // action under each accepted older grammar, so a newer writer cannot hide an Owner hold merely
   // by hashing its prospective version. All other transition fields, anchor and ordinal stay exact.
   const versions = [ESTABLISHED_AGGREGATE_POLICY_VERSION, PRINCIPAL_AGGREGATE_POLICY_VERSION,
-    AGGREGATE_POLICY_VERSION].filter((version) => version <= aggregatePolicyVersion(transition));
+    AGGREGATE_POLICY_VERSION, TERMINAL_REAUTHORIZATION_POLICY_VERSION].filter((version) => version <= aggregatePolicyVersion(transition));
   return reviews.filter((review) => review.next_gate_ordinal === ordinal &&
     (purpose !== "legacy_handoff" || (review.task_id === transition.parent_task_id &&
       review.changeset_id === transition.parent_changeset_id)) &&
@@ -921,6 +984,8 @@ function aggregateWorld(events, standardEvents = []) {
   const programs = new Map(), accepted = new Map(), continuations = new Map(), childLineage = new Map(),
     completionBatchWorkers = new Map();
   const principalDecisionIds = new Set();
+  const terminalReauthorizationDecisionIds = new Set();
+  const terminalReauthorizationRoots = new Set();
   const processReviews = [], processReviewKeys = new Set();
   const standardIdentities = standardEvents.filter((row) => row?.event?.type === "round_disposition" &&
     row.event.round === 1).filter((row, index, all) => all.findIndex((candidate) =>
@@ -1029,6 +1094,7 @@ function aggregateWorld(events, standardEvents = []) {
   // working its parent's reserved slice is also working its grandparent's — excepting only the
   // direct parent made the exit lattice one-shot (the measured nested lockout:
   // the grandchild refused forever on the grandparent's unliftable reservation).
+  const lineageRoot = (taskId) => { let current = taskId, parent; const seen = new Set(); while ((parent = childLineage.get(current)?.parent_task_id) && !seen.has(parent)) { seen.add(current); current = parent; } return current; };
   const lineageAncestors = (taskId) => {
     const ancestors = new Set();
     let current = childLineage.get(taskId)?.parent_task_id ?? null;
@@ -1105,7 +1171,7 @@ function aggregateWorld(events, standardEvents = []) {
         if (usedTasks.has(row.task_id) || usedChangesets.has(row.changeset_id) ||
             stdTaskUsed(row.task_id, rowSeq) || stdChangesetUsed(row.changeset_id, rowSeq)) continue;
         const lineage = lineageId !== null ? childLineage.get(row.task_id) : null;
-        const completionException = lineage?.continuation_kind === "completion_exception";
+        const completionException = completionBatchKind(lineage?.continuation_kind);
         const completionWorker = completionException ? completionBatchWorkers.get(row.task_id) : null;
         if (row.round !== 1 || row.phase !== (completionException ? "final_bookend" : "repair_round") || row.incoming_dispatch_event_id !== null ||
             row.incoming_worker_event_id !== (completionException ? completionWorker?.event_id ?? null : null) ||
@@ -1351,6 +1417,15 @@ function aggregateWorld(events, standardEvents = []) {
           anchor = row.purpose === "dispatch" ? aggregatePanelCloseAnchor(state) : aggregateTerminalAnchor(state);
           ordinal = nextGateOrdinal(state);
         }
+        if (aggregatePolicyVersion(row) === TERMINAL_REAUTHORIZATION_POLICY_VERSION) {
+          const proposal = row.terminal_reauthorization_proposal;
+          if (row.purpose !== "child_continuation" || row.ruling !== "owner_decision" ||
+              !terminalReauthorizationProposalShape(proposal, state) ||
+              !same(proposedTransitionProjection("child_continuation", proposal), proposal) ||
+              row.transition_sha256 !== eventId(proposal) ||
+              terminalReauthorizationDecisionIds.has(proposal.owner_decision_id) ||
+              terminalReauthorizationRoots.has(lineageRoot(row.task_id))) continue;
+        }
         const key = processReviewKey(row);
         if (!anchor || !same(row.anchor, anchor) || row.next_gate_ordinal !== ordinal || processReviewKeys.has(key)) continue;
         processReviewKeys.add(key); processReviews.push(accept(row));
@@ -1406,7 +1481,7 @@ function aggregateWorld(events, standardEvents = []) {
         const lineage = childLineage.get(row.task_id);
         const continuation = lineage && continuations.get(lineage.event_id);
         const batch = lineage?.completion_batch;
-        if (!lineage || lineage.continuation_kind !== "completion_exception" || !continuation ||
+        if (!lineage || !completionBatchKind(lineage.continuation_kind) || !continuation ||
             completionBatchWorkers.has(row.task_id) || row.changeset_id !== lineage.changeset_id ||
             row.dispatch_event_id !== lineage.event_id || row.worker_session_id !== batch?.worker_session_id ||
             !same(row.authorized_paths, batch.authorized_paths) || row.brief_path !== batch.brief_path ||
@@ -1453,11 +1528,11 @@ function aggregateWorld(events, standardEvents = []) {
       // trigger rules per terminal: STOP inherits the accepted set EXACTLY; GO may carry only
       // routed follow-ups; CLOSED must CARRY the accepted set (a floor — an empty trigger list
       // must not inherit the exit while shedding the harms) and may add routed follow-ups.
-      if (!state || state.changeset_id !== row.changeset_id || !state.terminal || state.completion_exception ||
+      if (!state || state.changeset_id !== row.changeset_id || !state.terminal || (state.completion_exception && row.continuation_kind !== "terminal_reauthorization") ||
           (aggregatePolicyVersion(row) === AGGREGATE_POLICY_VERSION && row.children?.some((child) => child.tier !== "T2")) ||
           !CONTINUATION_KINDS.has(row.continuation_kind) ||
           !Array.isArray(row.children)) continue;
-      const completionException = row.continuation_kind === "completion_exception";
+      const completionException = completionBatchKind(row.continuation_kind);
       const principalChildPaths = row.children.flatMap((child) => child?.authorized_paths ?? []);
       const principal = currentAggregatePolicy(row) && principalT2Program(state) && row.authority_route === "principal" &&
         row.owner_evidence === undefined && principalEvidenceMatches(row.principal_evidence, {
@@ -1470,7 +1545,18 @@ function aggregateWorld(events, standardEvents = []) {
       if (!owner && !principal) continue;
       const terminalR4Stop = state.terminal === "STOP" && state.latest?.round === 4 &&
         state.panels_open.at(-1)?.phase === "final_bookend";
-      if ((completionException && (!terminalR4Stop || row.children.length !== 1 ||
+      const terminalReauthorizationStop = row.continuation_kind === "terminal_reauthorization" &&
+        state.completion_exception && state.terminal === "STOP" && state.panels_open.length === 1 &&
+        state.panels_open[0]?.phase === "final_bookend";
+      if (row.continuation_kind === "terminal_reauthorization" && (row.authority_route !== "owner" || !text(row.owner_evidence, 1000) || row.principal_evidence !== undefined || !terminalReauthorizationStop ||
+          !text(row.owner_decision_id, 200) || terminalReauthorizationDecisionIds.has(row.owner_decision_id) || terminalReauthorizationRoots.has(lineageRoot(row.task_id)) ||
+          row.stopped_completion_child_event_id !== state.lineage_event_id ||
+          !strings(row.surviving_finding_ids, { max: 2600 }) || !same(row.surviving_finding_ids, [...row.surviving_finding_ids].sort()) ||
+          !same(row.surviving_finding_ids, [...state.latest.finding_dispositions.accepted].sort()) ||
+          !same(row.action_screen?.surviving_finding_ids ?? [], row.surviving_finding_ids) ||
+          !same(row.opened_paths ?? [], [...new Set(state.panels_open.flatMap((open) => open.changed_paths))].sort()) ||
+          !same(row.children?.[0]?.authorized_paths ?? [], row.opened_paths ?? []))) continue;
+      if ((completionException && (!(terminalR4Stop || terminalReauthorizationStop) || row.children.length !== 1 ||
           !(currentAggregatePolicy(row) ? v3FinalBundle(row.completion_exception,
             principal ? "T2" : row.children[0]?.tier) : completionExceptionShape(row.completion_exception)) ||
           !completionBatchShape(row.completion_batch))) ||
@@ -1491,10 +1577,13 @@ function aggregateWorld(events, standardEvents = []) {
           : state.process_reviews.find((candidate) => candidate.event_id === row.process_review_event_id);
         const typedApplicable = applicableTypedReviews(state.process_reviews, "child_continuation",
           aggregateTerminalAnchor(state), ordinal, row);
+        const terminalApplicable = row.continuation_kind === "terminal_reauthorization"
+          ? typedApplicable.filter((candidate) => terminalReauthorizationReviewMatches(candidate,
+            "child_continuation", aggregateTerminalAnchor(state), row)) : typedApplicable;
         const allowed = (candidate) => principal ? candidate.ruling === "successor" : completionException
           ? completionExceptionReviewAllows(candidate) : continuationReviewAllows(candidate);
         const held = typedApplicable.some((candidate) => !allowed(candidate));
-        const typed = review && !held && typedApplicable.some((candidate) => candidate.event_id === review.event_id) &&
+        const typed = review && !held && terminalApplicable.some((candidate) => candidate.event_id === review.event_id) &&
           allowed(review);
         const oldApplicable = state.process_reviews.find((candidate) => !typedProcessReview(candidate) &&
           candidate.next_gate_ordinal === ordinal) || null;
@@ -1514,7 +1603,7 @@ function aggregateWorld(events, standardEvents = []) {
       const anchorConsumed = (anchorId) => {
         const standing = parentContinuations.get(anchorId);
         if (!standing) return false;
-        if (standing.continuation_kind === "completion_exception") return true;
+        if (completionBatchKind(standing.continuation_kind)) return true;
         const children = standing.children.map((child) => programs.get(child.task_id));
         const allTerminal = children.every((child) => child?.terminal);
         const anyVirgin = children.some((child) =>
@@ -1608,6 +1697,7 @@ function aggregateWorld(events, standardEvents = []) {
           // only door, carrying its accepted set exactly.
           row.children.some((child) => stoppedPathOverlap(child.authorized_paths, declarationExceptions(row.task_id)))) continue;
       const continuation = accept(row); continuations.set(row.event_id, continuation);
+      if (row.continuation_kind === "terminal_reauthorization") { terminalReauthorizationDecisionIds.add(row.owner_decision_id); terminalReauthorizationRoots.add(lineageRoot(row.task_id)); }
       if (principal) principalDecisionIds.add(row.principal_evidence.decision_id);
       parentContinuations.set(row.parent_disposition_event_id ?? row.parent_panel_open_event_id, row);
       for (const child of row.children) {
@@ -2076,7 +2166,7 @@ function appendEligibleAggregate(file, rawEvent, conflictState = "aggregate-tran
 
 export function recordAggregatePanelOpen(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "panel_open" });
   if (input?.tier === "T3") {
     const rows = controllerRows(repairLedgerPath(projectRoot, { execGit }));
     const world = rows && aggregateWorld(rows.aggregate, rows.standard);
@@ -2152,7 +2242,7 @@ export function recordAggregatePanelClose(input,
   const evidence = open && panelGitEvidence(projectRoot, open.base_ref, open.base_commit, open.frozen_commit,
     { execGit, anchorToRef: false });
   const still = evidence && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "panel_close" });
   if (!base || !open || !candidate || !evidence || !still || !same(evidence.changed_paths, open.changed_paths) ||
       !Array.isArray(input.received_seats)) return { ok: false, state: "aggregate-panel-close-malformed" };
   const event = { ...base, kind: "panel_close", panel_open_event_id: input.panel_open_event_id,
@@ -2167,7 +2257,7 @@ export function recordAggregateDisposition(input,
   const close = rows?.aggregate.find((row) => row.event_id === input?.panel_close_event_id)?.event;
   const open = close && rows.aggregate.find((row) => row.event_id === close.panel_open_event_id)?.event;
   const candidate = open && cleanGitCandidate(projectRoot, open.frozen_commit, open.frozen_tree, { execGit });
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "disposition" });
   const event = base && { ...base, kind: "disposition", panel_close_event_id: input.panel_close_event_id,
     pm_findings: input.pm_findings ?? [], finding_dispositions: input.finding_dispositions,
     same_mechanism_repeated: input.same_mechanism_repeated,
@@ -2191,7 +2281,7 @@ export function recordAggregateDisposition(input,
 
 export function recordAggregateRootExit(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "root_exit" });
   if (!base || !Array.isArray(input.removed_workarounds) || !Array.isArray(input.trigger_matrix)) {
     return { ok: false, state: "aggregate-root-exit-malformed" };
   }
@@ -2217,16 +2307,18 @@ export function recordAggregateProcessReview(input,
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
   const batchBrief = purpose === "child_continuation" &&
-    proposed?.continuation_kind === "completion_exception" && completionBatchProposalShape(proposed.completion_batch)
+    completionBatchKind(proposed?.continuation_kind) && completionBatchProposalShape(proposed.completion_batch)
     ? readRegularRepoFile(projectRoot, proposed.completion_batch.brief_path) : null;
   const reviewedProposal = batchBrief ? { ...proposed, completion_batch: { ...proposed.completion_batch,
     brief_sha256: batchBrief.sha256, brief_size: batchBrief.size } } : proposed;
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent({ ...input, proposed_transition: reviewedProposal }, sessionId, now, projectRoot, execGit,
+    { operation: "process_review", terminalProposal: purpose === "child_continuation" ? reviewedProposal : null });
   if (aggregatePolicyVersion(reviewedProposal) !== base?.policy_version) {
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
   const projection = proposedTransitionProjection(purpose, reviewedProposal);
   const state = deriveAggregateRepairState(rows.aggregate, input?.task_id, { standardEvents: rows.standard });
+  const world = aggregateWorld(rows.aggregate, rows.standard);
   const standard = purpose === "legacy_handoff" ? deriveRepairState(rows.standard, input?.task_id) : null;
   if ((purpose === "child_continuation" && state?.tier !== "T3" &&
         reviewedProposal?.children?.some((child) => child?.tier === "T3")) ||
@@ -2262,27 +2354,45 @@ export function recordAggregateProcessReview(input,
       same(projection.authorized_paths, standard.latest.authorized_paths) &&
       same(projection.child.authorized_paths, projection.authorized_paths);
   }
+  const terminalReauthorization = purpose === "child_continuation" &&
+    reviewedProposal?.continuation_kind === "terminal_reauthorization";
+  const root = (taskId) => {
+    let current = taskId, parent;
+    const seen = new Set();
+    while ((parent = world?.childLineage.get(current)?.parent_task_id) && !seen.has(parent)) {
+      seen.add(current); current = parent;
+    }
+    return current;
+  };
+  const terminalAlreadyUsed = terminalReauthorization && [...(world?.accepted.values() ?? [])].some((row) => {
+    const existing = row;
+    return (existing?.kind === "child_continuation" && existing.continuation_kind === "terminal_reauthorization" &&
+      (existing.owner_decision_id === reviewedProposal.owner_decision_id || root(existing.task_id) === root(input.task_id)));
+  });
   const expectedChangeset = purpose === "legacy_handoff" ? standard?.changeset_id : state?.changeset_id;
   const transitionSha = projection && eventId(projection);
   if (!base || !projection || !contextOk || !processReviewRulingAllowed(purpose, input.ruling) ||
       input.changeset_id !== expectedChangeset ||
       !anchor || !same(input.anchor, anchor) ||
       (input.next_gate_ordinal !== undefined && input.next_gate_ordinal !== ordinal) ||
-      (input.transition_sha256 !== undefined && input.transition_sha256 !== transitionSha)) {
+      (input.transition_sha256 !== undefined && input.transition_sha256 !== transitionSha) ||
+      (terminalReauthorization && (!batchBrief || input.ruling !== "owner_decision" ||
+        !terminalReauthorizationProposalShape(reviewedProposal, state) || terminalAlreadyUsed))) {
     return { ok: false, state: "aggregate-process-review-malformed" };
   }
   const event = { ...base, kind: "process_review", reviewer_role: input.reviewer_role,
     anchor, purpose, transition_sha256: transitionSha, next_gate_ordinal: ordinal,
     review_evidence: input.review_evidence,
     zoom_out: input.zoom_out, ruling: input.ruling, bounded_scope: input.bounded_scope,
-    closure_evidence: input.closure_evidence };
+    closure_evidence: input.closure_evidence,
+    ...(terminalReauthorization ? { terminal_reauthorization_proposal: projection } : {}) };
   const result = appendEligibleAggregate(file, event, "aggregate-process-review-conflict");
   return result.ok ? { ...result, next_gate_ordinal: event.next_gate_ordinal } : result;
 }
 
 export function recordAggregateWorkerHandoff(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "worker_handoff" });
   if (!base || !((text(input.owner_evidence, 1000) && input.principal_evidence === undefined) ||
       (input.owner_evidence === undefined && plain(input.principal_evidence)))) {
     return { ok: false, state: "aggregate-worker-handoff-malformed" };
@@ -2310,10 +2420,9 @@ export function recordAggregateWorkerHandoff(input,
 
 export function recordAggregateChildContinuation(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
-  if (!base || !Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
+  if (!Array.isArray(input.trigger_ids) || !Array.isArray(input.children) ||
       !input.children.every(aggregateChildShape) ||
-      (input.continuation_kind === "completion_exception" && input.children.length !== 1)) {
+      (completionBatchKind(input.continuation_kind) && input.children.length !== 1)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
   // Screen-at-emission on the RECOMMENDATION: a successor is a screened action, never an automatic
@@ -2333,10 +2442,10 @@ export function recordAggregateChildContinuation(input,
   if (state.tier !== "T3" && input.children?.some((child) => child?.tier === "T3")) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
-  const completionException = input.continuation_kind === "completion_exception";
   const authorityRoute = input.authority_route;
-  if (!currentAggregatePolicy(base) ||
-      !["owner", "principal"].includes(authorityRoute)) {
+  const completionException = completionBatchKind(input.continuation_kind);
+  const terminalReauthorization = input.continuation_kind === "terminal_reauthorization";
+  if (!["owner", "principal"].includes(authorityRoute)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
   }
   if ((authorityRoute === "owner" && !text(input.owner_evidence, 1000)) ||
@@ -2358,6 +2467,27 @@ export function recordAggregateChildContinuation(input,
   const batchBrief = completionException && completionBatchProposalShape(input.completion_batch)
     ? readRegularRepoFile(projectRoot, input.completion_batch.brief_path) : null;
   if (completionException && !batchBrief) return { ok: false, state: "repair-brief-unconfirmed" };
+  // The special child envelope is derived here, after the recorder has loaded the stopped parent
+  // and frozen brief. Its outer policy is never caller authority: the review proposal remains the
+  // explicit v5 declaration, while this eventual continuation mints v5 only from this operation.
+  const terminalProposal = terminalReauthorization && batchBrief ? {
+    ...input, policy_version: TERMINAL_REAUTHORIZATION_POLICY_VERSION,
+    parent_frozen_commit: parentOpen.frozen_commit, parent_frozen_tree: parentOpen.frozen_tree,
+    completion_batch: { ...input.completion_batch, brief_sha256: batchBrief.sha256, brief_size: batchBrief.size },
+  } : null;
+  if (terminalReauthorization && !terminalReauthorizationProposalShape(terminalProposal, state)) {
+    return { ok: false, state: "aggregate-continuation-malformed" };
+  }
+  // A review is an accepted row in the derived parent state. Only its exact frozen projection
+  // permits the recorder to select the v5 envelope; a supplied outer policy field is discarded.
+  const reviewedTerminalProposal = terminalReauthorization && state.process_reviews.some((review) =>
+    review.event_id === input.process_review_event_id && terminalReauthorizationReviewMatches(review,
+      "child_continuation", aggregateTerminalAnchor(state), terminalProposal));
+  const ordinaryInput = terminalReauthorization
+    ? Object.fromEntries(Object.entries(input).filter(([key]) => key !== "policy_version")) : input;
+  const base = aggregateBaseEvent(reviewedTerminalProposal ? terminalProposal : ordinaryInput,
+    sessionId, now, projectRoot, execGit, { operation: "child_continuation" });
+  if (!base || !currentAggregatePolicy(base)) return { ok: false, state: "aggregate-continuation-malformed" };
   if (completionException && !v3FinalBundle(input.completion_exception,
     authorityRoute === "principal" ? "T2" : input.children[0]?.tier)) {
     return { ok: false, state: "aggregate-continuation-malformed" };
@@ -2375,6 +2505,9 @@ export function recordAggregateChildContinuation(input,
     authority_route: authorityRoute,
     ...(authorityRoute === "owner" ? { owner_evidence: input.owner_evidence } :
       { principal_evidence: input.principal_evidence }), action_screen: input.action_screen,
+    ...(terminalReauthorization ? { owner_decision_id: input.owner_decision_id,
+      stopped_completion_child_event_id: input.stopped_completion_child_event_id,
+      surviving_finding_ids: [...input.surviving_finding_ids], opened_paths: [...input.opened_paths] } : {}),
     ...(completionException ? { completion_exception: input.completion_exception,
       completion_batch: { worker_session_id: input.completion_batch.worker_session_id,
         brief_path: batchBrief.path, brief_sha256: batchBrief.sha256, brief_size: batchBrief.size,
@@ -2386,10 +2519,12 @@ export function recordAggregateChildContinuation(input,
       : state.process_reviews.find((candidate) => candidate.event_id === event.process_review_event_id);
     const applicable = applicableTypedReviews(state.process_reviews, "child_continuation",
       aggregateTerminalAnchor(state), ordinal, event);
+    const terminalApplicable = terminalReauthorization ? applicable.filter((candidate) =>
+      terminalReauthorizationReviewMatches(candidate, "child_continuation", aggregateTerminalAnchor(state), event)) : applicable;
     const allowed = (candidate) => authorityRoute === "principal" ? candidate.ruling === "successor"
       : completionException ? completionExceptionReviewAllows(candidate) : continuationReviewAllows(candidate);
     const held = applicable.some((candidate) => !allowed(candidate));
-    const authorized = review && !held && applicable.some((candidate) => candidate.event_id === review.event_id) &&
+    const authorized = review && !held && terminalApplicable.some((candidate) => candidate.event_id === review.event_id) &&
       allowed(review);
     if (held || ((completionException || authorityRoute === "principal" || ordinal % 4 === 0 || applicable.length ||
         event.process_review_event_id !== null) && !authorized)) {
@@ -2401,7 +2536,7 @@ export function recordAggregateChildContinuation(input,
 
 export function recordAggregateClose(input,
   { projectRoot, sessionId, now = new Date().toISOString(), execGit } = {}) {
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "close" });
   if (!base || !text(input.reason, 1000) ||
       !((text(input.owner_evidence, 1000) && input.principal_evidence === undefined) ||
         (input.owner_evidence === undefined && plain(input.principal_evidence)))) {
@@ -2438,7 +2573,7 @@ export function recordAggregateLegacyHandoff(input,
   const rows = controllerRows(file);
   if (!rows) return { ok: false, state: "repair-ledger-unavailable" };
   const parent = deriveRepairState(rows.standard, input?.parent_task_id);
-  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit);
+  const base = aggregateBaseEvent(input, sessionId, now, projectRoot, execGit, { operation: "legacy_handoff" });
   if (!base || !parent.ok || !parent.active || !parent.latest ||
       input.task_id !== input.parent_task_id || input.changeset_id !== input.parent_changeset_id ||
       input.child?.tier !== "T2" || !Array.isArray(input.authorized_paths) || !plain(input.child)) {
@@ -2752,7 +2887,7 @@ export function confirmRepairBrief({ declaration, brief_path: briefPath } = {},
   }
   const r = validated.repair;
   if (declaration.aggregate_controller === AGGREGATE_EVENT_TYPE) {
-    const base = aggregateBaseEvent(declaration, sessionId, now, projectRoot, execGit);
+    const base = aggregateBaseEvent(declaration, sessionId, now, projectRoot, execGit, { operation: "dispatch" });
     const event = { ...base, kind: "dispatch", disposition_event_id: r.disposition_event_id,
       panel_close_event_id: r.panel_close_event_id, source_round: r.source_round, next_round: r.next_round,
       authorized_paths: [...r.authorized_paths], root_exit_event_id: r.root_exit_event_id,
@@ -2802,7 +2937,7 @@ export function verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_even
     return { ok: true, state: "repair-brief-confirmed", receipt, brief };
   }
   const completionRow = loaded.aggregate_events.find((row) => row.event_id === eventId &&
-    row.event.kind === "child_continuation" && row.event.continuation_kind === "completion_exception");
+    row.event.kind === "child_continuation" && completionBatchKind(row.event.continuation_kind));
   if (completionRow) {
     const world = aggregateWorld(loaded.aggregate_events, loaded.events);
     const lineage = world?.childLineage.get(taskId);
@@ -2816,7 +2951,7 @@ export function verifyRepairBriefReceipt({ task_id: taskId, repair_dispatch_even
       return { ok: false, state: "repair-brief-changed" };
     }
     return { ok: true, state: "repair-brief-confirmed", receipt: { ...completionRow.event,
-      event_id: eventId, kind: "completion_exception", changeset_id: lineage.changeset_id,
+      event_id: eventId, kind: completionRow.event.continuation_kind, changeset_id: lineage.changeset_id,
       authorized_paths: [...batch.authorized_paths], target: batch.brief_path,
       brief_sha256: batch.brief_sha256, brief_size: batch.brief_size,
       worker_session_id: batch.worker_session_id }, brief };
@@ -2860,7 +2995,7 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
       row.worker_session_id === sessionId);
     if (prior) return { ok: true, event_id: prior.event_id, idempotent: true };
     const event = { type: AGGREGATE_EVENT_TYPE,
-      policy_version: aggregateBaseEvent(receipt, sessionId, now, projectRoot, execGit)?.policy_version,
+      policy_version: aggregateBaseEvent(receipt, sessionId, now, projectRoot, execGit, { operation: "worker" })?.policy_version,
       kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id,
       recorded_at: now, session_id: sessionId,
       dispatch_event_id: eventId, worker_session_id: sessionId,
@@ -2868,7 +3003,7 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
       brief_sha256: receipt.brief_sha256 };
     return appendEligibleAggregate(file, event, "aggregate-worker-conflict");
   }
-  if (receipt.type === AGGREGATE_EVENT_TYPE && receipt.kind === "completion_exception") {
+  if (receipt.type === AGGREGATE_EVENT_TYPE && completionBatchKind(receipt.kind)) {
     if (receipt.worker_session_id !== sessionId) return { ok: false, state: "repair-worker-verification-missing" };
     const rows = controllerRows(file);
     const world = rows && aggregateWorld(rows.aggregate, rows.standard);
@@ -2878,7 +3013,7 @@ export function recordWorkerVerification({ task_id: taskId, repair_dispatch_even
     }
     const event = { type: AGGREGATE_EVENT_TYPE,
       policy_version: aggregateBaseEvent({ task_id: taskId, changeset_id: receipt.changeset_id },
-        sessionId, now, projectRoot, execGit)?.policy_version,
+        sessionId, now, projectRoot, execGit, { operation: "worker" })?.policy_version,
       kind: "worker", task_id: taskId, changeset_id: receipt.changeset_id, recorded_at: now, session_id: sessionId,
       dispatch_event_id: eventId, worker_session_id: sessionId, authorized_paths: [...receipt.authorized_paths],
       brief_path: receipt.target, brief_sha256: receipt.brief_sha256 };
@@ -2929,7 +3064,7 @@ export function verifyRepairWorkerWrite({ task_id: taskId, session_id: sessionId
   if (!loaded.ok) return loaded;
   const completionWorld = aggregateWorld(loaded.aggregate_events, loaded.events);
   const completionLineage = completionWorld?.childLineage.get(taskId);
-  if (completionLineage?.continuation_kind === "completion_exception") {
+  if (completionBatchKind(completionLineage?.continuation_kind)) {
     if (completionWorld.programs.has(taskId)) {
       return { ok: false, state: "completion-batch-finished" };
     }

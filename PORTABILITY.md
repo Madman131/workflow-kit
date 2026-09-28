@@ -793,7 +793,7 @@ from the upgraded branch.
 `child_continuation` and in the `proposed_transition` of the process review before it, and a
 `proposed_transition.policy_version` equal to the version the recorder mints for that task: 3 when the
 task's program — or, with none, its pending child lineage — is a policy-3 lineage or tier T3,
-otherwise 4. The caller derives it; it does not choose it. A mismatch is refused as malformed.
+5 only for an eligible terminal-reauthorization proposal or its admitted child lineage; otherwise 4. The recorder derives it; caller fields cannot override it. A mismatch is refused as malformed.
 
 **The Principal record check (v2.35.0).** The recorder refuses an event that carries
 `principal_evidence` unless it is an object whose `authority_record` is a git-tracked regular file of
