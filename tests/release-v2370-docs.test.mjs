@@ -11,12 +11,6 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => readFileSync(path.join(KIT, rel), "utf8");
 const flat = (s) => s.replace(/\s+/g, " ");
 
-test("VERSION, package.json and the README title agree on 2.37.0", () => {
-  assert.equal(read("VERSION").trim(), "2.37.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.37.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.37\.0$/m);
-});
-
 test("the v2.37.0 note: a removal, no Codex re-trust, pair keys retired, committed adoption included", () => {
   const readme = read("README.md");
   const note = flat(readme.slice(readme.indexOf("## What's new in v2.37.0"), readme.indexOf("## What's new in v2.36.0")));

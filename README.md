@@ -1,4 +1,4 @@
-# workflow-kit — v2.37.0
+# workflow-kit — v2.37.1
 
 ## How to start a build
 
@@ -11,6 +11,45 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.37.1 — the context alert is louder and enforced
+
+- **Two levels, each once per session.** The context-pressure sensor fires at 50% and again at 70% of the window (`WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT` and `WORKFLOW_KIT_CONTEXT_HARD_PCT` override them); the old 10%-step reminders are gone. At 50% the first line is `**CONTEXT WINDOW WARNING — ~N%: restart this thread at the next natural breakpoint (push / chip end)**`. At 70% it is `**CONTEXT WINDOW — HARD STOP ~N%: write the restart digest now and restart before further work**`. Each carries the instruction to put that line VERBATIM as the FIRST line of the next message to the Owner. A session that jumps straight past 70% gets only the 70% level, and 50 counts as done.
+- **Three triggers.** Write/Edit `PreToolUse`, `UserPromptSubmit` (once per Owner turn, any thread) and `Stop`. One per-session state file is shared by all of them.
+- **Stop enforcement.** If a level has fired and the final message's first line is not that level's banner (exact match after trimming, read from the Stop payload's `last_assistant_message`, not the transcript), the Stop hook blocks — once per level, never when `stop_hook_active` is true — with a reason telling the model to lead with the banner. It fails open on any error and marks the level surfaced once the banner is seen.
+- **Claude lane only.** The Codex lane cannot do this: Codex hooks receive no transcript and no Stop payload, so the sensor stays silent there. No `.codex/hooks.json` entry changed, so **no re-trust**. The controller, the recorder and `guard-brief-rung.mjs` are unchanged.
+- **Upgrading.** `init --force` adds the `UserPromptSubmit` group and the Stop registration exactly once and never duplicates them or the existing `PreToolUse` group. Without `init`, copy `hooks/sensor-context-pressure.mjs` into `.claude/hooks/` and merge this into `.claude/settings.json` (the `Stop` entry goes into your existing `Stop` group's `hooks` list, or is a new group if you have none):
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-context-pressure.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Reading this session's context size\u2026"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-context-pressure.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking the context-window banner\u2026"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
 ## What's new in v2.37.0 — the Architect-to-PM send screens are removed
 
@@ -402,10 +441,10 @@ sensor or a report, fails open, and ships with the two-polarity test the mutatio
   declaration. `npm run report:tokens` prints spend by task, session or day with the **main / side**
   split — the gate-versus-build number this method argued about for a month without ever having.
   Tokens only, no price table. Codex CLI seats are outside the transcript and are not in it.
-- **A context-pressure sensor.** `hooks/sensor-context-pressure.mjs` (PreToolUse, write matcher) reads
+- **A context-pressure sensor.** `hooks/sensor-context-pressure.mjs` (PreToolUse write matcher, and UserPromptSubmit since v2.37.1) reads
   the newest usage record from the transcript tail, resolves the window (override, `[1m]` marker, a
   dated list of 1M families, size inference, else an *assumed* 200k — and says which), and at 50% of
-  it, then once per further 10%, tells the model the thread-restart digest is **owed** — before
+  it, then once per further 10%, tells the model the thread-restart digest is **owed** (v2.37.1: two levels, 50% and 70%, enforced at Stop) — before
   auto-compaction writes a lossy one. Self-keyed triggers fail; this is the external one.
 - **A worktree census.** `scripts/worktree-census.mjs` classifies every worktree from git facts into a
   cleanup plan (remove-safe / salvage / inspect / keep, a reason each) and **never removes anything**.

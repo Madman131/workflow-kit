@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// workflow-kit — .claude/hooks/sensor-context-pressure.mjs. PreToolUse on a write (Claude lane).
+// workflow-kit — .claude/hooks/sensor-context-pressure.mjs. PreToolUse on a write, UserPromptSubmit and Stop (Claude lane).
 // Tests: tests/context-pressure.test.mjs · Doctrine: the thread-restart digest (commands/*/thread-restart.md)
 //
 // WHY THIS EXISTS: the thread-restart digest is the method's answer to a long thread — a verified
@@ -30,14 +30,19 @@
 //   5. otherwise 200k, ASSUMED. The message says which of these it used, because a percentage
 //      against a guessed denominator is a number that looks more exact than it is.
 //
-// WHEN IT SPEAKS: at WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT (default 50) of the window, then once per
-// further WORKFLOW_KIT_CONTEXT_STEP_PCT (default 10) — bucket transitions only, tracked in a tiny
-// per-session file under the OS temp dir (WORKFLOW_KIT_CONTEXT_STATE_DIR overrides). Declared
-// state, deliberately: a stateless sensor would fire on every edit past the threshold, and a hook
-// that fires on ordinary work is the hook the reader switches off.
+// WHEN IT SPEAKS: two levels, each ONCE per session — a warning at WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT
+// (default 50) and a HARD STOP at WORKFLOW_KIT_CONTEXT_HARD_PCT (default 70). A session that jumps
+// straight past 70 fires only the hard stop (and counts 50 as done). State is a tiny per-session file
+// under the OS temp dir (WORKFLOW_KIT_CONTEXT_STATE_DIR overrides), shared by every event.
+//
+// STOP ENFORCEMENT (Owner ruling D-50: alerts were being blown past unseen): on the Stop event, if a
+// level fired and the final message's first line is not that level's banner, block ONCE per level
+// ({"decision":"block","reason":…}, exit 0); never when stop_hook_active; fail OPEN on any error. The
+// text comes from the Stop payload's last_assistant_message, not from a transcript read.
 //
 // HOW IT REACHES THE MODEL: `hookSpecificOutput.additionalContext` on stdout, which Claude Code
-// feeds to the model on an exit-0 PreToolUse hook; the same text also goes to stderr for the
+// feeds to the model on an exit-0 PreToolUse or UserPromptSubmit hook (hookEventName echoes the
+// payload's hook_event_name; the level state is shared by every event); the same text also goes to stderr for the
 // transcript view. (The kit's older sensors write stderr only; whether that text reaches the model
 // is a harness fact this file does not assert about them.)
 //
@@ -109,21 +114,69 @@ function pct(env, key, dflt) {
   return Number.isInteger(v) && v > 0 && v <= 100 ? v : dflt;
 }
 
-// EXPORTED for the test: the bucket a context size falls in (-1 below threshold; 0 at threshold;
-// +1 per step of growth). The sensor speaks only when the bucket rises.
-export function bucketOf(tokens, window, thresholdPct, stepPct) {
+// EXPORTED for the test: 0 below the warn threshold, 1 at/above it, 2 at/above the hard-stop threshold.
+export function levelOf(tokens, window, warnPct, hardPct) {
   const p = (100 * tokens) / window;
-  if (!(p >= thresholdPct)) return -1;
-  return Math.floor((p - thresholdPct) / stepPct);
+  if (p >= hardPct) return 2;
+  if (p >= warnPct) return 1;
+  return 0;
 }
 
-export function message({ tokens, window, source, percent }) {
+// EXPORTED for the test: the banner is the FIRST line of the message, exact text.
+export function banner(level, percent) {
+  return level === 2
+    ? `**CONTEXT WINDOW — HARD STOP ~${percent}%: write the restart digest now and restart before further work**`
+    : `**CONTEXT WINDOW WARNING — ~${percent}%: restart this thread at the next natural breakpoint (push / chip end)**`;
+}
+
+export function message({ tokens, window, source, percent, level }) {
   const k = (n) => `${Math.round(n / 1000)}k`;
-  return `CONTEXT PRESSURE — ~${k(tokens)} of ${k(window)} tokens (${percent}%) in this session's context ` +
-    `(window: ${source}). The thread-restart digest is OWED at the next phase boundary: write it ` +
-    `deliberately (/thread-restart) before auto-compaction writes a lossy one. Finish the step in ` +
-    `hand, land or note anything only this thread knows, then restart. This sensor only reports; ` +
-    `it will speak again after each further ${pct(process.env, "WORKFLOW_KIT_CONTEXT_STEP_PCT", 10)}% of growth.`;
+  return `${banner(level, percent)}\nPut the line above VERBATIM as the FIRST line of your next message to the Owner.\n` +
+    `(${k(tokens)} of ${k(window)} tokens; window: ${source}. This sensor only reports.)`;
+}
+
+function stateFileFor(ev) {
+  const file = typeof ev.transcript_path === "string" ? ev.transcript_path : "";
+  const key = (typeof ev.session_id === "string" && ev.session_id) || (file && path.basename(file));
+  if (!key) return null;
+  const stateDir = process.env.WORKFLOW_KIT_CONTEXT_STATE_DIR || os.tmpdir();
+  return { stateDir, stateFile: path.join(stateDir, `workflow-kit-context-${key.replace(/[^A-Za-z0-9._-]/g, "_")}`) };
+}
+// State is JSON: { window, fired, surfaced, blocked, banner } — the highest level announced, the highest
+// seen as an Owner-message first line, the highest a Stop block was spent on, and the banner text to match.
+function readState(stateFile) {
+  try {
+    const st = JSON.parse(readFileSync(stateFile, "utf8"));
+    if (st && typeof st === "object") return st;
+  } catch { /* first time */ }
+  return null;
+}
+function writeState(stateDir, stateFile, st) {
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    let lst = null; try { lst = lstatSync(stateFile); } catch { /* absent */ }
+    if (!lst || lst.isFile()) writeFileSync(stateFile, JSON.stringify(st));   // never through a symlink
+  } catch { /* speak anyway */ }
+}
+
+// Stop: the level fired but the Owner-facing message did not open with its banner ⇒ block ONCE.
+// Uses last_assistant_message (the docs' most reliable source), never a transcript read. Fails open.
+function stopMain(ev) {
+  const loc = stateFileFor(ev);
+  if (!loc) return ALLOW();
+  const st = readState(loc.stateFile);
+  if (!st || !(st.fired > (st.surfaced || 0)) || typeof st.banner !== "string") return ALLOW();
+  const msg = ev.last_assistant_message;
+  if (typeof msg !== "string") return ALLOW();
+  if (msg.split("\n")[0].trim() === st.banner.trim()) {
+    writeState(loc.stateDir, loc.stateFile, { ...st, surfaced: st.fired });
+    return ALLOW();
+  }
+  if (ev.stop_hook_active) return ALLOW();                  // already continuing from a block — never loop
+  if ((st.blocked || 0) >= st.fired) return ALLOW();        // one block per level
+  writeState(loc.stateDir, loc.stateFile, { ...st, blocked: st.fired });
+  process.stdout.write(JSON.stringify({ decision: "block", reason: `The context-window banner is owed and your message did not open with it. Put this line VERBATIM as the FIRST line of your message to the Owner, then continue:\n${st.banner}` }));
+  process.exit(0);
 }
 
 function main(raw) {
@@ -132,6 +185,7 @@ function main(raw) {
   try { ev = JSON.parse(raw); } catch { return ALLOW(); }
   if (ev === null || typeof ev !== "object") return ALLOW();
   if ("agent_id" in ev || "agent_type" in ev) return ALLOW();      // never nag a subagent
+  if (ev.hook_event_name === "Stop") return stopMain(ev);
   const file = ev.transcript_path;
   if (typeof file !== "string" || !file) return ALLOW();          // Codex payloads land here
   let text;
@@ -142,33 +196,22 @@ function main(raw) {
   const tokens = sum.context_now_main;
   if (!(tokens > 0)) return ALLOW();
   const { window, source } = resolveWindow(tokens, sum.model_main);   // the MAIN session's model sets the denominator
-  const threshold = pct(process.env, "WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT", 50);
-  const step = pct(process.env, "WORKFLOW_KIT_CONTEXT_STEP_PCT", 10);
-  const bucket = bucketOf(tokens, window, threshold, step);
-  if (bucket < 0) return ALLOW();
-  // Bucket state, per session. Unreadable/unwritable state ⇒ speak (fail toward the reminder, which
-  // costs a line, rather than toward silence, which costs the digest).
-  const key = (typeof ev.session_id === "string" && ev.session_id) || path.basename(file);
-  const stateDir = process.env.WORKFLOW_KIT_CONTEXT_STATE_DIR || os.tmpdir();
-  const stateFile = path.join(stateDir, `workflow-kit-context-${key.replace(/[^A-Za-z0-9._-]/g, "_")}`);
-  // State = "<bucket>:<window>". A bucket earned against one denominator means nothing against
-  // another (a session that switches from a 200k to a 1M model must not have its 1M reminders
-  // suppressed by a 200k bucket), so a window change resets the memory.
-  let last = -1;
-  try {
-    const [b, w] = readFileSync(stateFile, "utf8").trim().split(":");
-    if (/^-?\d+$/.test(b || "") && Number(w) === window) last = Number(b);
-  } catch { /* first time */ }
-  if (bucket <= last) return ALLOW();
-  try {
-    mkdirSync(stateDir, { recursive: true });
-    let lst = null; try { lst = lstatSync(stateFile); } catch { /* absent */ }
-    if (!lst || lst.isFile()) writeFileSync(stateFile, `${bucket}:${window}`);   // never through a symlink
-  } catch { /* speak anyway */ }
+  const warn = pct(process.env, "WORKFLOW_KIT_CONTEXT_THRESHOLD_PCT", 50);
+  const hard = pct(process.env, "WORKFLOW_KIT_CONTEXT_HARD_PCT", 70);
+  const level = levelOf(tokens, window, warn, hard);
+  if (level === 0) return ALLOW();
+  const loc = stateFileFor(ev);
+  if (!loc) return ALLOW();
+  // A level earned against one denominator means nothing against another, so a window change resets.
+  let st = readState(loc.stateFile);
+  if (!st || st.window !== window) st = { window, fired: 0, surfaced: 0, blocked: 0 };
+  if (level <= (st.fired || 0)) return ALLOW();            // each level fires once; a jump to 2 marks 1 done too
   const percent = Math.round((100 * tokens) / window);
-  const text2 = message({ tokens, window, source, percent });
+  const text2 = message({ tokens, window, source, percent, level });
+  writeState(loc.stateDir, loc.stateFile, { ...st, fired: level, banner: banner(level, percent) });
   try { process.stderr.write(`sensor-context-pressure: ${text2}\n`); } catch { /* ignore */ }
-  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: text2 } }));
+  const hookEventName = ev.hook_event_name === "UserPromptSubmit" ? "UserPromptSubmit" : "PreToolUse";
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: text2 } }));
   process.exit(0);
 }
 

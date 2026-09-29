@@ -65,6 +65,18 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-context-pressure.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Reading this session's context size\u2026"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -73,6 +85,12 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-owner-comms.mjs\"",
             "timeout": 10,
             "statusMessage": "Checking the final message against OWNER_COMMS rule 1\u2026"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sensor-context-pressure.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking the context-window banner\u2026"
           },
           {
             "type": "command",
