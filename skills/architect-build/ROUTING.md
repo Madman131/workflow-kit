@@ -13,11 +13,8 @@ accepted decisions versus pending advice; phase/CHIP; unresolved decisions with 
 program/baseline/scope, evidence, delegation/limits, stop/supersession, execution/result and
 active/pending/superseded status; last alignment and reconciliation owed. Locate an architecture/current-state
 record first; otherwise create one through normal docs/state convention and record its path.
-Pair keys: Codex `pairedPmThreadId`; Claude `pairedPmClaudeTarget` (ref/id) plus `pairedPmClaudeName`.
-Set them via `init`; existing config: edit only that lane's keys in `.claude/kit.config.json` in place; preserve
-other fields and read back. Plain init preserves config. Source tasks use reviewed scoped
-runtime setup, never init. Read approved blueprint/source and cite it. Hook checks shape, not reasoning.
-Prove exact-send real-tool Source, Command and Trust; apply_patch checker does not prove interception.
+Plain init preserves config. Source tasks use reviewed scoped runtime setup, never init. Read approved
+blueprint/source and cite it. No hook screens Architect-to-PM sends; the `pairedPm*` keys are retired.
 
 Recovery does not promote advice, create an acting architect or second PM, or block covered work.
 
@@ -57,13 +54,13 @@ model/seat choice, tier/wording and approved-provider routing. PM is sole execut
 proceeds automatically on covered work, and returns concrete conflicts.
 
 Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause, alternatives;
-decides proceed/simplify/defer/stop/escalate; records prompt-bound screen. For proceed/simplify, Principal
-directs completion through one PM; PM hold is screened non-status direction.
+decides proceed/simplify/defer/stop/escalate. For proceed/simplify, Principal
+directs completion through one PM.
 Batch covered work; save time/tokens without weakening gates; resolves in-envelope conflicts.
 
-Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;
-credentials/access changes; destructive-or-irreversible acts; money/new-spend; max/ultra, second frontier firing/cap increases; terminal
-exception except bounded T2 Principal controller completion; gate waiver; push/deploy/publication; and live/external-write GO. Review transmission is a
+Owner alone retains: push/deploy/publication GO; irreversible or live acts (including live/external-data
+writes); money/new spend; credentials/access; a change of direction or scope. Everything else is the
+Principal's: wording, tier, flags, seats, dispositions, waivers, caps, sequencing, terminal exceptions. Review transmission is a
 frozen packet with redacted context, never publication, messaging, live data, secrets, or
 unrelated export. Principal evidence is not Owner evidence or a review verdict.
 

@@ -26,9 +26,9 @@
 3. **Local, non-code** (docs, comments, log string, memory pointer) → **T0 Trivial** if no stronger controlling-doc rule applies.
 
 For an **unbounded production read**, bound rows, time, memory and concurrency, or use an offline artifact. Otherwise hold execution and route risk/budget through Principal to Owner. Relabeling grants no execution authority. Genuine T0 keeps its self-check; controlling instructions keep their stronger gate.
-**Action flags**, from concrete effects, never labels: **irreversible** · **money/ledger** · **auth/credential**. A flagged change is at least T2; each flag ADDS a **REQUIRED cross-family lens** (same-family-only never discharges it), the **frontier · xhigh** gate (`core/GATES.md` matrix) and a **named Owner GO per write**.
+**Action flags**, from concrete effects, never labels: **irreversible** · **money/ledger** · **auth/credential**. A flagged change is at least T2; each flag ADDS a **REQUIRED cross-family lens** (same-family-only never discharges it), the **frontier · xhigh** gate (`core/GATES.md` matrix) and a **named Owner GO for the flagged live effect** (irreversible act, money movement, credential change), not for building or committing.
 
-Builder proposes tier; **recorded Principal delegation covers ordinary in-scope tier/wording through PM. Owner retains critical intent, material scope/budget/access, risk acceptance, irreversible deletion, credential/access change, money/new spend, and exact push/deploy/publication/live/external-write GO.** Split separable tiers; otherwise use the highest. Tier sets review depth; action sets execution authority. ⚠ **RULE #1 cuts REPAIRS, never review DEPTH — cutting seats is the misreading. New work is never T3: it is T2 plus its action flags. Historical T3 retains its original depth.**
+Builder proposes tier; **the Principal decides tier, wording and intermediate steps through PM. Owner alone: push/deploy/publication GO; irreversible or live acts; money; credentials/access; change of direction or scope.** Split separable tiers; otherwise use the highest. Tier sets review depth; action sets execution authority. ⚠ **RULE #1 cuts REPAIRS, never review DEPTH — cutting seats is the misreading. New work is never T3: it is T2 plus its action flags. Historical T3 retains its original depth.**
 
 | Tier | Code gate | Execution gate *(only if prod write)* |
 |---|---|---|
@@ -57,7 +57,7 @@ declaration below.
    lighter" is FORBIDDEN:** a budget-free rung may stop the work, but it never reduces the panel's
    depth, scope, or seat count.
 
-*Tier table = local build/run depth; every remote push or publication needs a fresh Owner GO for the exact head and target (see "Pushing is a separate axis").*
+*Tier table = local build/run depth; every remote push or publication is a separate axis (see "Pushing is a separate axis").*
 **The tier is declared and approved under above authority** — a declaration is a self-report, and no mechanism can tell a correctly-tiered change from a mis-tiered one. **Escalate mid-task freely; lowering mid-task requires the Owner's confirmed reversibility handle (above) and is recorded in the PM disposition.** *(This binds the PM and Owner — **no mechanism enforces it**; a hook cannot tell a dodge from an Owner-authorised correction. `guard-gate-ladder.mjs` only surfaces a ladder — the declared tier's for `in-thread`, and the **strictest** for every other state, including a tiered `exempt`, whose tier it deliberately does **not** honour (honouring it would route to a LOWER tier, i.e. fail-OPEN in a sensor) — failing closed to T3, and never denying. Since kit v2.1 it registers in **both** lanes; the Codex-lane registration is inert until a human grants hook trust, and an untrusted hook is skipped silently.)*
 
 **Autonomy local, boundaries central:** T0/T1 the Builder builds and runs locally free; T2 adds an external adversary.

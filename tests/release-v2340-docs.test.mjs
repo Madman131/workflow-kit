@@ -22,7 +22,7 @@ test("K1/K2: WORKFLOW § Steer defines the three action flags and what each ADDS
   assert.match(steer, /A flagged change is at least T2;/);
   assert.match(steer, /each flag ADDS a \*\*REQUIRED cross-family lens\*\*/);
   assert.match(steer, /\(same-family-only never discharges it\)/);
-  assert.match(steer, /the \*\*frontier · xhigh\*\* gate \(`core\/GATES\.md` matrix\) and a \*\*named Owner GO per write\*\*/);
+  assert.match(steer, /the \*\*frontier · xhigh\*\* gate \(`core\/GATES\.md` matrix\) and a \*\*named Owner GO for the flagged live effect\*\* \(irreversible act, money movement, credential change\), not for building or committing\./);
   assert.match(steer, /New work is never T3: it is T2 plus its action flags\./);
 });
 

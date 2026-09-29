@@ -122,7 +122,7 @@ the route never weakens a Gemini binding, envelope, slice, tool, identity or per
 **Mirror:** on a Claude build an unavailable Codex seat (`scripts/codex-gate.sh`, installed by
 `init --with-gate-runners`) takes the same route — full-coverage Gemini first, otherwise a fresh cold
 Claude frontier pass recorded `same-family-only`, which spends the changeset's one discretionary
-frontier firing (§ Model · effort matrix); spent ⇒ an Owner-routed second firing.
+frontier firing (§ Model · effort matrix); spent ⇒ a Principal-routed second firing.
 
 ### ⚠ GEMINI REVIEWS DESIGNS, NOT DIFFS — pick by WHO BUILT the change (Owner ruling 2026-07-28; supersedes the 2026-07-15 routing)
 
@@ -296,7 +296,7 @@ more of the leaned-on family than it did; the verdict records the active binding
   per changeset is not "regularly". **"Changeset" is as `core/WORKFLOW.md` § Gate defines it — the
   task, not the file version**, so re-freezing after a fix, splitting findings, or swapping reviewers
   does not mint a second allowance. **Default consumer: the fold-check on a remediation delta**, before
-  the cross-family bookend. **A second DISCRETIONARY firing requires an Owner GO; any agent MAY request
+  the cross-family bookend. **A second DISCRETIONARY firing requires a Principal GO; any agent MAY request
   one with a reason — requesting is not authorizing.** Discretionary consumers **compete for that one
   budget and are never additive**: a design gate spends the allowance *instead of* the fold-check; on an
   irreversible/money/auth change the rare-cell gate seat **is** the firing. **Outside the cap:** the

@@ -52,8 +52,8 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    not happen: waiting on one, you keep building everything it does not touch and you seat nothing
    that depends on it.
    **For a delegated program, cite the Principal decision/record and its limits; it binds execution but
-   never supplies Owner GO. Name target-repo Owner reservations, including merge/push GO, material intent
-   or risk, live WRITE-GO, credentials, terminal exception and budget exceptions; all route THROUGH PM.**
+   never supplies Owner GO. Name target-repo Owner reservations, namely merge/push GO, irreversible or live acts,
+   money, credentials/access and a change of direction or scope; all route THROUGH PM.**
    **Give the orchestrator-facing
    labels (`CONSULT:` / `RULING NEEDED:`). The generated `core/OWNER_COMMS.md` rule 8 is the sole
    source for Owner-facing labels and form; do not duplicate its list in this portable brief.

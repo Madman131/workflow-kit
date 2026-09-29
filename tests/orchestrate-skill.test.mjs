@@ -341,10 +341,9 @@ test("architect-build routing keeps delegated authority, quiet boundaries, fourt
   pin(routing, "With explicit Owner delegation recorded for the program, Architect is Project Principal: accountable for", "delegated Principal owns program continuity");
   pin(routing, "Examples—never an allowlist", "Principal examples do not narrow authority");
   pin(routing, "proceeds automatically on covered work, and returns concrete conflicts", "PM quiet continuity");
-  pin(routing, "Owner alone retains baseline/launch; material outcome/scope/budget/risk; critical choice;", "Owner reservations remain explicit");
-  pin(routing, "destructive-or-irreversible acts", "Owner reservation covers destructive and irreversible acts");
+  pin(routing, "Owner alone retains: push/deploy/publication GO; irreversible or live acts (including live/external-data\nwrites); money/new spend; credentials/access; a change of direction or scope.", "Owner reservations are exactly the five D-43 items");
+  pin(routing, "Everything else is the\nPrincipal's: wording, tier, flags, seats, dispositions, waivers, caps, sequencing, terminal exceptions.", "everything else is the Principal's");
   pin(routing, "frozen packet with redacted context", "review packets remain frozen and redacted");
-  pin(routing, "terminal\nexception except bounded T2 Principal controller completion; gate waiver;", "only the bounded T2 Principal controller completion leaves the Owner terminal reservation");
   pin(routing, "When Principal is unavailable, create no acting architect", "unavailable architect does not mint a replacement chain");
   pin(routing, "Controller admission is necessary recorded-shape evidence, never certification of a complete tier roster.", "controller shape is not a full T3 roster certification");
   pin(routing, "T3 roster missing\nits configured lens or external family is not full even if a two-family controller predicate accepts it.", "T3 family assurance stays outside the controller-shape claim");
@@ -487,7 +486,7 @@ test("the pin helper reports a DEAD pin instead of passing it", () => {
 test("reserved decisions route through the PM without a portable mirror", () => {
   const body = readFileSync(BODY, "utf8");
   const brief = readFileSync(path.join(KIT, "skills", "orchestrate", "CHIP_BRIEF.md"), "utf8");
-  assert.match(body, /Owner alone decides critical product intent\/risk, material scope\/budget,\s+credentials\/access change, money\/new-spend/,
+  assert.match(body, /Owner alone decides push\/deploy\/publication GO, irreversible or live acts, money\/new spend, credentials\/access, and a change of direction or scope/,
     "§ Routing names the Owner-only boundary without treating Principal delegation as a release waiver");
   assert.match(body, /Principal decides nonreserved in-envelope questions/,
     "§ Routing makes delegated program direction binding rather than advisory");
