@@ -360,85 +360,18 @@ and a spot-check cannot read a digest.
 reality, so a hand-written sidecar naming commands that never ran satisfies this guard. It proves a
 session- and dispatch-bound RECORD exists — a raised cost and an auditable trace, not impossibility.
 
-**`guard-brief-rung` binds Codex brief writes and one paired thread send.** The brief-WRITE half
-uses the shared `apply_patch` envelope grammar. For the exact Codex app tool
-`mcp__codex_app__send_message_to_thread`, the optional, checkout-durable `pairedPmThreadId` in
-`.claude/kit.config.json` selects one PM `threadId`; without that field, Codex sends are
-outside this Architect-pair scope. A material send to that target owes the existing fresh,
-session/target-bound, single-use brief-rung receipt plus an Architect screen bound to the exact
-prompt bytes. The Architect evaluates observed evidence, the no-action consequence, approved-outcome/blueprint
-alignment, smallest action, KISS, zoom-out, root cause/cost and each finding's first-exit
-HARM/REAL/SCOPE/WORTH IT result. Compare at least two substantive options with tradeoffs;
-they may share a final route. For example, two viable `proceed` options could reuse the current guard
-(smaller review surface) or replace the coordinator (larger migration); `smallestAction` and
-`choiceReason` identify the selected approach. Choose `proceed`, `simplify`, `defer`, `stop`, or
-`escalate`; state the choice reason and, for escalation,
-the actual Owner-reserved boundary. Record the evaluation and choice before dispatch. Proceed/simplify
-may direct approved PM execution; defer/stop holds dependent work; escalate routes the reserved question
-to Owner. Any PM hold for that decision is a screened, non-status direction retaining `architectScreen`.
-The `ARCHITECT_STATUS_V1` status class is informational and cannot carry a decision screen. The hook checks
-shape and prompt binding, not whether the direction matches the choice. Declared status to that target
-must start with the literal `ARCHITECT_STATUS_V1` line; the marker is a sender self-report, not proof
-of the message's meaning. Paired sends carrying `model` or
-`thinking` overrides deny. During an active aggregate repair, an explicit `architect-direction`
-receipt permits screened Architect-to-PM direction only; it grants no worker dispatch or source-write
-authority. Ordinary task-lane refresh leaves the checkout pair intact, and `init --force` refuses
-to drop it unless its flag is supplied. `check-codex-hooks-armed.mjs` proves the `apply_patch`
-registration only. Generated registration and local command tests do not prove actual Codex task
-interception or hook trust; separately verify the exact send's Source, Command and Trust in the
-intended task before relying on this guard.
-
-**The Claude lane's pair (v2.33.1).** Claude Code's `SendMessage` (addressed by `to`) and the older
-`mcp__ccd_session_mgmt__send_message` (addressed by `session_id`) reach the same screen when the optional
-`pairedPmClaudeTarget` (`init --paired-pm-claude-target`) and/or `pairedPmClaudeName`
-(`init --paired-pm-claude-name`) in `.claude/kit.config.json` name the PM. Set the first to the PM's
-**stable** `ListAgents` `[ref]` or session/agent id, which survives a rename, and the second to its
-current name, because a model addresses by bare name by default (observed live). A send is to the pair
-when either stored value equals the whole address, the content of one trailing ` [ref]`, or the name
-before that ref. **After a rename the stored name is stale** until re-set (by `init --force` with every
-kit-config family named, or in place): a bare new title is unscreened and gets the notice, while
-`"<new title> [<ref>]"` still pairs by the ref. Claude Code 2.1.270 was
-observed passing `recipient` and `content` copies beside `to` and `message`: either address naming the
-PM makes it the PM's send, and two different bodies deny as ambiguous. The pair owes exactly what
-the Codex pair owes, with the sidecar's `target` set to the configured `pairedPmClaudeTarget` value
-(or `pairedPmClaudeName` when no ref is configured) whatever address form the send uses; `model`, `thinking` or `effort` in the send denies; an empty message (a pure idle
-subscription) directs nothing and passes. Any other `SendMessage` is not screened — as before this
-release — but a paired checkout prints a notice saying it was not, so a renamed or mis-addressed PM send
-is never silent. A malformed kit config denies every Claude send, because it cannot say which one is the
-PM's, and the deny names the key that failed (v2.35.0). In a paired checkout a `SendMessage` whose `to` or
-`recipient` is present but not a string is denied (v2.35.0). The matcher is a separate `SendMessage` registration in `.claude/settings.json`, beside the
-unchanged `.*send_message` one: init merges registrations by exact matcher, so editing the old matcher
-would have run this guard twice per send on upgrade and spent a single-use receipt twice. Address
-matching is a string comparison: a PM addressed by an alias that carries neither its configured ref nor
-its id (a new title with no ref, or `"parent"`) is outside the pair. **A mixed pair — Architect and PM in
-different harnesses — has no shared messaging tool and runs file-only:** directions and consults go
-through the durable program record, no `pairedPm*` key is configured, and no screen claims to bind it.
-
-Minimal `architectScreen` for the exact prompt `Hold chip pending Owner scope approval.` (the digest
-binds those bytes; other brief-rung sidecar fields and executed checks are still required):
-
-```json
-{
-  "promptSha256": "0423e1957a836676118d740c633f551844b88573b230be49efadc91e7fe30012",
-  "action": {
-    "approvedOutcome": "Hold the approved chip", "blueprintAlignment": "No new scope proceeds",
-    "smallestAction": "Tell PM to hold", "kiss": "Use the existing direction",
-    "zoomOut": "Avoid unapproved work", "rootCause": "Requested scope exceeds baseline",
-    "cost": "One Owner decision",
-    "evaluation": { "observedEvidence": "Scope request conflicts with approved baseline",
-      "noAction": "PM might continue unapproved work" },
-    "alternatives": [
-      { "route": "escalate", "tradeoff": "Wait for Owner scope decision" },
-      { "route": "defer", "tradeoff": "Delay without a scope decision" }
-    ],
-    "choice": "escalate", "choiceReason": "Scope change is Owner-reserved",
-    "reservedBoundary": "Material scope change"
-  },
-  "findings": []
-}
-```
-`action.reservedBoundary` is required when `choice` is `escalate`; `findings` may be empty only
-when no finding is being screened. A status declaration cannot carry this screen.
+**`guard-brief-rung` binds brief writes and worker-dispatch sends — not Architect-to-PM chat.** The
+brief-WRITE half uses the shared `apply_patch` envelope grammar. A tool named `…send_message`
+(a worker dispatch) still owes the fresh, session/target-bound, single-use receipt. Session chat
+is NOT a dispatch and passes untouched: Claude's `SendMessage`, the desktop app's forwarding of it
+as `mcp__ccd_session_mgmt__send_message`, and the Codex app's `mcp__codex_app__send_message_to_thread`.
+No hook stands between an Architect and its PM. The Architect-to-PM send screens of v2.33.0 and
+v2.33.1 (decision screen, `ARCHITECT_STATUS_V1` marker, `architect-direction`) were removed in v2.37.0.
+The `pairedPmThreadId`, `pairedPmClaudeTarget` and `pairedPmClaudeName` config keys are retired: an
+existing key is tolerated and ignored, never a malformed-config deny, and the matching `init` flags
+are accepted with a warning and do nothing. The `.codex/hooks.json` registration is unchanged, so
+no Codex re-trust is owed; the script simply allows those sends. `check-codex-hooks-armed.mjs`
+proves the `apply_patch` registration only.
 
 **The Codex review seat — a v2.0 disclosure this release CORRECTS.** v2.0 recorded, against its own
 artifact, that a repo-level `.codex/agents/` was "*not* something this work verified as a discovery
@@ -748,8 +681,7 @@ roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 This simplified line retains the reviewed controller from `06e449e1bd0bec920a062de3a22a46536d39295b`
 (`hooks/repair-dispatch-state.mjs` blob `e2a61115c77d99b93ac88b3141a1b19438ee3363`).
 Its finite gate ladder, recorded Principal authority, typed reviews, and active-program brief/worker
-checks remain. The Architect-to-PM prompt-bound decision screen above is separate and remains
-active where its hook is armed. Owner-reserved decisions and recorded STOP history are unchanged.
+checks remain. Owner-reserved decisions and recorded STOP history are unchanged.
 
 The later permissive uncited legacy-handoff migration, global stopped/pending/open-panel path-write
 interlocks, Git-common cross-process writer lock, and ordinary pending-child first-write admission
@@ -758,6 +690,8 @@ or a pending ordinary child without an active program, the tool-bound write guar
 `ok: true, state: "not-repair-write"`, and its hook allows the write. The workflow still forbids
 unauthorized rework of reserved paths; an allow from this guard does not grant that authority.
 Shell/direct filesystem writes remain outside the tool-bound guard.
+
+Controller and recorder bytes reach an adopter only through a committed adoption, never as uncommitted copies across worktrees: uncommitted copies read as another lane's work, and a restore or checkout in any one worktree silently reverts them to the old controller (lesson FM-42). Port a code-only release by copying its changed files, committing, and diff-proving them against the kit release.
 
 Replay also has an upgrade limit. If an existing ledger has an uncited, nonmandatory
 `legacy_handoff` with an applicable typed review, this retained controller can silently ignore
