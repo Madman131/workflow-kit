@@ -78,8 +78,7 @@ supported full-coverage Gemini first, otherwise a fresh cold Claude frontier pas
 **same-family-only**, never cross-family; use Codex for the next unstarted seat when it returns. A
 Claude lane reaches the Codex seat through `scripts/codex-gate.sh` (`init --with-gate-runners`). The
 frontier pass spends the changeset's one discretionary frontier firing; if that firing is already
-spent, the fallback is a second firing and routes to the Owner (through the Architect/PM, rule-8
-form) — the existing Owner reservation, not a new rule.
+spent, the fallback is a second firing and routes to the Principal for its GO.
 
 ## Artifact-class review physics
 *How findings are WEIGHED and TIERED once you have them is `core/ARTIFACT_CLASS.md`.*

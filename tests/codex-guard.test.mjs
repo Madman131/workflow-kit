@@ -7,6 +7,7 @@
 // invented proves that the author is self-consistent, not that the parser reads Codex.
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -868,49 +869,48 @@ function adoptCodex(extraArgs = []) {
   return { dir, out, run, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
-test("generated entry and bindings distinguish the optional paired Codex send from write-probe arming", () => {
+test("generated entry and bindings say Architect-to-PM sends are not screened, and the probe covers apply_patch only", () => {
   const A = adoptCodex();
   try {
     const claude = readFileSync(path.join(A.dir, "CLAUDE.md"), "utf8");
     const bindings = readFileSync(path.join(A.dir, "core", "BINDINGS.md"), "utf8");
     for (const [name, body] of [["CLAUDE.md", claude], ["BINDINGS.md", bindings]]) {
       assert.match(body, /mcp__codex_app__send_message_to_thread/, `${name} names the exact Codex send tool`);
-      assert.match(body, /pairedPmThreadId/, `${name} names the optional checkout pair selector`);
-      assert.match(body, /Source, Command and Trust/, `${name} requires separate actual-send proof`);
+      assert.match(body, /not screened/, `${name} says the PM chat is not screened`);
       assert.match(body, /check-codex-hooks-armed\.mjs` probes `apply_patch` only/,
         `${name} limits the arming probe to the write matcher`);
-      assert.doesNotMatch(body, /send half.*no Codex payload/s,
-        `${name} must not deny the generated exact Codex send matcher`);
+      assert.doesNotMatch(body, /pairedPm(?!\*)|decision screen|ARCHITECT_STATUS/,
+        `${name} carries no instruction for the removed pair screens`);
     }
-    assert.match(claude, /Claude.*cross-session send.*brief-rung/s,
-      "the Claude-lane send registration remains stated");
-    assert.match(bindings, /without.*pairedPmThreadId.*outside.*scope/s,
-      "unconfigured Codex sends remain outside this Architect-pair guard");
-    assert.doesNotMatch(bindings, /Always live:\*\* brief writes and cross-session sends need/,
-      "the binding cannot claim every cross-session send needs a sidecar");
   } finally { A.cleanup(); }
 });
 
-test("a configured PM pair survives task-lane refresh and init --force without a hidden drop", () => {
+test("retired pairedPm* keys and flags: init accepts the flags as a no-op, and a --force rewrite drops a stale key with a note, never a refusal", () => {
   const A = adoptCodex(["--skip-codex-lane", "--source-dirs", "src", "--paired-pm-thread-id", "pm-thread"]);
   try {
     const configFile = path.join(A.dir, ".claude", "kit.config.json");
-    const laneFile = path.join(A.dir, ".claude", "task-lane.json");
-    const original = readFileSync(configFile, "utf8");
-    assert.equal(JSON.parse(original).pairedPmThreadId, "pm-thread");
-    assert.deepEqual(JSON.parse(original).executedPathDirs, ["src"],
-      "first adoption can configure a pair alongside another durable field");
-    writeFileSync(laneFile, JSON.stringify({ mode: "in-thread", sessionId: "new-session", taskId: "task1", tier: "T2" }));
-    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread",
-      "refreshing the ignored task declaration does not erase the checkout's durable pair");
-    const refused = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", A.dir,
-      "--repo-name", "adopter", "--skip-codex-lane", "--skip-codex-prompt", "--force"], { encoding: "utf8" });
-    assert.equal(refused.status, 1, "a force run omitting the configured pair refuses instead of dropping it");
-    assert.match(refused.stderr, /pairedPmThreadId.*--paired-pm-thread-id/s);
-    assert.equal(readFileSync(configFile, "utf8"), original, "the refused run leaves the pair bytes unchanged");
-    A.run(["--skip-codex-lane", "--force", "--source-dirs", "src", "--paired-pm-thread-id", "pm-thread"]);
-    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).pairedPmThreadId, "pm-thread");
-    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")).executedPathDirs, ["src"]);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), { executedPathDirs: ["src"] },
+      "the retired flag writes nothing");
+    writeFileSync(configFile, JSON.stringify({ executedPathDirs: ["src"], pairedPmThreadId: "pm-thread",
+      pairedPmClaudeTarget: "ref1", pairedPmClaudeName: "PM" }));
+    const forced = spawnSync("node", [path.join(KIT, "bin", "init.mjs"), "--target", A.dir,
+      "--repo-name", "adopter", "--skip-codex-lane", "--skip-codex-prompt", "--force", "--source-dirs", "src"], { encoding: "utf8" });
+    assert.equal(forced.status, 0, forced.stderr);
+    assert.match(forced.stderr, /"pairedPmThreadId".*init does not recognise/s);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), { executedPathDirs: ["src"] });
+  } finally { A.cleanup(); }
+});
+
+test("the generated .codex/hooks.json registration is unchanged from v2.36.0 — entries byte-equal, so no Codex re-trust", () => {
+  const A = adoptCodex();
+  try {
+    const text = readFileSync(path.join(A.dir, ".codex", "hooks.json"), "utf8");
+    const reg = JSON.parse(text.split(A.dir).join("<T>"));
+    // sha256 of JSON.stringify(hooks) with the target path normalised, computed from a v2.36.0 (f98cada)
+    // init run. Trust is keyed to the entries; only the description's version string may differ.
+    assert.equal(createHash("sha256").update(JSON.stringify(reg.hooks)).digest("hex"),
+      "acf420dfa3823b5a61821681fdb92030b82e215d0c395abdf2a03624b2b4ad47");
+    assert.equal(reg.hooks.PreToolUse[1].matcher, "mcp__codex_app__send_message_to_thread");
   } finally { A.cleanup(); }
 });
 

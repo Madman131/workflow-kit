@@ -66,33 +66,6 @@ const verdictEvent = (over = {}) => {
 const repairEvents = [verdictEvent()];
 const state = (sidecar, over = {}) =>
   sidecarState(sidecar, { ageMin: 1, sessionId: "s1", dispatch: BRIEF, events: [], taskId: "task1", ...over }).state;
-const architectPrompt = "Proceed with the approved bounded chip.";
-const architectScreen = (over = {}) => ({
-  promptSha256: createHash("sha256").update(architectPrompt).digest("hex"),
-  decisionId: "chip-1-direction",
-  action: {
-    approvedOutcome: "Deliver the approved chip without changing its endpoint.",
-    blueprintAlignment: "The step implements the approved architecture path.",
-    smallestAction: "Change only the named chip files.",
-    kiss: "Reuse the existing guard and record.",
-    zoomOut: "This is still the shortest path to the release outcome.",
-    rootCause: "The current dispatch lacks a checked screening record.",
-    cost: "One bounded edit and its existing review gate.",
-    evaluation: {
-      observedEvidence: "The approved chip and current gate receipt identify this bounded step.",
-      noAction: "The approved result remains delayed while the PM waits.",
-    },
-    alternatives: [
-      { route: "proceed", tradeoff: "Finish the bounded chip with its existing gate." },
-      { route: "defer", tradeoff: "Avoid work now but delay the approved result." },
-    ],
-    choice: "proceed",
-    choiceReason: "The bounded step preserves the approved outcome and passes its existing gate.",
-  },
-  findings: [],
-  ...over,
-});
-
 // ---------------------------------------------------------------- scope: what owes the rung
 
 test("a BRIEF is recognised by its directory OR its name — and a shipped instruction artifact is not one", () => {
@@ -118,9 +91,12 @@ test("a BRIEF is recognised by its directory OR its name — and a shipped instr
 });
 
 test("the SEND half binds a send tool and nothing else — harness-specific by construction", () => {
-  assert.equal(isSendTool("mcp__ccd_session_mgmt__send_message"), true);
   assert.equal(isSendTool("send_message"), true);
-  assert.equal(isSendTool("mcp__codex_app__send_message_to_thread"), true);
+  assert.equal(isSendTool("mcp__other_harness__send_message"), true);
+  // v2.37.0: session chat is not a dispatch — the desktop-forwarded SendMessage, and the Codex thread send.
+  assert.equal(isSendTool("mcp__ccd_session_mgmt__send_message"), false);
+  assert.equal(isSendTool("SendMessage"), false);
+  assert.equal(isSendTool("mcp__codex_app__send_message_to_thread"), false);
   assert.equal(isSendTool("Write"), false);
   assert.equal(isSendTool("apply_patch"), false);
   assert.equal(isSendTool(undefined), false);
@@ -213,88 +189,6 @@ test("the STATUS escape is available to a send and refused to a brief", () => {
     "…and a brief cannot declare its way out: it is load-bearing by definition");
   // An explicit load-bearing class still owes receipts — the field cannot be used to skip them.
   assert.equal(state(fresh({ class: "load-bearing", checks: [] })), "no-executed-check");
-});
-
-test("an Architect direction owes a prompt-bound action screen even when there are no findings", () => {
-  const dispatch = { kind: "send", target: "pm-thread", architectPrompt };
-  const base = fresh({ target: "pm-thread" });
-  assert.equal(state(base, { dispatch }), "architect-screen-missing");
-  assert.equal(state({ ...base, architectScreen: architectScreen({ promptSha256: "0".repeat(64) }) }, { dispatch }),
-    "architect-prompt-mismatch");
-  assert.equal(state({ ...base, architectScreen: architectScreen({ action: { ...architectScreen().action, kiss: "" } }) },
-    { dispatch }), "architect-screen-incomplete");
-  const action = architectScreen().action;
-  for (const invalid of [
-    { evaluation: undefined }, { evaluation: { observedEvidence: "x" } },
-    { evaluation: { observedEvidence: "", noAction: "delay" } },
-    { evaluation: { observedEvidence: "receipt", noAction: "" } },
-    { alternatives: undefined }, { alternatives: [] },
-    { alternatives: [action.alternatives[0]] },
-    { alternatives: [action.alternatives[0], { ...action.alternatives[0] }] },
-    { alternatives: [{ route: "proceed", tradeoff: "" }, action.alternatives[1]] },
-    { choice: "approve" }, { choice: "stop" }, { choiceReason: "" },
-  ]) {
-    assert.equal(state({ ...base, architectScreen: architectScreen({ action: { ...action, ...invalid } }) },
-      { dispatch }), "architect-screen-incomplete", JSON.stringify(invalid));
-  }
-  assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
-    ...action, smallestAction: "Reuse the existing guard for this chip.",
-    choiceReason: "Both can deliver the chip; reuse has the smaller review surface.",
-    alternatives: [
-      { route: "proceed", tradeoff: "Reuse existing guard with a smaller review surface." },
-      { route: "proceed", tradeoff: "Replace coordinator with a larger migration." },
-    ],
-  } }) }, { dispatch }), "receipted", "distinct substantive options may share a proceed disposition");
-  for (const choice of ["proceed", "simplify", "defer", "stop", "escalate"]) {
-    assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
-      ...action, choice, reservedBoundary: choice === "escalate" ? "New scope requires Owner approval." : undefined,
-      alternatives: [
-        { route: choice, tradeoff: "Named consequence of this route." },
-        { route: choice === "proceed" ? "defer" : "proceed", tradeoff: "Compared consequence of the other route." },
-      ],
-    } }) }, { dispatch }), "receipted", choice);
-  }
-  assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
-    ...action, choice: "escalate", alternatives: [
-      { route: "escalate", tradeoff: "Wait for Owner's reserved decision." }, action.alternatives[0],
-    ],
-  } }) }, { dispatch }), "architect-screen-incomplete", "escalation owes its actual reserved boundary");
-  assert.equal(state({ ...base, architectScreen: architectScreen() }, { dispatch }), "receipted");
-  assert.equal(state({ ...base, architectScreen: architectScreen({ action: {
-    ...architectScreen().action, approvedOutcome: "x".repeat(4000),
-  } }) }, { dispatch }), "architect-screen-too-large", "the existing audit append remains small");
-  assert.equal(state({ ...base, class: "status", dispatch_kind: "status", architectScreen: undefined },
-    { dispatch }), "architect-status-marker-missing", "direction text cannot use class:status alone");
-  assert.equal(state({ ...base, class: "status", dispatch_kind: "status", architectScreen: undefined },
-    { dispatch: { ...dispatch, architectPrompt: "ARCHITECT_STATUS_V1\nProgress only." } }), "status-declared");
-  assert.equal(state({ ...base, class: "status", dispatch_kind: "status", architectScreen: architectScreen() },
-    { dispatch }), "architect-status-conflict", "a direction receipt cannot be relabelled as status");
-});
-
-test("Architect findings obey first-exit order and name the failed trigger before being screened out", () => {
-  const dispatch = { kind: "send", target: "pm-thread", architectPrompt };
-  const base = fresh({ target: "pm-thread" });
-  const pass = (evidence) => ({ result: "pass", evidence });
-  const fail = (evidence, failedTrigger) => ({ result: "fail", evidence, failedTrigger });
-  const finding = {
-    id: "F1", harm: pass("Owner loses the approved outcome because the send changes scope."),
-    real: pass("The changed scope reaches the supported paired PM task."),
-    scope: pass("The finding concerns the requested feature."),
-    worthIt: pass("The bounded correction is cheaper than another wrong build."),
-    disposition: "REMEDIATE",
-  };
-  assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [finding] }) }, { dispatch }), "receipted");
-  for (const [field, disposition] of [["harm", "NOTE"], ["real", "DEFER"], ["scope", "DECLINE"], ["worthIt", "DEFER"]]) {
-    const fields = ["harm", "real", "scope", "worthIt"];
-    const screened = { id: "F1", disposition };
-    for (const key of fields.slice(0, fields.indexOf(field))) screened[key] = finding[key];
-    screened[field] = fail("The original case misses the named supported target.", "Replayed original trigger against the target and observed no impact.");
-    assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [screened] }) }, { dispatch }), "receipted", field);
-    assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [{ ...screened, [field]: { ...screened[field], failedTrigger: "" } }] }) },
-      { dispatch }), "architect-screen-incomplete", `${field} cannot screen out on a bare assertion`);
-    if (field !== "worthIt") assert.equal(state({ ...base, architectScreen: architectScreen({ findings: [{ ...screened, [fields[fields.indexOf(field) + 1]]: pass("filler") }] }) },
-      { dispatch }), "architect-screen-incomplete", "downstream answers after first exit are filler");
-  }
 });
 
 test("retired standard repair declarations refuse while active legacy state still blocks ordinary repair work", () => {
@@ -434,12 +328,8 @@ test("every deny state produces a message that names the state's OWN remediation
   assert.doesNotMatch(denyReason("ledger-error", { dispatch: BRIEF }), /OPEN every citation/);
   assert.doesNotMatch(denyReason("kit-config-malformed", { dispatch: BRIEF }), /OPEN every citation/);
   const corrupt = denyReason("kit-config-malformed", { dispatch: BRIEF });
-  assert.match(corrupt, /repair.*in place.*restore.*pairedPmThreadId.*preserve other valid fields/i,
-    "a corrupt configured pair must be repaired without removing its scope");
-  assert.match(corrupt, /if this checkout is paired/i,
-    "ordinary unpaired adopters must not be told they necessarily have a PM pair");
-  assert.doesNotMatch(corrupt, /delete it|re-run `node bin\/init\.mjs`/i,
-    "the diagnostic cannot recommend an opt-out as a recovery path");
+  assert.match(corrupt, /repair this config in place.*preserve its other valid fields/i);
+  assert.doesNotMatch(corrupt, /pairedPm|delete it|re-run `node bin\/init\.mjs`/i);
 });
 
 test("a corrupt kit.config.json fails CLOSED rather than silently narrowing scope", () => {
@@ -609,116 +499,51 @@ test("THE GUARD IS INSTALLED, REGISTERED, AND RUNS IN A REAL ADOPTER TREE — pr
   } finally { cleanup(); }
 });
 
-test("the installed Codex thread-send guard scopes one declared PM and checks current direction screening", () => {
+test("v2.37.0: session chat between an Architect and its PM passes the installed guard; worker dispatches still owe the rung", () => {
   const { dir, cleanup } = adopt();
   try {
-    const registration = JSON.parse(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8"));
-    const sendGroup = registration.hooks.PreToolUse.find((group) =>
-      group.matcher === "mcp__codex_app__send_message_to_thread");
-    assert.equal(sendGroup.hooks.length, 1, "the generated registration names one exact send guard");
-    const command = sendGroup.hooks[0].command;
-    const laneFile = path.join(dir, ".claude", "task-lane.json");
+    const claudeHook = path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs");
+    const codexReg = JSON.parse(readFileSync(path.join(dir, ".codex", "hooks.json"), "utf8"));
+    const sendGroup = codexReg.hooks.PreToolUse.find((g) => g.matcher === "mcp__codex_app__send_message_to_thread");
+    assert.ok(sendGroup, "the Codex registration is kept, so no re-trust is owed");
+    const run = (payload, cmd) => (cmd
+      ? spawnSync("sh", ["-c", cmd], { input: JSON.stringify(payload), encoding: "utf8" })
+      : spawnSync(process.execPath, [claudeHook, "--project-dir", dir], { input: JSON.stringify(payload), encoding: "utf8" }));
     const configFile = path.join(dir, ".claude", "kit.config.json");
-    const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
-    const payload = (threadId = "pm-thread", prompt = architectPrompt, extra = {}) => ({
-      session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
-      tool_input: { threadId, prompt, ...extra },
-    });
-    const run = (input) => spawnSync("sh", ["-c", command], {
-      input: JSON.stringify(input), encoding: "utf8",
-    });
-    const lane = JSON.parse(readFileSync(laneFile, "utf8"));
-    const config = { ...JSON.parse(readFileSync(configFile, "utf8")), briefPathDirs: ["dispatches"] };
-    writeFileSync(configFile, JSON.stringify(config));
-    const setPair = (value) => writeFileSync(configFile, JSON.stringify({ ...config, pairedPmThreadId: value }));
-    const setSidecar = (over = {}) => writeFileSync(sidecarFile, JSON.stringify({
-      sessionId: "s1", target: "pm-thread", nonce: "architect-1", dispatch_kind: "build", task_id: "task1",
-      checks: OK_CHECK, architectScreen: architectScreen(), ...over,
-    }));
-
-    assert.equal(run(payload()).stdout, "", "without a configured pair the Codex send remains out of scope");
-    const plainInit = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"),
-      "--target", dir, "--repo-name", "adopter", "--skip-codex-prompt", "--skip-codex-lane",
-      "--paired-pm-thread-id", "pm-thread"], { encoding: "utf8" });
-    assert.equal(plainInit.status, 0, plainInit.stderr);
-    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), config,
-      "plain init keeps an existing config even when the new flag is present");
-    const routing = readFileSync(path.join(KIT, "skills", "architect-build", "ROUTING.md"), "utf8");
-    assert.match(routing, /existing.*config.*in place.*preserv.*other fields/is,
-      "the documented existing-adopter route must not rely on plain init to add the pair");
-    setPair(123);
-    const malformed = run(payload()).stdout;
-    assert.match(malformed, /"permissionDecision":"deny"/, "a malformed selector cannot silently narrow coverage");
-    assert.doesNotMatch(malformed, /delete it|re-run `node bin\/init\.mjs`/i,
-      "the exact installed hook cannot recommend silently opting out of the configured pair");
-    setPair(" pm-thread ");
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "whitespace cannot turn a configured pair into an unmatched quiet route");
-    setPair("pm-thread");
-    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), { ...config, pairedPmThreadId: "pm-thread" },
-      "repairing in place retains the unrelated field and the intended pair");
-    writeFileSync(laneFile, JSON.stringify(lane));
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/,
-      "a normal task-lane refresh retains the durable pair and still demands a sidecar");
-    const holdPrompt = "Hold chip pending Owner scope approval.";
-    const portable = readFileSync(path.join(KIT, "PORTABILITY.md"), "utf8");
-    const exampleMatch = /Minimal `architectScreen`[\s\S]*?```json\n([\s\S]*?)\n```/.exec(portable);
-    assert.ok(exampleMatch, "producer reference includes literal screen JSON");
-    const holdScreen = JSON.parse(exampleMatch[1]);
-    setSidecar({ nonce: "hold-1", architectScreen: { ...holdScreen, action: {
-      ...holdScreen.action, evaluation: { ...holdScreen.action.evaluation, observedEvidence: "" },
-    } } });
-    const incompleteScreen = run(payload("pm-thread", holdPrompt)).stdout;
-    assert.match(incompleteScreen, /"permissionDecision":"deny"/, "malformed published shape denies");
-    assert.match(incompleteScreen, /PORTABILITY\.md.*minimal/, "deny points to exact JSON shape");
-    setSidecar({ nonce: "hold-1", class: "status", dispatch_kind: "status", architectScreen: holdScreen });
-    const statusConflict = run(payload("pm-thread", holdPrompt)).stdout;
-    assert.match(statusConflict, /"permissionDecision":"deny"/, "screened escalation cannot use status class");
-    assert.match(statusConflict, /Keep the decision screen.*screened non-status direction/,
-      "denial preserves the high-value escalation screen");
-    setSidecar({ nonce: "hold-1", architectScreen: holdScreen });
-    assert.equal(run(payload("pm-thread", holdPrompt)).stdout, "", "published screened hold passes as direction");
-    const holdRows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
-      .split("\n").filter(Boolean).map(JSON.parse).filter((row) => row.control === "brief-rung");
-    assert.deepEqual(holdRows.at(-1).architectScreen, holdScreen, "hold direction retains its decision screen in audit");
-    assert.equal(run(payload("another-thread")).stdout, "", "an unrelated Codex send stays outside the paired guard");
-    assert.match(run(payload("pm-thread", architectPrompt, { model: "gpt-6-astra" })).stdout, /quietly change the PM's model/,
-      "a paired send cannot quietly change its model");
-    assert.match(run(payload("pm-thread", architectPrompt, { thinking: "max" })).stdout, /quietly change the PM's model/,
-      "a paired send cannot quietly change its reasoning effort");
-    assert.equal(run(payload("another-thread", architectPrompt, { model: "gpt-6-astra" })).stdout, "",
-      "an unrelated send keeps its existing behavior");
-    const missing = run(payload()).stdout;
-    assert.match(missing, /"permissionDecision":"deny"/, "the covered PM send needs a sidecar");
-    for (const question of ["HARM?", "REAL?", "SCOPE?", "WORTH IT?", "root replacement"]) {
-      assert.ok(missing.includes(question), `the paired deny surfaces the existing PM CONTRACT's ${question}`);
+    const config = JSON.parse(readFileSync(configFile, "utf8"));
+    const sendMessage = { session_id: "s1", tool_name: "SendMessage", cwd: dir,
+      tool_input: { to: "local_1234abcd", message: "Proceed.", content: "different harness copy" } };
+    // 1. SendMessage to a local_… id is allowed, with no sidecar.
+    assert.equal(run(sendMessage).stdout, "");
+    // 2. The desktop-forwarded ccd tool is allowed too.
+    assert.equal(run({ session_id: "s1", tool_name: "mcp__ccd_session_mgmt__send_message", cwd: dir,
+      tool_input: { session_id: "local_1234abcd", message: "Proceed." } }).stdout, "");
+    // 3. The ordinary send rung is untouched for another `…send_message` worker dispatch.
+    const worker = { session_id: "s1", tool_name: "mcp__other_harness__send_message", cwd: dir,
+      tool_input: { session_id: "worker-1", message: "Build it." } };
+    assert.match(run(worker).stdout, /"permissionDecision":"deny"[\s\S]*has not run for this dispatch/);
+    // 3b. …and the Codex thread send passes, as it did before v2.33.0 (never matched then).
+    const codexSend = { session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
+      tool_input: { threadId: "any-thread", prompt: "Proceed." } };
+    assert.equal(run(codexSend, sendGroup.hooks[0].command).stdout, "");
+    // 4. Retired pair keys — present, even malformed — never deny.
+    for (const pair of [{ pairedPmThreadId: "pm-thread" }, { pairedPmThreadId: 123, pairedPmClaudeTarget: "", pairedPmClaudeName: 7 }]) {
+      writeFileSync(configFile, JSON.stringify({ ...config, ...pair }));
+      assert.equal(run(sendMessage).stdout, "", JSON.stringify(pair));
+      assert.equal(run(codexSend, sendGroup.hooks[0].command).stdout, "", JSON.stringify(pair));
+      assert.equal(run({ session_id: "s1", tool_name: "Write", cwd: dir, tool_input: { file_path: path.join(dir, "docs", "design.md") } }).stdout, "",
+        "a retired key cannot turn the config malformed (a markdown write would deny kit-config-malformed)");
     }
-    setSidecar({ architectScreen: architectScreen({ findings: [
-      { id: "F1", harm: { result: "fail", evidence: "No target was reached." }, disposition: "NOTE" },
-    ] }) });
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "an incomplete first-exit finding cannot pass");
-    setSidecar({ architectScreen: architectScreen({ promptSha256: "0".repeat(64) }) });
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the screen must bind exact prompt bytes");
-    setSidecar();
-    assert.match(run(payload("pm-thread", architectPrompt + " Changed.")).stdout, /"permissionDecision":"deny"/,
-      "a changed message cannot ride the old decision digest");
-    setSidecar();
-    utimesSync(sidecarFile, new Date(Date.now() - 31 * 60_000), new Date(Date.now() - 31 * 60_000));
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "an old decision screen cannot pass");
-    setSidecar({ target: "wrong-thread" });
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the existing target binding still applies");
-    setSidecar({ class: "status", dispatch_kind: "status" });
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "a direction receipt may not take the status route");
-    setSidecar();
-    assert.equal(run(payload()).stdout, "", "the current screen permits exactly the paired direction");
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "the existing nonce is single use");
-    setSidecar({ class: "status", dispatch_kind: "status", architectScreen: undefined, checks: undefined, nonce: undefined });
-    assert.match(run(payload()).stdout, /"permissionDecision":"deny"/, "direction text cannot take the status route");
-    assert.equal(run(payload("pm-thread", "ARCHITECT_STATUS_V1\nProgress only.")).stdout, "",
-      "marked declared status remains available and auditable");
-    const rows = readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
-      .split("\n").filter(Boolean).map(JSON.parse).filter((row) => row.control === "brief-rung");
-    assert.equal(rows.at(-1).class, "status");
-    assert.equal(rows.at(-1).target, "pm-thread");
+    // The retired init flags are accepted with a warning and write nothing.
+    writeFileSync(configFile, JSON.stringify(config));
+    const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-rung-codex-"));
+    const legacy = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-lane", "--codex-prompts-dir", codexDir, "--paired-pm-thread-id", "pm-thread",
+      "--paired-pm-claude-target", "ref1", "--paired-pm-claude-name", "PM"], { encoding: "utf8" });
+    rmSync(codexDir, { recursive: true, force: true });
+    assert.equal(legacy.status, 0, legacy.stderr);
+    assert.match(legacy.stderr, /--paired-pm-thread-id is retired/);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, "utf8")), config);
   } finally { cleanup(); }
 });
 
@@ -777,36 +602,14 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
     writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
       mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T2",
     }));
-    const configFile = path.join(dir, ".claude", "kit.config.json");
-    writeFileSync(configFile, JSON.stringify({
-      ...JSON.parse(readFileSync(configFile, "utf8")), pairedPmThreadId: "pm-thread",
-    }));
     const sidecarFile = path.join(dir, ".claude", "brief-rung.json");
-    writeFileSync(sidecarFile, JSON.stringify({
-      sessionId: "s1", target: "pm-thread", nonce: "consult-rung", checks: OK_CHECK,
-      dispatch_kind: "build", task_id: "task1", architectScreen: architectScreen(),
-    }));
-    const codexSend = spawnSync(process.execPath,
+    // An Architect consult needs no receipt during an active aggregate repair (session chat, v2.37.0).
+    const chat = spawnSync(process.execPath,
       [path.join(dir, ".codex", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
         input: JSON.stringify({ session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
-          tool_input: { threadId: "pm-thread", prompt: architectPrompt } }), encoding: "utf8",
+          tool_input: { threadId: "pm-thread", prompt: "Proceed." } }), encoding: "utf8",
       });
-    assert.match(codexSend.stdout, /declares a new build while this task's durable controller/,
-      "an old build receipt cannot silently become an aggregate-repair consult");
-    writeFileSync(sidecarFile, JSON.stringify({
-      sessionId: "s1", target: "pm-thread", nonce: "consult-rung", checks: OK_CHECK,
-      dispatch_kind: "architect-direction", task_id: "task1", architectScreen: architectScreen(),
-    }));
-    const admittedConsult = spawnSync(process.execPath,
-      [path.join(dir, ".codex", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir], {
-        input: JSON.stringify({ session_id: "s1", tool_name: "mcp__codex_app__send_message_to_thread", cwd: dir,
-          tool_input: { threadId: "pm-thread", prompt: architectPrompt } }), encoding: "utf8",
-      });
-    assert.equal(admittedConsult.stdout, "", "an explicit screened Architect consult remains possible during active aggregate repair");
-    assert.ok(readFileSync(path.join(dir, ".claude", "lane-ledger.jsonl"), "utf8")
-      .split("\n").filter(Boolean).map(JSON.parse).some((row) =>
-        row.control === "brief-rung" && row.decision === "allow" && row.nonce === "consult-rung"),
-    "the active-round consult must actually pass the guard and leave its receipt");
+    assert.equal(chat.stdout, "", "session chat passes with no sidecar while a repair is active");
     writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "briefs/fix.md", nonce: "build-not-repair", checks: OK_CHECK,
       dispatch_kind: "build", task_id: "task1",
@@ -818,20 +621,20 @@ test("AN INSTALLED GUARD carries aggregate sidecar through confirm, verify, and 
     });
     writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "briefs/fix.md", nonce: "consult-not-brief", checks: OK_CHECK,
-      dispatch_kind: "architect-direction", task_id: "task1", architectScreen: architectScreen(),
+      dispatch_kind: "architect-direction", task_id: "task1",
     }));
-    assert.match(run("briefs/fix.md").stdout, /Architect direction cannot carry repair authority/,
-      "a direction declaration cannot authorize an aggregate repair brief");
+    assert.match(run("briefs/fix.md").stdout, /does not explicitly declare `dispatch_kind`/,
+      "the retired architect-direction kind authorizes nothing");
     assert.match(run("src/x.mjs").stdout, /no typed worker-verification event/,
-      "a direction declaration cannot authorize a source write");
+      "…and cannot authorize a source write");
     writeFileSync(sidecarFile, JSON.stringify({
       sessionId: "s1", target: "briefs/fix.md", nonce: "build-not-repair", checks: OK_CHECK,
       dispatch_kind: "build", task_id: "task1",
     }));
     assert.match(run("briefs/fix.md").stdout, /repair-dispatch-required|repair and must bind/,
-      "the Architect consult does not admit a build brief during repair");
+      "a build brief is refused during repair");
     assert.match(run("src/x.mjs").stdout, /no typed worker-verification event/,
-      "the Architect consult does not admit a source write");
+      "a source write is refused without worker verification");
     const repair = {
       aggregate_controller: "aggregate_v2", task_id: "task1", changeset_id: "cs1",
       disposition_event_id: decided.event_id, panel_close_event_id: closed.event_id,

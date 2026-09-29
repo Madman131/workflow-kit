@@ -1,4 +1,4 @@
-# workflow-kit — v2.36.0
+# workflow-kit — v2.37.0
 
 ## How to start a build
 
@@ -10,7 +10,34 @@
    that must survive thread restarts. Otherwise use **PM-led**: `/orchestrate` alone.
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
-   record carries directions and consults, no `pairedPm*` key is configured, and no send screen applies.
+   record carries directions and consults.
+
+## What's new in v2.37.0 — the Architect-to-PM send screens are removed
+
+- **A removal.** No hook stands between an Architect and its PM any more. `hooks/guard-brief-rung.mjs`
+  no longer screens Claude's `SendMessage`, the desktop app's forwarded
+  `mcp__ccd_session_mgmt__send_message`, or the Codex app's `mcp__codex_app__send_message_to_thread`:
+  all three pass untouched. The decision screen, the `ARCHITECT_STATUS_V1` marker and the
+  `architect-direction` dispatch kind are gone. Brief writes and worker `…send_message` dispatches
+  owe the same receipt as before.
+- **No Codex re-trust.** No `.codex/hooks.json` entry changed (the guard stays registered and simply
+  allows), so nothing needs re-approving in an interactive Codex session. The Claude template drops
+  its `SendMessage` matcher; an already-installed one is harmless (the script allows).
+- **The `pairedPm*` keys are retired.** `pairedPmThreadId`, `pairedPmClaudeTarget` and
+  `pairedPmClaudeName` in `.claude/kit.config.json` are tolerated and ignored, never a
+  malformed-config deny. `init` still accepts `--paired-pm-thread-id`, `--paired-pm-claude-target` and
+  `--paired-pm-claude-name` (a warning, no effect), and no longer writes them; a `--force` rewrite
+  notes any such key it drops.
+- **Owner reservations, written down.** `skills/architect-build/ROUTING.md` and `core/WORKFLOW.md` now
+  say the Owner rules only on push/deploy/publication GOs, irreversible or live acts, money,
+  credentials or access, and a change of direction or scope. Wording, tier and intermediate steps are
+  the Principal's.
+- **v2.36.1's committed-adoption rule is included** (`PORTABILITY.md` § Retained repair-controller
+  boundary): controller and recorder bytes reach an adopter only through a committed adoption, and are
+  diff-proved against the kit release.
+
+**Upgrading.** Controller and recorder unchanged; `hooks/guard-brief-rung.mjs`, `bin/init.mjs` and
+`templates/settings.json` changed. Port by copying the changed files, committing, and diff-proving.
 
 ## What's new in v2.36.0 — one-use Owner terminal reauthorization
 
@@ -45,16 +72,11 @@ follow the v2.35.0 note's Codex re-trust step.
   Checked at write time only; the repair controller is unchanged.
 - **The gate-ladder sensor's T2 line** reads `cross-family lens [if avail; REQUIRED if flagged]`,
   matching `core/WORKFLOW.md`.
-- **Smaller fixes.** A `SendMessage` whose `to` or `recipient` is not a string is denied in a paired
-  checkout. A malformed-config deny names the key that failed. `init`'s mixed-controller check reads
+- **Smaller fixes.** A malformed-config deny names the key that failed. `init`'s mixed-controller check reads
   `git worktree list -z`, so a path holding a newline is still compared. `init --force` prints an
   explicit Codex re-trust step when it changes a `.codex/hooks.json` entry (a version-only difference
   is not one). The kit's own suite can no longer reach a real `codex`: `npm test` puts a stub first on
   `PATH` and fails if any test calls it.
-- **Residual — the PM pair is repository-wide.** A tracked pair (`pairedPm*` in `.claude/kit.config.json`)
-  applies in every checkout that shares it. Any session there sending to the PM by a matched address
-  (e.g. a Builder reporting) needs a decision screen or the `ARCHITECT_STATUS_V1` status marker, or it
-  is denied with guidance. Unmatched sends get a notice.
 
 **Upgrading.** From **v2.33.x**, go straight to v2.35.0 with one `node <kit>/bin/init.mjs --target
 <repo> --force`, naming every kit-config family you hold (`--force` refuses and names any it would
@@ -102,23 +124,8 @@ changes in v2.35.0 to match these docs. v2.34.0 changes only prose — `core/WOR
   `init --force` there. A worktree already locked out recovers the same way — a `git merge` is a shell
   operation the write guard does not bind. Never edit the ledger. Worktrees created after the upgrade are
   not checked: create them from the upgraded branch.
-- **Claude Code's `SendMessage` now carries the Architect decision screen.** v2.33.0 screened only the
-  Codex app thread send; `SendMessage` was not even matched. Configure the Claude pair with
-  `init --paired-pm-claude-target <ref-or-id> --paired-pm-claude-name "<PM's current name>"` (kit
-  config `pairedPmClaudeTarget` and `pairedPmClaudeName`): the PM's **stable** `ListAgents` `[ref]` or
-  session/agent id, and its current name, because a model addresses by bare name by default (observed
-  live). A send whose `to` equals either value, carries either before or inside a trailing `[ref]`, is
-  screened exactly like the Codex pair (prompt-bound screen, or the `ARCHITECT_STATUS_V1` status
-  marker; `model`, `thinking` or `effort` in the send is denied). The older
-  `mcp__ccd_session_mgmt__send_message` to the pair is screened too (its field names are from its
-  schema; only `SendMessage` was observed live). Any other `SendMessage` is not screened, as before —
-  but in a paired checkout it prints a notice saying so. `pairedPmThreadId` is unchanged.
-  **Residual — after the PM is renamed, the name match is stale** until you re-set it: a bare new title
-  goes unscreened, with the notice; `"<new title> [<ref>]"` is still screened by the ref. Re-set it with
-  `node <kit>/bin/init.mjs --target <repo> --force --paired-pm-claude-target <ref-or-id>
-  --paired-pm-claude-name "<new name>"`, adding the flag for every other kit-config family you hold
-  (`--force` refuses and names any it would drop, and backs up the generated files it rewrites) — or
-  set `pairedPmClaudeName` in `.claude/kit.config.json` in place and read it back.
+- **The Claude and Codex Architect-to-PM send screens this release added were removed in v2.37.0** (see
+  that note); no `pairedPm*` configuration or flag applies.
 - **Reviewer availability route, both ways round.** A Codex code-gate seat unavailable on a
   Claude-built change now has a stated route (`core/REVIEW.md`, `core/GATES.md`, generated
   `BINDINGS.md`): the Gemini lens when it covers the full artifact, otherwise a fresh cold Claude
@@ -150,8 +157,7 @@ changes in v2.35.0 to match these docs. v2.34.0 changes only prose — `core/WOR
 - **The mixed-version hazard** — the first bullet above; v2.33.0 created it without a warning.
 - **The retained-controller upgrade limit** already stated in `PORTABILITY.md` § Retained
   repair-controller boundary: read the destination's ledger before activating this line over it.
-- **The paired Codex Architect send** (`init --paired-pm-thread-id`) needs a current, prompt-bound
-  decision screen; `/architect-build` itself is described below.
+- **`/architect-build`** is described below.
 
 Upgrading from v2.33.0: installed mechanism files changed (`hooks/guard-brief-rung.mjs`,
 `scripts/record-repair-event.mjs`, `bin/init.mjs`'s behaviour, the `/orchestrate` and `/architect-build`

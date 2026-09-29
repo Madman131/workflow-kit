@@ -202,13 +202,13 @@ test("remote publication, endpoint, routing, and discovery claims retain one aut
   assert.match(claudeOrchestrate, /active workhorse PM, designated Builder/);
   assert.match(codexCloseout, /safe local closeout and an explicit remote boundary/);
   assert.match(claudeTemplate, /needs a\s+fresh Owner GO for the exact head and target/);
-  assert.match(workflow, /Tier table = local build\/run depth; every remote push or publication needs a fresh Owner GO for the exact head and target/,
+  assert.match(workflow, /Tier table = local build\/run depth; every remote push or publication is a separate axis/,
     "the tier summary cannot narrow the universal remote-publication GO to code pushes");
   assert.doesNotMatch(workflow, /wording sign-off also stands as its push-GO/,
     "core-document wording sign-off is never equivalent to a remote-publication GO");
-  assert.match(workflow, /recorded Principal delegation covers ordinary in-scope tier\/wording through PM/,
+  assert.match(workflow, /the Principal decides tier, wording and intermediate steps through PM/,
     "tier classification grants the Principal completion authority without an Owner-ratification mirror");
-  assert.match(workflow, /Owner retains critical intent, material scope\/budget\/access, risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/,
+  assert.match(workflow, /Owner alone: push\/deploy\/publication GO; irreversible or live acts; money; credentials\/access; change of direction or scope/,
     "Owner retains the exact reserved actions without reclaiming ordinary review approval");
   assert.doesNotMatch(workflow, /review\/publication GO/,
     "the superseded combined Owner review/publication reservation cannot return");
@@ -491,8 +491,8 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
   assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ wording approval under above authority/);
-  assert.match(w, /recorded Principal delegation covers ordinary in-scope tier\/wording through PM/);
-  assert.match(w, /Owner retains critical intent, material scope\/budget\/access, risk acceptance, irreversible deletion, credential\/access change, money\/new spend, and exact push\/deploy\/publication\/live\/external-write GO/);
+  assert.match(w, /the Principal decides tier, wording and intermediate steps through PM/);
+  assert.match(w, /Owner alone: push\/deploy\/publication GO; irreversible or live acts; money; credentials\/access; change of direction or scope/);
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);
   // The one-round rule became a warrant test at v2.9.0; the Owner gate moved to round 3 and is
   // HARD. Pinned in the amended test above — this older pin named the retired sentence.

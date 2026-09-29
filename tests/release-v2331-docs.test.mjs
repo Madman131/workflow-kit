@@ -81,16 +81,12 @@ test("the reviewer availability route is stated BOTH ways round on all three sur
 
 // ---- R2 root exits: each corrected instruction is pinned on the sentence that carries it.
 
-test("R2-1: the existing-config instruction names BOTH lanes' pair keys, never Codex alone", () => {
-  const routing = flat(read("skills/architect-build/ROUTING.md"));
-  assert.match(routing, /Pair keys: Codex `pairedPmThreadId`; Claude `pairedPmClaudeTarget` \(ref\/id\) plus `pairedPmClaudeName`\./);
-  assert.match(routing, /existing config: edit only that lane's keys in `\.claude\/kit\.config\.json` in place/);
-  for (const rel of ["skills/architect-build/ROUTING.md", "skills/architect-build/SKILL.md", "README.md", "PORTABILITY.md",
-    "templates/BINDINGS.md.tmpl", "templates/CLAUDE.md.tmpl", "templates/AGENTS.md.tmpl"]) {
-    assert.doesNotMatch(flat(read(rel)), /set only `pairedPmThreadId`/, `${rel} must not tell a Claude Architect to set only the Codex key`);
+test("R2-1 (retired in v2.37.0): no surface instructs anyone to set a pairedPm* key or flag", () => {
+  for (const rel of ["skills/architect-build/ROUTING.md", "skills/architect-build/SKILL.md", "templates/BINDINGS.md.tmpl",
+    "templates/CLAUDE.md.tmpl", "templates/AGENTS.md.tmpl"]) {
+    assert.doesNotMatch(flat(read(rel)), /pairedPm(?!\*)|paired-pm|Pair keys/, `${rel} carries no live pair instruction`);
   }
-  assert.match(flat(read("templates/BINDINGS.md.tmpl")), /optional `pairedPmThreadId`, `pairedPmClaudeTarget`, `pairedPmClaudeName`\)/,
-    "the generated family list names the Claude keys");
+  assert.match(flat(read("skills/architect-build/ROUTING.md")), /No hook screens Architect-to-PM sends; the `pairedPm\*` keys are retired\./);
 });
 
 test("R2-3: an upgrade from v2.32.x is told to re-trust the send entry the armed check cannot probe", () => {
@@ -101,10 +97,10 @@ test("R2-3: an upgrade from v2.32.x is told to re-trust the send entry the armed
     /The probe covers `apply_patch` only\.\*\* An upgrade that ADDS an entry on another matcher — v2\.33\.0 added `mcp__codex_app__send_message_to_thread`, so every upgrade from v2\.32\.x — needs that entry re-trusted interactively/);
 });
 
-test("R2-2 (D-15): a spent frontier firing turns the mirror fallback into an Owner-routed second firing", () => {
+test("R2-2 (D-15, D-41): a spent frontier firing turns the mirror fallback into a Principal-routed second firing", () => {
   assert.match(flat(read("core/REVIEW.md")),
-    /if that firing is already spent, the fallback is a second firing and routes to the Owner \(through the Architect\/PM, rule-8 form\) — the existing Owner reservation, not a new rule\./);
+    /if that firing is already spent, the fallback is a second firing and routes to the Principal for its GO\./);
   assert.match(flat(read("templates/BINDINGS.md.tmpl")),
-    /if it is already spent, the fallback is a second firing and goes to the Owner through the Architect\/PM \(rule-8 form\) — the existing reservation, not a new rule\./);
-  assert.match(flat(read("core/GATES.md")), /frontier firing \(§ Model · effort matrix\); spent ⇒ an Owner-routed second firing\./);
+    /if it is already spent, the fallback is a second firing and goes to the Principal for its GO\./);
+  assert.match(flat(read("core/GATES.md")), /frontier firing \(§ Model · effort matrix\); spent ⇒ a Principal-routed second firing\./);
 });

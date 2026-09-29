@@ -293,21 +293,21 @@ test("the Stop registration merges into settings.json exactly once, confirmed by
       return (s.hooks?.Stop ?? []).flatMap((g) => g.hooks ?? [])
         .filter((h) => String(h.command).includes("guard-owner-comms.mjs")).length;
     };
-    // Counts REGISTRATIONS, not distinct guards: `guard-brief-rung` is registered THREE times on
-    // purpose — on the write matcher, the `.*send_message` matcher and (v2.33.1) the separate
-    // `SendMessage` matcher — so the expected total is 6 for 4 guards. The send groups are exactly
+    // Counts REGISTRATIONS, not distinct guards: `guard-brief-rung` is registered TWICE on
+    // purpose — on the write matcher and the `.*send_message` matcher (v2.37.0 dropped the separate
+    // `SendMessage` matcher) — so the expected total is 5 for 4 guards. The send group is exactly
     // where a duplicate would hide, because `mergeSettings` dedupes by matcher first and then by
-    // command string, and each send matcher is a NEW matcher.
+    // command string.
     const countPreToolUse = () => {
       const s = JSON.parse(readFileSync(settingsPath, "utf8"));
       return (s.hooks?.PreToolUse ?? []).flatMap((g) => g.hooks ?? [])
         .filter((h) => /guard-(cross-repo-writes|lane-authoring|gate-ladder|brief-rung)\.mjs/.test(String(h.command))).length;
     };
     assert.equal(countStop(), 1, "Stop sensor registered once on disk");
-    assert.equal(countPreToolUse(), 6, "the 4 PreToolUse guards (brief-rung three times) are still registered alongside it");
+    assert.equal(countPreToolUse(), 5, "the 4 PreToolUse guards (brief-rung twice) are still registered alongside it");
     run(); // merging is idempotent — a re-run must not duplicate the registration
     assert.equal(countStop(), 1, "re-run does not duplicate the Stop registration");
-    assert.equal(countPreToolUse(), 6, "re-run does not duplicate the PreToolUse registrations, both send matchers included");
+    assert.equal(countPreToolUse(), 5, "re-run does not duplicate the PreToolUse registrations, the send matcher included");
     // the hook file itself landed and is executable-ish (copied like every other hook)
     assert.ok(existsSync(path.join(dir, ".claude", "hooks", "guard-owner-comms.mjs")), "the Stop hook file is installed");
 
@@ -326,7 +326,7 @@ test("the Stop registration merges into settings.json exactly once, confirmed by
     assert.ok(allCommands.some((c) => c.includes("afplay")), "the adopter's own Stop hook SURVIVES the merge");
     assert.ok(allCommands.some((c) => c.includes("./mine.mjs")), "the adopter's own PreToolUse hook SURVIVES the merge");
     assert.equal(countStop(), 1, "our Stop registration is still present exactly once");
-    assert.equal(countPreToolUse(), 6, "our 4 PreToolUse guards are still present");
+    assert.equal(countPreToolUse(), 5, "our 4 PreToolUse guards are still present");
   } finally { cleanup(); }
 });
 

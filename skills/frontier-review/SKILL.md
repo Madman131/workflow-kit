@@ -12,7 +12,7 @@ effort matrix. Roles bind in `core/BINDINGS.md`; alias the command to your model
 ## When to invoke
 **One firing per changeset, and the Owner holds the second.** Default consumer: the **fold-check**
 on a remediation delta, before the cross-family bookend. A discretionary consumer — a design gate,
-a rare-cell gate — **spends that same firing**. A second needs an Owner GO; **requesting one is not
+a rare-cell gate — **spends that same firing**. A second needs a Principal GO; **requesting one is not
 authorizing it.** **Outside the cap:** an Owner-typed `/frontier-review` and the pinned decider seat
 (P3). Same-class recurrence enters the root-cause queue; it never mints a firing.
 

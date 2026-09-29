@@ -110,34 +110,11 @@ function parseArgs(argv) {
     else if (a === "--source-dirs") out.sourceDirs = listVal(next());
     else if (a === "--state-docs") out.stateDocs = listVal(next());
     else if (a === "--memory-dir") out.memoryDir = next();
-    else if (a === "--paired-pm-thread-id") {
-      const v = next();
-      if (v.length > 120 || /\s/.test(v)) {
-        console.error(`init: --paired-pm-thread-id requires one non-empty PM thread id of at most 120 characters without whitespace (got ${JSON.stringify(v)})`);
-        process.exit(2);
-      }
-      out.pairedPmThreadId = v;
-    }
-    else if (a === "--paired-pm-claude-target") {
-      // A Claude PM is addressed by its stable listing ref or session/agent id, which never changes
-      // when a session title is renamed. Names may contain inner spaces; line breaks and edge
-      // whitespace are refused (they could never equal a SendMessage `to`).
-      const v = next();
-      if (v.length > 300 || /[\r\n\u2028\u2029]/.test(v) || v !== v.trim()) {
-        console.error(`init: --paired-pm-claude-target requires the Claude PM's stable ref or session/agent id: one line of at most 300 characters with no leading or trailing whitespace (got ${JSON.stringify(v)})`);
-        process.exit(2);
-      }
-      out.pairedPmClaudeTarget = v;
-    }
-    else if (a === "--paired-pm-claude-name") {
-      // The PM's CURRENT session name, matched beside the stable ref because a model addresses by bare
-      // name by default. Stale after a rename until re-set; the ref match is what survives a rename.
-      const v = next();
-      if (v.length > 300 || /[\r\n\u2028\u2029]/.test(v) || v !== v.trim()) {
-        console.error(`init: --paired-pm-claude-name requires the Claude PM's current name: one line of at most 300 characters with no leading or trailing whitespace (got ${JSON.stringify(v)})`);
-        process.exit(2);
-      }
-      out.pairedPmClaudeName = v;
+    else if (a === "--paired-pm-thread-id" || a === "--paired-pm-claude-target" || a === "--paired-pm-claude-name") {
+      // RETIRED in v2.37.0 (the Architect-to-PM send screens were removed). Accepted so an old
+      // command line keeps working; the value is read and discarded, and nothing is written.
+      next();
+      console.error(`init: WARNING ${a} is retired (v2.37.0) and ignored — no hook screens Architect-to-PM sends any more.`);
     }
     else if (a === "--worktree-roots") {
       // VALIDATED HERE, not at the guard alone. guard-cross-repo-writes DENIES every write on a
@@ -218,16 +195,8 @@ Usage: node bin/init.mjs [--target <dir>] [options]
   --source-dirs a,b       repo-specific source-tree roots ⇒ kit.config.json executedPathDirs
   --state-docs a,b        repo CLASS: STATE docs governed by doc:size ⇒ kit.config.json stateDocs
   --memory-dir <abs>      external memory dir for the --memory advisory ⇒ kit.config.json memoryDir
-  --paired-pm-thread-id <id>
-                          checkout's one Architect-to-PM Codex send target ⇒ kit.config.json
-                          pairedPmThreadId (optional; absent leaves ordinary sends outside scope)
-  --paired-pm-claude-target <ref-or-id>
-                          checkout's one Architect-to-PM Claude send target — the PM's stable
-                          ListAgents [ref] or session/agent id, never its renameable title ⇒
-                          kit.config.json pairedPmClaudeTarget (optional)
-  --paired-pm-claude-name <name>
-                          that PM's CURRENT session name, also matched (models address by bare
-                          name) ⇒ kit.config.json pairedPmClaudeName; re-set it after a rename
+  --paired-pm-thread-id, --paired-pm-claude-target, --paired-pm-claude-name
+                          RETIRED (v2.37.0): accepted, warned about and ignored
   --allow-mixed-repair-controllers
                           proceed although another worktree of this repo has a different repair
                           controller installed (upgrade them all in the same step — see the refusal)
@@ -1617,6 +1586,8 @@ function main() {
               ],
             },
             {
+              // KEPT VERBATIM in v2.37.0 (matcher, command AND statusMessage): Codex trust is keyed to
+              // this entry, so any edit forces a re-trust at every port. The script now just allows.
               matcher: "mcp__codex_app__send_message_to_thread",
               hooks: [entry("guard-brief-rung.mjs", "Checking the Architect decision screen for this PM send…")],
             },
@@ -1712,17 +1683,12 @@ function main() {
   if (args.stateDocs) config.stateDocs = args.stateDocs;
   if (args.memoryDir) config.memoryDir = args.memoryDir;
   if (args.worktreeRoots) config.worktreeRoots = args.worktreeRoots;
-  if (args.pairedPmThreadId) config.pairedPmThreadId = args.pairedPmThreadId;
-  if (args.pairedPmClaudeTarget) config.pairedPmClaudeTarget = args.pairedPmClaudeTarget;
-  if (args.pairedPmClaudeName) config.pairedPmClaudeName = args.pairedPmClaudeName;
   const cfgPath = path.join(T, ".claude", "kit.config.json");
-  // The seven families this file is ALLOWED to hold, each with the flag that fills it. Names and
+  // The four families this file is ALLOWED to hold, each with the flag that fills it. Names and
   // flags only: the refusal below reads this file to LIST what it holds and never to reprint what
   // is IN it (see there).
   const CFG_FAMILIES = [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
-    ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"],
-    ["pairedPmThreadId", "--paired-pm-thread-id"], ["pairedPmClaudeTarget", "--paired-pm-claude-target"],
-    ["pairedPmClaudeName", "--paired-pm-claude-name"]];
+    ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"]];
   let cfgKept = false, cfgRefused = false, cfgUnreadable = false;
   if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
   else {

@@ -37,9 +37,7 @@ approval captures routine authority; a ticket never authorizes implementation or
 For a delegated program, Principal decides nonreserved in-envelope questions; directives bind PM and reviews remain
 evidence. PM proceeds on covered work and returns safeguards, never silently declines. A rejected method is held with
 exact evidence for Principal-supported-method diagnosis; a valid ordinary retry proceeds, otherwise an unresolved reserved
-exception reaches Owner once through Principal. Owner alone decides critical product intent/risk, material scope/budget,
-credentials/access change, money/new-spend, destructive/irreversible acts, named live-write GO, remote push/deploy GO,
-terminal exception except bounded T2 Principal completion, gate waiver, max/ultra, second frontier firing and cap increase. A chip routes
+exception reaches Owner once through Principal. Owner alone decides push/deploy/publication GO, irreversible or live acts, money/new spend, credentials/access, and a change of direction or scope; the Principal decides the rest (waivers, max/ultra, second frontier firing, caps, terminal exceptions). A chip routes
 those calls through PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
 An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a
