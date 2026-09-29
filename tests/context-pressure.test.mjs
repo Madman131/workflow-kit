@@ -4,13 +4,13 @@
 // payload, missing transcript, off switch — is observed as exit 0 with an EMPTY stdout.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bucketOf, resolveWindow } from "../hooks/sensor-context-pressure.mjs";
+import { banner, levelOf, resolveWindow } from "../hooks/sensor-context-pressure.mjs";
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HOOK = path.join(KIT, "hooks", "sensor-context-pressure.mjs");
@@ -33,13 +33,13 @@ test("resolveWindow trusts the override, then the marker, then the family list, 
   assert.equal(resolveWindow(10, "x", { WORKFLOW_KIT_CONTEXT_WINDOW: "1e6" }).source.startsWith("assumed"), true, "a malformed override is ignored, not parsed as 1");
   assert.equal(resolveWindow(350_000, "mystery", {}).source, "inferred from size (assumed 1M)");
   assert.match(resolveWindow(10, "mystery", {}).source, /assumed 200k/);
-  assert.equal(bucketOf(99_999, 200_000, 50, 10), -1);
-  assert.equal(bucketOf(100_000, 200_000, 50, 10), 0);
-  assert.equal(bucketOf(139_999, 200_000, 50, 10), 1);
-  assert.equal(bucketOf(180_000, 200_000, 50, 10), 4);
+  assert.equal(levelOf(99_999, 200_000, 50, 70), 0);
+  assert.equal(levelOf(100_000, 200_000, 50, 70), 1);
+  assert.equal(levelOf(139_999, 200_000, 50, 70), 1);
+  assert.equal(levelOf(140_000, 200_000, 50, 70), 2);
 });
 
-test("the sensor speaks at the threshold as additionalContext, once per bucket, and is silent on every other path", () => {
+test("the sensor speaks at the threshold as additionalContext, once per level, and is silent on every other path", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ctx-"));
   try {
     const transcript = path.join(dir, "t.jsonl");
@@ -62,16 +62,19 @@ test("the sensor speaks at the threshold as additionalContext, once per bucket, 
     assert.equal(speaks(r), true);
     const out = JSON.parse(r.stdout);
     assert.equal(out.hookSpecificOutput.hookEventName, "PreToolUse");
-    assert.match(out.hookSpecificOutput.additionalContext, /thread-restart/);
-    assert.match(out.hookSpecificOutput.additionalContext, /50%/);
+    assert.match(out.hookSpecificOutput.additionalContext, /^\*\*CONTEXT WINDOW WARNING — ~50%/);
     assert.match(out.hookSpecificOutput.additionalContext, /assumed 200k/);
-    assert.match(r.stderr, /CONTEXT PRESSURE/, "the same text goes to stderr for the transcript view");
-    // Same bucket again: silent (one reminder per bucket).
+    assert.match(r.stderr, /CONTEXT WINDOW WARNING/, "the same text goes to stderr for the transcript view");
+    // Same level again: silent (each level fires once).
     writeFileSync(transcript, usageLine(115_000) + "\n");
-    assert.equal(speaks(run(base)), false, "still bucket 0 — no repeat");
-    // Next bucket: speaks again.
+    assert.equal(speaks(run(base)), false, "still level 1 — no repeat");
     writeFileSync(transcript, usageLine(121_000) + "\n");
-    r = run(base); assert.equal(speaks(r), true); assert.match(r.stdout, /61%/);
+    assert.equal(speaks(run(base)), false, "no 10%-step re-reminders any more");
+    // 70%: the hard stop fires once.
+    writeFileSync(transcript, usageLine(141_000) + "\n");
+    r = run(base); assert.equal(speaks(r), true); assert.match(r.stdout, /HARD STOP ~71%/);
+    writeFileSync(transcript, usageLine(170_000) + "\n");
+    assert.equal(speaks(run(base)), false, "hard stop already fired");
     // A different session has its own state: speaks at its first crossing.
     assert.equal(speaks(run({ ...base, session_id: "sess-B" })), true);
     // Window detection changes the denominator: a 1M family at 121k is 12% — silent.
@@ -138,4 +141,162 @@ test("init installs the sensor and registers it on the write matcher once", () =
     r = init(); assert.equal(r.status, 0, r.stderr);
     assert.equal(count(), 1, "re-run does not duplicate");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("read-only state after the level fires: Stop never blocks, but the announcement still appears", () => {
+  const t = rig();
+  try {
+    t.at(100_000); t.run(t.ups("ro"));
+    const f = path.join(t.dir, "s", "workflow-kit-context-ro");
+    assert.ok(existsSync(f), "the level fired and persisted");
+    chmodSync(f, 0o444);
+    let writable = true; try { writeFileSync(f, readFileSync(f)); } catch { writable = false; }
+    if (!writable) {   // (skipped only where a superuser can write through 0444)
+      for (let i = 0; i < 3; i++) assert.equal(t.run(t.stop("no banner", "ro")).stdout, "", `Stop ${i}: allow, never a repeat block`);
+    }
+    // (b) An announcement never blocks, so it still appears when its level cannot be remembered.
+    t.at(150_000);
+    assert.equal(t.ctx(t.run(t.ups("ro"))).split("\n")[0], HARD(75), "the hard stop is still announced with unwritable state");
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+const WARN = (n) => `**CONTEXT WINDOW WARNING — ~${n}%: restart this thread at the next natural breakpoint (push / chip end)**`;
+const HARD = (n) => `**CONTEXT WINDOW — HARD STOP ~${n}%: write the restart digest now and restart before further work**`;
+function rig() {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ctx-lv-"));
+  const transcript = path.join(dir, "t.jsonl");
+  const state = path.join(dir, "s");
+  const run = (payload, env = {}) => {
+    const r = spawnSync(process.execPath, [HOOK], { cwd: dir, encoding: "utf8", input: typeof payload === "string" ? payload : JSON.stringify(payload),
+      env: cleanEnv({ WORKFLOW_KIT_CONTEXT_STATE_DIR: state, ...env }) });
+    assert.equal(r.status, 0, r.stderr);
+    return r;
+  };
+  const at = (tokens) => writeFileSync(transcript, usageLine(tokens) + "\n");
+  const ups = (sid = "s1") => ({ transcript_path: transcript, session_id: sid, hook_event_name: "UserPromptSubmit", prompt: "go" });
+  const pre = (sid = "s1") => ({ transcript_path: transcript, session_id: sid, hook_event_name: "PreToolUse", tool_name: "Edit" });
+  const stop = (msg, sid = "s1", extra = {}) => ({ transcript_path: transcript, session_id: sid, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: msg, ...extra });
+  const ctx = (r) => JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+  return { dir, run, at, ups, pre, stop, ctx };
+}
+
+test("both banner texts are pinned verbatim, first line, with the verbatim instruction", () => {
+  assert.equal(banner(1, 52), WARN(52));
+  assert.equal(banner(2, 71), HARD(71));
+  const t = rig();
+  try {
+    t.at(100_000);
+    let c = t.ctx(t.run(t.ups()));
+    assert.equal(c.split("\n")[0], WARN(50));
+    assert.match(c, /^Put the line above VERBATIM as the FIRST line of your next message to the Owner\.$/m);
+    t.at(150_000);
+    c = t.ctx(t.run(t.ups()));
+    assert.equal(c.split("\n")[0], HARD(75));
+    assert.match(c, /^Put the line above VERBATIM as the FIRST line of your next message to the Owner\.$/m);
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("50 then 70 each fire once, across events; a direct jump to 70 fires only the hard stop and marks 50 done", () => {
+  const t = rig();
+  try {
+    t.at(100_000);
+    assert.equal(JSON.parse(t.run(t.ups()).stdout).hookSpecificOutput.hookEventName, "UserPromptSubmit");
+    assert.equal(t.run(t.pre()).stdout, "", "PreToolUse after UserPromptSubmit at the same level: silent");
+    t.at(145_000);
+    assert.equal(t.ctx(t.run(t.pre())).split("\n")[0], HARD(73), "70 fires after 50");
+    assert.equal(JSON.parse(t.run(t.pre()).stdout || "{}").hookSpecificOutput, undefined);
+    // Direct jump on a fresh session.
+    t.at(150_000);
+    assert.equal(t.ctx(t.run(t.pre("j"))).split("\n")[0], HARD(75), "only the hard stop");
+    t.at(100_000);
+    assert.equal(t.run(t.pre("j")).stdout, "", "50 is marked done too (never fires after a jump)");
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("Stop blocks when the banner is missing, allows and marks surfaced when present, blocks once, respects stop_hook_active, fails open", () => {
+  const t = rig();
+  try {
+    t.at(100_000); t.run(t.ups());
+    // Missing banner ⇒ block, with the banner in the reason.
+    let r = t.run(t.stop("Done with the step."));
+    let out = JSON.parse(r.stdout);
+    assert.equal(out.decision, "block");
+    assert.ok(out.reason.includes(WARN(50)));
+    // One block per level: the same missing banner again is allowed.
+    assert.equal(t.run(t.stop("Still no banner.")).stdout, "", "block cap: one per level");
+    // Present banner (first line, trimmed) ⇒ allowed and surfaced.
+    assert.equal(t.run(t.stop(`  ${WARN(50)}  \nrest`)).stdout, "");
+    // Surfaced ⇒ a later message without the banner is not blocked.
+    assert.equal(t.run(t.stop("plain")).stdout, "", "surfaced level never blocks again");
+    // Surfaced without any block spent: the banner alone marks it, so a later bare message is not blocked.
+    t.run(t.ups("q"));
+    assert.equal(t.run(t.stop(WARN(50), "q")).stdout, "");
+    assert.equal(t.run(t.stop("bare", "q")).stdout, "", "surfaced by the banner itself, no block was ever spent");
+    // A banner that is not the FIRST line does not count (fresh session, exact first-line match).
+    t.run(t.ups("k"));
+    assert.equal(JSON.parse(t.run(t.stop(`intro\n${WARN(50)}`, "k")).stdout).decision, "block", "must be the first line");
+    // stop_hook_active ⇒ allow, even with a missing banner and no block spent.
+    t.run(t.ups("m"));
+    assert.equal(t.run(t.stop("no banner", "m", { stop_hook_active: true })).stdout, "");
+    assert.equal(JSON.parse(t.run(t.stop("no banner", "m")).stdout).decision, "block", "the active-skip spent nothing");
+    // A hard stop after a surfaced warning blocks afresh, once.
+    t.at(150_000); t.run(t.ups());
+    out = JSON.parse(t.run(t.stop(WARN(50))).stdout);
+    assert.equal(out.decision, "block");
+    assert.ok(out.reason.includes(HARD(75)));
+    // Fail-open: empty/malformed stdin, missing last_assistant_message, no state, off switch.
+    t.run(t.ups("n"));
+    for (const [label, payload, env] of [
+      ["empty stdin", "", {}], ["malformed stdin", "{nope", {}],
+      ["missing last_assistant_message", { transcript_path: "x", session_id: "n", hook_event_name: "Stop" }, {}],
+      ["non-string last_assistant_message", t.stop(42, "n"), {}],
+      ["no state for the session", t.stop("x", "never-seen"), {}],
+      ["off switch", t.stop("x", "n"), { WORKFLOW_KIT_CONTEXT_SENSOR: "false" }],
+      ["subagent payload", t.stop("x", "n", { agent_id: "a" }), {}],
+    ]) assert.equal(t.run(payload, env).stdout, "", `${label}: exit 0, no block`);
+    assert.equal(JSON.parse(t.run(t.stop("x", "n")).stdout).decision, "block", "…and the state was untouched by those");
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test("init registers the sensor on UserPromptSubmit and Stop exactly once, upgrades an older settings file once, and re-init does not duplicate", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-ctx-ups-init-"));
+  try {
+    const prompts = path.join(dir, "codex-prompts");
+    const init = (...more) => spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter",
+      "--skip-codex-prompt", "--skip-codex-lane", "--codex-prompts-dir", prompts, ...more], { encoding: "utf8", env: cleanEnv() });
+    const file = path.join(dir, ".claude", "settings.json");
+    const settings = () => JSON.parse(readFileSync(file, "utf8"));
+    const cmd = (event) => (settings().hooks?.[event] ?? []).flatMap((g) => g.hooks ?? []).filter((h) => String(h.command).includes("sensor-context-pressure.mjs")).length;
+    let r = init(); assert.equal(r.status, 0, r.stderr);
+    assert.equal(cmd("UserPromptSubmit"), 1);
+    assert.equal(cmd("Stop"), 1);
+    assert.equal(cmd("PreToolUse"), 1);
+    // Upgrade path: an adopter file that has the v2.37.0 shape (no UserPromptSubmit group).
+    const s = settings(); delete s.hooks.UserPromptSubmit;
+    s.hooks.Stop[0].hooks = s.hooks.Stop[0].hooks.filter((h) => !String(h.command).includes("sensor-context-pressure")); writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
+    assert.equal(cmd("UserPromptSubmit"), 0); assert.equal(cmd("Stop"), 0);
+    r = init("--force"); assert.equal(r.status, 0, r.stderr);
+    assert.equal(cmd("UserPromptSubmit"), 1, "the upgrade adds the group once");
+    r = init("--force"); assert.equal(r.status, 0, r.stderr);
+    assert.equal(cmd("UserPromptSubmit"), 1, "re-init --force does not duplicate it");
+    assert.equal(cmd("Stop"), 1, "the upgrade adds the Stop registration once; re-init does not duplicate it");
+    assert.equal(settings().hooks.Stop.length, 1, "merged into the one Stop group");
+    assert.equal(cmd("PreToolUse"), 1, "…nor the PreToolUse group");
+    assert.equal(settings().hooks.UserPromptSubmit.length, 1, "one group, not several");
+    // Never registered on Bash or send_message for this sensor.
+    for (const g of settings().hooks.PreToolUse) if (g.matcher === "Bash" || String(g.matcher).includes("send_message")) assert.equal(JSON.stringify(g).includes("sensor-context-pressure"), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("v2.37.1 release: version, note wording and the paste-in snippet", () => {
+  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.37.1");
+  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.37.1");
+  const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
+  assert.match(readme, /^# workflow-kit — v2\.37\.1$/m);
+  const note = readme.slice(readme.indexOf("## What's new in v2.37.1"), readme.indexOf("## What's new in v2.37.0")).replace(/\s+/g, " ");
+  assert.match(note, /\*\*Claude lane only\.\*\* The Codex lane cannot do this: Codex hooks receive no transcript and no Stop payload/);
+  assert.match(note, /No `\.codex\/hooks\.json` entry changed, so \*\*no re-trust\*\*/);
+  assert.match(note, /"UserPromptSubmit": \[/);
+  assert.match(note, /"Stop": \[/);
+  assert.match(note, /sensor-context-pressure\.mjs/);
 });
