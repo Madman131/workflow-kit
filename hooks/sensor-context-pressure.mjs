@@ -151,8 +151,8 @@ function readState(stateFile) {
   } catch { /* first time */ }
   return null;
 }
-// Returns true only when the state was persisted. Every emission is gated on it: a level or block that
-// cannot be remembered would repeat on every later call, so an unpersistable state means silence.
+// Returns true only when the state was persisted. The Stop BLOCK is gated on it (an unrecorded block would
+// repeat as a forced continuation every turn); the level announcement is not (a repeat is merely visible).
 function writeState(stateDir, stateFile, st) {
   try {
     mkdirSync(stateDir, { recursive: true });
@@ -212,7 +212,7 @@ function main(raw) {
   if (level <= (st.fired || 0)) return ALLOW();            // each level fires once; a jump to 2 marks 1 done too
   const percent = Math.round((100 * tokens) / window);
   const text2 = message({ tokens, window, source, percent, level });
-  if (!writeState(loc.stateDir, loc.stateFile, { ...st, fired: level, banner: banner(level, percent) })) return ALLOW();   // cannot record the level ⇒ it would repeat every call
+  writeState(loc.stateDir, loc.stateFile, { ...st, fired: level, banner: banner(level, percent) });   // an announcement never blocks: if it cannot be remembered it may repeat, and a repeat is visible — silence is not
   try { process.stderr.write(`sensor-context-pressure: ${text2}\n`); } catch { /* ignore */ }
   const hookEventName = ev.hook_event_name === "UserPromptSubmit" ? "UserPromptSubmit" : "PreToolUse";
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: text2 } }));

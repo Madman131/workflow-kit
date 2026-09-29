@@ -143,7 +143,7 @@ test("init installs the sensor and registers it on the write matcher once", () =
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("an unpersistable state never blocks: read-only state after the level fires makes Stop allow, every time", () => {
+test("read-only state after the level fires: Stop never blocks, but the announcement still appears", () => {
   const t = rig();
   try {
     t.at(100_000); t.run(t.ups("ro"));
@@ -154,9 +154,9 @@ test("an unpersistable state never blocks: read-only state after the level fires
     if (!writable) {   // (skipped only where a superuser can write through 0444)
       for (let i = 0; i < 3; i++) assert.equal(t.run(t.stop("no banner", "ro")).stdout, "", `Stop ${i}: allow, never a repeat block`);
     }
-    // A level that cannot be recorded is not announced either (it would repeat every call).
+    // (b) An announcement never blocks, so it still appears when its level cannot be remembered.
     t.at(150_000);
-    assert.equal(t.run(t.ups("ro")).stdout, "", "hard stop not announced when it cannot be remembered");
+    assert.equal(t.ctx(t.run(t.ups("ro"))).split("\n")[0], HARD(75), "the hard stop is still announced with unwritable state");
   } finally { rmSync(t.dir, { recursive: true, force: true }); }
 });
 
