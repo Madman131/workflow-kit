@@ -4,7 +4,7 @@
 // payload, missing transcript, off switch — is observed as exit 0 with an EMPTY stdout.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -141,6 +141,23 @@ test("init installs the sensor and registers it on the write matcher once", () =
     r = init(); assert.equal(r.status, 0, r.stderr);
     assert.equal(count(), 1, "re-run does not duplicate");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an unpersistable state never blocks: read-only state after the level fires makes Stop allow, every time", () => {
+  const t = rig();
+  try {
+    t.at(100_000); t.run(t.ups("ro"));
+    const f = path.join(t.dir, "s", "workflow-kit-context-ro");
+    assert.ok(existsSync(f), "the level fired and persisted");
+    chmodSync(f, 0o444);
+    let writable = true; try { writeFileSync(f, readFileSync(f)); } catch { writable = false; }
+    if (!writable) {   // (skipped only where a superuser can write through 0444)
+      for (let i = 0; i < 3; i++) assert.equal(t.run(t.stop("no banner", "ro")).stdout, "", `Stop ${i}: allow, never a repeat block`);
+    }
+    // A level that cannot be recorded is not announced either (it would repeat every call).
+    t.at(150_000);
+    assert.equal(t.run(t.ups("ro")).stdout, "", "hard stop not announced when it cannot be remembered");
+  } finally { rmSync(t.dir, { recursive: true, force: true }); }
 });
 
 const WARN = (n) => `**CONTEXT WINDOW WARNING — ~${n}%: restart this thread at the next natural breakpoint (push / chip end)**`;

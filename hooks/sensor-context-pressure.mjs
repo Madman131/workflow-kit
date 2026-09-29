@@ -151,12 +151,16 @@ function readState(stateFile) {
   } catch { /* first time */ }
   return null;
 }
+// Returns true only when the state was persisted. Every emission is gated on it: a level or block that
+// cannot be remembered would repeat on every later call, so an unpersistable state means silence.
 function writeState(stateDir, stateFile, st) {
   try {
     mkdirSync(stateDir, { recursive: true });
     let lst = null; try { lst = lstatSync(stateFile); } catch { /* absent */ }
-    if (!lst || lst.isFile()) writeFileSync(stateFile, JSON.stringify(st));   // never through a symlink
-  } catch { /* speak anyway */ }
+    if (lst && !lst.isFile()) return false;   // never through a symlink
+    writeFileSync(stateFile, JSON.stringify(st));
+    return true;
+  } catch { return false; }
 }
 
 // Stop: the level fired but the Owner-facing message did not open with its banner ⇒ block ONCE.
@@ -174,7 +178,7 @@ function stopMain(ev) {
   }
   if (ev.stop_hook_active) return ALLOW();                  // already continuing from a block — never loop
   if ((st.blocked || 0) >= st.fired) return ALLOW();        // one block per level
-  writeState(loc.stateDir, loc.stateFile, { ...st, blocked: st.fired });
+  if (!writeState(loc.stateDir, loc.stateFile, { ...st, blocked: st.fired })) return ALLOW();   // cannot record the block ⇒ never spend it
   process.stdout.write(JSON.stringify({ decision: "block", reason: `The context-window banner is owed and your message did not open with it. Put this line VERBATIM as the FIRST line of your message to the Owner, then continue:\n${st.banner}` }));
   process.exit(0);
 }
@@ -208,7 +212,7 @@ function main(raw) {
   if (level <= (st.fired || 0)) return ALLOW();            // each level fires once; a jump to 2 marks 1 done too
   const percent = Math.round((100 * tokens) / window);
   const text2 = message({ tokens, window, source, percent, level });
-  writeState(loc.stateDir, loc.stateFile, { ...st, fired: level, banner: banner(level, percent) });
+  if (!writeState(loc.stateDir, loc.stateFile, { ...st, fired: level, banner: banner(level, percent) })) return ALLOW();   // cannot record the level ⇒ it would repeat every call
   try { process.stderr.write(`sensor-context-pressure: ${text2}\n`); } catch { /* ignore */ }
   const hookEventName = ev.hook_event_name === "UserPromptSubmit" ? "UserPromptSubmit" : "PreToolUse";
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: text2 } }));
