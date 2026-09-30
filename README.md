@@ -1,4 +1,4 @@
-# workflow-kit — v2.38.0
+# workflow-kit — v2.39.0
 
 ## How to start a build
 
@@ -11,6 +11,15 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.39.0 — a fresh or compacted Codex thread finds its task from one block
+
+Prose only: no hook, script, config or controller changed, so no Codex re-trust.
+
+- **One snapshot block, both lanes.** `core/README.md` § STATE defines the top block of the current-state head once: objective and scope, identities, task/checkout/branch/candidate SHA, verified work with evidence, remaining work and blocker, next actor and exact next action, a pointer to the Owner-reserved list, last-verified date. Superseded instructions move to `docs/journal/`; updating the block never erases evidence, approvals, failures or review history. `/closeout` § 6 refreshes it.
+- **Codex restart rule.** `templates/AGENTS.md.tmpl` gains a `## Thread restart` section, the twin of the CLAUDE one: after any auto-compaction re-read the snapshot and the governing procedure; `/thread-restart` at every chip landing and when the thread returns to obsolete work after a correction; never interrupt an active write, test or review; no token-count trigger, because Codex has no sensor. The shared `AGENTS.md` fallback pointer (`commands/agents-pointer.md`) is trimmed to keep the entry under its 8 KiB cap. The Codex `/thread-restart` prompt now refreshes the snapshot block first. The "out of scope until measured" sentence is retired from the three Claude homes and replaced by a pointer to the twin.
+- **Measured, not shipped: `compact_prompt`.** On codex-cli 0.158.0-alpha.2.1 (gpt-6-astra) the key is accepted (`--strict-config` clean), but auto-compaction is server-side and its summary is opaque (`encrypted_content` only). A model asked to print a marker demanded by `compact_prompt` after three compactions reported none — identically to the run without the key and to a CLI-level override. The project layer also did not honor `model_auto_compact_token_limit`. So `codex/config.toml` is unchanged; the re-read rests on the AGENTS rule. PreCompact/PostCompact hook events exist in the binary and are banked, not built.
+- **Upgrading.** Re-run `init --force` (or copy the `## Thread restart` section into `AGENTS.md`).
 
 ## What's new in v2.38.0 — the thread-restart practice is written into the kit
 

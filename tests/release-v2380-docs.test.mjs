@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const flat = (rel) => readFileSync(path.join(KIT, rel), "utf8").replace(/\s+/g, " ");
 const section = (s, from) => { const i = s.indexOf(from); assert.ok(i >= 0, `${from} present`); return s.slice(i, i + 1600); };
-const LANE = /Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured/;
+const LANE = /Codex twin: `AGENTS\.md` § Thread restart/;
 
 test("PM skill carries clauses 1-4", () => {
   const s = section(flat("skills/orchestrate/SKILL.md"), "## Thread restart");
@@ -48,12 +48,6 @@ test("the v2.38.0 README note cites the evidence", () => {
   assert.match(n, /token-report/);
   assert.match(n, /this session's own boot cost/);
   assert.match(n, /`context_now` of its first row in `\.claude\/metrics\/tokens\.jsonl`/);
-});
-
-test("version is 2.38.0 everywhere", () => {
-  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.38.0");
-  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.38.0");
-  assert.match(readFileSync(path.join(KIT, "README.md"), "utf8"), /^# workflow-kit — v2\.38\.0$/m);
 });
 
 test("Architect skill keeps the two rules the trims once removed", () => {

@@ -89,7 +89,7 @@ into a private worktree.
 rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing a brief.*
 
 ## Thread restart
-Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
+Codex twin: `AGENTS.md` § Thread restart.
 1. At EVERY chip landing, after merge and closeout, the PM reports the landing (landed SHA and actuals) to the Architect/Owner, then writes a pointer-style restart digest via `/thread-restart` and stops; the Owner's line "Read <digest> and continue" comes after the context banner line when the sensor owes one.
 2. Mid-chip, obey the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): at ~50% restart at the next safe breakpoint (push or chip end); at ~70% stop and restart before further work.
 3. The digest records the finished chip's token totals (`node scripts/token-report.mjs --by session`) and this session's own boot cost — the `context_now` of its first row in `.claude/metrics/tokens.jsonl` (the first row with this session's `session_id`).

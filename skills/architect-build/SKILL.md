@@ -35,7 +35,7 @@ Handoff gives baseline, record/location, Principal locator, delegation/limits, p
 decisions and milestone. It does not authorize new scope, push, deployment, or live write.
 
 ## Thread restart
-Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
+Codex twin: `AGENTS.md` § Thread restart.
 1. At EVERY chip landing, after merge and closeout, the Architect reports the landing (landed SHA and actuals) to the Owner, then writes a pointer-style restart digest via `/thread-restart` and stops; the Owner's line "Read <digest> and continue" comes after the context banner line when the sensor owes one.
 2. Mid-chip, follow the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): ~50% restart at the next safe breakpoint; ~70% stop and restart before further work.
 

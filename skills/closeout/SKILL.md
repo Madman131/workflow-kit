@@ -46,7 +46,7 @@ Confirm the merge is on the target branch on the remote, that required checks pa
 and — if the push has a deploy effect — that the deploy reached the state your stub names.
 
 ## 6. Land the record, then receipt — mandatory
-Update the current-state / open-work docs and memory your repo names. Begin the final message
+Update the current-state / open-work docs (refresh the snapshot block, `core/README.md` § STATE) and memory your repo names. Begin the final message
 **`CLOSEOUT: ARCHIVE-READY`** only if every applicable stage succeeded, inventory shows no
 unknown required work, and the endpoint plus intentional residuals are named — **an unmerged
 PR or an unverified target is NOT ARCHIVE-READY**. Otherwise begin **`CLOSEOUT: NOT

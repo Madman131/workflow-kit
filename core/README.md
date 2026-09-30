@@ -95,6 +95,12 @@ its class in a marker on line 3**, and `scripts/check-doc-size.mjs` reads that m
 - **STATE** — a regenerated current-state head (`docs/open_work_current_state.md`): structurally
   validated (it must declare its class and exist — fail-closed), but its **size is ADVISORY** (a WARN
   at 40 KiB, never a hard cap — a current-state doc legitimately grows between regenerations).
+  **Its top block is the current-state snapshot, defined here once, short, and read first by a fresh or
+  compacted thread of either lane:** approved objective + scope · active Architect/PM/Builder identities ·
+  current task, checkout, branch, candidate SHA · verified completed work, with evidence links · remaining
+  work and any genuine blocker · next actor + exact next action · authorization boundaries (a pointer to the
+  Owner-reserved list, never a copy) · last-verified date. Superseded instructions ARE history: they move to
+  `docs/journal/`, linked. Updating the block never erases evidence, approvals, failures or review history.
 - **REFERENCE** — looked up; missing a section just means you look it up later → **no size cap**, but
   it must carry a lookup-only marker, stable headings, and a table of contents.
 

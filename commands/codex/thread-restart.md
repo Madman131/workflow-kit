@@ -6,6 +6,7 @@ lose nothing essential. This is NOT `/compact` (a lossy auto-summary) — it is 
 Optional focus from the user follows this line, if any.
 
 ## Step 1 — Build the digest (a control, not a summary)
+First refresh the current-state snapshot block (`core/README.md` § STATE) so the digest can point at it.
 Write a durable digest document with these sections:
 1. **Read-first pointers** — the durable docs/files/code where the truth ALREADY lives. Point at them; do NOT
    re-copy their content ("read these, don't re-derive"). This is what keeps the digest small.
