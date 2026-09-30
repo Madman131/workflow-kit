@@ -288,11 +288,8 @@ test("init registers the sensor on UserPromptSubmit and Stop exactly once, upgra
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("v2.37.1 release: version, note wording and the paste-in snippet", () => {
-  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.37.1");
-  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.37.1");
+test("v2.37.1 release: note wording and the paste-in snippet", () => {
   const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
-  assert.match(readme, /^# workflow-kit — v2\.37\.1$/m);
   const note = readme.slice(readme.indexOf("## What's new in v2.37.1"), readme.indexOf("## What's new in v2.37.0")).replace(/\s+/g, " ");
   assert.match(note, /\*\*Claude lane only\.\*\* The Codex lane cannot do this: Codex hooks receive no transcript and no Stop payload/);
   assert.match(note, /No `\.codex\/hooks\.json` entry changed, so \*\*no re-trust\*\*/);

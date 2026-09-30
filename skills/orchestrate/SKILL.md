@@ -88,6 +88,13 @@ into a private worktree.
 *What every brief must carry: `.agents/skills/orchestrate/CHIP_BRIEF.md`. The incident behind each
 rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing a brief.*
 
+## Thread restart
+Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
+1. At EVERY chip landing (after merge and closeout) the PM writes a pointer-style restart digest via `/thread-restart` and stops; the Owner gets one line: "Read <digest> and continue".
+2. Mid-chip, obey the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): at ~50% restart at the next safe breakpoint (push or chip end); at ~70% stop and restart before further work.
+3. The digest records the finished chip's token totals (`node scripts/token-report.mjs --by session`) and, noted at first boot, the new session's boot cost: its first ledger row's `context_now`.
+4. A Builder (subagent or headless) near ~70% gets a fresh session and lane file with a digest-style handoff, not more briefs.
+
 ## Honest limits
 **The METHOD is portable; the PLUMBING is not.** Clickable chips and cross-session messaging are
 harness features this kit does not ship and must not assume.
