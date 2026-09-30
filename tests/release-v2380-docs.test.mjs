@@ -12,29 +12,27 @@ const LANE = /Claude lane only; the Codex lane's self-compacting ~254k window is
 
 test("PM skill carries clauses 1-4", () => {
   const s = section(flat("skills/orchestrate/SKILL.md"), "## Thread restart");
-  assert.match(s, /At EVERY chip landing \(after merge and closeout\)/);
-  assert.match(s, /`\/thread-restart`/);
-  assert.match(s, /"Read <digest> and continue"/);
+  assert.match(s, /At EVERY chip landing, after merge and closeout, the PM reports the landing \(landed SHA and actuals\) to the Architect\/Owner, then writes a pointer-style restart digest via `\/thread-restart`/);
+  assert.match(s, /"Read <digest> and continue" comes after the context banner line when the sensor owes one/);
   assert.match(s, /at ~50% restart at the next safe breakpoint/);
   assert.match(s, /at ~70% stop and restart before further work/);
   assert.match(s, /node scripts\/token-report\.mjs --by session/);
-  assert.match(s, /first ledger row's `context_now`/);
+  assert.match(s, /The NEW session, at first boot, reads its own first ledger row's `context_now` and records it in the program record/);
   assert.match(s, /Builder \(subagent or headless\) near ~70% gets a fresh session and lane file/);
   assert.match(s, LANE);
 });
 
 test("Architect skill carries clauses 1-2", () => {
   const s = section(flat("skills/architect-build/SKILL.md"), "## Thread restart");
-  assert.match(s, /At EVERY chip landing/);
-  assert.match(s, /`\/thread-restart`/);
+  assert.match(s, /At EVERY chip landing, after merge and closeout, the Architect reports the landing \(landed SHA and actuals\) to the Owner, then writes a pointer-style restart digest via `\/thread-restart`/);
+  assert.match(s, /comes after the context banner line when the sensor owes one/);
   assert.match(s, /~70% stop and restart before further work/);
   assert.match(s, LANE);
 });
 
 test("template carries the summary and pointer", () => {
   const s = section(flat("templates/CLAUDE.md.tmpl"), "## Thread restart");
-  assert.match(s, /At EVERY chip landing/);
-  assert.match(s, /`\/thread-restart`/);
+  assert.match(s, /At EVERY chip landing report the landing, then write a pointer-style digest via `\/thread-restart`/);
   assert.match(s, /~70% context/);
   assert.match(s, /stop and restart/);
   assert.match(s, LANE);

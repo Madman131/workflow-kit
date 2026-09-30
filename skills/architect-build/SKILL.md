@@ -11,11 +11,11 @@ Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing 
 repos · a blueprint that must survive restarts; otherwise `/orchestrate` alone (workflow-kit README).
 
 Owner-delegated Principal owns authorized completion through one separate PM. **Quad Mandate:** Core Principles—blueprint/KISS/Rule #1/Zoom Out/root cause; Efficiency—time/token economy, full gates; Focus—spare Owner; Prevent Downtime—resolve stops; next actor/action/restart. Directives bind PM; PM executes; return only unresolved reserved decisions to Owner; avoid unrelated work or repeated attempts without new evidence.
-For substantive PM findings, blockers or decisions, show existing assessment visibly: **Quad Mandate:** one concise sentence with evidence-based judgment and next action. Routine progress adds none unless something changes; no new gate, consult or message. Decide route, record screen, dispatch; proceed/simplify directs covered work, defer/stop holds, escalate asks Owner.
+For substantive PM findings, blockers or decisions, show existing assessment visibly: **Quad Mandate:** one concise sentence with evidence-based judgment and next action. Routine progress adds none. Decide route, record screen, dispatch; proceed/simplify directs covered work, defer/stop holds, escalate asks Owner.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If task creation is supported, establish/reuse architect first; after baseline approval,
 create/connect separate PM; record both locators. File-only launch hands off. Without launch, preserve planning continuity only. Existing authorized execution
-does not need a renewed launch. Never duplicate either role.
+does not need a renewed launch.
 
 ## Establish, reuse, or recover
 
@@ -28,7 +28,7 @@ Locate or create the durable record; its location and contents are `ROUTING.md` 
 - **Reuse:** retain an identified architect only when its baseline is current. Reconcile any pending
   recommendations before treating them as decisions.
 - **Recover:** inspect record/evidence; preserve context through file-only continuity. Never create an
-  acting architect or second PM, or promote advice. Continue covered work and hold only the dependent decision;
+  acting architect or second PM. Continue covered work and hold only the dependent decision;
   a current in-scope directive survives ordinary commits, while pending/superseded advice grants nothing.
 
 Handoff gives baseline, record/location, Principal locator, delegation/limits, phase/CHIP, open
@@ -36,7 +36,7 @@ decisions and milestone. It does not authorize new scope, push, deployment, or l
 
 ## Thread restart
 Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
-1. At EVERY chip landing (after merge and closeout) the Architect writes a pointer-style restart digest via `/thread-restart` and stops; the Owner gets one line: "Read <digest> and continue".
+1. At EVERY chip landing, after merge and closeout, the Architect reports the landing (landed SHA and actuals) to the Owner, then writes a pointer-style restart digest via `/thread-restart` and stops; the Owner's line "Read <digest> and continue" comes after the context banner line when the sensor owes one.
 2. Mid-chip, follow the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): ~50% restart at the next safe breakpoint; ~70% stop and restart before further work.
 
 ## Quiet continuity
@@ -46,5 +46,5 @@ Consult only at the `ROUTING.md` § Continuity triggers, among them an unresolve
 concrete PM authority, safety, or evidence conflict requiring Principal direction. Packet content, the material
 test, the ordinary-consult boundary, the combined fourth-gate rule and the degraded fallback live only in `ROUTING.md`.
 
-Advice recording and the rejected-method hold: `ROUTING.md` § Packets and consults, § Authority. Do not create
+Advice recording and the rejected-method hold: `ROUTING.md` § Packets and consults, § Authority. Create no
 polling, scheduler, transport, review seat, or model binding.
