@@ -1,4 +1,4 @@
-# workflow-kit — v2.38.0
+# workflow-kit — v2.39.0
 
 ## How to start a build
 
@@ -12,12 +12,21 @@
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
 
+## What's new in v2.39.0 — a fresh or compacted Codex thread finds its task from one block
+
+Prose only: no hook, script, config or controller changed, so no Codex re-trust.
+
+- **One snapshot block, both lanes.** `core/README.md` § STATE defines the top block of the current-state head once: objective and scope, identities, task/checkout/branch/candidate SHA, verified work with evidence, remaining work and blocker, next actor and exact next action, a pointer to the Owner-reserved list, last-verified date. Superseded instructions move to `docs/journal/`; updating the block never erases evidence, approvals, failures or review history. `/closeout` § 6 refreshes it.
+- **Codex restart rule.** `templates/AGENTS.md.tmpl` gains a `## Thread restart` section, the twin of the CLAUDE one: after any auto-compaction re-read the snapshot and the governing procedure; `/thread-restart` at every chip landing and when the thread returns to obsolete work after a correction; never interrupt an active write, test or review; no token-count trigger, because Codex has no sensor. The shared `AGENTS.md` fallback pointer (`commands/agents-pointer.md`) is trimmed to keep the entry under its 8 KiB cap. The Codex `/thread-restart` prompt now refreshes the snapshot block first. The "out of scope until measured" sentence is retired from the three Claude homes and replaced by a pointer to the twin.
+- **Measured, not shipped: `compact_prompt`.** On codex-cli 0.158.0-alpha.2.1 (gpt-6-astra) the key is accepted (`--strict-config` clean), but auto-compaction is server-side and its summary is opaque (`encrypted_content` only). A model asked to print a marker demanded by `compact_prompt` after three compactions reported none — identically to the run without the key and to a CLI-level override. The project layer also did not honor `model_auto_compact_token_limit`. So `codex/config.toml` is unchanged; the re-read rests on the AGENTS rule. PreCompact/PostCompact hook events exist in the binary and are banked, not built.
+- **Upgrading.** Re-run `init --force` (or copy the `## Thread restart` section into `AGENTS.md`).
+
 ## What's new in v2.38.0 — the thread-restart practice is written into the kit
 
 Prose only: no hook, script or controller changed, so no Codex re-trust.
 
 - **The rule.** At EVERY chip landing the PM and the Architect each write a pointer-style restart digest via `/thread-restart` and stop; the Owner gets a one-line seed, "Read <digest> and continue". Mid-chip the v2.37.1 context banners govern (~50% restart at the next safe breakpoint, ~70% stop and restart). Each landing digest records the finished chip's token totals (`node scripts/token-report.mjs --by session`) and this session's own boot cost — the `context_now` of its first row in `.claude/metrics/tokens.jsonl` (the first row with this session's `session_id`). A Builder near ~70% gets a fresh session and lane file, not more briefs.
-- **Where it lives.** `skills/orchestrate/SKILL.md` (PM, clauses 1-4), `skills/architect-build/SKILL.md` (clauses 1-2) and `templates/CLAUDE.md.tmpl` (summary and pointer, so `init` and upgrades carry it). Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
+- **Where it lives.** `skills/orchestrate/SKILL.md` (PM, clauses 1-4), `skills/architect-build/SKILL.md` (clauses 1-2) and `templates/CLAUDE.md.tmpl` (summary and pointer, so `init` and upgrades carry it). Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured (superseded in v2.39.0).
 - **Evidence.** NexusBot, 2026-09-29: the Orchestrator's prompt tokens per call fell from ~415k to ~194k and peak context from ~692k to ~273k once it restarted at landings.
 - **Upgrading.** Re-run `init --force` to refresh the template, or copy the three sections by hand.
 
