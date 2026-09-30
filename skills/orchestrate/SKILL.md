@@ -91,7 +91,7 @@ rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing
 ## Thread restart
 Codex twin: `AGENTS.md` § Thread restart.
 1. At EVERY chip landing, after merge and closeout, the PM reports the landing (landed SHA and actuals) to the Architect/Owner, then writes a pointer-style restart digest via `/thread-restart` and stops; the Owner's line "Read <digest> and continue" comes after the context banner line when the sensor owes one.
-2. Mid-chip, obey the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): at ~50% restart at the next safe breakpoint (push or chip end); at ~70% stop and restart before further work.
+2. Mid-chip, obey the context-pressure sensor's banners (`.claude/hooks/sensor-context-pressure.mjs`): at ~50% restart at the next safe breakpoint (push or chip end); at ~70% stop and restart before further work.
 3. The digest records the finished chip's token totals (`node scripts/token-report.mjs --by session`) and this session's own boot cost — the `context_now` of its first row in `.claude/metrics/tokens.jsonl` (the first row with this session's `session_id`).
 4. A Builder (subagent or headless) near ~70% gets a fresh session and lane file with a digest-style handoff, not more briefs.
 
@@ -107,7 +107,7 @@ discipline of any shared checkout.
 ⚠ **One rung on this page is enforced WHEN ITS HOOK IS ARMED; the rest is honour-system. That rung
 is TRUST-GATED: an untrusted hook is skipped SILENTLY, and Codex keys trust to the `hooks.json`
 entry, not the script — a changed entry is NOT ARMED until re-approved; after any upgrade, run
-`check-codex-hooks-armed.mjs`.** The controller reads
+`scripts/check-codex-hooks-armed.mjs`.** The controller reads
 typed author-recorded rounds, `panel_open` DOES read its freeze, and for a RECORDED program the
 armed hook walls the cadence (terminal states, batch caps, path ownership). No control checks who
 gave a GO. `guard-brief-rung` denies a brief WRITE lacking a fresh, session- and

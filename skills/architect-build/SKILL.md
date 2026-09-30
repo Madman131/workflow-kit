@@ -37,7 +37,7 @@ decisions and milestone. It does not authorize new scope, push, deployment, or l
 ## Thread restart
 Codex twin: `AGENTS.md` § Thread restart.
 1. At EVERY chip landing, after merge and closeout, the Architect reports the landing (landed SHA and actuals) to the Owner, then writes a pointer-style restart digest via `/thread-restart` and stops; the Owner's line "Read <digest> and continue" comes after the context banner line when the sensor owes one.
-2. Mid-chip, follow the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): ~50% restart at the next safe breakpoint; ~70% stop and restart before further work.
+2. Mid-chip, follow the context-pressure sensor's banners (`.claude/hooks/sensor-context-pressure.mjs`): ~50% restart at the next safe breakpoint; ~70% stop and restart before further work.
 
 ## Quiet continuity
 

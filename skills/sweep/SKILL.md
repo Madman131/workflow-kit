@@ -7,7 +7,7 @@ description: Run the sweep sensor — ONE mechanical question over an explicit f
 
 Word budget: 300 (author-set for this new skill — no Owner ruling names a number for it; the
 originating repo's 250 assumed a body that could defer detail to journal docs this kit does not
-ship). Tool: `scripts/sweep.mjs`. Doctrine: `core/WORKFLOW.md` § Gate.
+ship). Tool: `scripts/sweep.mjs` (workflow-kit repository; init does not install it). Doctrine: `core/WORKFLOW.md` § Gate.
 
 ## When
 - **Pre-fold (load-bearing):** before editing a rule in a `CLASS: BINDING` doc, sweep every clause
