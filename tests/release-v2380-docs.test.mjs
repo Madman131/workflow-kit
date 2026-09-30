@@ -17,7 +17,8 @@ test("PM skill carries clauses 1-4", () => {
   assert.match(s, /at ~50% restart at the next safe breakpoint/);
   assert.match(s, /at ~70% stop and restart before further work/);
   assert.match(s, /node scripts\/token-report\.mjs --by session/);
-  assert.match(s, /The NEW session, at first boot, reads its own first ledger row's `context_now` and records it in the program record/);
+  assert.match(s, /and this session's own boot cost — the `context_now` of its first row in `\.claude\/metrics\/tokens\.jsonl` \(the first row with this session's `session_id`\)/);
+  assert.doesNotMatch(s.slice(s.indexOf("3. The digest"), s.indexOf("4. A Builder")), /at first boot|program record|NEW session/);
   assert.match(s, /Builder \(subagent or headless\) near ~70% gets a fresh session and lane file/);
   assert.match(s, LANE);
 });
@@ -45,7 +46,8 @@ test("the v2.38.0 README note cites the evidence", () => {
   assert.match(n, /~415k to ~194k/);
   assert.match(n, /~692k to ~273k/);
   assert.match(n, /token-report/);
-  assert.match(n, /context_now/);
+  assert.match(n, /this session's own boot cost/);
+  assert.match(n, /`context_now` of its first row in `\.claude\/metrics\/tokens\.jsonl`/);
 });
 
 test("version is 2.38.0 everywhere", () => {
