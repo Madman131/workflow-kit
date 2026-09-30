@@ -58,9 +58,3 @@ test("the README note records the compact_prompt measurement and the unchanged c
 test("the v2.38.0 note marks its Codex scope-out superseded", () => {
   assert.match(flat("README.md"), /out of scope until measured \(superseded in v2\.39\.0\)/);
 });
-
-test("version is 2.39.0 everywhere", () => {
-  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.39.0");
-  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.39.0");
-  assert.match(readFileSync(path.join(KIT, "README.md"), "utf8"), /^# workflow-kit — v2\.39\.0$/m);
-});

@@ -1,4 +1,4 @@
-# workflow-kit — v2.39.0
+# workflow-kit — v2.39.1
 
 ## How to start a build
 
@@ -11,6 +11,15 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.39.1 — installed text cites only paths an adopter has
+
+Prose plus one test: no hook, script, config or controller changed, so no Codex re-trust.
+
+- **Dead paths fixed.** The CLAUDE template now points at `.agents/skills/orchestrate/SKILL.md`; the orchestrate and architect-build skills cite the installed `.claude/hooks/sensor-context-pressure.mjs`, and `scripts/check-codex-hooks-armed.mjs`; the sweep skill says `scripts/sweep.mjs` lives in the workflow-kit repository and `init` does not install it.
+- **Claude `/thread-restart`** now refreshes the current-state snapshot block first, like the Codex copy, so the AGENTS pointer at it is true.
+- **New test.** `tests/installed-citations.test.mjs` runs a hermetic `init` and checks every backticked path in the rendered `AGENTS.md`, `CLAUDE.md`, `/thread-restart` and installed skills resolves, or matches a deny entry with a reason. `core/` is out of its scan, declared in the test.
+- **Upgrading.** Re-run `init --force`.
 
 ## What's new in v2.39.0 — a fresh or compacted Codex thread finds its task from one block
 
