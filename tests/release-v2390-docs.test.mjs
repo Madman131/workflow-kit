@@ -25,8 +25,9 @@ test("core/README STATE defines the snapshot block once", () => {
 test("AGENTS template carries the Codex thread-restart twin", () => {
   const s = section(flat("templates/AGENTS.md.tmpl"), "## Thread restart");
   assert.match(s, /After any auto-compaction re-read the snapshot \(`core\/README\.md` § STATE\) and the governing procedure; never resume superseded work/);
-  assert.match(s, /Run `\/thread-restart` \(`commands\/codex\/thread-restart\.md`\) at EVERY chip landing and when a corrected thread returns to obsolete work/);
+  assert.match(s, /Run `\/thread-restart` \(`\.claude\/commands\/thread-restart\.md`\) at EVERY chip landing and when a corrected thread returns to obsolete work/);
   assert.match(s, /Never interrupt an active write, test or review; one execution owner during handoff/);
+  assert.doesNotMatch(s, /commands\/codex\/thread-restart/, "no kit-only path in the adopter entry");
   assert.match(s, /No token sensor, so no percentage trigger/);
 });
 
@@ -52,6 +53,10 @@ test("the README note records the compact_prompt measurement and the unchanged c
   assert.match(n, /`encrypted_content` only/);
   assert.match(n, /So `codex\/config\.toml` is unchanged/);
   assert.doesNotMatch(readFileSync(path.join(KIT, "codex", "config.toml"), "utf8"), /^\s*(experimental_)?compact_prompt/m, "no unproven compact_prompt key ships");
+});
+
+test("the v2.38.0 note marks its Codex scope-out superseded", () => {
+  assert.match(flat("README.md"), /out of scope until measured \(superseded in v2\.39\.0\)/);
 });
 
 test("version is 2.39.0 everywhere", () => {

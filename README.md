@@ -26,7 +26,7 @@ Prose only: no hook, script, config or controller changed, so no Codex re-trust.
 Prose only: no hook, script or controller changed, so no Codex re-trust.
 
 - **The rule.** At EVERY chip landing the PM and the Architect each write a pointer-style restart digest via `/thread-restart` and stop; the Owner gets a one-line seed, "Read <digest> and continue". Mid-chip the v2.37.1 context banners govern (~50% restart at the next safe breakpoint, ~70% stop and restart). Each landing digest records the finished chip's token totals (`node scripts/token-report.mjs --by session`) and this session's own boot cost — the `context_now` of its first row in `.claude/metrics/tokens.jsonl` (the first row with this session's `session_id`). A Builder near ~70% gets a fresh session and lane file, not more briefs.
-- **Where it lives.** `skills/orchestrate/SKILL.md` (PM, clauses 1-4), `skills/architect-build/SKILL.md` (clauses 1-2) and `templates/CLAUDE.md.tmpl` (summary and pointer, so `init` and upgrades carry it). Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
+- **Where it lives.** `skills/orchestrate/SKILL.md` (PM, clauses 1-4), `skills/architect-build/SKILL.md` (clauses 1-2) and `templates/CLAUDE.md.tmpl` (summary and pointer, so `init` and upgrades carry it). Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured (superseded in v2.39.0).
 - **Evidence.** NexusBot, 2026-09-29: the Orchestrator's prompt tokens per call fell from ~415k to ~194k and peak context from ~692k to ~273k once it restarted at landings.
 - **Upgrading.** Re-run `init --force` to refresh the template, or copy the three sections by hand.
 
