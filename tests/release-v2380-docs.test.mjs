@@ -53,3 +53,9 @@ test("version is 2.38.0 everywhere", () => {
   assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.38.0");
   assert.match(readFileSync(path.join(KIT, "README.md"), "utf8"), /^# workflow-kit — v2\.38\.0$/m);
 });
+
+test("Architect skill keeps the two rules the trims once removed", () => {
+  const a = flat("skills/architect-build/SKILL.md");
+  assert.match(a, /Routine progress adds none unless something changes; no new gate, consult or message\./);
+  assert.match(a, /Never duplicate either role\./);
+});

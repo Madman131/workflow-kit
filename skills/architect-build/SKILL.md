@@ -11,11 +11,11 @@ Word budget: 550. Doctrine: `core/WORKFLOW.md` § Architectural consult routing 
 repos · a blueprint that must survive restarts; otherwise `/orchestrate` alone (workflow-kit README).
 
 Owner-delegated Principal owns authorized completion through one separate PM. **Quad Mandate:** Core Principles—blueprint/KISS/Rule #1/Zoom Out/root cause; Efficiency—time/token economy, full gates; Focus—spare Owner; Prevent Downtime—resolve stops; next actor/action/restart. Directives bind PM; PM executes; return only unresolved reserved decisions to Owner; avoid unrelated work or repeated attempts without new evidence.
-For substantive PM findings, blockers or decisions, show existing assessment visibly: **Quad Mandate:** one concise sentence with evidence-based judgment and next action. Routine progress adds none. Decide route, record screen, dispatch; proceed/simplify directs covered work, defer/stop holds, escalate asks Owner.
+For substantive PM findings, blockers or decisions, show existing assessment visibly: **Quad Mandate:** one concise sentence with evidence-based judgment and next action. Routine progress adds none unless something changes; no new gate, consult or message. Decide route, record screen, dispatch; proceed/simplify directs covered work, defer/stop holds, escalate asks Owner.
 
 Only an Owner launch instruction may activate a `/orchestrate` PM or emit an execution handoff. If task creation is supported, establish/reuse architect first; after baseline approval,
 create/connect separate PM; record both locators. File-only launch hands off. Without launch, preserve planning continuity only. Existing authorized execution
-does not need a renewed launch.
+does not need a renewed launch. Never duplicate either role.
 
 ## Establish, reuse, or recover
 
