@@ -76,6 +76,9 @@ loads none of them. What binds **every** lane unconditionally is prose (`AGENTS.
 PM-disposition emission) **plus the `.githooks/pre-commit` hook** `init` installed
 (`core.hooksPath=.githooks`). See the kit's `PORTABILITY.md` (workflow-kit repository).
 
+## Thread restart
+At EVERY chip landing report the landing, then write a pointer-style digest via `/thread-restart` and stop; at ~70% context (the sensor's banner) stop and restart. Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured. Detail: `skills/orchestrate/SKILL.md` § Thread restart.
+
 ## Local traps worth knowing
 - **Env flags are toggled, never deleted;** boolean reads use explicit string compare (`=== "false"`),
   never truthiness — a `"false"` string is truthy.

@@ -23,8 +23,8 @@ ordered; each verifies its predecessor landed. Never let two chips write one rep
 | **Workhorse PM** | worker/chip dispatch, briefs, rulings, fold-checks, local integration, lesson bank | authors designated Builder source or gives remote GO |
 | **Builder** | its raw T2 and historical T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
 
-**A remote GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner instruction
-outranks any routing preference; the Builder acts and tells the PM promptly. **A GO
+**A remote GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner
+instruction outranks any routing preference; the Builder acts and tells the PM promptly. **A GO
 ratifies a specific artifact:** if the changeset gains a commit the GO is void until re-confirmed on
 the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
 
@@ -87,6 +87,13 @@ into a private worktree.
 
 *What every brief must carry: `.agents/skills/orchestrate/CHIP_BRIEF.md`. The incident behind each
 rule above: `.agents/skills/orchestrate/PROTOCOLS.md` — read it before writing a brief.*
+
+## Thread restart
+Claude lane only; the Codex lane's self-compacting ~254k window is out of scope until measured.
+1. At EVERY chip landing, after merge and closeout, the PM reports the landing (landed SHA and actuals) to the Architect/Owner, then writes a pointer-style restart digest via `/thread-restart` and stops; the Owner's line "Read <digest> and continue" comes after the context banner line when the sensor owes one.
+2. Mid-chip, obey the context-pressure sensor's banners (`hooks/sensor-context-pressure.mjs`): at ~50% restart at the next safe breakpoint (push or chip end); at ~70% stop and restart before further work.
+3. The digest records the finished chip's token totals (`node scripts/token-report.mjs --by session`) and this session's own boot cost — the `context_now` of its first row in `.claude/metrics/tokens.jsonl` (the first row with this session's `session_id`).
+4. A Builder (subagent or headless) near ~70% gets a fresh session and lane file with a digest-style handoff, not more briefs.
 
 ## Honest limits
 **The METHOD is portable; the PLUMBING is not.** Clickable chips and cross-session messaging are
