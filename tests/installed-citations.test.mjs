@@ -9,6 +9,7 @@
 // SCANNED: AGENTS.md, CLAUDE.md, .claude/commands/thread-restart.md, every .agents/skills/**/*.md.
 // NOT SCANNED, declared: core/ — ~150 history / opt-in / journal citations (docs/journal/, optional
 //   adopter docs) that an adopter may legitimately not have yet; a separate NOTE owns that class.
+// FENCES ARE SCANNED: inside ``` blocks every whitespace/quote-separated token is checked, not just backticked ones.
 // NOT A PATH, declared: a backticked token is "path-like" only if it contains "/" or ends in a known
 //   file extension. Tokens holding <>*{}$|=()  are placeholders, globs, flags or shell, not citations.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -24,14 +25,17 @@ const HERMETIC_PATH = [path.dirname(process.execPath), "/usr/bin", "/bin"].join(
 
 // DENY-LIST: each entry = what it matches, WHY it legitimately does not exist in a freshly init-ed tree.
 // `near` (optional): the entry applies only when the citing text, within 160 chars of the token, matches
-// it — so a citation that merely lacks the disclosure still fails (this is what keeps items 4 live).
+// it; `nearFile` (optional): only when the WHOLE citing file matches it (a disclosure once per file covers
+// its later fenced uses) — so a citation that merely lacks the disclosure still fails (this is what keeps items 4 live).
 const DENY = [
   { tok: ".claude/task-lane.json", why: "runtime-created by /lane-declare in the adopter's session; never installed" },
   { tok: ".claude/metrics/tokens.jsonl", why: "runtime-created by the token recorder hook on first use" },
   { tok: "package.json", why: "adopter-owned; the kit never writes it" },
   { tok: "PORTABILITY.md", near: /kit's|workflow-kit repository|in the kit\b|workflow-kit's/, why: "kit-repo contract; allowed only where the text names it as the kit's (see portability-citations.test.mjs)" },
-  { tok: "scripts/sweep.mjs", near: /workflow-kit repository; init does not install it/, why: "kit-repo tool init never installs; allowed only where the sentence says so" },
+  { tok: "scripts/sweep.mjs", nearFile: /workflow-kit repository; init does not install it/, why: "kit-repo tool init never installs; allowed only where the sentence says so" },
   { tok: "hooks.json", why: "bare generic name of Codex's hook registration (the adopter's is .codex/hooks.json); orchestrate-skill.test.mjs pins the phrase verbatim, so it stays bare by decision" },
+  { tok: "build/type/lint", why: "step label in kill-pass's fenced report-format block, not a path" },
+  { tok: "red/green", why: "step label in kill-pass's fenced report-format block, not a path" },
   { tok: ".md", why: "the bare file-extension token, not a path" },
   { tok: "docs/journal/", why: "the adopter's own history directory, created by the adopter as needed" },
   { tok: "docs/", why: "the adopter's own docs tree, named as an example of a lane-exempt prefix" },
@@ -44,7 +48,7 @@ const DENY = [
   { re: /^~\//, why: "home-directory path (~/.claude, ~/.codex/prompts/), outside any adopter tree" },
 ];
 const denied = (tok, text, at) => DENY.some((d) =>
-  (d.tok === tok || (d.re && d.re.test(tok))) && (!d.near || d.near.test(text.slice(Math.max(0, at - 160), at + tok.length + 160))));
+  (d.tok === tok || (d.re && d.re.test(tok))) && (!d.nearFile || d.nearFile.test(text)) && (!d.near || d.near.test(text.slice(Math.max(0, at - 160), at + tok.length + 160))));
 const EXT = /\.(md|mjs|js|json|jsonl|toml|sh|tmpl|yml|yaml)$/;
 const PLACEHOLDER = /[<>*{}$|=()]/;
 
@@ -57,13 +61,23 @@ function walk(dir, out = []) {
   return out;
 }
 
+const EXTS = EXT;
+function candidate(raw, at, out) {
+  const bare = raw.replace(/#.*$/, "");
+  let t = bare.replace(/[:,.;]+$/, (x) => (EXTS.test(bare) ? "" : x)).replace(/^\.\//, "");
+  if (!t || PLACEHOLDER.test(t) || /^[a-z]+:\/\//.test(t)) return;
+  if (t.includes("/") || EXTS.test(t)) out.push([t, at]);
+}
+
+// Outside ``` fences: backticked tokens. Inside ``` fences: every whitespace/quote-separated token.
 export function citations(text) {
   const out = [];
-  for (const m of text.matchAll(/`([^`\s]+)`/g)) {
-    let t = m[1].replace(/#.*$/, "").replace(/[:,.;]+$/, (x) => (EXT.test(m[1].replace(/#.*$/, "")) ? "" : x));
-    t = t.replace(/^\.\//, "");
-    if (!t || PLACEHOLDER.test(t) || /^[a-z]+:\/\//.test(t)) continue;
-    if (t.includes("/") || EXT.test(t)) out.push([t, m.index]);
+  let fenced = false, off = 0;
+  for (const line of text.split("\n")) {
+    if (/^\s*```/.test(line)) fenced = !fenced;
+    else if (fenced) for (const m of line.matchAll(/[^\s"'`]+/g)) candidate(m[0], off + m.index, out);
+    else for (const m of line.matchAll(/`([^`\s]+)`/g)) candidate(m[1], off + m.index, out);
+    off += line.length + 1;
   }
   return out;
 }
@@ -111,4 +125,5 @@ test("every deny entry carries a reason", () => {
 
 test("the extractor finds path-like tokens and skips placeholders", () => {
   assert.deepEqual(citations("see `a/b.md`, `x.mjs`: and `<dir>/y.md` `--flag` `foo`").map((c) => c[0]), ["a/b.md", "x.mjs"]);
+  assert.deepEqual(citations("```\nnode scripts/q.mjs --repo <abs path> --files <p>\n```\nout `z/w.md`").map((c) => c[0]), ["scripts/q.mjs", "z/w.md"]);
 });
