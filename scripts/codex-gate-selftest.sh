@@ -15,6 +15,9 @@ mkdir -p "$WORK/repo" "$WORK/bin"
 printf 'alpha line number one\nalpha line number two\nalpha line number three\nalpha line number four\n' > "$WORK/repo/a.txt"
 printf 'bravo line number one\nbravo line number two\nbravo line number three\nbravo line number four\n' > "$WORK/repo/b.txt"
 printf 'Review the files.\n' > "$WORK/prompt.txt"
+printf 'import shared one from lib\nimport shared two from lib\nimport shared three from lib\nuniq c line number one\nuniq c line number two\nuniq c line number three\n' > "$WORK/repo/c.txt"
+printf 'import shared one from lib\nimport shared two from lib\nimport shared three from lib\nuniq d line number one\nuniq d line number two\nuniq d line number three\n' > "$WORK/repo/d.txt"
+printf 'import shared one from lib\nimport shared two from lib\nimport shared three from lib\n' > "$WORK/repo/e.txt"
 
 cat > "$WORK/bin/codex" <<'FAKE'
 #!/usr/bin/env bash
@@ -80,6 +83,21 @@ expect "an in_progress record earns no credit" 3 "UNDER-READ: no verdict" -- --e
 
 events "$THREAD" "$(cmd_record "/bin/zsh -lc cat a.txt" "$A")" "$(cmd_record "/bin/zsh -lc sed -n 1,3p b.txt" 'bravo line number one\nbravo line number two\nbravo line number three\n')"
 expect "files read by separate commands, a ranged read counts" 0 "seat coverage OK" -- --expect-files "$WORK/both.txt" -f "$WORK/prompt.txt"
+
+printf 'c.txt\nd.txt\n' > "$WORK/cd.txt"
+C='import shared one from lib\nimport shared two from lib\nimport shared three from lib\nuniq c line number one\nuniq c line number two\nuniq c line number three\n'
+D='uniq d line number one\nuniq d line number two\nuniq d line number three\n'
+SH='import shared one from lib\nimport shared two from lib\nimport shared three from lib\n'
+events "$THREAD" "$(cmd_record "/bin/zsh -lc cat c.txt && rg -n import d.txt" "$C")"
+expect "shared boilerplate: C read, D only named and grepped for shared lines" 3 "UNDER-READ: no verdict" -- --expect-files "$WORK/cd.txt" -f "$WORK/prompt.txt"
+grep -q "^  d.txt" "$WORK/err.txt" && ! grep -q "^  c.txt" "$WORK/err.txt" && { pass=$((pass + 1)); echo "ok   only d.txt is listed unopened"; } || { fail=$((fail + 1)); echo "FAIL shared-line listing"; sed 's/^/     | /' "$WORK/err.txt"; }
+events "$THREAD" "$(cmd_record "/bin/zsh -lc cat d.txt && rg -n import c.txt" "$SH$D")"
+expect "shared boilerplate, the other direction" 3 "UNDER-READ: no verdict" -- --expect-files "$WORK/cd.txt" -f "$WORK/prompt.txt"
+events "$THREAD" "$(cmd_record "/bin/zsh -lc cat c.txt d.txt" "$C$D")"
+expect "shared boilerplate, both fully read" 0 "seat coverage OK" -- --expect-files "$WORK/cd.txt" -f "$WORK/prompt.txt"
+printf 'c.txt\ne.txt\n' > "$WORK/ce.txt"
+events "$THREAD" "$(cmd_record "/bin/zsh -lc cat c.txt e.txt" "$C")"
+expect "a file with no line unique among the listed files is unverifiable, fail closed" 3 "unverifiable" -- --expect-files "$WORK/ce.txt" -f "$WORK/prompt.txt"
 
 printf 'a.txt\nmissing-file.txt\n' > "$WORK/gone.txt"
 events "$THREAD" "$(cmd_record "/bin/zsh -lc cat a.txt missing-file.txt" "$A")"

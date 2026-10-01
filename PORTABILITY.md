@@ -841,7 +841,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 - **SEAT-COVERAGE (`codex-gate.sh --expect-files`, v2.41.0) measures that a file's text reached the seat's tool output, nothing more.**
   It keys on the `command_execution` records of a real `codex exec --json` run (codex-cli 0.159.2; receipt
   `docs/journal/2026-10-01-codex-exec-events-receipt.md`): a listed file counts as opened when a completed command names it and
-  that command's output carries at least min(3, n) distinct lines of the file. It does NOT prove the seat understood what it read;
+  that command's output carries at least min(3, n) distinct lines of the file. It proves a file was TOUCHED with its own content shown (lines found in no other listed file; a file with none is unverifiable and fails closed), not that it was read whole (ranged reads count) and not that the seat understood it; the basename alternative can match a same-named file in another directory (the content test mostly guards it);
   a seat that steers around it (naming A in a command that prints a distinctive line of A while reading B) is hostile-evasion and
   out of the stated model; a file the caller leaves out of the list is never required; a large read the client truncated is
   under-credited (fails closed); an event shape the check does not know earns no credit, so a changed Codex client fails CLOSED

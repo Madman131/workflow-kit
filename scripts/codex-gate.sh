@@ -57,7 +57,7 @@
 #   `--expect-files FILE` (one repo-relative path per line; typically the changed files) MEASURES instead: after the
 #   run it reads the `codex exec --json` event stream and requires, for every listed path, a completed
 #   `command_execution` record whose command NAMES the file AND whose aggregated_output carries that file's own
-#   content (>= min(3, n) of its distinct lines; n = its distinctive lines). A path merely named in a command whose
+#   content (>= min(3, n) of its distinct lines found in NO other listed file; n = those unique lines). A path merely named in a command whose
 #   output went to /dev/null, or only grepped for one line, is NOT opened. Any file not evidenced => exit 3,
 #   "UNDER-READ: no verdict", with the missing paths printed. Shapes keyed on real records, not assumed:
 #   docs/journal/2026-10-01-codex-exec-events-receipt.md. Cold passes only (a warm round reads a delta, so
@@ -131,8 +131,9 @@ fi
 # MEASURES what the seat opened instead of trusting its INSPECTED SCOPE line. Keyed on RECORDS OBSERVED in a real
 # `codex exec --json` run (codex-cli 0.159.2; docs/journal/2026-10-01-codex-exec-events-receipt.md), never on an
 # assumed shape: a file is OPENED only if some completed `command_execution` item names it in `command` AND that item's
-# `aggregated_output` carries the file's own content (>= min(3, n) distinct lines of it, n = its lines of 12+ chars,
-# or all its nonblank lines when it has none). Why content and not the command text: the observed seat batches many
+# `aggregated_output` carries the file's own content (>= min(3, n) distinct lines of it that occur in NO other listed
+# file, n = those unique lines of 12+ chars, or all its unique lines when it has none; a file with NO unique line is
+# unverifiable and fails closed — shared boilerplate proves nothing about which file was read). Why content and not the command text: the observed seat batches many
 # files into ONE `/bin/zsh -lc` script, the outputs arrive merged in one string, and one observed run named four
 # files in a command that sent their output to /dev/null — a path match alone credits a seat that read nothing.
 # An unrecognised event shape simply earns no credit, so a changed client fails CLOSED (exit 3), never open.
@@ -163,15 +164,23 @@ try {
 } catch (e) { /* unreadable stream: nothing evidenced */ }
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const missing = [], opened = [];
+const norm = (x) => x.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+const texts = new Map();
 for (const rel of want) {
-  let text = null;
-  try { const st = fs.statSync(path.join(root, rel)); if (st.isFile() && st.size <= 4 * 1024 * 1024) text = fs.readFileSync(path.join(root, rel), "utf8"); } catch { /* absent or unreadable */ }
-  if (text === null) { missing.push(rel + "  (not a readable file in the repo)"); continue; }
-  const lines = [...new Set(text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))];
-  const dist = lines.filter((x) => x.length >= 12), pool = dist.length ? dist : lines;
+  try { const st = fs.statSync(path.join(root, rel)); if (st.isFile() && st.size <= 4 * 1024 * 1024) texts.set(rel, norm(fs.readFileSync(path.join(root, rel), "utf8"))); } catch { /* absent or unreadable */ }
+}
+// Evidence for a file is ONLY lines found in NO other listed file: a line two files share (imports, boilerplate) proves
+// neither was opened, so a seat that read A and merely named B could otherwise be credited for B.
+const owners = new Map();
+for (const [rel, ls] of texts) for (const l of new Set(ls)) owners.set(l, (owners.get(l) || 0) + 1);
+for (const rel of want) {
+  if (!texts.has(rel)) { missing.push(rel + "  (not a readable file in the repo)"); continue; }
+  const uniq = [...new Set(texts.get(rel))].filter((l) => owners.get(l) === 1);
+  const dist = uniq.filter((x) => x.length >= 12), pool = dist.length ? dist : uniq;
+  if (!pool.length) { missing.push(rel + "  (unverifiable: it has no line unique among the listed files, so its content cannot show it was opened; fail closed)"); continue; }
   const need = Math.min(3, pool.length);
   const named = new RegExp("(?<![\\w.-])(?:" + esc(rel) + "|" + esc(path.basename(rel)) + ")(?![\\w-])");
-  const ok = cmds.some((c) => named.test(c.command) && (need === 0 || pool.filter((x) => c.aggregated_output.includes(x)).length >= need));
+  const ok = cmds.some((c) => named.test(c.command) && pool.filter((x) => c.aggregated_output.includes(x)).length >= need);
   (ok ? opened : missing).push(rel);
 }
 process.stderr.write("codex-gate: seat coverage: " + cmds.length + " completed command record(s) in " + events + " event(s); " + opened.length + "/" + want.length + " expected file(s) evidenced as opened\n");
@@ -406,7 +415,7 @@ if [ "$EXPECT_SET" = "1" ]; then
   if [ "$cov_rc" -ne 0 ]; then
     echo "codex-gate: ERROR — UNDER-READ: no verdict. The seat did not open every file in $EXPECT_FILE; the event stream does not show these opened (a path only NAMED in a command, with its output discarded or one line grepped, does not count):" >&2
     if [ -n "$UNDER_READ" ]; then printf '%s\n' "$UNDER_READ" | sed 's/^/  /' >&2; else echo "  (the coverage check itself failed, exit $cov_rc — treated as under-read)" >&2; fi
-    echo "codex-gate: Treat this seat as UNAVAILABLE for the gate (core/GATES.md § Required-review availability route), never as a GO. Re-run COLD (never --resume this thread) with a prompt that makes the seat open each listed file." >&2
+    echo "codex-gate: Treat this seat as UNAVAILABLE for the gate (core/GATES.md § Required-review availability route), never as a GO. Screen any findings already in $OUT before re-running: an under-read seat's NO-GO findings are still evidence. Re-run COLD (never --resume this thread) with a prompt that makes the seat open each listed file." >&2
     exit 3
   fi
   echo "codex-gate: seat coverage OK — every file in $EXPECT_FILE evidenced as opened." >&2

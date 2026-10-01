@@ -105,3 +105,24 @@ test("usage errors exit 2 before any model call: empty list, escaping path, --re
     assert.equal(gate(r, "", ["a.txt"], ["--resume", "some-thread"]).status, 2, "warm round");
   } finally { cleanup(r); }
 });
+
+test("shared boilerplate between two listed files never credits the one only named (both directions), and a fully read pair passes", () => {
+  const shared = ["import { test } from \"node:test\";", "import assert from \"node:assert/strict\";", "import path from \"node:path\";", "import { fileURLToPath } from \"node:url\";", "import { readFileSync } from \"node:fs\";"];
+  const A = [...shared, "const UNIQUE_A_ONE = 'alpha unique line one';", "const UNIQUE_A_TWO = 'alpha unique line two';", "const UNIQUE_A_THREE = 'alpha unique line three';"];
+  const B = [...shared, "const UNIQUE_B_ONE = 'bravo unique line one';", "const UNIQUE_B_TWO = 'bravo unique line two';", "const UNIQUE_B_THREE = 'bravo unique line three';"];
+  const r = rig({ "tests/a.test.mjs": A, "tests/b.test.mjs": B });
+  const rec = (command, lines) => JSON.stringify({ type: "item.completed", item: { id: "item_1", type: "command_execution", command, aggregated_output: lines.join("\n") + "\n", exit_code: 0, status: "completed" } });
+  const ev = (name, ...recs) => { const f = path.join(r.dir, name); writeFileSync(f, recs.join("\n") + "\n"); return f; };
+  try {
+    const list = ["tests/a.test.mjs", "tests/b.test.mjs"];
+    const aOnly = gate(r, ev("e1.jsonl", rec("/bin/zsh -lc \"cat tests/a.test.mjs && rg -n import tests/b.test.mjs\"", A)), list);
+    assert.equal(aOnly.status, 3, aOnly.stderr);
+    assert.match(aOnly.stderr, /^  tests\/b\.test\.mjs$/m);
+    assert.doesNotMatch(aOnly.stderr, /^  tests\/a\.test\.mjs$/m);
+    const bOnly = gate(r, ev("e2.jsonl", rec("/bin/zsh -lc \"cat tests/b.test.mjs && rg -n import tests/a.test.mjs\"", B)), list);
+    assert.equal(bOnly.status, 3, bOnly.stderr);
+    assert.match(bOnly.stderr, /^  tests\/a\.test\.mjs$/m);
+    const both = gate(r, ev("e3.jsonl", rec("/bin/zsh -lc \"cat tests/a.test.mjs tests/b.test.mjs\"", [...A, ...B])), list);
+    assert.equal(both.status, 0, both.stderr);
+  } finally { cleanup(r); }
+});
