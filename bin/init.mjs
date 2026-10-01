@@ -1158,7 +1158,7 @@ function main() {
   // v2.27: the two REPORT tools. Read-only; they need no binding and never mutate the repo.
   copyGuarded(path.join(KIT_ROOT, "scripts", "worktree-census.mjs"), path.join(T, "scripts", "worktree-census.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "token-report.mjs"), path.join(T, "scripts", "token-report.mjs"), force);
-  const runners = ["codex-gate.sh", "cold-review-gemini.sh", "cold-review-gemini-selftest.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs", "gemini-frozen-gate.mjs", "gemini-frozen-gate-selftest.mjs"];
+  const runners = ["codex-gate.sh", "codex-gate-selftest.sh", "cold-review-gemini.sh", "cold-review-gemini-selftest.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs", "gemini-frozen-gate.mjs", "gemini-frozen-gate-selftest.mjs"];
   const gateGuardRel = path.join("scripts", "codex-gate-guard", "claude");
   if (args.withGateRunners) {
     for (const r of runners) {

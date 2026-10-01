@@ -86,7 +86,9 @@ observe it and record the result.
 **The mirror, on a Claude build:** an unavailable Codex seat takes the same route and receipt —
 supported full-coverage Gemini first, otherwise a fresh cold Claude frontier pass recorded
 **same-family-only**, never cross-family; use Codex for the next unstarted seat when it returns. A
-Claude lane reaches the Codex seat through `scripts/codex-gate.sh` (`init --with-gate-runners`). The
+Claude lane reaches the Codex seat through `scripts/codex-gate.sh` (`init --with-gate-runners`); pass it
+`--expect-files` with the changed files, and a seat whose event stream shows a listed file unopened exits 3
+`UNDER-READ: no verdict` and is unavailable, not a GO (`core/GATES.md` § Gotchas / traps). The
 frontier pass spends the changeset's one discretionary frontier firing; if that firing is already
 spent, the fallback is a second firing and routes to the Principal for its GO.
 
