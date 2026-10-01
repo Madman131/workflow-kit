@@ -20,9 +20,9 @@ export const delegation = (turnId, from, name = "send_message_to_thread") => lin
 }, { metadata: { client_authored: false } });
 
 // event_msg / item_completed with a McpToolCall — a send this thread made. status is "completed" or "failed".
-export const sent = (turnId, to, status = "completed") => line("event_msg", {
+export const sent = (turnId, to, status = "completed", tool = "send_message_to_thread") => line("event_msg", {
   type: "item_completed", thread_id: "00000000-cccc-7000-8000-00000000000c", turn_id: turnId,
-  item: { type: "McpToolCall", id: "exec-00000000-0000-4000-8000-000000000002", server: "codex_app", tool: "send_message_to_thread",
+  item: { type: "McpToolCall", id: "exec-00000000-0000-4000-8000-000000000002", server: "codex_app", tool,
     arguments: { threadId: to, prompt: "STOP: REDACTED; next action: REDACTED; actor: REDACTED" }, pluginId: "codex-app-tools@openai-bundled",
     status, result: { content: [{ type: "text", text: `{"threadId":"${to}"}` }], isError: false }, duration: { secs: 0, nanos: 374511875 } },
   started_at_ms: 1790813506394, completed_at_ms: 1790813512133,

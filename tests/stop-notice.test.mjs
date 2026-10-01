@@ -85,6 +85,9 @@ test("a block names the thread and the four fields, and fires ONCE: stop_hook_ac
   assert.match(reason, /STOP: <reason>; next action: <action>; actor: <who must act>/, "reason, next action, who must act");
   assert.match(reason, /\*\*DECISION NEEDED:\*\*.*\*\*AUTHORIZATION NEEDED\*\*/, "the Owner ask under a rule-8 label");
   assert.match(reason, /END the message with it/);
+  // The "Send thread …" line names the thread even when only trigger (b) fired.
+  const askOnly = [...start(), F.delegation(T1, F.ARCHITECT), F.sent(T1, F.ARCHITECT), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)];
+  assert.ok(blocks(stop(dir, askOnly, "Pending.")).includes(`Send thread ${F.ARCHITECT} one message`), "the send instruction names the thread");
   // The continuation's Stop carries stop_hook_active:true — never block again, even though every trigger still holds.
   allows(stop(dir, lines, "The question is pending.", { stop_hook_active: true }), "no loop");
   // …and the continuation, once it has done what was asked, passes.
@@ -98,6 +101,7 @@ test("trigger (a): the latest delegation's thread must receive a send this turn"
   allows(stop(dir, [...base, F.sent(T1, F.ARCHITECT)], "Done."), "NEGATIVE: a completed send to that thread this turn");
   blocks(stop(dir, [...base, F.sent(T1, F.OTHER)], "Done."));                                  // a send to a different thread does not count
   blocks(stop(dir, [...base, F.sent(T1, F.ARCHITECT, "failed")], "Done."));                    // a failed send delivered nothing
+  blocks(stop(dir, [...base, F.sent(T1, F.ARCHITECT, "completed", "read_thread")], "Done."));    // reading the thread is not notifying it
   blocks(stop(dir, [F.agentsMd(T0), F.taskStarted(T0), F.sent(T0, F.ARCHITECT), F.assistant(T0, "x"), F.taskStarted(T1), F.delegation(T1, F.ARCHITECT)], "Done."));   // a send in an EARLIER turn does not count
   blocks(stop(dir, [...base, F.execSendJs(T1, F.ARCHITECT)], "Done."));                        // the JS spelling is not a structured send
   allows(stop(dir, start(), "Done."), "NEGATIVE: no delegation anywhere");
@@ -122,7 +126,7 @@ test("trigger (b): an async Owner ask with no recorded answer needs a rule-8 lab
 }));
 
 test("trigger (c): an unanswered labeled ask stays LAST — the final message must END with a rule-8 label", () => withDir((dir) => {
-  const earlier = [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Reviews done.\n\n**DECISION NEEDED:** Authorize the Astra process review?"), F.taskStarted(T1), F.envContext(T1)];
+  const earlier = [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Reviews done.\n\n**DECISION NEEDED:** Authorize the Astra process review?"), F.taskStarted(T1), F.agentsMd(T1), F.envContext(T1)];
   const reason = blocks(stop(dir, earlier, "No change: the recorded authorization blocker remains."));   // POSITIVE: a heartbeat-style status
   assert.match(reason, /does not END with a rule-8 label/);
   allows(stop(dir, earlier, "No change.\n\n**DECISION NEEDED:** Authorize the Astra process review?"), "NEGATIVE: re-ends with the ask");
@@ -132,6 +136,7 @@ test("trigger (c): an unanswered labeled ask stays LAST — the final message mu
   allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "**QUESTION:** which branch?"), F.ownerSays(T0, "main\n"), F.taskStarted(T1)], "Working."), "NEGATIVE: answered inside the earlier turn");
   allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "All done, nothing owed."), F.taskStarted(T1), F.envContext(T1), F.openPage(T1), F.hookPrompt(T1, "x")], "Still done."), "NEGATIVE: no earlier labeled ask");
   allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "**QUESTION:** which branch?", "commentary"), F.taskStarted(T1)], "Working."), "NEGATIVE: only a FINAL message is an ask");
+  allows(stop(dir, start(), "**DECISION NEEDED:** pick one\n\nMore status text."), "NEGATIVE: this turn's own ask is not an EARLIER ask");
   // host-injected user messages are not Owner messages; a question reply is
   allows(stop(dir, [...earlier, F.questionReply(T1, CALL)], "Working."), "NEGATIVE: a question reply is an Owner message");
 }));
