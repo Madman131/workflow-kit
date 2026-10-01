@@ -25,7 +25,7 @@ test("ROUTING § Authority carries the kit-gap rule, and the orchestrate SKILL g
 
 test("WORKFLOW carries the Owner replacement-design route at the reserved-paths sentence, as doctrine only", () => {
   const w = flat("core/WORKFLOW.md");
-  assert.match(w, /STOP or a collected-panel close reserves reviewed paths; only an Owner child or T2 Principal-evidenced split\/new child confined to opened paths can rework them\. A parent without typed records reserves nothing: an Owner-recorded replacement opens a FRESH program on those paths, disclosing the parent in the current-state snapshot, brief and every commit body and fabricating, reconstructing or backfilling no record; a typed parent keeps the Owner-child route\./);
+  assert.match(w, /STOP or a collected-panel close reserves reviewed paths; only an Owner child or T2 Principal-evidenced split\/new child confined to opened paths can rework them\. Without typed parent records, only an Owner-recorded replacement reworks them: a FRESH program disclosing the parent in the current-state snapshot, brief and every commit body, fabricating, reconstructing or backfilling no record; a typed parent keeps the Owner-child route\./);
   // The push-GO rule the trimmed restatements duplicated is still stated where it governs.
   assert.match(w, /\*\*every remote push or publication needs a fresh Owner GO for the exact head and target, regardless of tier or file type\*\*/);
   assert.match(w, /needs the applicable code gate plus a \*\*fresh named Owner GO\*\* for the exact head and target\./);
@@ -84,6 +84,8 @@ test("the README note names the changes, the new tests and the upgrade steps", (
   assert.match(n, /tests\/release-v2410-docs\.test\.mjs/);
   assert.match(n, /hand-edits rule 8 of their existing `core\/OWNER_COMMS\.md`/);
   assert.match(n, /pass `--expect-files` with the changed files/);
+  assert.match(n, /existing `scripts\/codex-gate\.sh` copies have the same dead `--selftest`/);
+  assert.match(n, /never shipped before v2\.41\.0/);
 });
 
 test("version is 2.41.0 everywhere", () => {
