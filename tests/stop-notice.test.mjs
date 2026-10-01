@@ -1,0 +1,183 @@
+// workflow-kit — tests for the Codex Stop sensor (hooks/sensor-stop-notice.mjs). Silent-failure surface, so BOTH polarities:
+//   · every bad input is ALLOWED (exit 0, EMPTY stdout);
+//   · a real block names the thread and the four fields, and fires ONCE (stop_hook_active ⇒ allow);
+//   · each trigger blocks on its positive and stays silent on its negative;
+//   · init registers the Stop entry exactly once, and --force does not duplicate it.
+// Transcript records come from tests/stop-notice-fixtures.mjs, which copies the shapes of real Codex rollouts.
+
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { endsWithLabel, hasLabel } from "../hooks/sensor-stop-notice.mjs";
+import * as F from "./stop-notice-fixtures.mjs";
+
+const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const HOOK = path.join(KIT, "hooks", "sensor-stop-notice.mjs");
+const T1 = "01a0f4b0-ddaa-7820-ae21-1a5b2b480dc0";   // the turn being stopped
+const T0 = "01a0f490-e119-75c3-b726-41d2c914c51c";   // an earlier turn
+const CALL = "call_CVaRgrUcdfM4FMOHnSWkUTF7";
+
+function cleanEnv(extra = {}) {
+  const e = { ...process.env };
+  delete e.NODE_OPTIONS;
+  for (const k of Object.keys(e)) if (k.startsWith("NODE_TEST") || k.startsWith("WORKFLOW_KIT_STOP")) delete e[k];
+  return { ...e, ...extra };
+}
+function withDir(fn) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-stop-"));
+  try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+function run(payload, env = {}) {
+  const r = spawnSync(process.execPath, [HOOK], { encoding: "utf8", input: typeof payload === "string" ? payload : JSON.stringify(payload), env: cleanEnv(env) });
+  assert.equal(r.status, 0, `exit 0 on every path: ${r.stderr}`);
+  return r;
+}
+// Writes the transcript, runs the hook with a Stop payload shaped like the observed one.
+function stop(dir, lines, final, extra = {}, env = {}) {
+  const file = path.join(dir, "rollout.jsonl");
+  writeFileSync(file, F.transcript(...lines, F.assistant(T1, final)));
+  return run({ session_id: "s", turn_id: T1, transcript_path: file, cwd: dir, hook_event_name: "Stop", model: "gpt-test", permission_mode: "default", stop_hook_active: false, last_assistant_message: final, ...extra }, env);
+}
+const blocks = (r) => { assert.notEqual(r.stdout, "", "expected a block"); const j = JSON.parse(r.stdout); assert.equal(j.decision, "block"); return j.reason; };
+const allows = (r, why) => assert.equal(r.stdout, "", why || "expected silence");
+const start = (turn = T1) => [F.agentsMd(turn), F.taskStarted(turn)];
+
+test("every bad input is ALLOWED: empty, non-JSON, wrong shapes, missing/unreadable/symlinked/garbled transcripts, no turn start, turn mismatch", () => withDir((dir) => {
+  const good = [...start(), F.delegation(T1, F.ARCHITECT)];
+  allows(run(""), "empty stdin");
+  allows(run("not json {"), "non-JSON");
+  allows(run("null"), "null");
+  allows(run("[]"), "array");
+  allows(run("42"), "number");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "x" }), "no transcript_path");
+  allows(run({ hook_event_name: "Stop", transcript_path: path.join(dir, "absent.jsonl"), last_assistant_message: "x" }), "missing transcript");
+  allows(run({ hook_event_name: "Stop", transcript_path: dir, last_assistant_message: "x" }), "a directory");
+  allows(run({ hook_event_name: "Stop", transcript_path: 7, last_assistant_message: "x" }), "non-string path");
+  const file = path.join(dir, "ok.jsonl");
+  writeFileSync(file, F.transcript(...good));
+  allows(run({ hook_event_name: "Stop", transcript_path: file }), "no last_assistant_message");
+  allows(run({ hook_event_name: "Stop", transcript_path: file, last_assistant_message: 5 }), "non-string last_assistant_message");
+  allows(run({ hook_event_name: "PreToolUse", transcript_path: file, last_assistant_message: "x" }), "not a Stop event");
+  allows(run({ transcript_path: file, last_assistant_message: "x" }), "no event name");
+  allows(run({ hook_event_name: "Stop", agent_id: "a", transcript_path: file, last_assistant_message: "x" }), "a subagent payload");
+  const link = path.join(dir, "link.jsonl"); symlinkSync(file, link);
+  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: link, last_assistant_message: "x" }), "a symlinked transcript is not read");
+  writeFileSync(path.join(dir, "garbage.jsonl"), "{{{{\nnot json\n\"task_started\" \"function_call_output\"\n");
+  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: path.join(dir, "garbage.jsonl"), last_assistant_message: "x" }), "garbled lines");
+  writeFileSync(path.join(dir, "nostart.jsonl"), F.transcript(F.delegation(T1, F.ARCHITECT)));
+  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: path.join(dir, "nostart.jsonl"), last_assistant_message: "x" }), "no turn start in the transcript");
+  allows(run({ hook_event_name: "Stop", turn_id: "some-other-turn", transcript_path: file, last_assistant_message: "x" }), "payload turn differs from the transcript's last turn");
+  const unreadable = path.join(dir, "locked.jsonl"); writeFileSync(unreadable, F.transcript(...good)); chmodSync(unreadable, 0o000);
+  try { if (process.getuid && process.getuid() !== 0) allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: unreadable, last_assistant_message: "x" }), "unreadable transcript"); } finally { chmodSync(unreadable, 0o600); }
+  // The same good input does block — so the silences above are the guards, not a dead sensor.
+  blocks(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: file, last_assistant_message: "x" }));
+  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: file, last_assistant_message: "x" }, { WORKFLOW_KIT_STOP_NOTICE_SENSOR: "false" }), "off switch");
+}));
+
+test("a block names the thread and the four fields, and fires ONCE: stop_hook_active ⇒ allow", () => withDir((dir) => {
+  const lines = [...start(), F.delegation(T1, F.ARCHITECT), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)];
+  const reason = blocks(stop(dir, lines, "The question is pending."));
+  assert.ok(reason.includes(F.ARCHITECT), "names the delegating thread id");
+  assert.match(reason, /STOP: <reason>; next action: <action>; actor: <who must act>/, "reason, next action, who must act");
+  assert.match(reason, /\*\*DECISION NEEDED:\*\*.*\*\*AUTHORIZATION NEEDED\*\*/, "the Owner ask under a rule-8 label");
+  assert.match(reason, /END the message with it/);
+  // The continuation's Stop carries stop_hook_active:true — never block again, even though every trigger still holds.
+  allows(stop(dir, lines, "The question is pending.", { stop_hook_active: true }), "no loop");
+  // …and the continuation, once it has done what was asked, passes.
+  const done = [...lines, F.sent(T1, F.ARCHITECT), F.hookPrompt(T1, reason)];
+  allows(stop(dir, done, "Notice sent.\n\n**DECISION NEEDED:** Authorize the scoped review?"), "satisfied");
+}));
+
+test("trigger (a): the latest delegation's thread must receive a send this turn", () => withDir((dir) => {
+  const base = [...start(), F.delegation(T1, F.ARCHITECT)];
+  assert.ok(blocks(stop(dir, base, "Done.")).includes(F.ARCHITECT), "POSITIVE: delegation, no send");
+  allows(stop(dir, [...base, F.sent(T1, F.ARCHITECT)], "Done."), "NEGATIVE: a completed send to that thread this turn");
+  blocks(stop(dir, [...base, F.sent(T1, F.OTHER)], "Done."));                                  // a send to a different thread does not count
+  blocks(stop(dir, [...base, F.sent(T1, F.ARCHITECT, "failed")], "Done."));                    // a failed send delivered nothing
+  blocks(stop(dir, [F.agentsMd(T0), F.taskStarted(T0), F.sent(T0, F.ARCHITECT), F.assistant(T0, "x"), F.taskStarted(T1), F.delegation(T1, F.ARCHITECT)], "Done."));   // a send in an EARLIER turn does not count
+  blocks(stop(dir, [...base, F.execSendJs(T1, F.ARCHITECT)], "Done."));                        // the JS spelling is not a structured send
+  allows(stop(dir, start(), "Done."), "NEGATIVE: no delegation anywhere");
+  // the LATEST delegation decides
+  const twoThreads = [...start(), F.delegation(T1, F.ARCHITECT), F.delegation(T1, F.OTHER, "create_thread")];
+  assert.ok(blocks(stop(dir, [...twoThreads, F.sent(T1, F.ARCHITECT)], "Done.")).includes(F.OTHER));
+  allows(stop(dir, [...twoThreads, F.sent(T1, F.OTHER)], "Done."));
+  // a delegation from an earlier turn still names the thread to notify
+  assert.ok(blocks(stop(dir, [F.taskStarted(T0), F.delegation(T0, F.ARCHITECT), F.assistant(T0, "x"), ...start()], "Done.")).includes(F.ARCHITECT));
+}));
+
+test("trigger (b): an async Owner ask with no recorded answer needs a rule-8 label in the final message", () => withDir((dir) => {
+  const ask = [...start(), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)];
+  const reason = blocks(stop(dir, ask, "The question is pending."));            // POSITIVE: the ack is not an answer
+  assert.match(reason, /request_user_input_async/);
+  allows(stop(dir, ask, "Status.\n\n**DECISION NEEDED:** Authorize the scoped review?"), "NEGATIVE: the final carries a label");
+  allows(stop(dir, ask, "**AUTHORIZATION NEEDED** approve the push to origin."), "AUTHORIZATION NEEDED takes no colon");
+  allows(stop(dir, [...ask, F.questionReply(T1, CALL)], "Continuing."), "NEGATIVE: the Owner answered this call");
+  blocks(stop(dir, [...ask, F.questionReply(T1, "call_someOtherCall")], "Continuing."));   // an answer to another call is not this call's
+  allows(stop(dir, [F.taskStarted(T0), F.asyncAsk(T0, CALL), F.asyncAck(T0, CALL), F.assistant(T0, "x"), ...start()], "Continuing."), "NEGATIVE: the ask belongs to an earlier turn");
+  blocks(stop(dir, ask, "Plain text. DECISION NEEDED: not bold, not a line start"));        // a bare mention is not a label
+}));
+
+test("trigger (c): an unanswered labeled ask stays LAST — the final message must END with a rule-8 label", () => withDir((dir) => {
+  const earlier = [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Reviews done.\n\n**DECISION NEEDED:** Authorize the Astra process review?"), F.taskStarted(T1), F.envContext(T1)];
+  const reason = blocks(stop(dir, earlier, "No change: the recorded authorization blocker remains."));   // POSITIVE: a heartbeat-style status
+  assert.match(reason, /does not END with a rule-8 label/);
+  allows(stop(dir, earlier, "No change.\n\n**DECISION NEEDED:** Authorize the Astra process review?"), "NEGATIVE: re-ends with the ask");
+  allows(stop(dir, earlier, "No change.\n\n- **ACTION NEEDED:** run the handed-over command\n  then reply done"), "a bulleted label paragraph counts");
+  blocks(stop(dir, earlier, "**DECISION NEEDED:** Authorize the Astra process review?\n\nAutomatic approval rejected the payload. Nothing else changed."));   // buried above status text
+  allows(stop(dir, [...earlier, F.ownerSays(T1, "yes, authorized\n")], "Working on it."), "NEGATIVE: an Owner message came since");
+  allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "**QUESTION:** which branch?"), F.ownerSays(T0, "main\n"), F.taskStarted(T1)], "Working."), "NEGATIVE: answered inside the earlier turn");
+  allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "All done, nothing owed."), F.taskStarted(T1), F.envContext(T1), F.openPage(T1), F.hookPrompt(T1, "x")], "Still done."), "NEGATIVE: no earlier labeled ask");
+  allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "**QUESTION:** which branch?", "commentary"), F.taskStarted(T1)], "Working."), "NEGATIVE: only a FINAL message is an ask");
+  // host-injected user messages are not Owner messages; a question reply is
+  allows(stop(dir, [...earlier, F.questionReply(T1, CALL)], "Working."), "NEGATIVE: a question reply is an Owner message");
+}));
+
+test("label helpers: a label opens a line; the last paragraph decides END", () => {
+  assert.equal(hasLabel("**DECISION NEEDED:** x"), true);
+  assert.equal(hasLabel("a\n- **ACTION NEEDED:** x"), true);
+  assert.equal(hasLabel("**AUTHORIZATION NEEDED**"), true);
+  assert.equal(hasLabel("**QUESTION:** x"), true);
+  assert.equal(hasLabel("**RECOMMENDATION:** x"), false, "a recommendation is not an Owner ask");
+  assert.equal(hasLabel("mid-line **DECISION NEEDED:** x"), false);
+  assert.equal(hasLabel(null), false);
+  assert.equal(endsWithLabel("status\n\n**DECISION NEEDED:** x\ndetail"), true);
+  assert.equal(endsWithLabel("**DECISION NEEDED:** x\n\nstatus"), false);
+  assert.equal(endsWithLabel(""), false);
+});
+
+test("init registers the Stop entry exactly once; --force does not duplicate it; the installed hook is byte-identical", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-stop-init-"));
+  const prompts = mkdtempSync(path.join(os.tmpdir(), "kit-stop-prompts-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const initRun = (args = []) => spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--codex-prompts-dir", prompts, ...args],
+      { encoding: "utf8", env: { ...process.env, PATH: [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter) } });
+    const first = initRun();
+    assert.equal(first.status, 0, first.stderr);
+    const hooksJson = path.join(dir, ".codex", "hooks.json");
+    const stopGroups = () => JSON.parse(readFileSync(hooksJson, "utf8")).hooks.Stop;
+    const entries = () => stopGroups().flatMap((g) => g.hooks).filter((h) => /sensor-stop-notice\.mjs/.test(h.command));
+    assert.equal(stopGroups().length, 1, "one Stop group");
+    assert.equal(entries().length, 1, "one sensor-stop-notice entry");
+    assert.equal("matcher" in stopGroups()[0], false, "Stop takes no matcher");
+    assert.match(entries()[0].command, /\.codex\/hooks\/sensor-stop-notice\.mjs --project-dir/);
+    for (const lane of [".claude", ".codex"]) assert.equal(readFileSync(path.join(dir, lane, "hooks", "sensor-stop-notice.mjs"), "utf8"), readFileSync(HOOK, "utf8"), `${lane} copy is the kit's, byte for byte`);
+    for (let i = 0; i < 2; i++) {
+      const again = initRun(["--force"]);
+      assert.doesNotMatch(again.stdout + again.stderr, /RE-TRUST NOW/, "an unchanged registration owes no re-trust");
+      assert.equal(entries().length, 1, `--force #${i + 1} leaves exactly one entry`);
+      assert.equal(stopGroups().length, 1);
+    }
+    // A v2.39.x-shaped registration (no Stop group): --force adds it once and says to re-trust.
+    const reg = JSON.parse(readFileSync(hooksJson, "utf8")); delete reg.hooks.Stop;
+    writeFileSync(hooksJson, JSON.stringify(reg, null, 2) + "\n");
+    const upgraded = initRun(["--force"]);
+    assert.match(upgraded.stdout + upgraded.stderr, /RE-TRUST NOW: run `codex` in this repo interactively/);
+    assert.match(upgraded.stdout + upgraded.stderr, /the v2\.40\.0 Stop entry is new/);
+    assert.equal(entries().length, 1, "added once");
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(prompts, { recursive: true, force: true }); }
+});

@@ -55,6 +55,45 @@ test("the README note names the new test and the changes", () => {
   assert.match(n, /Standing review authorization/);
 });
 
+test("the README note carries the Codex re-trust line first and names the Stop sensor", () => {
+  const r = flat("README.md");
+  const n = r.slice(r.indexOf("## What's new in v2.40.0"), r.indexOf("## What's new in v2.39.2"));
+  assert.doesNotMatch(n, /no Codex re-trust/, "the part-1 'no re-trust' line is gone");
+  const head = n.slice(n.indexOf("—") , n.indexOf("- **Record before send.**"));
+  assert.match(head, /Codex re-trust owed\./);
+  assert.match(head, /new `\.codex\/hooks\.json` entry \(a `Stop` hook\)/);
+  assert.match(head, /every adopter that takes it re-approves hooks once/);
+  assert.match(head, /FM-40/);
+  assert.match(n, /\*\*Codex Stop sensor\.\*\* `hooks\/sensor-stop-notice\.mjs`, registered on Codex `Stop` by `init` exactly once/);
+  assert.match(n, /blocks ONCE per turn \(`stop_hook_active` ⇒ allow/);
+  assert.match(n, /`tests\/stop-notice\.test\.mjs`/);
+  assert.match(n, /hand-edits rule 8 of their existing `core\/OWNER_COMMS\.md`/);
+});
+
+test("the Stop-payload claims are corrected to what the probe observed (README v2.37.1, PORTABILITY)", () => {
+  const r = flat("README.md");
+  const v = r.slice(r.indexOf("## What's new in v2.37.1"), r.indexOf("## What's new in v2.37.0") > 0 ? r.indexOf("## What's new in v2.37.0") : undefined);
+  assert.doesNotMatch(v, /receive no transcript and no Stop payload/);
+  assert.match(v, /Corrected in v2\.40\.0/);
+  assert.match(v, /codex-cli 0\.159\.2/);
+  assert.match(v, /`stop_hook_active:true`/);
+  assert.match(v, /an untrusted hook is skipped silently/);
+  const p = flat("PORTABILITY.md");
+  assert.doesNotMatch(p, /this kit has not observed that payload/);
+  assert.doesNotMatch(p, /Codex has no observed Stop payload/);
+  assert.match(p, /The Codex `Stop` payload WAS observed \(codex-cli 0\.159\.2, 2026-09-30/);
+  assert.match(p, /trust is recorded per `hooks\.json` entry and an untrusted hook is skipped silently/);
+  assert.match(p, /`sensor-stop-notice` on `Stop`/);
+  assert.match(p, /Not coded in `sensor-stop-notice`, because no transcript shape was observed:\*\* the "Owner-ended final close" exemption/);
+});
+
+test("the probe receipt is kept in the journal", () => {
+  const j = flat("docs/journal/2026-09-30-codex-stop-probe-receipt.md");
+  assert.match(j, /codex-cli` 0\.159\.2/);
+  assert.match(j, /`stop_hook_active:true`/);
+  assert.match(j, /ACKNOWLEDGEMENT/);
+});
+
 test("version is 2.40.0 everywhere", () => {
   assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.40.0");
   assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.40.0");
