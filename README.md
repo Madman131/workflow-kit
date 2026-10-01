@@ -1,4 +1,4 @@
-# workflow-kit — v2.39.2
+# workflow-kit — v2.40.0
 
 ## How to start a build
 
@@ -11,6 +11,17 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.40.0 — no silent PM stop: directives are recorded before they are sent
+
+Prose plus tests: no hook, script, config or controller changed, so no Codex re-trust.
+
+- **Record before send.** `core/README.md` § STATE: a directive that changes a PM's task or sets or lifts a pause is written into the current-state snapshot BEFORE it is sent, and a receiver whose sender could not write it records it first. Measured reason: compaction keeps the Owner's own messages but can drop peer- or tool-delivered ones. `skills/architect-build/ROUTING.md` points at it.
+- **No silent stop.** `skills/orchestrate/SKILL.md`: a PM ending a turn with work owed sends its Architect `STOP:` + reason + next action + who must act, and puts any Owner ask in its final message under a rule-8 label, never only in an async question tool. An Owner pause gets one notice, then quiet. The Claude-lane backstop is the Architect's one-shot idle subscription.
+- **The outstanding Owner action stays last.** `core/OWNER_COMMS.md` rule 8 (and one clause in the SKILL): while Owner input is outstanding, every later final response ends with that exact action under its bold label, never a vague "blocker remains" pointer; a status or heartbeat turn with nothing new stays silent where the host allows it.
+- **Standing review authorization, and who an ask goes to.** `core/REVIEW.md` § External gate: a routine delegated review decision goes to the Architect; only an unresolved reserved decision, or a host restriction only the Owner can clear, reaches the Owner, once per program, in standing scoped form, recorded in the snapshot. That a host reviewer honours a standing answer for later candidates is assumed, not observed; the first rollout should observe it.
+- **New test.** `tests/release-v2400-docs.test.mjs` pins each phrase and this note; the SKILL stays within its word budget.
+- **Upgrading.** Re-run `init --force`; `OWNER_COMMS` is a per-repo file, so an adopter hand-edits rule 8.
 
 ## What's new in v2.39.2 — ACTION NEEDED joins the Owner labels; briefs land with plain commands
 

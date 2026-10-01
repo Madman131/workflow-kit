@@ -73,6 +73,16 @@ and decorrelation level. Astra on a Codex build is **same-family-only**, never c
 diversity. A valid fallback discharges the seat: do not duplicate a running/completed seat or repeat it
 when Claude returns; use Claude for the next appropriate unstarted seat. Existing push/deploy/live,
 destructive, access/credential, new-spend, critical boundaries, T3 honesty and a flagged change's cross-family lens remain.
+
+**Standing review authorization, and who an ask goes to.** The Architect approves each review and covered action
+through push-ready; the push GO stays the Owner's. A routine delegated review decision goes to the Architect, never to
+the Owner as a new decision. Tell genuine HOST enforcement (for example approval review demanding in-chat payload
+authorization) apart from missing Owner intent, and never bypass a host restriction. Only an unresolved reserved
+decision, or a host restriction only the Owner's own words can clear, reaches the Owner, once per program, in
+standing scoped form: packet classes, reviewers, exclusions. The PM records the answer in the current-state
+snapshot (`core/README.md` § STATE); a typed Owner answer is a user message and survives compaction. ASSUMED, not
+observed: that a host reviewer honours a standing answer for later candidates — an adopter's first rollout should
+observe it and record the result.
 **The mirror, on a Claude build:** an unavailable Codex seat takes the same route and receipt —
 supported full-coverage Gemini first, otherwise a fresh cold Claude frontier pass recorded
 **same-family-only**, never cross-family; use Codex for the next unstarted seat when it returns. A
