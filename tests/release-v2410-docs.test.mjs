@@ -58,6 +58,21 @@ test("codex-gate.sh documents --expect-files and is installed with its selftest"
   assert.ok(read("bin/init.mjs").includes('"codex-gate-selftest.sh"'), "init --with-gate-runners installs the selftest the wrapper execs");
 });
 
+test("the coverage wording: relative path only, co-output limit, brief-writer note", () => {
+  const g = flat("core/GATES.md"), p = flat("PORTABILITY.md"), r = flat("README.md");
+  assert.match(g, /appeared in the output of a command that NAMES its repo-relative path, not who printed them: co-output is reachable in ordinary use \(a command that prints a file quoting another file's lines, `git show BASE:path`, a fixture embedding file text\)/);
+  assert.match(g, /list every changed file with `git diff --name-only --diff-filter=d` \(a deleted file can never pass\), list only ONE copy of byte-identical mirror files/);
+  assert.match(g, /`git diff A B` with no pathspec, or a glob read, names no listed file and fails closed: have the seat run per-file reads/);
+  assert.match(g, /\*\*Threat model:\*\* `--expect-files` catches UNDER-READ by a NON-DECEPTIVE seat \(the observed 1-of-25 case\); it does NOT prove a read against a seat that crafts commands to earn credit, and such a seat is out of model\./);
+  assert.match(p, /Threat model: `--expect-files` catches UNDER-READ by a NON-DECEPTIVE seat \(the observed 1-of-25 case\); it does NOT prove a read against a seat that crafts commands to earn credit, and such a seat is out of model\./);
+  assert.match(p, /a command must name the listed repo-relative path \(never just a basename\)/);
+  assert.match(p, /not who printed them \(co-output is reachable in ordinary use/);
+  assert.doesNotMatch(p + g, /basename alternative/);
+  assert.match(r, /`git diff --name-only --diff-filter=d` \(a deleted file can never pass\), only ONE copy of byte-identical mirror files/);
+  assert.match(r, /`git diff A B` with no pathspec, or a glob, names no listed file and fails closed/);
+  assert.ok(!/path\.basename/.test(read("scripts/codex-gate.sh")), "the matcher has no basename alternative");
+});
+
 test("PORTABILITY states the SEAT-COVERAGE limits", () => {
   const p = flat("PORTABILITY.md");
   assert.match(p, /\*\*SEAT-COVERAGE \(`codex-gate\.sh --expect-files`, v2\.41\.0\) measures that a file's text reached the seat's tool output, nothing more\.\*\*/);
@@ -84,7 +99,7 @@ test("the README note names the changes, the new tests and the upgrade steps", (
   assert.match(n, /tests\/codex-gate-seat-coverage\.test\.mjs/);
   assert.match(n, /tests\/release-v2410-docs\.test\.mjs/);
   assert.match(n, /hand-edits rule 8 of their existing `core\/OWNER_COMMS\.md`/);
-  assert.match(n, /pass `--expect-files` with the changed files/);
+  assert.match(n, /pass `--expect-files` on every Codex gate run, listing changed files/);
   assert.match(n, /existing `scripts\/codex-gate\.sh` copies have the same dead `--selftest`/);
   assert.match(n, /never shipped before v2\.41\.0/);
 });

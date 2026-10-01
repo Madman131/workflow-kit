@@ -56,7 +56,7 @@
 #   a seat that never opened the code writes it just as fluently as one that did (core/GATES.md § Gotchas / traps).
 #   `--expect-files FILE` (one repo-relative path per line; typically the changed files) MEASURES instead: after the
 #   run it reads the `codex exec --json` event stream and requires, for every listed path, a completed
-#   `command_execution` record whose command NAMES the file AND whose aggregated_output carries that file's own
+#   `command_execution` record whose command NAMES the file's repo-relative path AND whose aggregated_output carries that file's own
 #   content (>= min(3, n) of its distinct lines found in NO other listed file; n = those unique lines). A path merely named in a command whose
 #   output went to /dev/null, or only grepped for one line, is NOT opened. Any file not evidenced => exit 3,
 #   "UNDER-READ: no verdict", with the missing paths printed. Shapes keyed on real records, not assumed:
@@ -179,7 +179,9 @@ for (const rel of want) {
   const dist = uniq.filter((x) => x.length >= 12), pool = dist.length ? dist : uniq;
   if (!pool.length) { missing.push(rel + "  (unverifiable: it has no line unique among the listed files, so its content cannot show it was opened; fail closed)"); continue; }
   const need = Math.min(3, pool.length);
-  const named = new RegExp("(?<![\\w.-])(?:" + esc(rel) + "|" + esc(path.basename(rel)) + ")(?![\\w-])");
+  // The listed REPO-RELATIVE path (an optional leading ./), never the basename: a bare `cat package.json` on an unlisted root
+  // manifest must not credit a listed packages/widget/package.json. A seat that does cd into a subdir and then cats a bare name fails closed.
+  const named = new RegExp("(?<![\\w./-])(?:\\./)?" + esc(rel) + "(?![\\w-])");
   const ok = cmds.some((c) => named.test(c.command) && pool.filter((x) => c.aggregated_output.includes(x)).length >= need);
   (ok ? opened : missing).push(rel);
 }

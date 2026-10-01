@@ -126,3 +126,19 @@ test("shared boilerplate between two listed files never credits the one only nam
     assert.equal(both.status, 0, both.stderr);
   } finally { cleanup(r); }
 });
+
+test("a bare basename read of an unlisted root file never credits a listed nested file of the same name; the relative path does", () => {
+  const body = ["{ \"name\": \"widget-pkg-line-one\",", "  \"version\": \"1.0.0-widget-line\",", "  \"private\": true, \"widget\": \"line-three\" }"];
+  const r = rig({ "packages/widget/package.json": body, "package.json": body });
+  const rec = (command) => JSON.stringify({ type: "item.completed", item: { id: "item_1", type: "command_execution", command, aggregated_output: body.join("\n") + "\n", exit_code: 0, status: "completed" } });
+  const ev = (name, line) => { const f = path.join(r.dir, name); writeFileSync(f, line + "\n"); return f; };
+  try {
+    const list = ["packages/widget/package.json"];
+    const bare = gate(r, ev("b.jsonl", rec("/bin/zsh -lc \"cat package.json\"")), list);
+    assert.equal(bare.status, 3, bare.stderr);
+    assert.match(bare.stderr, /^  packages\/widget\/package\.json$/m);
+    assert.equal(gate(r, ev("c.jsonl", rec("/bin/zsh -lc \"cd packages/widget && cat package.json\"")), list).status, 3, "cd then a bare name fails closed");
+    assert.equal(gate(r, ev("d.jsonl", rec("/bin/zsh -lc \"cat packages/widget/package.json\"")), list).status, 0);
+    assert.equal(gate(r, ev("e.jsonl", rec("/bin/zsh -lc \"cat ./packages/widget/package.json\"")), list).status, 0);
+  } finally { cleanup(r); }
+});

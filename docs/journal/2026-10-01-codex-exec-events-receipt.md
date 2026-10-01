@@ -33,7 +33,7 @@ Its `aggregated_output` was `2.40.0\n`. The seat's reply then listed all four fi
 This is the observed instance of the failure the gate guards (`core/GATES.md` § Gotchas / traps: a seat's account of its own method is satisfied by the failure it describes).
 
 ## What the matcher therefore keys on
-A file counts as OPENED only when some `item.completed` / `command_execution` record (a) has the file's repo-relative path (or its basename as a whole token) in `command`, AND (b) has `aggregated_output`
+A file counts as OPENED only when some `item.completed` / `command_execution` record (a) has the file's repo-relative path (optional leading `./`; never the basename) in `command`, AND (b) has `aggregated_output`
 containing at least `min(3, n)` distinct trimmed lines of the file's own content as substrings, where n is the number of its lines of 12+ characters (all its nonblank lines when it has none).
 `item.started` records (empty output) earn nothing. An unrecognised shape earns nothing, so a client that changes the stream fails CLOSED (exit 3).
 
