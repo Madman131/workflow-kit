@@ -56,8 +56,9 @@ import { fileURLToPath } from "node:url";
 const ALLOW = () => process.exit(0);
 const MAX_BYTES = 64 * 1024 * 1024;   // a real day-long PM rollout is ~15 MB; a larger one is read from its tail, and a missing turn start fails open
 
-// A rule-8 label opens a (possibly bulleted) line. AUTHORIZATION NEEDED carries no colon in its rule-8 form.
-const LABEL_LINE = /^[ \t]*(?:[-*+][ \t]+)?\*\*[ \t]*(?:AUTHORIZATION NEEDED|DECISION NEEDED|ACTION NEEDED|QUESTION)\b/m;
+// A rule-8 label opens a (possibly bulleted) line. AUTHORIZATION NEEDED carries no colon in its rule-8 form. KIT GAP-ACTION NEEDED
+// (v2.41.0) is the Owner's label for a defect in the installed kit; it is an Owner action until forwarded, so it counts like the others.
+const LABEL_LINE = /^[ \t]*(?:[-*+][ \t]+)?\*\*[ \t]*(?:AUTHORIZATION NEEDED|DECISION NEEDED|KIT GAP-ACTION NEEDED|ACTION NEEDED|QUESTION)\b/m;
 
 export const hasLabel = (text) => typeof text === "string" && LABEL_LINE.test(text);
 export function endsWithLabel(text) {
@@ -148,7 +149,7 @@ export function blockReason({ reasons, thread }) {
     "STOP NOTICE OWED (workflow-kit sensor; it fires once). Before you end this turn:",
     ...reasons.map((r) => `- ${r}.`),
     `- Send ${to} one message: \`STOP: <reason>; next action: <action>; actor: <who must act>\`, unless the work is fully closed and you say so.`,
-    "- Put any Owner ask in your FINAL message under a bold rule-8 label (**DECISION NEEDED:**, **ACTION NEEDED:**, **QUESTION:** or **AUTHORIZATION NEEDED**) and END the message with it, never only in an async question tool.",
+    "- Put any Owner ask in your FINAL message under a bold rule-8 label (**DECISION NEEDED:**, **ACTION NEEDED:**, **QUESTION:**, **KIT GAP-ACTION NEEDED:** or **AUTHORIZATION NEEDED**) and END the message with it, never only in an async question tool.",
     "Then end the turn.",
   ].join("\n");
 }
