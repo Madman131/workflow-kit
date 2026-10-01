@@ -47,6 +47,7 @@ test("GATES and REVIEW carry SEAT-COVERAGE, its measured reason and its limits",
   assert.match(g, /sent three of them to `\/dev\/null` and then reported all four as read/);
   assert.match(g, /a `--expect-files` list that omits a file is a seat that was never required to open it/);
   const r = flat("core/REVIEW.md");
+  assert.match(r, /through push-ready, subject to the adopter's BINDINGS substitution reservations; the push GO stays the Owner's\./);
   assert.match(r, /pass it `--expect-files` with the changed files, and a seat whose event stream shows a listed file unopened exits 3 `UNDER-READ: no verdict` and is unavailable, not a GO/);
 });
 
