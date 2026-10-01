@@ -109,9 +109,3 @@ test("the probe receipt is kept in the journal", () => {
   assert.match(j, /`stop_hook_active:true`/);
   assert.match(j, /ACKNOWLEDGEMENT/);
 });
-
-test("version is 2.40.0 everywhere", () => {
-  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.40.0");
-  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.40.0");
-  assert.match(readFileSync(path.join(KIT, "README.md"), "utf8"), /^# workflow-kit — v2\.40\.0$/m);
-});

@@ -798,6 +798,8 @@ no behavioral gain — bounded > tidy). A later version may neutralize the prefi
 
 The gate runners are optional (`init --with-gate-runners`). They need tools you provide:
 - `codex-gate.sh` → the `codex` CLI (a ChatGPT-subscription session).
+  Since v2.41.0 its `--expect-files FILE` (SEAT-COVERAGE) also needs `node` on PATH to read the event stream, and
+  `--selftest` runs `codex-gate-selftest.sh`, installed beside it.
 - `cold-review-gemini.sh` → the `agy` CLI (an Antigravity / Google AI Pro subscription session) for
   exact `--base --candidate --tree` frozen review in its documented disposable request-review rig;
   strict manual Gemini-subscription export/import remains the explicit high-sensitivity fallback.
@@ -836,6 +838,16 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   allowed. A `worktreeRoots` this guard cannot read (bad JSON, not an object, symlinked, or an entry
   that is not a non-empty absolute path) fails CLOSED: every gated write is DENIED until it is fixed
   with a shell command, deleted, or rewritten by `init`.
+- **SEAT-COVERAGE (`codex-gate.sh --expect-files`, v2.41.0) measures that a file's text reached the seat's tool output, nothing more.**
+  It keys on the `command_execution` records of a real `codex exec --json` run (codex-cli 0.159.2; receipt
+  `docs/journal/2026-10-01-codex-exec-events-receipt.md`): a listed file counts as opened when a completed command names it and
+  that command's output carries at least min(3, n) distinct lines of the file. It does NOT prove the seat understood what it read;
+  a seat that steers around it (naming A in a command that prints a distinctive line of A while reading B) is hostile-evasion and
+  out of the stated model; a file the caller leaves out of the list is never required; a large read the client truncated is
+  under-credited (fails closed); an event shape the check does not know earns no credit, so a changed Codex client fails CLOSED
+  (exit 3), never open. Cold passes only: a warm `--resume` round has no event stream, so the option is refused there. Codex only:
+  `cold-review-gemini.sh` has no such stream and is not mirrored. Adopters who copied `codex-gate.sh` before v2.41.0 have no
+  `--expect-files` until they re-run `init --force --with-gate-runners`.
 - **A few `[P]` method docs carry illustrative origin-repo names.** `core/ARTIFACT_CLASS.md` cites
   `pil/` as a code-dir example; `core/README.md` names `docs/PIL_ARCHITECTURE.md` / `docs/open_work_current_state.md`
   as layer-model examples an adopter won't have; and several method docs cite a `docs/journal/*.md`
