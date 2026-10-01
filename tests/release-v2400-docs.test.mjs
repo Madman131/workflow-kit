@@ -90,7 +90,7 @@ test("the Stop-payload claims are corrected to what the probe observed (README v
 test("R1 repairs: in-turn delegation, notice leads, unobserved-subagent clause, heartbeat test owed, (b) label rule", () => {
   const r = flat("README.md");
   const n = r.slice(r.indexOf("## What's new in v2.40.0"), r.indexOf("## What's new in v2.39.2"));
-  assert.match(n, /a `codex_delegation` arrived in this turn \(earlier turns and Owner-initiated turns never count\)/);
+  assert.match(n, /a `codex_delegation` arrived in this turn \(earlier turns, and Owner-initiated turns with no delegation in them, never count\)/);
   assert.match(n, /input opens with `STOP:` or `STATUS:` is a notice and owes no reply \(`CONSULT:`, `RULING NEEDED:` and directives do\)/);
   assert.match(n, /this trigger accepts a label anywhere in the final; the next requires it to END/);
   assert.match(n, /Whether Stop fires for a subagent, and any `agent_id`\/`agent_type` on a Stop payload, are also unobserved: the subagent exemption is a guess that fails open, and block-once bounds it/);
