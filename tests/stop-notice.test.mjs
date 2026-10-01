@@ -54,28 +54,33 @@ test("every bad input is ALLOWED: empty, non-JSON, wrong shapes, missing/unreada
   allows(run("[]"), "array");
   allows(run("42"), "number");
   allows(run({ hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "x" }), "no transcript_path");
-  allows(run({ hook_event_name: "Stop", transcript_path: path.join(dir, "absent.jsonl"), last_assistant_message: "x" }), "missing transcript");
-  allows(run({ hook_event_name: "Stop", transcript_path: dir, last_assistant_message: "x" }), "a directory");
-  allows(run({ hook_event_name: "Stop", transcript_path: 7, last_assistant_message: "x" }), "non-string path");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, transcript_path: path.join(dir, "absent.jsonl"), last_assistant_message: "x" }), "missing transcript");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, transcript_path: dir, last_assistant_message: "x" }), "a directory");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, transcript_path: 7, last_assistant_message: "x" }), "non-string path");
   const file = path.join(dir, "ok.jsonl");
   writeFileSync(file, F.transcript(...good));
-  allows(run({ hook_event_name: "Stop", transcript_path: file }), "no last_assistant_message");
-  allows(run({ hook_event_name: "Stop", transcript_path: file, last_assistant_message: 5 }), "non-string last_assistant_message");
-  allows(run({ hook_event_name: "PreToolUse", transcript_path: file, last_assistant_message: "x" }), "not a Stop event");
-  allows(run({ transcript_path: file, last_assistant_message: "x" }), "no event name");
-  allows(run({ hook_event_name: "Stop", agent_id: "a", transcript_path: file, last_assistant_message: "x" }), "a subagent payload");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, transcript_path: file }), "no last_assistant_message");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, transcript_path: file, last_assistant_message: 5 }), "non-string last_assistant_message");
+  allows(run({ hook_event_name: "PreToolUse", stop_hook_active: false, transcript_path: file, last_assistant_message: "x" }), "not a Stop event");
+  allows(run({ stop_hook_active: false, transcript_path: file, last_assistant_message: "x" }), "no event name");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, agent_id: "a", transcript_path: file, last_assistant_message: "x" }), "a subagent payload");
   const link = path.join(dir, "link.jsonl"); symlinkSync(file, link);
-  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: link, last_assistant_message: "x" }), "a symlinked transcript is not read");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, turn_id: T1, transcript_path: link, last_assistant_message: "x" }), "a symlinked transcript is not read");
   writeFileSync(path.join(dir, "garbage.jsonl"), "{{{{\nnot json\n\"task_started\" \"function_call_output\"\n");
-  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: path.join(dir, "garbage.jsonl"), last_assistant_message: "x" }), "garbled lines");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, turn_id: T1, transcript_path: path.join(dir, "garbage.jsonl"), last_assistant_message: "x" }), "garbled lines");
   writeFileSync(path.join(dir, "nostart.jsonl"), F.transcript(F.delegation(T1, F.ARCHITECT)));
-  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: path.join(dir, "nostart.jsonl"), last_assistant_message: "x" }), "no turn start in the transcript");
-  allows(run({ hook_event_name: "Stop", turn_id: "some-other-turn", transcript_path: file, last_assistant_message: "x" }), "payload turn differs from the transcript's last turn");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, turn_id: T1, transcript_path: path.join(dir, "nostart.jsonl"), last_assistant_message: "x" }), "no turn start in the transcript");
+  allows(run({ hook_event_name: "Stop", stop_hook_active: false, turn_id: "some-other-turn", transcript_path: file, last_assistant_message: "x" }), "payload turn differs from the transcript's last turn");
   const unreadable = path.join(dir, "locked.jsonl"); writeFileSync(unreadable, F.transcript(...good)); chmodSync(unreadable, 0o000);
-  try { if (process.getuid && process.getuid() !== 0) allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: unreadable, last_assistant_message: "x" }), "unreadable transcript"); } finally { chmodSync(unreadable, 0o600); }
+  try { if (process.getuid && process.getuid() !== 0) allows(run({ hook_event_name: "Stop", stop_hook_active: false, turn_id: T1, transcript_path: unreadable, last_assistant_message: "x" }), "unreadable transcript"); } finally { chmodSync(unreadable, 0o600); }
+  // Only an explicit boolean false may block: absent or non-boolean stop_hook_active fails OPEN.
+  const noActive = { hook_event_name: "Stop", turn_id: T1, transcript_path: file, last_assistant_message: "x" };
+  allows(run({ ...noActive }), "stop_hook_active absent");
+  for (const v of [null, "false", 0, "", [], {}]) allows(run({ ...noActive, stop_hook_active: v }), `stop_hook_active ${JSON.stringify(v)}`);
+  allows(run({ ...noActive, stop_hook_active: true }), "stop_hook_active true");
   // The same good input does block — so the silences above are the guards, not a dead sensor.
-  blocks(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: file, last_assistant_message: "x" }));
-  allows(run({ hook_event_name: "Stop", turn_id: T1, transcript_path: file, last_assistant_message: "x" }, { WORKFLOW_KIT_STOP_NOTICE_SENSOR: "false" }), "off switch");
+  blocks(run({ ...noActive, stop_hook_active: false }));
+  allows(run({ ...noActive, stop_hook_active: false }, { WORKFLOW_KIT_STOP_NOTICE_SENSOR: "false" }), "off switch");
 }));
 
 test("a block names the thread and the four fields, and fires ONCE: stop_hook_active ⇒ allow", () => withDir((dir) => {
@@ -109,8 +114,31 @@ test("trigger (a): the latest delegation's thread must receive a send this turn"
   const twoThreads = [...start(), F.delegation(T1, F.ARCHITECT), F.delegation(T1, F.OTHER, "create_thread")];
   assert.ok(blocks(stop(dir, [...twoThreads, F.sent(T1, F.ARCHITECT)], "Done.")).includes(F.OTHER));
   allows(stop(dir, [...twoThreads, F.sent(T1, F.OTHER)], "Done."));
-  // a delegation from an earlier turn still names the thread to notify
-  assert.ok(blocks(stop(dir, [F.taskStarted(T0), F.delegation(T0, F.ARCHITECT), F.assistant(T0, "x"), ...start()], "Done.")).includes(F.ARCHITECT));
+  // F1: only a delegation that arrived IN THIS TURN counts. An Owner-initiated turn after an earlier delegation owes nothing.
+  const afterDelegation = [F.agentsMd(T0), F.taskStarted(T0), F.delegation(T0, F.ARCHITECT), F.assistant(T0, "Working."), F.taskStarted(T1), F.envContext(T1)];
+  allows(stop(dir, [...afterDelegation, F.ownerSays(T1, "where are we?\n")], "On track, building."), "NEGATIVE: Owner-initiated turn (Architect side, earlier delegation)");
+  allows(stop(dir, [...afterDelegation, F.ownerSays(T1, "pause here and wait for me\n")], "Paused at a safe checkpoint."), "NEGATIVE: Owner-pause turn");
+  assert.ok(blocks(stop(dir, [...afterDelegation, F.delegation(T1, F.ARCHITECT)], "Done.")).includes(F.ARCHITECT), "POSITIVE: the same thread, delegating again IN this turn");
+}));
+
+test("trigger (a): a notice owes no reply (STOP:, STATUS:), a CONSULT:, RULING NEEDED: or directive does", () => withDir((dir) => {
+  const turn = (input, name) => [...start(), F.delegation(T1, F.ARCHITECT, name || "send_message_to_thread", input)];
+  allows(stop(dir, turn("STOP: fourth-round dispatch held; next action: Principal decide; actor: Principal"), "Done."), "STOP: notice (real lead)");
+  allows(stop(dir, turn("\n   STOP: indented after the tag, trimmed"), "Done."), "STOP: after whitespace");
+  allows(stop(dir, turn("STATUS: build green at the frozen head"), "Done."), "STATUS: notice (D-109)");
+  allows(stop(dir, turn("STOP: a notice sent through create_thread", "create_thread"), "Done."), "either tool name");
+  assert.ok(blocks(stop(dir, turn("CONSULT: Builder readiness. My real thread ID is REDACTED."), "Done.")).includes(F.ARCHITECT), "CONSULT: owes a reply (real lead)");
+  blocks(stop(dir, turn("RULING NEEDED on exact bookend seat/packet before dispatch"), "Done."));
+  blocks(stop(dir, turn("ARCHITECT_STATUS_V1\nRead-only disposition: REDACTED"), "Done."));            // a real lead that is not STATUS:
+  blocks(stop(dir, turn("Resume the approved build NOW."), "Done."));
+  blocks(stop(dir, turn("stop: lowercase is not the notice lead"), "Done."));
+  blocks(stop(dir, turn("Do NOT STOP: this is mid-text"), "Done."));
+  blocks(stop(dir, turn(""), "Done."));
+  // a directive plus a later notice from the same thread: the directive still owes its reply
+  assert.ok(blocks(stop(dir, [...turn("Resume the approved build NOW."), F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "STOP: ack")], "Done.")).includes(F.ARCHITECT));
+  // the delegation filter requires the codex_app namespace
+  allows(stop(dir, [...start(), F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "Resume NOW.", "some_other_app")], "Done."), "NEGATIVE: another namespace is not a thread delegation");
+  allows(stop(dir, [...start(), F.delegation(T1, F.ARCHITECT, "read_thread")], "Done."), "NEGATIVE: another tool name");
 }));
 
 test("trigger (b): an async Owner ask with no recorded answer needs a rule-8 label in the final message", () => withDir((dir) => {
@@ -120,7 +148,10 @@ test("trigger (b): an async Owner ask with no recorded answer needs a rule-8 lab
   allows(stop(dir, ask, "Status.\n\n**DECISION NEEDED:** Authorize the scoped review?"), "NEGATIVE: the final carries a label");
   allows(stop(dir, ask, "**AUTHORIZATION NEEDED** approve the push to origin."), "AUTHORIZATION NEEDED takes no colon");
   allows(stop(dir, [...ask, F.questionReply(T1, CALL)], "Continuing."), "NEGATIVE: the Owner answered this call");
-  blocks(stop(dir, [...ask, F.questionReply(T1, "call_someOtherCall")], "Continuing."));   // an answer to another call is not this call's
+  allows(stop(dir, [...ask, F.ownerSays(T1, "yes, authorized\n")], "Continuing."), "NEGATIVE (F3): any later Owner message answers the ask");
+  allows(stop(dir, [...ask, F.questionReply(T1, "call_someOtherCall")], "Continuing."), "NEGATIVE: a question reply is an Owner message");
+  blocks(stop(dir, [...start(), F.ownerSays(T1, "go ahead\n"), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)], "Pending."));   // an Owner message BEFORE the ask does not answer it
+  blocks(stop(dir, [...ask, F.envContext(T1), F.openPage(T1), F.hookPrompt(T1, "x")], "Pending."));                           // host-injected user messages do not answer it
   allows(stop(dir, [F.taskStarted(T0), F.asyncAsk(T0, CALL), F.asyncAck(T0, CALL), F.assistant(T0, "x"), ...start()], "Continuing."), "NEGATIVE: the ask belongs to an earlier turn");
   blocks(stop(dir, ask, "Plain text. DECISION NEEDED: not bold, not a line start"));        // a bare mention is not a label
 }));

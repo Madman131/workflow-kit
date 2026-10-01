@@ -11,9 +11,11 @@
 // THIS IS A SENSOR THAT BLOCKS ONCE. It exits 0 on every path and FAILS OPEN: empty or non-JSON stdin, a missing,
 // unreadable, symlinked or malformed transcript, no turn start in it, a turn id that disagrees with the payload —
 // all produce silence. Silence proves nothing; only a block is evidence. It blocks at most once per turn
-// (`stop_hook_active` true ⇒ allow, never repeats) and keeps no state, so it cannot wedge a session.
+// (anything but an explicit `stop_hook_active:false` ⇒ allow, never repeats) and keeps no state, so it cannot wedge a session.
 //
 // OBSERVED SHAPES (codex-cli 0.159.2, 2026-09-30; every one below is copied from a real rollout, see the receipt):
+//   NOT OBSERVED: whether Stop fires for a subagent turn, and any agent_id/agent_type on a Stop payload. The subagent
+//     guard below is a guess; it fails open and block-once bounds it.
 //   Stop payload: session_id, turn_id, transcript_path, cwd, hook_event_name:"Stop", model, permission_mode,
 //     stop_hook_active, last_assistant_message. The final message is already in the transcript when the hook runs.
 //   Transcript line: {timestamp, ordinal, type, payload}. Turn start: type "event_msg", payload.type "task_started",
@@ -26,18 +28,21 @@
 //     input is JavaScript; this sensor does not parse that.)
 //   An async Owner ask: type "response_item", payload.type "function_call", name "request_user_input_async", call_id.
 //     Its function_call_output is only {"accepted":true} — an acknowledgement, NOT an answer. The answer arrives later
-//     as a role:"user" message whose text is <send_user_message_question_reply> naming that call_id.
+//     as a role:"user" message whose text is <send_user_message_question_reply> naming that call_id (an Owner message).
 //   An Owner message: a role:"user" response_item message whose text does not open with "<" (environment context, hook
 //     prompts, open-page markers, skill bodies) or "# AGENTS.md instructions"; a question reply counts as one.
 //   A final message: response_item, role "assistant", payload.phase "final_answer".
 //
 // THE THREE TRIGGERS (one block, reasons combined):
-//   (a) the transcript's LATEST delegation names a thread, this turn sent nothing to it, and the turn is not the
-//       Owner-ended final close. NOT CODED: the Owner-ended close — no transcript shape for it was observed, so a final
-//       close is nudged once like any stop, and block-once keeps that cheap. The delegating thread is NOT assumed to be
-//       an Architect: a reply from a thread the PM itself messaged also names that thread.
+//   (a) a delegation ARRIVED IN THIS TURN (an earlier turn's, or an Owner-initiated turn with none, never counts), it is
+//       not a notice, and this turn sent nothing to its thread. A notice owes no reply: an <input> that, trimmed, opens
+//       with `STOP:` or `STATUS:` (ping-pong breaker, D-108/D-109); `CONSULT:`, `RULING NEEDED:` and directives still owe
+//       one. NOT CODED: the Owner-ended final close — no transcript shape for it was observed, so a final close is nudged
+//       once like any stop, and block-once keeps that cheap. The delegating thread is NOT assumed to be an Architect: a
+//       reply from a thread the PM itself messaged also names that thread.
 //   (b) this turn has a request_user_input_async call with no recorded ANSWER (the observed output is only the
-//       acknowledgement) and the final message carries no rule-8 label.
+//       acknowledgement; ANY Owner message after the call answers it, a question reply included) and the final message
+//       carries a rule-8 label NOWHERE (trigger (c) is stricter: the label must END the message).
 //   (c) an earlier final message carried a labeled Owner ask, no Owner message has come since, and this final message does
 //       not END with a rule-8 label (its last paragraph holds no label line). UNOBSERVED: how a scheduled heartbeat
 //       arrives; if one arrives as a plain user message it reads as an Owner message and (c) stays silent for it.
@@ -73,6 +78,7 @@ function readCapped(file) {
   } finally { closeSync(fd); }
 }
 
+const NOTICE_LEAD = /^(?:STOP|STATUS):/;
 const textOf = (content) => Array.isArray(content) ? content.map((c) => (c && typeof c.text === "string" ? c.text : "")).join("") : "";
 const isOwnerMessage = (text) => {
   const t = text.trimStart();
@@ -82,7 +88,7 @@ const isOwnerMessage = (text) => {
 
 // EXPORTED for the test. Reads the transcript text into the few facts the triggers need, in file order.
 export function scan(text) {
-  const out = { turnStart: -1, turnId: null, delegations: [], sends: [], asks: [], replies: [], owners: [], finals: [] };
+  const out = { turnStart: -1, turnId: null, delegations: [], sends: [], asks: [], owners: [], finals: [] };
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -103,12 +109,11 @@ export function scan(text) {
     if (o.type !== "response_item") continue;
     if (p.type === "function_call_output" && p.namespace === "codex_app" && (p.name === "create_thread" || p.name === "send_message_to_thread") && typeof p.output === "string") {
       const m = /<codex_delegation>[\s\S]*?<source_thread_id>\s*([^<\s]+)\s*<\/source_thread_id>/.exec(p.output);
-      if (m) out.delegations.push({ i, tid: m[1] });
+      if (m) out.delegations.push({ i, tid: m[1], notice: NOTICE_LEAD.test((/<input>\s*([\s\S]{0,16})/.exec(p.output) || [])[1] || "") });
     } else if (p.type === "function_call" && p.name === "request_user_input_async" && typeof p.call_id === "string") {
       out.asks.push({ i, callId: p.call_id });
     } else if (p.type === "message" && p.role === "user") {
       const t = textOf(p.content);
-      if (t.startsWith("<send_user_message_question_reply>")) for (const m of t.matchAll(/request_user_input_async\W{1,8}(call_[A-Za-z0-9_-]+)/g)) out.replies.push({ i, callId: m[1] });
       if (isOwnerMessage(t)) out.owners.push(i);
     } else if (p.type === "message" && p.role === "assistant" && p.phase === "final_answer") {
       out.finals.push({ i, text: textOf(p.content) });
@@ -121,11 +126,12 @@ export function scan(text) {
 export function evaluate(sc, finalText) {
   const reasons = [];
   const ts = sc.turnStart;
-  const last = sc.delegations.length ? sc.delegations[sc.delegations.length - 1] : null;
+  const inTurn = sc.delegations.filter((d) => d.i > ts && !d.notice);
+  const last = inTurn.length ? inTurn[inTurn.length - 1] : null;
   if (last && !sc.sends.some((s) => s.i > ts && s.tid === last.tid)) {
-    reasons.push(`this turn sent thread ${last.tid} no message (its latest message to you came from that thread)`);
+    reasons.push(`this turn received a message from thread ${last.tid} and sent it none`);
   }
-  const unanswered = sc.asks.filter((a) => a.i > ts && !sc.replies.some((r) => r.i > a.i && r.callId === a.callId));
+  const unanswered = sc.asks.filter((a) => a.i > ts && !sc.owners.some((o) => o > a.i));
   if (unanswered.length && !hasLabel(finalText)) {
     reasons.push("this turn asked the Owner through request_user_input_async (an acknowledgement is not an answer) and your final message carries no rule-8 label");
   }
@@ -154,7 +160,7 @@ function main(raw) {
   if (ev === null || typeof ev !== "object") return ALLOW();
   if (ev.hook_event_name !== "Stop") return ALLOW();
   if ("agent_id" in ev || "agent_type" in ev) return ALLOW();       // never nag a subagent
-  if (ev.stop_hook_active) return ALLOW();                          // already continuing from a block — never loop
+  if (ev.stop_hook_active !== false) return ALLOW();                // block only on an explicit false: true means already continuing from a block (never loop); absent or non-boolean fails open
   const file = ev.transcript_path;
   const finalText = ev.last_assistant_message;
   if (typeof file !== "string" || !file || typeof finalText !== "string") return ALLOW();

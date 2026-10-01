@@ -324,7 +324,7 @@ it, because only its transcript shapes were also observed in real rollouts (the 
 hook's header). The other Stop sensors install and stay unregistered — the file installs, the two hook trees
 are byte-identical by construction — until each is adapted to the observed payload. **Not coded in
 `sensor-stop-notice`, because no transcript shape was observed:** the "Owner-ended final close" exemption (a
-final close gets one nudge like any stop) and a scheduled heartbeat turn (if a heartbeat arrives as a plain
+final close gets one nudge like any stop), whether Stop fires for a subagent and any `agent_id`/`agent_type` on a Stop payload (the subagent exemption is a guess that fails open; block-once bounds it), and a scheduled heartbeat turn (if a heartbeat arrives as a plain
 user message the sensor reads it as an Owner message, so its "ask stays last" trigger stays silent for that
 turn). Registering the sensor adds a `.codex/hooks.json` entry, so every adopter owes the Codex hook re-trust
 (FM-40). (An earlier version of this paragraph had understated the list since v2.2.0, naming the write

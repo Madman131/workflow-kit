@@ -42,6 +42,7 @@ Each line is `{timestamp, ordinal, type, payload[, metadata]}`.
 - Whether a Stop hook fires for a Codex subagent turn (the sensor ignores a payload that carries `agent_id` or `agent_type`).
 
 ## Checked against the real rollout
-Replaying the delegated PM rollout (turn by turn, the transcript cut at each `task_complete`) the sensor's triggers fire on exactly the silent
-stops measured that day (no send to the delegating thread; an async ask with no label in the final message) and stay silent on the turn that
-sent its notice and ended with a labeled ask.
+Replaying the delegated PM rollout (turn by turn, the transcript cut at each `task_complete`) the first-build sensor fired on the silent stops
+measured that day (no send to the delegating thread; an async ask with no label in the final message) and stayed silent on the turn that sent its
+notice. That turn's final message carried a DECISION NEEDED label in the middle, not at its end; the label passes trigger (b) (label anywhere) but
+would owe trigger (c) a final that ENDS with it. Later rounds narrowed trigger (a) to delegations that arrived in the turn; see the README note.

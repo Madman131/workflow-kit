@@ -87,6 +87,22 @@ test("the Stop-payload claims are corrected to what the probe observed (README v
   assert.match(p, /Not coded in `sensor-stop-notice`, because no transcript shape was observed:\*\* the "Owner-ended final close" exemption/);
 });
 
+test("R1 repairs: in-turn delegation, notice leads, unobserved-subagent clause, heartbeat test owed, (b) label rule", () => {
+  const r = flat("README.md");
+  const n = r.slice(r.indexOf("## What's new in v2.40.0"), r.indexOf("## What's new in v2.39.2"));
+  assert.match(n, /a `codex_delegation` arrived in this turn \(earlier turns and Owner-initiated turns never count\)/);
+  assert.match(n, /input opens with `STOP:` or `STATUS:` is a notice and owes no reply \(`CONSULT:`, `RULING NEEDED:` and directives do\)/);
+  assert.match(n, /this trigger accepts a label anywhere in the final; the next requires it to END/);
+  assert.match(n, /Whether Stop fires for a subagent, and any `agent_id`\/`agent_type` on a Stop payload, are also unobserved: the subagent exemption is a guess that fails open, and block-once bounds it/);
+  assert.match(n, /A payload without an explicit `stop_hook_active:false` is allowed/);
+  assert.match(n, /Owed in the MRR rollout: the heartbeat acceptance test \(post an approval ask, let a heartbeat or status turn pass unanswered, verify the latest visible final still ends with the Owner action\)/);
+  assert.match(flat("PORTABILITY.md"), /whether Stop fires for a subagent and any `agent_id`\/`agent_type` on a Stop payload \(the subagent exemption is a guess that fails open; block-once bounds it\)/);
+  assert.match(flat("skills/architect-build/ROUTING.md"), /A message led by `STOP:` or `STATUS:` is a notice and owes no reply; `CONSULT:`, `RULING NEEDED:` and directives do\./);
+  const j = flat("docs/journal/2026-09-30-codex-stop-probe-receipt.md");
+  assert.doesNotMatch(j, /ended with a labeled ask/);
+  assert.match(j, /carried a DECISION NEEDED label in the middle, not at its end/);
+});
+
 test("the probe receipt is kept in the journal", () => {
   const j = flat("docs/journal/2026-09-30-codex-stop-probe-receipt.md");
   assert.match(j, /codex-cli` 0\.159\.2/);

@@ -13,9 +13,10 @@ const turnMeta = (turnId) => ({ turn_id: turnId, create_time: 1790811770.588618 
 export const taskStarted = (turnId) => line("event_msg", { type: "task_started", turn_id: turnId, root_turn_id: turnId, started_at: 1790811626, model_context_window: 258400, collaboration_mode_kind: "default" });
 
 // response_item / function_call_output (namespace codex_app) — a message FROM thread `from`.
-export const delegation = (turnId, from, name = "send_message_to_thread") => line("response_item", {
-  type: "function_call_output", id: "fco_00000000-0000-7000-8000-000000000001", name, namespace: "codex_app",
-  output: `<codex_delegation>\n  <source_thread_id>${from}</source_thread_id>\n  <input>REDACTED directive</input>\n</codex_delegation>`,
+// `input` is the sender's text; real leads seen in rollouts: "STOP: …", "CONSULT: …", "RULING NEEDED …", "ARCHITECT_STATUS_V1\n…", directives.
+export const delegation = (turnId, from, name = "send_message_to_thread", input = "REDACTED directive", namespace = "codex_app") => line("response_item", {
+  type: "function_call_output", id: "fco_00000000-0000-7000-8000-000000000001", name, namespace,
+  output: `<codex_delegation>\n  <source_thread_id>${from}</source_thread_id>\n  <input>${input}</input>\n</codex_delegation>`,
   internal_chat_message_metadata_passthrough: turnMeta(turnId),
 }, { metadata: { client_authored: false } });
 
