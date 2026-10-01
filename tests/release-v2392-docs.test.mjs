@@ -32,9 +32,3 @@ test("the README note names the new test and both changes", () => {
   assert.match(n, /`\*\*ACTION NEEDED:\*\*` label/);
   assert.match(n, /one plain command per call/);
 });
-
-test("version is 2.39.2 everywhere", () => {
-  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.39.2");
-  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.39.2");
-  assert.match(readFileSync(path.join(KIT, "README.md"), "utf8"), /^# workflow-kit — v2\.39\.2$/m);
-});

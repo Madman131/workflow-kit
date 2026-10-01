@@ -1080,7 +1080,7 @@ function main() {
   const claudeHooks = installHooks(path.join(T, ".claude", "hooks"));
   log(claudeHooks.kept
     ? `  .claude/hooks/: ${claudeHooks.installed} installed, ${claudeHooks.kept} EXISTING kept — may be STALE; re-run with --force to update`
-    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the sweep-owed, mutation-owed and context-pressure PreToolUse sensors (print, never deny), the guard-owner-comms and sensor-token-ledger Stop sensors (fail OPEN; the ledger writes .claude/metrics/tokens.jsonl, untracked), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
+    : `  .claude/hooks/: ${hookFiles.length} files installed — PreToolUse guards (fail CLOSED), the sweep-owed, mutation-owed and context-pressure PreToolUse sensors (print, never deny), the guard-owner-comms and sensor-token-ledger Stop sensors (fail OPEN; the ledger writes .claude/metrics/tokens.jsonl, untracked), sensor-stop-notice.mjs (registered only on the Codex Stop event, in .codex/hooks.json), and payload-targets.mjs, which is a shared MODULE the guards import and is registered nowhere`);
 
   // 3. Harness-agnostic pre-commit + commit-msg hooks + core.hooksPath (bind EVERY lane, not just
   // Claude). commit-msg (v2.35.0) requires the Step 0 `entry:` line — presence and shape only.
@@ -1564,7 +1564,7 @@ function main() {
       const nodeCmd = (file) => `node ${arg(path.join(T, ".codex", "hooks", file))} --project-dir ${arg(T)}`;
       const entry = (file, statusMessage) => ({ type: "command", command: nodeCmd(file), timeout: 10, statusMessage });
       const registration = {
-        description: `workflow-kit v${KIT_VERSION} — Codex-lane PreToolUse guards. These do NOT run until you approve them in an INTERACTIVE codex session; codex exec skips untrusted hooks silently. Verify with: node scripts/check-codex-hooks-armed.mjs`,
+        description: `workflow-kit v${KIT_VERSION} — Codex-lane PreToolUse guards and one Stop sensor. These do NOT run until you approve them in an INTERACTIVE codex session; codex exec skips untrusted hooks silently. Verify with: node scripts/check-codex-hooks-armed.mjs`,
         hooks: {
           PreToolUse: [
             {
@@ -1595,6 +1595,11 @@ function main() {
               matcher: "Bash",
               hooks: [entry("guard-gate-ladder.mjs", "Resolving the declared tier; surfacing the ladder it owes…")],
             },
+          ],
+          // v2.40.0: the Stop sensor, registered because its payload and transcript shapes were OBSERVED
+          // (docs/journal/2026-09-30-codex-stop-probe-receipt.md). Stop takes no matcher. It blocks once, never denies a tool.
+          Stop: [
+            { hooks: [entry("sensor-stop-notice.mjs", "Checking this stop reached the delegating Architect…")] },
           ],
         },
       };
@@ -1637,11 +1642,10 @@ function main() {
         //
         // An ordinary path still comes out UNQUOTED, which keeps the common case identical under any
         // executor and keeps the generated file readable.
-        // The Stop-event Owner-comms SENSOR is deliberately NOT registered here. Codex does list a
-        // `Stop` hook event, but this kit has not observed that payload, and registering a sensor
-        // against an unverified payload shape would ship a control whose behaviour nobody has
-        // watched. The file installs (the two trees stay byte-identical); only the registration is
-        // withheld, and PORTABILITY.md says so.
+        // The Stop sensor registered above is `sensor-stop-notice.mjs` ONLY (v2.40.0), because the Codex Stop
+        // payload and transcript shapes it reads were observed (codex-cli 0.159.2). `guard-owner-comms.mjs`,
+        // `sensor-token-ledger.mjs` and `sensor-context-pressure.mjs` still install (the two trees stay
+        // byte-identical) and are still not registered on Codex; PORTABILITY.md says so.
         let prior = null;
         try { if (!isSymlinkAt(hooksJson)) prior = readFileSync(hooksJson, "utf8"); } catch { /* absent or unreadable */ }
         if (writeWithBackup(hooksJson, registrationText)) {
@@ -1650,7 +1654,7 @@ function main() {
           // would call every version bump an entry change and ask for a needless re-trust.
           try { hooksEntryChanged = prior !== null && JSON.stringify(JSON.parse(prior).hooks) !== JSON.stringify(registration.hooks); }
           catch { hooksEntryChanged = prior !== null; }
-          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · exact Codex app thread-send ⇒ brief-rung guard for the configured PM pair · Bash ⇒ gate-ladder sensor (never denies) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
+          log(`  .codex/hooks.json: [G] registration written — apply_patch ⇒ 3 write guards (fail CLOSED) + 2 sensors (never deny) · exact Codex app thread-send ⇒ brief-rung guard for the configured PM pair · Bash ⇒ gate-ladder sensor (never denies) · Stop ⇒ stop-notice sensor (blocks once, fails open) · PER-CHECKOUT: this checkout's absolute path is baked into every command, so the file is gitignored`);
           if (needsQuoting) {
             warn(`this repo's path contains characters that had to be shell-QUOTED inside the .codex/hooks.json hook commands (${T}). Codex runs a hook command through a shell, so the single-quoted form written here is correct — but a hook that fails to START does not block anything, so verify rather than assume: run \`node scripts/check-codex-hooks-armed.mjs\` after granting trust. Adopting from a path without spaces or shell metacharacters removes the question entirely.`);
           }
@@ -2031,8 +2035,8 @@ function main() {
   // an adopter the upgrade completed while its Codex-lane controls were dead, which is the same
   // manufactured assurance the check itself exists to stop. An ABSTAIN counts as not-verified for
   // the same reason a clean `codex exec` proves nothing.
-  const RETRUST_STEP = `this --force CHANGED .codex/hooks.json entries (from v2.32.x or earlier, the v2.33.0 PM thread-send ` +
-    `entry is new). RE-TRUST NOW: run \`codex\` in this repo interactively and answer "Hooks need review" with "Trust all ` +
+  const RETRUST_STEP = `this --force CHANGED .codex/hooks.json entries (from v2.39.x or earlier, the v2.40.0 Stop ` +
+    `entry is new; from v2.32.x or earlier, the v2.33.0 PM thread-send entry is new too). RE-TRUST NOW: run \`codex\` in this repo interactively and answer "Hooks need review" with "Trust all ` +
     `and continue"; then run node scripts/check-codex-hooks-armed.mjs. That check probes apply_patch only, so ARMED ` +
     `does not prove a changed entry is trusted`;
   if (force && codexLaneOk && hooksEntryChanged) warn(`${RETRUST_STEP}.`);

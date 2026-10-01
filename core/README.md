@@ -101,6 +101,10 @@ its class in a marker on line 3**, and `scripts/check-doc-size.mjs` reads that m
   work and any genuine blocker · next actor + exact next action · authorization boundaries (a pointer to the
   Owner-reserved list, never a copy) · last-verified date. Superseded instructions ARE history: they move to
   `docs/journal/`, linked. Updating the block never erases evidence, approvals, failures or review history.
+  **Record before send:** a directive that changes a PM's current task or sets or lifts a pause is written into
+  this block BEFORE it is sent; a receiver whose sender could not write it records it as its first act.
+  Compaction keeps the Owner's own messages but can drop peer- or tool-delivered ones, so an unrecorded
+  directive can vanish.
 - **REFERENCE** — looked up; missing a section just means you look it up later → **no size cap**, but
   it must carry a lookup-only marker, stable headings, and a table of contents.
 

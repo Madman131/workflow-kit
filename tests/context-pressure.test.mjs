@@ -291,8 +291,8 @@ test("init registers the sensor on UserPromptSubmit and Stop exactly once, upgra
 test("v2.37.1 release: note wording and the paste-in snippet", () => {
   const readme = readFileSync(path.join(KIT, "README.md"), "utf8");
   const note = readme.slice(readme.indexOf("## What's new in v2.37.1"), readme.indexOf("## What's new in v2.37.0")).replace(/\s+/g, " ");
-  assert.match(note, /\*\*Claude lane only\.\*\* The Codex lane cannot do this: Codex hooks receive no transcript and no Stop payload/);
-  assert.match(note, /No `\.codex\/hooks\.json` entry changed, so \*\*no re-trust\*\*/);
+  assert.match(note, /\*\*Claude lane only\.\*\* This sensor is not registered in the Codex lane\. \(Corrected in v2\.40\.0: this bullet first said Codex sends no Stop payload\./);
+  assert.match(note, /No `\.codex\/hooks\.json` entry changed in v2\.37\.1, so \*\*no re-trust\*\* then/);
   assert.match(note, /"UserPromptSubmit": \[/);
   assert.match(note, /"Stop": \[/);
   assert.match(note, /sensor-context-pressure\.mjs/);

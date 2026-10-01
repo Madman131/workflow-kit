@@ -36,8 +36,9 @@ The Codex column is not the Claude column. Read the qualifier in it as part of t
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | **enforced — only once hook trust is granted** | not enforced |
 | `.githooks/pre-commit` (declaration, at commit) | **enforced** | **enforced** | **enforced** |
 | `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* | not present |
-| `sensor-token-ledger` (Stop; token telemetry to `.claude/metrics/tokens.jsonl`) — **sensor, fails OPEN** | *telemetry only* | *installed, NOT registered* (no observed Stop payload) | not present |
-| `sensor-context-pressure` (PreToolUse write; names the digest as owed) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* (payload carries no transcript) | not present |
+| `sensor-token-ledger` (Stop; token telemetry to `.claude/metrics/tokens.jsonl`) — **sensor, fails OPEN** | *telemetry only* | *installed, NOT registered* (this kit has not adapted it to the observed Codex Stop payload) | not present |
+| `sensor-context-pressure` (PreToolUse write; names the digest as owed) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* (not adapted for Codex; the observed Codex Stop payload does carry `transcript_path`) | not present |
+| `sensor-stop-notice` (Stop; blocks ONCE so a PM stop reaches its Architect and an Owner ask stays last) — **sensor, fails OPEN** | *not registered* | **registered (v2.40.0); only once hook trust is granted** | not present |
 
 The formula for the Codex write guards, in full, because every word of it is load-bearing:
 **installed · fail-closed by design · INERT unless your Codex run carries hook trust.**
@@ -311,12 +312,23 @@ did not change them and the arming probe will not vouch for them.
 **Registered in the Codex lane: the three write guards (`guard-cross-repo-writes`,
 `guard-lane-authoring`, `guard-brief-rung`) and two sensors (`sensor-sweep-owed`,
 `sensor-mutation-owed`) on `apply_patch`; the exact `mcp__codex_app__send_message_to_thread`
-matcher runs `guard-brief-rung`; `guard-gate-ladder` runs on `Bash`. Not the Owner-comms
-Stop sensor.** Codex does list a `Stop` hook event, but this kit has not observed that payload, and
-registering a sensor against an unverified payload shape would ship a control nobody has watched. The
-file installs — the two hook trees are byte-identical by construction — and only the registration is
-withheld. (This sentence had understated the list since v2.2.0, naming the write guards and the
-gate-ladder sensor while omitting the two `apply_patch` sensors that release registered; the
+matcher runs `guard-brief-rung`; `guard-gate-ladder` runs on `Bash`; and, since v2.40.0,
+`sensor-stop-notice` on `Stop`. Not the Owner-comms Stop sensor, the token ledger or the
+context-pressure sensor.** The Codex `Stop` payload WAS observed (codex-cli 0.159.2, 2026-09-30; receipt
+`docs/journal/2026-09-30-codex-stop-probe-receipt.md`): the keys `session_id`, `turn_id`, `transcript_path`,
+`cwd`, `hook_event_name`, `model`, `permission_mode`, `stop_hook_active` and `last_assistant_message`;
+`decision:"block"` with a `reason` continues the turn and the reason arrives as a user message
+(`<hook_prompt …>`); the continuation's own Stop carries `stop_hook_active:true`; trust is recorded per
+`hooks.json` entry and an untrusted hook is skipped silently. Only `sensor-stop-notice` is registered against
+it, because only its transcript shapes were also observed in real rollouts (the three triggers are in the
+hook's header). The other Stop sensors install and stay unregistered — the file installs, the two hook trees
+are byte-identical by construction — until each is adapted to the observed payload. **Not coded in
+`sensor-stop-notice`, because no transcript shape was observed:** the "Owner-ended final close" exemption (a
+final close gets one nudge like any stop), whether Stop fires for a subagent and any `agent_id`/`agent_type` on a Stop payload (the subagent exemption is a guess that fails open; block-once bounds it), and a scheduled heartbeat turn (if a heartbeat arrives as a plain
+user message the sensor reads it as an Owner message, so its "ask stays last" trigger stays silent for that
+turn). Registering the sensor adds a `.codex/hooks.json` entry, so every adopter owes the Codex hook re-trust
+(FM-40). (An earlier version of this paragraph had understated the list since v2.2.0, naming the write
+guards and the gate-ladder sensor while omitting the two `apply_patch` sensors that release registered; the
 generated registration was right and the description of it was not.)
 
 **`guard-brief-rung` is INERT for an adopter whose briefs are neither under a brief directory nor
@@ -837,11 +849,12 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
 - `[P]` (verbatim): `core/*` method docs, the four PreToolUse guards, the three PreToolUse sensors
   (`sensor-sweep-owed`, `sensor-mutation-owed`, and `sensor-context-pressure`, which reads the real
   context size from the transcript tail and says when the thread-restart digest is owed — Claude lane
-  only, a Codex payload carries no transcript; all three print, never deny), the `guard-owner-comms` and
+  only, not registered on Codex; all three print, never deny), the `guard-owner-comms` and
   `sensor-token-ledger` Stop sensors (the ledger appends one cumulative token-usage row per turn to the
   untracked `.claude/metrics/tokens.jsonl`; `scripts/token-report.mjs` reads it; Claude lane only —
-  Codex has no observed Stop payload, so like `guard-owner-comms` it installs and is not registered
-  there), `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
+  like `guard-owner-comms` it installs in both lanes and is registered only in Claude; the Codex Stop
+  payload is observed, see the Codex-lane registration paragraph), the Codex-registered
+  `sensor-stop-notice` Stop sensor (v2.40.0; blocks once, fails open), `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
   `/frontier-review`, `/architect-build`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
   `/grilling`, `/kill-pass`), the `scripts/worktree-census.mjs` and `scripts/token-report.mjs` report tools, the

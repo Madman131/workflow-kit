@@ -24,9 +24,9 @@ ordered; each verifies its predecessor landed. Never let two chips write one rep
 | **Builder** | its raw T2 and historical T3 source, tests, repairs and gate evidence | merges/pushes without fresh Owner GO |
 
 **A remote GO is the Owner's alone**, and may arrive DIRECTLY to a Builder — a direct Owner
-instruction outranks any routing preference; the Builder acts and tells the PM promptly. **A GO
+instruction outranks any routing preference; the Builder acts, then tells the PM. **A GO
 ratifies a specific artifact:** if the changeset gains a commit the GO is void until re-confirmed on
-the new head. Pin heads by **SHA**, never by branch name — a chip's branch can fork mid-life.
+the new head. Pin heads by **SHA**, never by branch name.
 
 ### Routing — the Owner is not a queue
 Within approved plan, access and budget, PM may dispatch ordinary workers/reviews, approve Gemini
@@ -41,8 +41,11 @@ exception reaches Owner once through Principal. Owner alone decides push/deploy/
 those calls through PM using `CONSULT:` or `RULING NEEDED:`; the
 Owner-facing labels and form are governed solely by `core/OWNER_COMMS.md` rule 8, not mirrored here.
 An unsure consult never times out, waiting rather than becoming authority. **Never end a turn on a
-consult or a wait:** send it, name what you do meanwhile, and do it. Review availability follows
-`core/REVIEW.md` § External gate; it does not change authority.
+consult or a wait:** send it, name what you do meanwhile, and do it. **No silent stop:** a PM ending a turn with work owed first sends its Architect `STOP:` reason, next
+action, who must act (Claude backstop: Architect's one-shot idle subscription); an Owner pause gets one
+notice, then quiet. An Owner ask goes in the final message under its rule-8 label, never only an async
+question tool, and while outstanding ENDS every final response (rule 8). Review availability, ask routing:
+`core/REVIEW.md` § External gate; authority unchanged.
 
 ## Standing duties
 - Before PM local integration in a primary clone: clean, on the target branch, pure fast-forward; otherwise
@@ -72,7 +75,6 @@ into a private worktree.
    peer tier); **evidence escalates them, appetite does not.**
 5. **One discretionary frontier firing per changeset**; default is the PM's fold-check
    (`/frontier-review`). Required planning/process consults are outside it, never review loops.
-   Precommit, collect, disposition one panel.
    Verdicts are evidence, never repair authority: require concrete supported-use harm; route green
    non-blockers to parent-linked successors. R1 permits one bounded batch unless the mechanism
    repeated; harm-bearing R2 and repeated R1 require one root kind plus a root exit with closure
@@ -113,5 +115,5 @@ armed hook walls the cadence (terminal states, batch caps, path ownership). No c
 gave a GO. `guard-brief-rung` denies a brief WRITE lacking a fresh, session- and
 target-bound, SINGLE-USE record of executed checks — proving such a RECORD EXISTS, never that its
 commands were run or were the right ones. The kit ships controls for the declaration and the commit
-floor, and their lane, trust, fresh-clone and bypass limits are in workflow-kit's `PORTABILITY.md` — and a rung you
+floor; their lane, trust, fresh-clone and bypass limits are in workflow-kit's `PORTABILITY.md` — and a rung you
 did not name is a rung you did not run.

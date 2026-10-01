@@ -35,6 +35,8 @@ directives, and alignment check. Name question, scope, evidence, alternatives, r
 adopt/adapt/decline; delegated decisions as acknowledged/executing/completed/stopped or concrete
 safety/gate/evidence conflict. Pending/superseded advice never promotes; current directives apply only
 within recorded program, baseline and scope.
+A directive that changes a PM's task or sets or lifts a pause is recorded in the current-state snapshot BEFORE it is
+sent (`core/README.md` § STATE). A message led by `STOP:` or `STATUS:` is a notice and owes no reply; `CONSULT:`, `RULING NEEDED:` and directives do.
 
 An ordinary bounded current-CHIP question stays with the active in-thread consult. Below-trigger questions
 do not contact the persistent architect unless an existing gate independently requires its own seat.

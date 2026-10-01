@@ -901,15 +901,19 @@ test("retired pairedPm* keys and flags: init accepts the flags as a no-op, and a
   } finally { A.cleanup(); }
 });
 
-test("the generated .codex/hooks.json registration is unchanged from v2.36.0 — entries byte-equal, so no Codex re-trust", () => {
+test("the generated .codex/hooks.json PreToolUse registration is unchanged from v2.36.0 — entries byte-equal; v2.40.0 adds only the Stop entry (re-trust owed for it)", () => {
   const A = adoptCodex();
   try {
     const text = readFileSync(path.join(A.dir, ".codex", "hooks.json"), "utf8");
     const reg = JSON.parse(text.split(A.dir).join("<T>"));
     // sha256 of JSON.stringify(hooks) with the target path normalised, computed from a v2.36.0 (f98cada)
     // init run. Trust is keyed to the entries; only the description's version string may differ.
-    assert.equal(createHash("sha256").update(JSON.stringify(reg.hooks)).digest("hex"),
+    // v2.40.0 added a Stop event beside PreToolUse, so the v2.36.0 hash covers the PreToolUse group alone
+    // (v2.36.0's `hooks` held nothing else, so the stringified shape is identical).
+    assert.equal(createHash("sha256").update(JSON.stringify({ PreToolUse: reg.hooks.PreToolUse })).digest("hex"),
       "acf420dfa3823b5a61821681fdb92030b82e215d0c395abdf2a03624b2b4ad47");
+    assert.deepEqual(Object.keys(reg.hooks), ["PreToolUse", "Stop"], "the only new event in v2.40.0 is Stop");
+    assert.equal(reg.hooks.Stop.length, 1);
     assert.equal(reg.hooks.PreToolUse[1].matcher, "mcp__codex_app__send_message_to_thread");
   } finally { A.cleanup(); }
 });
