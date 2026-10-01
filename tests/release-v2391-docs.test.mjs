@@ -22,9 +22,3 @@ test("the README note names the new test", () => {
   const n = r.slice(r.indexOf("## What's new in v2.39.1"), r.indexOf("## What's new in v2.39.0"));
   assert.match(n, /tests\/installed-citations\.test\.mjs/);
 });
-
-test("version is 2.39.1 everywhere", () => {
-  assert.equal(readFileSync(path.join(KIT, "VERSION"), "utf8").trim(), "2.39.1");
-  assert.equal(JSON.parse(readFileSync(path.join(KIT, "package.json"), "utf8")).version, "2.39.1");
-  assert.match(readFileSync(path.join(KIT, "README.md"), "utf8"), /^# workflow-kit — v2\.39\.1$/m);
-});

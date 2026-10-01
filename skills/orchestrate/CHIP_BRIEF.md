@@ -4,7 +4,7 @@ Word budget: 1000 (**Owner-ratified 2026-08-11**, raised from an author-set 600 
 gained the routing completion; its own number, never summed with the body's).
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. A brief goes to a session with **no
-memory of the program**. Everything needed on its first turn is in the brief or referenced record.
+memory of the program**. Everything it needs on turn one is in the brief or the referenced record.
 
 ## The nine sections
 1. **Identity and order** — which chip this is, which chips must have landed first, and the
@@ -12,15 +12,15 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    not only as a number: a printed number goes stale the moment another chip lands, and a worker
    that trusts it ships a wrong stamp.
 2. **The program record** — the one file holding the program's state and rulings. **NAME THE ENTRIES
-   this chip needs; never say "read it whole."** **The binding lessons are not there anyway** — they live
+   this chip needs; never say "read it whole."** **The binding lessons are not there** — they live
    in `.agents/skills/orchestrate/PROTOCOLS.md` and `RUNG_ZERO.md`; the record is where they were
-   DISCOVERED, not where they live.
+   DISCOVERED.
 3. **Startup gate** — the sole-writer CHECK, never called a proof (lane declarations, main checkout
-   and every worktree; it finds writers who DECLARED, and the body states what it misses),
+   and every worktree; it finds only writers who DECLARED, and the body states what it misses),
    and a startup confirmation back to the orchestrator naming the base SHA, the version, and the
    scope as the worker understood it. **An unacknowledged brief is unconfirmed, not undelivered** —
    messages cross and long turns delay them, so chase it rather than re-send blind or record a
-   delivery failure that did not happen.
+   failed delivery.
 4. **Scope** — what ships, user-visible done, its proof, and what does NOT. Name artifacts.
 5. **Process** — ordered rungs and pre-decided skips. **Every brief names the Builder's model and
    effort; every same-family seat runs at or above that model** (`core/REVIEW.md` peer tier), **reporting expected and observed
@@ -28,7 +28,8 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
    event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
    frontier process-review ID. **Review logs never ride in the changeset under review.** **A Builder the
-   Owner cannot address (a subagent) never holds a GO:** the PM pushes on the Owner's relayed GO and SHA. Stored standard programs are
+   Owner cannot address (a subagent) never holds a GO:** the PM pushes on the Owner's relayed GO and SHA. **The land recipe runs each push, PR-create and merge as one
+   plain command per call — no pipe, shell function or chain — so host allow rules can match it.** Stored standard programs are
    replay/close-only and enter the aggregate ladder through `legacy_handoff`; never mint another
    standard round. The orchestrator confirms bytes (`confirm-repair-brief --confirm`), sending
    receipt/path. Ordinary workers include `session_id` in `--verify`; guard binds authorized
@@ -49,7 +50,7 @@ memory of the program**. Everything needed on its first turn is in the brief or 
    EXAMPLES, not a closed set** — a repo reserves what it reserves, and any list a portable file
    ships is short in every repo it is wrong about. **Short used to mean "ask the Owner"; keyed to a
    timeout it means "proceed without them", so the property is what binds, never the count.** A ratification that did not arrive did
-   not happen: waiting on one, you keep building everything it does not touch and you seat nothing
+   not happen: waiting on one, keep building everything it does not touch and seat nothing
    that depends on it.
    **For a delegated program, cite the Principal decision/record and its limits; it binds execution but
    never supplies Owner GO. Name target-repo Owner reservations, namely merge/push GO, irreversible or live acts,
@@ -65,13 +66,13 @@ memory of the program**. Everything needed on its first turn is in the brief or 
 
 ## Three failures worth designing against
 - **A brief re-presented after a delay carries stale facts.** Version numbers, chip ids and "the
-  next chip is X" all rot. Mark every volatile field as verify-on-arrival, and have the worker
-  confirm them in its startup message rather than acting on them.
-- **Verbatim is not safe by default.** A clause that is TRUE in the source repo can be FALSE in the
-  target, because the doctrine around it differs. Check every ported claim against the TARGET's
+  next chip is X" all rot. Mark every volatile field verify-on-arrival; the worker
+  confirms them in its startup message rather than acting on them.
+- **Verbatim is not safe by default.** A clause TRUE in the source repo can be FALSE in the
+  target, where the doctrine differs. Check every ported claim against the TARGET's
   doctrine, not merely for leaked names. Likewise, when a claim's provenance receipt is stripped
   because it does not belong in the target, DOWNGRADE the claim with it — a stripped receipt
   silently converts a proven claim into an asserted one.
 - **Adapt the remedy to the target's defect surface.** A source fix ported whole can carry machinery
-  the target does not need; the target may already be immune for its own reasons. Port the half that
-  applies, and pin the accidental immunity so a future change reddens it.
+  the target does not need, or the target may already be immune. Port the half that
+  applies, and pin any accidental immunity so a future change reddens it.
