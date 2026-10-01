@@ -100,7 +100,7 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
     const flat = doc.replace(/\s+/g, " ");
     const rule8 = /^8\. \*\*Questions and recommendations never blend in\.\*\*([\s\S]*?)(?=^9\. )/m.exec(doc);
     assert.ok(rule8, "the generated contract carries rule 8");
-    for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**"]) {
+    for (const lead of ["**QUESTION:**", "**RECOMMENDATION:**", "**DECISION NEEDED:**", "**ACTION NEEDED:**"]) {
       assert.ok(rule8[0].includes(lead), `rule 8 names the ${lead} lead verbatim — the label IS the rule`);
     }
 

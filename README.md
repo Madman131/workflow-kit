@@ -1,4 +1,4 @@
-# workflow-kit — v2.39.1
+# workflow-kit — v2.39.2
 
 ## How to start a build
 
@@ -11,6 +11,15 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.39.2 — ACTION NEEDED joins the Owner labels; briefs land with plain commands
+
+Prose plus tests: no hook, script, config or controller changed, so no Codex re-trust.
+
+- **`**ACTION NEEDED:**` label.** `core/OWNER_COMMS.md` rule 8 now lists it beside `QUESTION`, `RECOMMENDATION` and `DECISION NEEDED` for a step only the Owner can perform, and says an ask never ends as an unlabeled trailing question.
+- **Landing commands.** `CHIP_BRIEF` § 5 tells every brief to run each push, PR-create and merge as one plain command per call, so host allow rules can match it.
+- **New test.** `tests/release-v2392-docs.test.mjs` pins both phrases and this note.
+- **Upgrading.** Re-run `init --force`; `OWNER_COMMS` is a per-repo file, so an adopter hand-edits rule 8.
 
 ## What's new in v2.39.1 — installed text cites only paths an adopter has
 
@@ -1448,7 +1457,7 @@ already.
 
 **An ask stops hiding in a paragraph.** `core/OWNER_COMMS.md` gains an **eighth rule**: any question
 for the Owner, any recommendation, and any decision they have to make appears **bolded, on its own
-bulleted line, with a labeled lead** — `**QUESTION:**`, `**RECOMMENDATION:**`, `**DECISION NEEDED:**`.
+bulleted line, with a labeled lead** — `**QUESTION:**`, `**RECOMMENDATION:**`, `**DECISION NEEDED:**`, `**ACTION NEEDED:**`.
 Prose may still explain; the ask itself has to be findable by skimming alone. The failure it names is
 specific and common: a well-written report that answers first, defines its terms and gives the
 background, and then buries the one sentence the Owner has to act on in the middle of paragraph four.
@@ -1512,7 +1521,7 @@ smaller:
 ```markdown
 8. **Questions and recommendations never blend in.** Any question for <Owner>, any recommendation,
    and any decision they must make appears **bolded, on its own bulleted line, with a labeled lead** —
-   `**QUESTION:**`, `**RECOMMENDATION:**`, or `**DECISION NEEDED:**` — never buried mid-paragraph.
+   `**QUESTION:**`, `**RECOMMENDATION:**`, `**DECISION NEEDED:**`, or `**ACTION NEEDED:**` — never buried mid-paragraph.
    Prose may explain; the ask itself must be findable by skimming alone. If <Owner> could scroll past
    it without seeing it, it is not formatted.
 ```
