@@ -52,20 +52,9 @@
 #   `codex login` homes also run concurrently. Serializing gate ladders stays a human rule
 #   (core/WORKFLOW.md), not machinery in this wrapper.
 #
-# SEAT COVERAGE (v2.41.0) — the CLAIMED "inspected scope" line above is the seat's own account of its work, and
-#   a seat that never opened the code writes it just as fluently as one that did (core/GATES.md § Gotchas / traps).
-#   `--expect-files FILE` (one repo-relative path per line; typically the changed files) MEASURES instead: after the
-#   run it reads the `codex exec --json` event stream and requires, for every listed path, a completed
-#   `command_execution` record whose command NAMES the file's repo-relative path AND whose aggregated_output carries that file's own
-#   content (>= min(3, n) of its distinct lines found in NO other listed file; n = those unique lines). A path merely named in a command whose
-#   output went to /dev/null, or only grepped for one line, is NOT opened. Any file not evidenced => exit 3,
-#   "UNDER-READ: no verdict", with the missing paths printed. Shapes keyed on real records, not assumed:
-#   docs/journal/2026-10-01-codex-exec-events-receipt.md. Cold passes only (a warm round reads a delta, so
-#   --expect-files with --resume is a usage error). Without the option, behaviour is unchanged.
-#
 # Usage (pass the prompt EITHER via -f FILE OR after --, never a bare positional):
-#   scripts/codex-gate.sh -o OUT [-m MODEL] [-e EFFORT] [-C REPO] [-t SECS] [--expect-files FILE] [--resume THREAD_ID] -f PROMPT_FILE
-#   scripts/codex-gate.sh -o OUT [-m MODEL] [-e EFFORT] [-C REPO] [-t SECS] [--expect-files FILE] [--resume THREAD_ID] -- "PROMPT TEXT"
+#   scripts/codex-gate.sh -o OUT [-m MODEL] [-e EFFORT] [-C REPO] [-t SECS] [--resume THREAD_ID] -f PROMPT_FILE
+#   scripts/codex-gate.sh -o OUT [-m MODEL] [-e EFFORT] [-C REPO] [-t SECS] [--resume THREAD_ID] -- "PROMPT TEXT"
 #   -t SECS : hard self-timeout (default 1800, or $CODEX_GATE_TIMEOUT). If codex has not finished in
 #             time it is killed (with its direct MCP children) and the gate FAILS CLOSED (exit 3) — stalled
 #             init can never become an unbounded SILENT hang. Foreground callers should pass a value
@@ -78,8 +67,8 @@
 #
 # Exit: 0 = a receipt-verified verdict in OUT that ALSO states an explicit GO/NO-GO decision and a claimed
 #   inspected scope; 2 = usage error; 3 = no verdict / receipt missing / verdict-contract unmet (no GO/NO-GO
-#   enum, no inspected-scope line, or conflicting decisions) / gate self-timeout / UNDER-READ seat (an
-#   --expect-files path the event stream does not show opened) — NEVER a pass; otherwise codex's own status.
+#   enum, no inspected-scope line, or conflicting decisions) / gate self-timeout — NEVER a pass; otherwise
+#   codex's own status.
 # Verify the result: confirm the -o file contains a real, on-topic, severity-ranked CODEX verdict
 #   THAT CITES EVIDENCE THE PAYLOAD DID NOT CONTAIN. The first three are exactly what a seat with no
 #   file access still produces from the payload alone, at exit 0 — see core/GATES.md, Gotchas / traps.
@@ -100,15 +89,14 @@ GUARD_DIR="$SCRIPT_DIR/codex-gate-guard"
 # being fixed. Both are echoed in the banner line below, and a run that did not pass them says so.
 MODEL="gpt-5.6-terra"; EFFORT="high"; MODEL_SET=0; EFFORT_SET=0
 OUT=""; REPO="$(pwd)"; PROMPT_FILE=""; PROMPT=""; PROMPT_SET=0
-RESUME_ID=""; RESUME_SET=0; SELFTEST=0; EXPECT_FILE=""; EXPECT_SET=0
+RESUME_ID=""; RESUME_SET=0; SELFTEST=0
 VERDICT_VALUE=""; INSPECTED_SCOPE=""; VERDICT_CONTRACT_ERROR=""
 TIMEOUT="${CODEX_GATE_TIMEOUT:-1800}"   # hard self-timeout (s); fail-closed if codex never finishes
 while [ $# -gt 0 ]; do
   case "$1" in
-    -o|-m|-e|-C|-f|-t|--resume|--expect-files)
+    -o|-m|-e|-C|-f|-t|--resume)
       [ $# -ge 2 ] || { echo "codex-gate: $1 requires an argument" >&2; exit 2; }
       case "$1" in
-        --expect-files) EXPECT_FILE="$2"; EXPECT_SET=1 ;;
         -o) OUT="$2" ;; -m) MODEL="$2"; MODEL_SET=1 ;; -e) EFFORT="$2"; EFFORT_SET=1 ;; -C) REPO="$2" ;; -f) PROMPT_FILE="$2" ;;
         -t) TIMEOUT="$2" ;;
         --resume) RESUME_ID="$2"; RESUME_SET=1 ;;
@@ -126,70 +114,6 @@ if [ "$SELFTEST" = "1" ]; then
   # See scripts/codex-gate-selftest.sh and tests/codex-gate-verdict.test.mjs.
   exec /bin/bash "$SCRIPT_DIR/codex-gate-selftest.sh"
 fi
-
-# ── SEAT COVERAGE (v2.41.0) — `--expect-files FILE` ─────────────────────────────────────────────────
-# MEASURES what the seat opened instead of trusting its INSPECTED SCOPE line. Keyed on RECORDS OBSERVED in a real
-# `codex exec --json` run (codex-cli 0.159.2; docs/journal/2026-10-01-codex-exec-events-receipt.md), never on an
-# assumed shape: a file is OPENED only if some completed `command_execution` item names it in `command` AND that item's
-# `aggregated_output` carries the file's own content (>= min(3, n) distinct lines of it that occur in NO other listed
-# file, n = those unique lines of 12+ chars, or all its unique lines when it has none; a file with NO unique line is
-# unverifiable and fails closed — shared boilerplate proves nothing about which file was read). Why content and not the command text: the observed seat batches many
-# files into ONE `/bin/zsh -lc` script, the outputs arrive merged in one string, and one observed run named four
-# files in a command that sent their output to /dev/null — a path match alone credits a seat that read nothing.
-# An unrecognised event shape simply earns no credit, so a changed client fails CLOSED (exit 3), never open.
-# Modes: `validate` (the list is sane; usage errors, exit 2) and `check` (exit 0 all opened, 1 some missing).
-COVERAGE_JS='
-const fs = require("fs"), path = require("path");
-const [mode, listFile, repo, eventsFile] = process.argv.slice(1);
-const die = (m) => { process.stderr.write("codex-gate: " + m + "\n"); process.exit(2); };
-let raw; try { raw = fs.readFileSync(listFile, "utf8"); } catch (e) { die("cannot read --expect-files list: " + listFile); }
-const root = path.resolve(repo), want = [];
-for (const l of raw.split(/\r?\n/)) {
-  const t = l.trim(); if (!t || t.startsWith("#")) continue;
-  const rel = path.relative(root, path.resolve(root, t));
-  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) die("--expect-files path escapes the repo (must be repo-relative): " + t);
-  if (!want.includes(rel)) want.push(rel);
-}
-if (!want.length) die("--expect-files list names no paths (an empty list would pass vacuously); list the changed files, one repo-relative path per line");
-if (mode === "validate") process.exit(0);
-const cmds = [];
-let events = 0;
-try {
-  for (const line of fs.readFileSync(eventsFile, "utf8").split("\n")) {
-    if (!line) continue; let e; try { e = JSON.parse(line); } catch { continue; }
-    events++;
-    const it = e && e.item;
-    if (e && e.type === "item.completed" && it && it.type === "command_execution" && typeof it.command === "string" && typeof it.aggregated_output === "string") cmds.push(it);
-  }
-} catch (e) { /* unreadable stream: nothing evidenced */ }
-const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const missing = [], opened = [];
-const norm = (x) => x.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-const texts = new Map();
-for (const rel of want) {
-  try { const st = fs.statSync(path.join(root, rel)); if (st.isFile() && st.size <= 4 * 1024 * 1024) texts.set(rel, norm(fs.readFileSync(path.join(root, rel), "utf8"))); } catch { /* absent or unreadable */ }
-}
-// Evidence for a file is ONLY lines found in NO other listed file: a line two files share (imports, boilerplate) proves
-// neither was opened, so a seat that read A and merely named B could otherwise be credited for B.
-const owners = new Map();
-for (const [rel, ls] of texts) for (const l of new Set(ls)) owners.set(l, (owners.get(l) || 0) + 1);
-for (const rel of want) {
-  if (!texts.has(rel)) { missing.push(rel + "  (not a readable file in the repo)"); continue; }
-  const uniq = [...new Set(texts.get(rel))].filter((l) => owners.get(l) === 1);
-  const dist = uniq.filter((x) => x.length >= 12), pool = dist.length ? dist : uniq;
-  if (!pool.length) { missing.push(rel + "  (unverifiable: it has no line unique among the listed files, so its content cannot show it was opened; fail closed)"); continue; }
-  const need = Math.min(3, pool.length);
-  // The listed REPO-RELATIVE path (an optional leading ./), never the basename: a bare `cat package.json` on an unlisted root
-  // manifest must not credit a listed packages/widget/package.json. A seat that does cd into a subdir and then cats a bare name fails closed.
-  const named = new RegExp("(?<![\\w./-])(?:\\./)?" + esc(rel) + "(?![\\w-])");
-  const ok = cmds.some((c) => named.test(c.command) && pool.filter((x) => c.aggregated_output.includes(x)).length >= need);
-  (ok ? opened : missing).push(rel);
-}
-process.stderr.write("codex-gate: seat coverage: " + cmds.length + " completed command record(s) in " + events + " event(s); " + opened.length + "/" + want.length + " expected file(s) evidenced as opened\n");
-if (missing.length) { process.stdout.write(missing.join("\n") + "\n"); process.exit(1); }
-process.exit(0);
-'
-seat_coverage() { node -e "$COVERAGE_JS" "$@"; }
 
 [ -n "$OUT" ] || { echo "codex-gate: -o OUT is required" >&2; exit 2; }
 case "$TIMEOUT" in ''|*[!0-9]*) echo "codex-gate: -t TIMEOUT must be a positive integer of seconds; got '$TIMEOUT'" >&2; exit 2 ;; esac
@@ -213,14 +137,6 @@ if [ -n "$PROMPT_FILE" ]; then
   [ -f "$PROMPT_FILE" ] || { echo "codex-gate: prompt file not found: $PROMPT_FILE" >&2; exit 2; }
 elif [ "$PROMPT_SET" != "1" ] || [ -z "$PROMPT" ]; then
   echo "codex-gate: no prompt given (use -f FILE or -- \"PROMPT\")" >&2; exit 2
-fi
-
-if [ "$EXPECT_SET" = "1" ]; then
-  # Refuse a bad request BEFORE a model call is spent; a vacuous or unmeasurable coverage check is never a pass.
-  [ "$RESUME_SET" = "0" ] || { echo "codex-gate: --expect-files measures a COLD pass; a warm --resume round reads only a delta, so the coverage check cannot apply (usage error). Run it on the full cold pass." >&2; exit 2; }
-  [ -n "$EXPECT_FILE" ] && [ -f "$EXPECT_FILE" ] || { echo "codex-gate: --expect-files list not found: $EXPECT_FILE" >&2; exit 2; }
-  command -v node >/dev/null 2>&1 || { echo "codex-gate: --expect-files needs node on PATH to read the event stream (refusing: a coverage check that cannot run is never a pass)" >&2; exit 2; }
-  seat_coverage validate "$EXPECT_FILE" "$REPO" || exit 2
 fi
 
 HYGIENE='[cross-family gate] You are the independent CROSS-FAMILY (Codex) reviewer. Review the code YOURSELF and emit the verdict directly. Do NOT invoke any $cc/companion skill, do NOT spawn a background job or subagent, do NOT read or follow any SKILL.md, and do NOT delegate to Claude Code. If a tool named claude/companion is unavailable, that is expected and intentional — proceed and review the code yourself.'
@@ -408,20 +324,6 @@ if ! verify_verdict_contract "$OUT"; then
   exit 3
 fi
 echo "codex-gate: verdict contract OK — decision=$VERDICT_VALUE; inspected scope stated." >&2
-
-# SEAT COVERAGE (v2.41.0): the contract above reads the seat's OWN account; this reads the event stream. A seat that did
-# not open every expected file is UNAVAILABLE for this gate, not a GO (core/GATES.md § Gotchas / traps). Exit 3, the same
-# class as a missing receipt; OUT stays on disk for the record but carries no verdict, and an under-read thread is never resumed.
-if [ "$EXPECT_SET" = "1" ]; then
-  set +e; UNDER_READ="$(seat_coverage check "$EXPECT_FILE" "$REPO" "$JSONL_TMP")"; cov_rc=$?; set -e
-  if [ "$cov_rc" -ne 0 ]; then
-    echo "codex-gate: ERROR — UNDER-READ: no verdict. The seat did not open every file in $EXPECT_FILE; the event stream does not show these opened (a path only NAMED in a command, with its output discarded or one line grepped, does not count):" >&2
-    if [ -n "$UNDER_READ" ]; then printf '%s\n' "$UNDER_READ" | sed 's/^/  /' >&2; else echo "  (the coverage check itself failed, exit $cov_rc — treated as under-read)" >&2; fi
-    echo "codex-gate: Treat this seat as UNAVAILABLE for the gate (core/GATES.md § Required-review availability route), never as a GO. Screen any findings already in $OUT before re-running: an under-read seat's NO-GO findings are still evidence. Re-run COLD (never --resume this thread) with a prompt that makes the seat open each listed file." >&2
-    exit 3
-  fi
-  echo "codex-gate: seat coverage OK — every file in $EXPECT_FILE evidenced as opened." >&2
-fi
 
 if [ -n "$RESUME_ID" ]; then
   echo "codex-gate: WARM round complete (receipt verified) on thread $RESUME_ID." >&2

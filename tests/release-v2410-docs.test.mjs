@@ -1,4 +1,4 @@
-// v2.41.0: the KIT GAP-ACTION NEEDED label, "a kit gap is never a project dependency", the Owner replacement-design route, the sensor label, SEAT-COVERAGE.
+// v2.41.0: the KIT GAP-ACTION NEEDED label, "a kit gap is never a project dependency", the Owner replacement-design route, the sensor label.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,56 +38,6 @@ test("the stop sensor recognises the label and its forced reply names it", () =>
   assert.match(h, /\*\*QUESTION:\*\*, \*\*KIT GAP-ACTION NEEDED:\*\* or \*\*AUTHORIZATION NEEDED\*\*/);
 });
 
-test("GATES and REVIEW carry SEAT-COVERAGE, its measured reason and its limits", () => {
-  const g = flat("core/GATES.md");
-  assert.match(g, /SEAT-COVERAGE, v2\.41\.0/);
-  assert.match(g, /`scripts\/codex-gate\.sh --expect-files FILE`/);
-  assert.match(g, /exit 3, `UNDER-READ: no verdict`/);
-  assert.match(g, /An under-read seat is \*\*UNAVAILABLE, not a GO\*\*/);
-  assert.match(g, /sent three of them to `\/dev\/null` and then reported all four as read/);
-  assert.match(g, /a `--expect-files` list that omits a file is a seat that was never required to open it/);
-  const r = flat("core/REVIEW.md");
-  assert.match(r, /through push-ready, subject to the adopter's BINDINGS substitution reservations; the push GO stays the Owner's\./);
-  assert.match(r, /pass it `--expect-files` with the changed files, and a seat whose event stream shows a listed file unopened exits 3 `UNDER-READ: no verdict` and is unavailable, not a GO/);
-});
-
-test("codex-gate.sh documents --expect-files and is installed with its selftest", () => {
-  const sh = read("scripts/codex-gate.sh");
-  assert.match(sh, /\[--expect-files FILE\]/);
-  assert.match(sh, /UNDER-READ: no verdict/);
-  assert.ok(read("bin/init.mjs").includes('"codex-gate-selftest.sh"'), "init --with-gate-runners installs the selftest the wrapper execs");
-});
-
-test("the coverage wording: relative path only, co-output limit, brief-writer note", () => {
-  const g = flat("core/GATES.md"), p = flat("PORTABILITY.md"), r = flat("README.md");
-  assert.match(g, /appeared in the output of a command that NAMES its repo-relative path, not who printed them: co-output is reachable in ordinary use \(a command that prints a file quoting another file's lines, `git show BASE:path`, a fixture embedding file text\)/);
-  assert.match(g, /list every changed file with `git diff --name-only --diff-filter=d` \(a deleted file can never pass\), list only ONE copy of byte-identical mirror files/);
-  assert.match(g, /`git diff A B` with no pathspec, or a glob read, names no listed file and fails closed: have the seat run per-file reads/);
-  assert.match(g, /\*\*Threat model:\*\* `--expect-files` catches UNDER-READ by a NON-DECEPTIVE seat \(the observed 1-of-25 case\); it does NOT prove a read against a seat that crafts commands to earn credit, and such a seat is out of model\./);
-  assert.match(p, /Threat model: `--expect-files` catches UNDER-READ by a NON-DECEPTIVE seat \(the observed 1-of-25 case\); it does NOT prove a read against a seat that crafts commands to earn credit, and such a seat is out of model\./);
-  assert.match(p, /a command must name the listed repo-relative path \(never just a basename\)/);
-  assert.match(p, /not who printed them \(co-output is reachable in ordinary use/);
-  assert.doesNotMatch(p + g, /basename alternative/);
-  assert.match(r, /`git diff --name-only --diff-filter=d` \(a deleted file can never pass\), only ONE copy of byte-identical mirror files/);
-  assert.match(r, /`git diff A B` with no pathspec, or a glob, names no listed file and fails closed/);
-  assert.ok(!/path\.basename/.test(read("scripts/codex-gate.sh")), "the matcher has no basename alternative");
-});
-
-test("PORTABILITY states the SEAT-COVERAGE limits", () => {
-  const p = flat("PORTABILITY.md");
-  assert.match(p, /\*\*SEAT-COVERAGE \(`codex-gate\.sh --expect-files`, v2\.41\.0\) measures that a file's text reached the seat's tool output, nothing more\.\*\*/);
-  assert.match(p, /an event shape the check does not know earns no credit, so a changed Codex client fails CLOSED/);
-  assert.match(p, /Cold passes only/);
-  assert.match(p, /`cold-review-gemini\.sh` has no such stream and is not mirrored/);
-});
-
-test("the events receipt is kept in the journal", () => {
-  const j = flat("docs/journal/2026-10-01-codex-exec-events-receipt.md");
-  assert.match(j, /codex-cli` 0\.159\.2/);
-  assert.match(j, /\*\*Run 1 — the trap this chip is built around|Run 1 — the trap this chip is built around/);
-  assert.match(j, /`aggregated_output`/);
-});
-
 test("the README note names the changes, the new tests and the upgrade steps", () => {
   const r = flat("README.md");
   const n = r.slice(r.indexOf("## What's new in v2.41.0"), r.indexOf("## What's new in v2.40.0"));
@@ -95,11 +45,8 @@ test("the README note names the changes, the new tests and the upgrade steps", (
   assert.match(n, /A kit gap is never a project dependency/);
   assert.match(n, /Owner replacement-design route/);
   assert.match(n, /no controller or guard code changed/);
-  assert.match(n, /\*\*SEAT-COVERAGE\.\*\* `scripts\/codex-gate\.sh --expect-files FILE`/);
-  assert.match(n, /tests\/codex-gate-seat-coverage\.test\.mjs/);
   assert.match(n, /tests\/release-v2410-docs\.test\.mjs/);
   assert.match(n, /hand-edits rule 8 of their existing `core\/OWNER_COMMS\.md`/);
-  assert.match(n, /pass `--expect-files` on every Codex gate run, listing changed files/);
   assert.match(n, /existing `scripts\/codex-gate\.sh` copies have the same dead `--selftest`/);
   assert.match(n, /never shipped before v2\.41\.0/);
 });
@@ -108,4 +55,13 @@ test("version is 2.41.0 everywhere", () => {
   assert.equal(read("VERSION").trim(), "2.41.0");
   assert.equal(JSON.parse(read("package.json")).version, "2.41.0");
   assert.match(read("README.md"), /^# workflow-kit — v2\.41\.0$/m);
+});
+
+test("the wrapper's --selftest target ships and init installs it", () => {
+  assert.ok(read("bin/init.mjs").includes('"codex-gate-selftest.sh"'), "init --with-gate-runners installs the selftest the wrapper execs");
+  assert.match(read("scripts/codex-gate-selftest.sh"), /VERDICT: NO-GO/);
+});
+
+test("REVIEW's Standing review authorization yields to BINDINGS reservations", () => {
+  assert.match(flat("core/REVIEW.md"), /through push-ready, subject to the adopter's BINDINGS substitution reservations; the push GO stays the Owner's\./);
 });
