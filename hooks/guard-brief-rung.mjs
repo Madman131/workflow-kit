@@ -134,12 +134,12 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   let raw;
   if (readConfig) {
     raw = readConfig(file);
-    if (raw === undefined) return { ok: true, briefPathDirs: [] };
+    if (raw === undefined) return { ok: true, briefPathDirs: [], repairController: false };
     if (raw === null) return { ok: false };
   } else {
     let st;
     try { st = lstatSync(file); }
-    catch (e) { if (e && e.code === "ENOENT") return { ok: true, briefPathDirs: [] }; return { ok: false }; }
+    catch (e) { if (e && e.code === "ENOENT") return { ok: true, briefPathDirs: [], repairController: false }; return { ok: false }; }
     if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
     try { raw = readFileSync(file, "utf8"); } catch { return { ok: false }; }
   }
@@ -148,7 +148,11 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   if (!isPlainObject(parsed)) return { ok: false };
   const dirs = parsed.briefPathDirs === undefined ? [] : parsed.briefPathDirs;
   if (!isSegmentArray(dirs)) return { ok: false, key: "briefPathDirs" };
-  const out = { ok: true, briefPathDirs: dirs };
+  // `repairController` (v2.43.0): the repair-round controller is OPT-IN. Absent ⇒ false; anything but a
+  // boolean is malformed and fails CLOSED like `briefPathDirs`, i.e. the controller stays ON.
+  const rc = parsed.repairController === undefined ? false : parsed.repairController;
+  if (typeof rc !== "boolean") return { ok: false, key: "repairController" };
+  const out = { ok: true, briefPathDirs: dirs, repairController: rc };
   // `pairedPm*` keys (retired in v2.37.0) may still sit in an older adopter's config: ignored, never fatal.
   return out;
 }
@@ -595,7 +599,14 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     }
 
     const taskId = loadTaskId(root);
-    const controller = loadRepairEventsForProject(root);
+    // Controller OFF (default; the config parsed and `repairController` is not true): no ledger is read,
+    // the controller has an empty history, and no source write is admission-checked. A malformed config
+    // (`config.ok` false) never reaches this branch, so it keeps the controller ON. Every other check
+    // below is unchanged.
+    const controllerOff = config.ok && !config.repairController;
+    const controller = controllerOff
+      ? { ok: true, events: [], aggregate_events: [], observed_overrides: [] }
+      : loadRepairEventsForProject(root);
 
     // A repair receipt becomes worker authority only after explicit `--verify` records this exact
     // session. The already-registered write hook then rechecks the current candidate, persisted
@@ -614,7 +625,7 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     let pendingNotice = null;
     const say = (reason) => emit(pendingNotice ? `${pendingNotice}\n\n${reason}` : reason);
     const finish = () => { if (pendingNotice) notice(pendingNotice); return exit(0); };
-    if (sourceTargets.length) {
+    if (sourceTargets.length && !controllerOff) {
       // THE ONE SANCTIONED RELIEF, and it is stated out loud rather than taken quietly. A tree in
       // which the control's own walk finds no `.git` above it and no Git location override has no
       // subject THE CONTROL CAN SEE, so denying every write there would be a pure false positive.
@@ -666,7 +677,9 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
       say(denyReason(blocked.v.state, {
         dispatch: blocked.d,
         detail: blocked.v.named ?? (blocked.v.ageMin !== undefined ? Math.abs(Math.round(blocked.v.ageMin)) : undefined),
-      }) + overrides);
+      }) + overrides + (controllerOff && sidecar?.dispatch_kind === "repair"
+        ? ` The repair-round controller is OFF in this repo: \`repairController\` is not true in ${KIT_CONFIG}, so a repair declaration has no ledger to bind. Set it to true to opt in, or send a plain build brief.`
+        : ""));
       return exit(0);
     }
 

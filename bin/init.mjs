@@ -853,6 +853,17 @@ function gitRevParse(target, flag) {
   } catch { return null; }
 }
 
+// Does the target's Git-common repair ledger exist and hold rows? (v2.43.0: such a repo stays opted in
+// to the repair-round controller, which is otherwise OFF by default.) Never reads the ledger's content.
+function repairLedgerNonEmpty(target) {
+  const common = gitRevParse(target, "--git-common-dir");
+  if (common === null) return false;
+  try {
+    const st = lstatSync(path.resolve(target, common, "workflow-kit", "repair-events-v1.jsonl"));
+    return st.isFile() && !st.isSymbolicLink() && st.size > 0;
+  } catch { return false; }
+}
+
 // ROOT-BATCH CURE (write-target trust): set a git config key DIRECTLY in the target's OWN config and
 // PROVE it landed there — the resolved-EFFECT discipline that replaces trusting a NAME ENUMERATION.
 // A bare `git config <key> <value>` obeys GIT_CONFIG (and any future write-redirect var), so it can
@@ -1694,7 +1705,22 @@ function main() {
   const CFG_FAMILIES = [["executedPathDirs", "--source-dirs"], ["stateDocs", "--state-docs"],
     ["memoryDir", "--memory-dir"], ["worktreeRoots", "--worktree-roots"]];
   let cfgKept = false, cfgRefused = false, cfgUnreadable = false;
-  if (existsSync(cfgPath) && !force) { warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true; }
+  // v2.43.0: `repairController` is not a flag family. A repo with a non-empty repair ledger keeps the
+  // controller ON (init writes `true` only when the key is absent); an explicit value is never flipped.
+  const ledgerActive = repairLedgerNonEmpty(T);
+  const RC_NOTE = `  .claude/kit.config.json: repairController: true — this repo already has a repair ledger, so the repair-round controller stays ON (it is OFF by default since v2.43.0)`;
+  let existingCfg = null, rcNote = false;
+  if (existsSync(cfgPath) && !force) {
+    warn(`exists, kept (use --force to overwrite): ${cfgPath}`); cfgKept = true;
+    if (ledgerActive) {
+      try {
+        const parsed = JSON.parse(readFileSync(cfgPath, "utf8"));
+        if (isPlainObject(parsed) && !Object.prototype.hasOwnProperty.call(parsed, "repairController")) {
+          if (writeWithBackup(cfgPath, JSON.stringify({ ...parsed, repairController: true }, null, 2) + "\n")) { rcNote = true; }
+        }
+      } catch { /* unreadable: the controller stays ON for a malformed config; nothing to add */ }
+    }
+  }
   else {
     // --force rewrites this file from THIS RUN'S FLAGS ALONE, so a run naming a PARTIAL set of
     // families silently DROPS every family it did not name: a dropped executedPathDirs WIDENS the
@@ -1711,7 +1737,7 @@ function main() {
       let existing = null, unreadable = null;
       try {
         const parsed = JSON.parse(readFileSync(cfgPath, "utf8"));
-        if (isPlainObject(parsed)) existing = parsed;
+        if (isPlainObject(parsed)) { existing = parsed; existingCfg = parsed; }
         else unreadable = "it parses as JSON but is not a JSON object";
         // The fs error CODE, never the thrown message: V8 quotes a snippet of the offending file
         // back inside a JSON parse error (Unexpected token 'N', "NOT JSON{" is not valid JSON),
@@ -1729,7 +1755,7 @@ function main() {
         // A key init does not recognise is adopter data too, and the rewrite drops it. Say so
         // WHENEVER the rewrite is going to happen — not only inside the refusal below, or a run
         // that names every family takes the key away in silence.
-        const unknown = Object.keys(existing).filter((k) => !CFG_FAMILIES.some(([key]) => key === k));
+        const unknown = Object.keys(existing).filter((k) => k !== "repairController" && !CFG_FAMILIES.some(([key]) => key === k));
         const unknownNote = unknown.length
           // JSON.stringify per key, not a bare join: a key name is adopter-authored text going
           // straight to a terminal, and one carrying an ESC or a newline could forge lines around
@@ -1761,6 +1787,8 @@ function main() {
       }
     }
     if (!cfgRefused) {
+      if (existingCfg && Object.prototype.hasOwnProperty.call(existingCfg, "repairController")) config.repairController = existingCfg.repairController;
+      else if (ledgerActive) { config.repairController = true; rcNote = true; }
       // No eager ensureDir: writeWithBackup creates the parent itself, AFTER its containment check.
       // A mkdir taken first is the same escape copyGuarded refuses — a directory built inside a
       // linked-out `.claude` by a write that then refuses.
@@ -1773,8 +1801,9 @@ function main() {
       ? `  .claude/kit.config.json: REFUSED — on-disk file unchanged; init could not read it as a JSON object, so repair or move that file aside (see the warning above), then re-run`
       : `  .claude/kit.config.json: REFUSED — on-disk file unchanged; re-run with every family it holds named on the command line (the warning above names the missing families and the flag that fills each)`)
     : cfgKept
-    ? `  .claude/kit.config.json: EXISTING kept — on-disk file unchanged; the flags you passed were NOT applied`
+    ? `  .claude/kit.config.json: EXISTING kept — ${rcNote ? "only repairController was added (backup .bak)" : "on-disk file unchanged"}; the flags you passed were NOT applied`
     : `  .claude/kit.config.json: ${Object.keys(config).length ? Object.keys(config).join(", ") : "empty (portable defaults)"}`);
+  if (rcNote) log(RC_NOTE);
 
   // 7. [G] generated files from templates (placeholders the adopter completes).
   const vars = {
