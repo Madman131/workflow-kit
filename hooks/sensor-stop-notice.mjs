@@ -44,8 +44,10 @@
 //       acknowledgement; ANY Owner message after the call answers it, a question reply included) and the final message
 //       carries a rule-8 label NOWHERE (trigger (c) is stricter: the label must END the message).
 //   (c) an earlier final message carried a labeled Owner ask, no Owner message has come since, and this final message does
-//       not END with a rule-8 label (its last paragraph holds no label line). UNOBSERVED: how a scheduled heartbeat
-//       arrives; if one arrives as a plain user message it reads as an Owner message and (c) stays silent for it.
+//       not END with a rule-8 label that carries text (its last paragraph holds no label line with text after it; a bare
+//       label does not count). A relayed Owner answer is NOT recognised (deferred until a Codex relay rollout is observed).
+//       UNOBSERVED: how a scheduled heartbeat arrives; if one arrives as a plain user message it reads as an Owner message and
+//       (c) stays silent for it.
 //
 // OFF SWITCH: WORKFLOW_KIT_STOP_NOTICE_SENSOR="false" (explicit string compare).
 
@@ -61,10 +63,19 @@ const MAX_BYTES = 64 * 1024 * 1024;   // a real day-long PM rollout is ~15 MB; a
 const LABEL_LINE = /^[ \t]*(?:[-*+][ \t]+)?\*\*[ \t]*(?:AUTHORIZATION NEEDED|DECISION NEEDED|KIT GAP-ACTION NEEDED|ACTION NEEDED|QUESTION)\b/m;
 
 export const hasLabel = (text) => typeof text === "string" && LABEL_LINE.test(text);
+// The final must END with a label that CARRIES TEXT (v2.42.0): a bare label line ("**ACTION NEEDED:**" and nothing after it in the
+// last paragraph) names no action and does not count. The text is whatever follows the label token, up to the next label line or the end
+// of the last paragraph, and it must hold a letter or digit.
 export function endsWithLabel(text) {
   if (typeof text !== "string") return false;
   const paragraphs = text.trim().split(/\n[ \t]*\n/);
-  return LABEL_LINE.test(paragraphs[paragraphs.length - 1]);
+  const last = paragraphs[paragraphs.length - 1];
+  const starts = [...last.matchAll(new RegExp(LABEL_LINE.source, "gm"))];
+  return starts.some((m, k) => {
+    const from = m.index + m[0].length;
+    const to = k + 1 < starts.length ? starts[k + 1].index : last.length;
+    return /[\p{L}\p{N}]/u.test(last.slice(from, to));
+  });
 }
 
 function readCapped(file) {

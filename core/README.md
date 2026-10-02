@@ -38,7 +38,7 @@ unbounded doc grow.
 | **ENTRY** | `CLAUDE.md` · `AGENTS.md` (repo ROOT — pinned) | rare | each agent at boot (per-reader twins) |
 | **METHOD** (portable) | `FOUNDATIONS.md` · `WORKFLOW.md` · `REVIEW.md` · `ARTIFACT_CLASS.md` · `OPERATE.md` · `MULTI_AGENT.md` → `GATES.md` · `INVARIANTS.md` | rare | boot (first six) · on-demand · **machine** (INVARIANTS) |
 | **BINDINGS** (repo) | `BINDINGS.md` · `REPO_INVARIANTS.md` | occasional | boot · machine |
-| **STATE** | `SYSTEM_MAP.md` (regenerated snapshot) · `docs/PIL_ARCHITECTURE.md` (deep, REFERENCE) · `docs/open_work_current_state.md` (CLASS: STATE head) · `docs/journal/` (append-only) · memory | constant | **boot** (SYSTEM_MAP) · on demand (rest) |
+| **STATE** | `SYSTEM_MAP.md` (regenerated snapshot) · the repo's deep architecture REFERENCE and its CLASS: STATE head, as `BINDINGS.md` names them · `docs/journal/` (append-only) · memory | constant | **boot** (SYSTEM_MAP) · on demand (rest) |
 
 Dependencies run one way: **ENTRY → METHOD + BINDINGS + STATE.** The rule that keeps every file
 bounded: **STATE never contains method · METHOD never contains repo facts · history never lives in a
@@ -59,7 +59,7 @@ current-state doc.** Every overflow is a violation of one of those three.
 | `INVARIANTS.md` | BINDING | `[P]` | epistemic rules + portable invariants + failure classes. **MACHINE PAYLOAD** |
 | `REPO_INVARIANTS.md` | BINDING | `[G]` | this repo's concrete invariants. **MACHINE PAYLOAD** |
 | `GATES.md` | REFERENCE | `[P]` | gate contract · routing · model·effort matrix · Codex + Gemini tool manuals |
-| `SYSTEM_MAP.md` | BINDING | `[G]` | the bounded, `as-of`-dated **architecture snapshot** — the boot-set map over `docs/PIL_ARCHITECTURE.md` (REFERENCE, deep). Regenerated on architectural change; **snapshot** role (8 KiB). |
+| `SYSTEM_MAP.md` | BINDING | `[G]` | the bounded, `as-of`-dated **architecture snapshot** — the boot-set map over the repo's deep architecture REFERENCE (`BINDINGS.md` names it). Regenerated on architectural change; **snapshot** role (8 KiB). |
 
 `[P]` portable — copies verbatim to another repo. `[G]` generated per-repo — **never copied.**
 
@@ -92,7 +92,7 @@ its class in a marker on line 3**, and `scripts/check-doc-size.mjs` reads that m
   | **snapshot** | `SYSTEM_MAP.md` | **8 KiB** | a boot-read architecture snapshot; keep it tight so boot stays cheap |
 
   A newly added `core/*.md` defaults to **method** — capped, never uncapped by omission.
-- **STATE** — a regenerated current-state head (`docs/open_work_current_state.md`): structurally
+- **STATE** — a regenerated current-state head (the file `BINDINGS.md` names): structurally
   validated (it must declare its class and exist — fail-closed), but its **size is ADVISORY** (a WARN
   at 40 KiB, never a hard cap — a current-state doc legitimately grows between regenerations).
   **Its top block is the current-state snapshot, defined here once, short, and read first by a fresh or
@@ -104,7 +104,8 @@ its class in a marker on line 3**, and `scripts/check-doc-size.mjs` reads that m
   **Record before send:** a directive that changes a PM's current task or sets or lifts a pause is written into
   this block BEFORE it is sent; a receiver whose sender could not write it records it as its first act.
   Compaction keeps the Owner's own messages but can drop peer- or tool-delivered ones, so an unrecorded
-  directive can vanish.
+  directive can vanish. A repo with no snapshot block records it in its STATE head per `BINDINGS.md`; with
+  no idle backstop, the `STOP:` notice is the only signal that a PM stopped. The snapshot never records gate, GO or merge status as current fact: git and the PR are the source, and a snapshot written before a merge says "pending merge, check git".
 - **REFERENCE** — looked up; missing a section just means you look it up later → **no size cap**, but
   it must carry a lookup-only marker, stable headings, and a table of contents.
 

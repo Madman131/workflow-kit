@@ -176,6 +176,21 @@ test("trigger (c): an unanswered labeled ask stays LAST — the final message mu
   allows(stop(dir, [...earlier, F.questionReply(T1, CALL)], "Working."), "NEGATIVE: a question reply is an Owner message");
 }));
 
+test("NB-K2 (v2.42.0): trigger (c) needs a label WITH text at the END; a relayed answer is not recognised", () => withDir((dir) => {
+  const earlier = [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Ready.\n\n**AUTHORIZATION NEEDED:** push 97b3b1a to origin."), F.taskStarted(T1), F.agentsMd(T1), F.envContext(T1)];
+  // (i) a bare label names no action: it blocks; the same label with text passes.
+  blocks(stop(dir, earlier, "No change.\n\n**ACTION NEEDED:**"));
+  blocks(stop(dir, earlier, "No change.\n\n- **DECISION NEEDED:**  "));
+  allows(stop(dir, earlier, "No change.\n\n**ACTION NEEDED:** run the handed-over command"), "label with text on the same line");
+  allows(stop(dir, earlier, "No change.\n\n**ACTION NEEDED:**\nrun the handed-over command"), "text on the next line of the same paragraph counts");
+  allows(stop(dir, earlier, "No change.\n\n**DECISION NEEDED: approve or decline**"), "text inside the bold counts");
+  // A relayed answer is NOT recognised (deferred until a Codex relay rollout is observed): a non-Owner, non-notice delegation after the ask does not clear (c).
+  const opened = [F.agentsMd(T0), F.taskStarted(T0), F.delegation(T0, F.ARCHITECT, "send_message_to_thread", "DIRECTIVE: build it"), F.assistant(T0, "Ready.\n\n**AUTHORIZATION NEEDED:** push 97b3b1a to origin."), F.taskStarted(T1), F.agentsMd(T1)];
+  blocks(stop(dir, [...opened, F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "DIRECTIVE: Josh's push GO, relayed."), F.sent(T1, F.ARCHITECT)], "Pushed."));
+  blocks(stop(dir, [...opened, F.sent(T1, F.OTHER), F.delegation(T1, F.OTHER, "send_message_to_thread", "DONE: tests green")], "Worker finished."));
+  allows(stop(dir, [...opened, F.ownerSays(T1, "approved\n")], "Pushed."), "an Owner message still answers the ask");
+}));
+
 test("label helpers: a label opens a line; the last paragraph decides END", () => {
   assert.equal(hasLabel("**DECISION NEEDED:** x"), true);
   assert.equal(hasLabel("a\n- **ACTION NEEDED:** x"), true);
@@ -194,6 +209,8 @@ test("label helpers: a label opens a line; the last paragraph decides END", () =
   assert.equal(endsWithLabel("status\n\n**DECISION NEEDED:** x\ndetail"), true);
   assert.equal(endsWithLabel("**DECISION NEEDED:** x\n\nstatus"), false);
   assert.equal(endsWithLabel(""), false);
+  assert.equal(endsWithLabel("s\n\n**ACTION NEEDED:**"), false, "v2.42.0: a bare label does not count");
+  assert.equal(endsWithLabel("s\n\n**ACTION NEEDED:** run x"), true);
 });
 
 test("init registers the Stop entry exactly once; --force does not duplicate it; the installed hook is byte-identical", () => {

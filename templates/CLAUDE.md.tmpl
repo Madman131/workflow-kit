@@ -68,7 +68,7 @@ chat is not a dispatch and is not screened); and on Stop
 `.codex/hooks.json` registers the three guards and first two sensors on `apply_patch`, the gate
 ladder on Bash, and brief-rung on the exact `mcp__codex_app__send_message_to_thread` tool, which
 allows it (Architect-to-PM chat is not screened).
-Context-pressure and both Stop sensors remain Claude-only. **In the Codex lane these hooks are
+Context-pressure and the Owner-comms and token-ledger Stop sensors remain Claude-only; `sensor-stop-notice` is registered on Codex `Stop` only. **In the Codex lane these hooks are
 INERT until a human grants hook trust interactively; an untrusted hook is skipped SILENTLY.**
 `node scripts/check-codex-hooks-armed.mjs` probes `apply_patch` only. Write guards bind tool
 calls, so a shell command that rewrites a file passes them in either lane; a human with an editor
@@ -78,6 +78,9 @@ PM-disposition emission) **plus the `.githooks/pre-commit` hook** `init` install
 
 ## Thread restart
 At EVERY chip landing report the landing, then write a pointer-style digest via `/thread-restart` and stop; at ~70% context (the sensor's banner) stop and restart. Codex twin: `AGENTS.md` § Thread restart. Detail: `.agents/skills/orchestrate/SKILL.md` § Thread restart.
+
+## Gating budget and check-ins
+Twin of `AGENTS.md`'s. Per `.agents/skills/orchestrate/CHIP_BRIEF.md` § 5: the brief precommits seats, rounds and the STAKES; past 2× its rounds or seat-runs, whichever first, the PM stops and the Principal runs RULE #1 → root cause → KISS → Zoom Out, recording each answer, never another repair round. No scheduled check-ins; a heartbeat that arrives anyway follows `core/OWNER_COMMS.md` rule 8.
 
 ## Local traps worth knowing
 - **Env flags are toggled, never deleted;** boolean reads use explicit string compare (`=== "false"`),
