@@ -43,8 +43,8 @@
 //   (b) this turn has a request_user_input_async call with no recorded ANSWER (the observed output is only the
 //       acknowledgement; ANY Owner message after the call answers it, a question reply included) and the final message
 //       carries a rule-8 label NOWHERE (trigger (c) is stricter: the label must END the message).
-//   (c) an earlier final message carried a labeled Owner ask, no Owner message has come since (a relayed answer, i.e. a non-notice
-//       delegation after the ask, counts as one), and this final message does not END with a rule-8 label that carries text (its
+//   (c) an earlier final message carried a labeled Owner ask, no Owner message has come since (a relayed answer counts as one: a non-notice
+//       delegation after the ask from the SAME thread that opened the ask's turn; an Owner-initiated turn's ask needs an Owner message), and this final message does not END with a rule-8 label that carries text (its
 //       last paragraph holds no label line with text after it; a bare label does not count). UNOBSERVED: how a scheduled heartbeat
 //       arrives; if one arrives as a plain user message it reads as an Owner message and (c) stays silent for it.
 //
@@ -99,7 +99,7 @@ const isOwnerMessage = (text) => {
 
 // EXPORTED for the test. Reads the transcript text into the few facts the triggers need, in file order.
 export function scan(text) {
-  const out = { turnStart: -1, turnId: null, delegations: [], sends: [], asks: [], owners: [], finals: [] };
+  const out = { turnStart: -1, turnId: null, turns: [], delegations: [], sends: [], asks: [], owners: [], finals: [] };
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -111,7 +111,7 @@ export function scan(text) {
     const p = o && o.payload;
     if (!p || typeof p !== "object") continue;
     if (o.type === "event_msg") {
-      if (p.type === "task_started") { out.turnStart = i; out.turnId = typeof p.turn_id === "string" ? p.turn_id : null; }
+      if (p.type === "task_started") { out.turns.push(i); out.turnStart = i; out.turnId = typeof p.turn_id === "string" ? p.turn_id : null; }
       else if (p.type === "item_completed" && p.item && p.item.type === "McpToolCall" && p.item.server === "codex_app" &&
                p.item.tool === "send_message_to_thread" && p.item.status === "completed" && p.item.arguments &&
                typeof p.item.arguments.threadId === "string") out.sends.push({ i, tid: p.item.arguments.threadId });
@@ -147,9 +147,22 @@ export function evaluate(sc, finalText) {
     reasons.push("this turn asked the Owner through request_user_input_async (an acknowledgement is not an answer) and your final message carries no rule-8 label");
   }
   const earlierAsk = [...sc.finals].reverse().find((f) => f.i < ts && hasLabel(f.text));
-  // v2.42.0: an Owner answer RELAYED by the delegating thread (a non-notice delegation that arrived after the ask) answers it too, FAIL OPEN
-  // like a plain Owner message. A STOP:/STATUS: notice is not an answer.
-  const answered = (after) => sc.owners.some((o) => o > after) || sc.delegations.some((d) => d.i > after && !d.notice);
+  // v2.42.0: an Owner answer RELAYED by the delegating thread answers the ask, FAIL OPEN like a plain Owner message. Exactly: a non-notice
+  // delegation after the ask whose source thread is the SAME thread that opened the turn the ask was made in (the first delegation of that
+  // turn, with no Owner message before it). An ask made in an Owner-initiated turn is answered only by an Owner message. A STOP:/STATUS:
+  // notice never answers, and a delegation from any other thread (a worker reply, another Architect) does not. If the ask's turn start is
+  // not in the text read (tail-capped), the opener is unknown and any non-notice delegation answers (fail open). No text matching.
+  const openerOf = (a) => {
+    const t0 = [...sc.turns].reverse().find((t) => t < a);
+    if (t0 === undefined) return undefined;
+    const d = sc.delegations.find((x) => x.i > t0 && x.i < a);
+    return d && !sc.owners.some((o) => o > t0 && o < d.i) ? d.tid : null;
+  };
+  const answered = (after) => {
+    if (sc.owners.some((o) => o > after)) return true;
+    const opener = openerOf(after);
+    return opener !== null && sc.delegations.some((d) => d.i > after && !d.notice && (opener === undefined || d.tid === opener));
+  };
   if (earlierAsk && !answered(earlierAsk.i) && !endsWithLabel(finalText)) {
     reasons.push("an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label");
   }
