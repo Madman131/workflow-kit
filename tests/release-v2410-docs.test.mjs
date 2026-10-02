@@ -68,10 +68,8 @@ test("the older releases' Upgrading bullets are unchanged (a replace-all must no
   assert.match(r, /three restatements of the push-GO rule .* and the clause "; the parent stays terminal" \(L97; L101 still says it\) were removed to make room: each idea survives elsewhere in the file and no rule changed/);
 });
 
-test("version is 2.41.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.41.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.41.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.41\.0$/m);
+test("the v2.41.0 release note is still in the README (the version stamp itself moves with each release; v2.42.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.41\.0 — a kit gap is reported, never waited on$/m);
 });
 
 test("the wrapper's --selftest target ships and init installs it", () => {

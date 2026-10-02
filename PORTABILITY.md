@@ -326,7 +326,7 @@ are byte-identical by construction — until each is adapted to the observed pay
 `sensor-stop-notice`, because no transcript shape was observed:** the "Owner-ended final close" exemption (a
 final close gets one nudge like any stop), whether Stop fires for a subagent and any `agent_id`/`agent_type` on a Stop payload (the subagent exemption is a guess that fails open; block-once bounds it), and a scheduled heartbeat turn (if a heartbeat arrives as a plain
 user message the sensor reads it as an Owner message, so its "ask stays last" trigger stays silent for that
-turn). Registering the sensor adds a `.codex/hooks.json` entry, so every adopter owes the Codex hook re-trust
+turn). Since v2.42.0 that trigger needs the closing label to carry text, and a non-notice delegation that arrives after the ask (an Owner answer relayed by the delegating thread) counts as answered, failing open like a plain Owner message; a `STOP:` or `STATUS:` notice never answers. Registering the sensor adds a `.codex/hooks.json` entry, so every adopter owes the Codex hook re-trust
 (FM-40). (An earlier version of this paragraph had understated the list since v2.2.0, naming the write
 guards and the gate-ladder sensor while omitting the two `apply_patch` sensors that release registered; the
 generated registration was right and the description of it was not.)
@@ -837,8 +837,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   that is not a non-empty absolute path) fails CLOSED: every gated write is DENIED until it is fixed
   with a shell command, deleted, or rewritten by `init`.
 - **A few `[P]` method docs carry illustrative origin-repo names.** `core/ARTIFACT_CLASS.md` cites
-  `pil/` as a code-dir example; `core/README.md` names `docs/PIL_ARCHITECTURE.md` / `docs/open_work_current_state.md`
-  as layer-model examples an adopter won't have; and several method docs cite a `docs/journal/*.md`
+  `pil/` as a code-dir example; and several method docs cite a `docs/journal/*.md`
   file for the postmortem a rule came from, which an adopter also won't have. These are illustrative
   prose and provenance only — **no control has a functional dependency on the origin repo** (verified:
   repo is passed via `-C`/cwd; no hardcoded absolute paths in any portable script).
