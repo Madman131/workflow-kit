@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, loadBriefConfig, sidecarState,
+  ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, ledgerKeepsControllerOn, loadBriefConfig, sidecarState,
   adjudicateFirst, ledgerRows, repairDeclarationState, writeLedger,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
@@ -334,9 +334,16 @@ test("every deny state produces a message that names the state's OWN remediation
 
 test("a corrupt kit.config.json fails CLOSED rather than silently narrowing scope", () => {
   const read = (v) => () => v;
-  assert.deepEqual(loadBriefConfig("/r", { readConfig: read(undefined) }), { ok: true, briefPathDirs: [] },
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read(undefined) }), { ok: true, briefPathDirs: [], repairController: false, repairControllerSet: false },
     "absent config ⇒ portable defaults, a legitimate minimal state");
-  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"briefPathDirs":["d"]}') }), { ok: true, briefPathDirs: ["d"] });
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"briefPathDirs":["d"]}') }), { ok: true, briefPathDirs: ["d"], repairController: false, repairControllerSet: false });
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"repairController":true}') }), { ok: true, briefPathDirs: [], repairController: true, repairControllerSet: true });
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"repairController":false}') }), { ok: true, briefPathDirs: [], repairController: false, repairControllerSet: true });
+  for (const bad of ['"true"', "1", "0", "null", '"yes"', "[]", "{}"]) {
+    const got = loadBriefConfig("/r", { readConfig: read(`{"repairController":${bad}}`) });
+    assert.equal(got.ok, false, `repairController ${bad} is malformed, not a quiet off`);
+    assert.equal(got.key, "repairController");
+  }
   for (const bad of ["{oops", "[]", '"str"', '{"briefPathDirs":"d"}', '{"briefPathDirs":["a/b"]}', '{"briefPathDirs":[""]}']) {
     assert.equal(loadBriefConfig("/r", { readConfig: read(bad) }).ok, false, `${bad} must fail closed`);
   }
@@ -344,7 +351,9 @@ test("a corrupt kit.config.json fails CLOSED rather than silently narrowing scop
 
 // ---------------------------------------------------------------- installed · registered · RUNS
 
-function adopt() {
+// `rc`: "on" (default — the pre-v2.43.0 controller suite runs against an opted-in repo, unchanged),
+// "off" (explicit false) or "absent" (no key: the v2.43.0 default, which is OFF).
+function adopt({ rc = "on" } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "kit-rung-"));
   const codexDir = mkdtempSync(path.join(os.tmpdir(), "kit-rung-codex-"));
   execFileSync("git", ["init", "-q", dir]);
@@ -356,6 +365,10 @@ function adopt() {
   writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
     mode: "in-thread", sessionId: "s1", taskId: "task1", tier: "T1",
   }));
+  if (rc !== "absent") {
+    const cfg = path.join(dir, ".claude", "kit.config.json");
+    writeFileSync(cfg, JSON.stringify({ ...JSON.parse(readFileSync(cfg, "utf8")), repairController: rc === "on" }));
+  }
   return { dir, cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(codexDir, { recursive: true, force: true }); } };
 }
 
@@ -1035,4 +1048,195 @@ test("every deny that asks for a RECORDED event names the command that records i
     "the detector must flag a remedy that names events but nothing runnable");
   const cured = `${planted} Record both with \`node scripts/record-repair-event.mjs --event <json>\`.`;
   assert.ok(RECORDER.test(cured), "…and must clear once the command is named");
+});
+
+// ── v2.43.0: the repair-round controller is OPT-IN (`repairController` in .claude/kit.config.json) ─────
+
+const guardRun = (dir, payload) => spawnSync(process.execPath,
+  [path.join(dir, ".claude", "hooks", "guard-brief-rung.mjs"), "--project-dir", dir],
+  { input: JSON.stringify(payload), encoding: "utf8" });
+const writeCall = (dir, target, session = "s2") => ({ session_id: session, tool_name: "Write", cwd: dir,
+  tool_input: { file_path: path.join(dir, target) } });
+const DENY = /"permissionDecision":"deny"/;
+const OWNED = /owned by another ACTIVE repair program/;
+const relabel = (dir) => writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
+  mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1" }));
+
+for (const rc of ["off"]) {
+  test(`v2.43.0 (${rc}): a source write the controller denies at base is admitted, and nothing is announced`, () => {
+    // The same fixture as GLOBAL ACTIVE PATH OWNERSHIP, whose opted-in run denies with OWNED.
+    const { dir, cleanup } = adopt({ rc });
+    try {
+      mkdirSync(path.join(dir, "src"));
+      writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+      seedStoredLegacy(dir);
+      relabel(dir);
+      const out = guardRun(dir, writeCall(dir, "src/x.mjs"));
+      assert.equal(out.stdout, "", "no deny and no notice from the controller in a repo that has not opted in");
+      // Control: the identical tree, opted in, denies — so the empty output above is the switch, not a dead fixture.
+      writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: true }));
+      assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, OWNED);
+    } finally { cleanup(); }
+  });
+}
+
+test("v2.43.0 (off): a corrupt ledger is never read, so it cannot deny a source write; opted in it still denies", () => {
+  const { dir, cleanup } = adopt({ rc: "off" });
+  try {
+    const ledgerDir = path.join(dir, ".git", "workflow-kit");
+    mkdirSync(ledgerDir, { recursive: true });
+    writeFileSync(path.join(ledgerDir, "repair-events-v1.jsonl"), "{not json at all\n");
+    assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "");
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: true }));
+    assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, DENY);
+  } finally { cleanup(); }
+});
+
+test("v2.43.0 (off): every non-controller check still denies — absent sidecar, stale sidecar, wrong session, spent rung", () => {
+  // Stake (b): the off branch must not open a fail-open in the brief rung beyond the controller.
+  for (const rc of ["off", "absent"]) {
+    const { dir, cleanup } = adopt({ rc });
+    try {
+      mkdirSync(path.join(dir, "briefs"), { recursive: true });
+      const sidecar = path.join(dir, ".claude", "brief-rung.json");
+      const brief = (session = "s1") => guardRun(dir, { session_id: session, tool_name: "Write", cwd: dir,
+        tool_input: { file_path: "briefs/cs1.md" } });
+      const good = { sessionId: "s1", target: "briefs/cs1.md", nonce: "rung-1", dispatch_kind: "build", task_id: "task1",
+        checks: [{ command: "c", output: "o" }] };
+      assert.match(brief().stdout, DENY, `${rc}: no sidecar denies`);
+      assert.match(brief().stdout, /has not run/);
+      writeFileSync(sidecar, JSON.stringify(good));
+      assert.match(brief("other").stdout, DENY, `${rc}: a sidecar bound to another session denies`);
+      const old = Date.now() / 1000 - 31 * 60;
+      utimesSync(sidecar, old, old);
+      assert.match(brief().stdout, DENY, `${rc}: a stale sidecar denies`);
+      assert.match(brief().stdout, /belong to another dispatch's ritual/);
+      const now = Date.now() / 1000;
+      utimesSync(sidecar, now, now);
+      assert.equal(brief().stdout, "", `${rc}: a fresh, bound sidecar admits the brief, silently`);
+      const again = brief().stdout;
+      assert.match(again, DENY, `${rc}: the same nonce cannot be spent twice`);
+      assert.match(again, /ALREADY been spent/);
+      // A send is still a dispatch that owes the rung.
+      assert.match(guardRun(dir, { session_id: "s1", tool_name: "mcp__other_harness__send_message", cwd: dir,
+        tool_input: { session_id: "worker-1", message: "Build it." } }).stdout, DENY, `${rc}: a worker send still owes the rung`);
+    } finally { cleanup(); }
+  }
+});
+
+test("v2.43.0 (off): a build brief is ordinary work while a stored repair program stands; opted in it is refused", () => {
+  const { dir, cleanup } = adopt({ rc: "off" });
+  try {
+    mkdirSync(path.join(dir, "src"));
+    writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+    seedStoredLegacy(dir);
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md",
+      nonce: "rung-b", dispatch_kind: "build", task_id: "task1", checks: [{ command: "c", output: "o" }] }));
+    const brief = () => guardRun(dir, { session_id: "s1", tool_name: "Write", cwd: dir, tool_input: { file_path: "briefs/cs1.md" } });
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: true }));
+    assert.match(brief().stdout, /repair|REPAIR/, "control: opted in, the live program refuses the ordinary build brief");
+    assert.match(brief().stdout, DENY);
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: false }));
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md",
+      nonce: "rung-c", dispatch_kind: "build", task_id: "task1", checks: [{ command: "c", output: "o" }] }));
+    assert.equal(brief().stdout, "", "off: the controller has an empty history, so the build brief is admitted");
+  } finally { cleanup(); }
+});
+
+test("v2.43.0 (off): a repair declaration is refused, and the refusal names the switch", () => {
+  const { dir, cleanup } = adopt({ rc: "off" });
+  try {
+    mkdirSync(path.join(dir, "briefs"), { recursive: true });
+    writeFileSync(path.join(dir, ".claude", "brief-rung.json"), JSON.stringify({ sessionId: "s1", target: "briefs/cs1.md",
+      nonce: "rung-r", dispatch_kind: "repair", task_id: "task1", checks: [{ command: "c", output: "o" }],
+      repair: { task_id: "task1" } }));
+    const out = guardRun(dir, { session_id: "s1", tool_name: "Write", cwd: dir, tool_input: { file_path: "briefs/cs1.md" } });
+    assert.match(out.stdout, DENY);
+    assert.match(out.stdout, /repairController/);
+  } finally { cleanup(); }
+});
+
+test("v2.43.0: a malformed repairController fails CLOSED — markdown writes deny as malformed, and the controller stays ON", () => {
+  for (const bad of ['"true"', "1", "null"]) {
+    const { dir, cleanup } = adopt({ rc: "off" });
+    try {
+      mkdirSync(path.join(dir, "src"));
+      writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+      seedStoredLegacy(dir);
+      relabel(dir);
+      writeFileSync(path.join(dir, ".claude", "kit.config.json"), `{"repairController":${bad}}`);
+      const md = guardRun(dir, writeCall(dir, "docs/design.md", "s1"));
+      assert.match(md.stdout, DENY, `${bad}: a markdown write denies`);
+      assert.match(md.stdout, /MALFORMED/);
+      assert.match(md.stdout, /`repairController` is invalid/, "and names the key to repair");
+      assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, OWNED,
+        `${bad}: the active repair program still binds the source write — a config error never narrows the control`);
+    } finally { cleanup(); }
+  }
+});
+
+// ── v2.43.0 (D-144): an ABSENT key lets an existing repair ledger keep the controller ON (lstat only) ───
+
+test("v2.43.0 (absent key): a non-empty regular ledger keeps the controller ON — the state a refused `init --force` leaves", () => {
+  const { dir, cleanup } = adopt({ rc: "absent" });
+  try {
+    mkdirSync(path.join(dir, "src"));
+    writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+    seedStoredLegacy(dir);
+    relabel(dir);
+    assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, OWNED, "the controller still binds the source write");
+    // …and explicit false beats the same ledger.
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: false }));
+    assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "");
+    // …and with no config FILE at all the absent-key rule is the same.
+    rmSync(path.join(dir, ".claude", "kit.config.json"));
+    assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, OWNED);
+  } finally { cleanup(); }
+});
+
+test("v2.43.0 (absent key): an unreadable non-empty ledger and a symlinked ledger both fail CLOSED, as at base", () => {
+  for (const shape of ["corrupt", "symlink"]) {
+    const { dir, cleanup } = adopt({ rc: "absent" });
+    try {
+      const ledgerDir = path.join(dir, ".git", "workflow-kit");
+      mkdirSync(ledgerDir, { recursive: true });
+      const ledger = path.join(ledgerDir, "repair-events-v1.jsonl");
+      if (shape === "corrupt") writeFileSync(ledger, "{not json at all\n");
+      else { writeFileSync(path.join(dir, "elsewhere.jsonl"), ""); symlinkSync(path.join(dir, "elsewhere.jsonl"), ledger); }
+      assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, DENY, `${shape}: controller ON ⇒ the source write denies`);
+      writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: false }));
+      assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "", `${shape}: explicit false wins`);
+    } finally { cleanup(); }
+  }
+});
+
+test("v2.43.0 (absent key): a missing or an empty regular ledger means OFF", () => {
+  for (const shape of ["missing", "empty"]) {
+    const { dir, cleanup } = adopt({ rc: "absent" });
+    try {
+      if (shape === "empty") {
+        mkdirSync(path.join(dir, ".git", "workflow-kit"), { recursive: true });
+        writeFileSync(path.join(dir, ".git", "workflow-kit", "repair-events-v1.jsonl"), "");
+      }
+      assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "", `${shape} ledger: OFF`);
+    } finally { cleanup(); }
+  }
+});
+
+test("v2.43.0: ledgerKeepsControllerOn fails closed on a non-git tree and never creates a ledger", () => {
+  const plain = mkdtempSync(path.join(os.tmpdir(), "kit-rung-plain-"));
+  try {
+    assert.equal(ledgerKeepsControllerOn(plain), true, "no resolvable Git common dir ⇒ ON");
+  } finally { rmSync(plain, { recursive: true, force: true }); }
+  const odd = adopt({ rc: "absent" });
+  try {
+    writeFileSync(path.join(odd.dir, ".git", "workflow-kit"), "a file where the ledger directory belongs");
+    assert.equal(ledgerKeepsControllerOn(odd.dir), true, "an lstat error other than ENOENT (ENOTDIR here) ⇒ ON");
+  } finally { odd.cleanup(); }
+  const { dir, cleanup } = adopt({ rc: "absent" });
+  try {
+    assert.equal(ledgerKeepsControllerOn(dir), false);
+    assert.equal(existsSync(path.join(dir, ".git", "workflow-kit")), false, "the check created nothing");
+  } finally { cleanup(); }
 });

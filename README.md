@@ -1,4 +1,4 @@
-# workflow-kit — v2.42.0
+# workflow-kit — v2.43.0
 
 ## How to start a build
 
@@ -11,6 +11,19 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.43.0 — the repair-round controller is opt-in
+
+One guard branch and conditional prose. The repair-round controller (the ledger, the worker-receipt check on source writes, the repair-dispatch rules) is now **off by default**: on automatically where a repair ledger exists, off otherwise, and an explicit `repairController` in `.claude/kit.config.json` wins.
+
+- **Switch.** `repairController` is a boolean. Any non-boolean value is MALFORMED and fails closed exactly like a bad `briefPathDirs`: the controller stays ON and a markdown write is denied until the file is fixed.
+- **Absent key.** The guard checks the Git-common ledger `<git-common-dir>/workflow-kit/repair-events-v1.jsonl` with `lstat` only, never reading or creating it. A non-empty file, a symlink, a non-regular file, any other `lstat` error or an unresolvable Git common dir keeps the controller ON exactly as at base; a missing or empty regular file means OFF. So an upgrade that landed the new hook but not a key (a refused `init --force`, a byte-copy port) never silently drops enforcement.
+- **Explicit value.** `true` is ON, `false` is OFF even beside a ledger.
+- **Off repos.** `hooks/guard-brief-rung.mjs` reads no repair ledger, admission-checks no source write, and evaluates every dispatch against an empty history, so the controller cannot cause a deny or a notice there. Every other check is unchanged: brief freshness, sidecar, session binding, rung already spent, and the malformed-config deny. A brief whose sidecar declares `dispatch_kind: "repair"` is still refused (an off repo has no ledger to bind), and the refusal names the switch.
+- **On repos.** Behave byte-for-byte as in v2.42.0. `hooks/repair-dispatch-state.mjs`, `scripts/record-repair-event.mjs`, `scripts/confirm-repair-brief.mjs` and `bin/init.mjs` are untouched; `init` writes no key.
+- **Docs.** `core/WORKFLOW.md`, `skills/orchestrate/CHIP_BRIEF.md` § 5, the `/orchestrate` SKILL, `PORTABILITY.md`, the `BINDINGS` template and this README say the controller is conditional where a statement would otherwise be false. Budgets held, not raised: `core/WORKFLOW.md` is at its 25600 B cap (the sentence "Non-blocking adjacents route as FOLLOW-UP." was cut; the SKILL still routes green non-blockers to successors), the SKILL stays at 1400 words and CHIP_BRIEF under 1000, by trimming.
+- **New tests.** `tests/release-v2430-docs.test.mjs`, plus the opt-in cases in `tests/brief-rung.test.mjs`.
+- **Upgrading.** Re-run `init --force`. A repo that already has a repair ledger stays on automatically; any other repo is now off and needs nothing. To force it on or off, set `"repairController"` in `.claude/kit.config.json`; `init --force` drops `repairController` (it warns), so re-add an explicit value afterwards. No `.codex/hooks.json` entry changes.
 
 ## What's new in v2.42.0 — a gating budget is precommitted; a bare closing label no longer counts at the Stop sensor
 
@@ -1238,7 +1251,7 @@ may declare `{"class":"status"}` instead, and that declaration is LEDGERED for t
 spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
 must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
-**The same guard also gates SOURCE writes** once a repair program is live — a scope worth stating
+**The same guard also gates SOURCE writes** once a repair program is live, where the controller is on (`repairController: true`, or the key absent beside a repair ledger) — a scope worth stating
 plainly, because it is the half most likely to block you. While a gate round stands at NO-GO with
 disposition REMEDIATE and no eligible recorded close, a write to a path that repair claimed is
 admitted only from a session holding a verified worker receipt. Every other disposition holds

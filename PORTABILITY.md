@@ -693,7 +693,8 @@ roots at `.agents/skills/` etc. is a hand adaptation, not a supported path).
 This simplified line retains the reviewed controller from `06e449e1bd0bec920a062de3a22a46536d39295b`
 (`hooks/repair-dispatch-state.mjs` blob `e2a61115c77d99b93ac88b3141a1b19438ee3363`).
 Its finite gate ladder, recorded Principal authority, typed reviews, and active-program brief/worker
-checks remain. Owner-reserved decisions and recorded STOP history are unchanged.
+checks remain, but since v2.43.0 they are on automatically where a repair ledger exists; off otherwise;
+an explicit `repairController` in `.claude/kit.config.json` wins. Owner-reserved decisions and recorded STOP history are unchanged.
 
 The later permissive uncited legacy-handoff migration, global stopped/pending/open-panel path-write
 interlocks, Git-common cross-process writer lock, and ordinary pending-child first-write admission
