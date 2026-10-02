@@ -4,7 +4,7 @@ Word budget: 1000 (**Owner-ratified 2026-08-11**, raised from an author-set 600 
 gained the routing completion; its own number, never summed with the body's).
 
 Reference layer for `.agents/skills/orchestrate/SKILL.md`. A brief goes to a session with **no
-memory of the program**. Everything it needs on turn one is in the brief or the referenced record.
+memory of the program**. Everything it needs is in the brief or the referenced record.
 
 ## The nine sections
 1. **Identity and order** — which chip this is, which chips must have landed first, and the
@@ -23,8 +23,8 @@ memory of the program**. Everything it needs on turn one is in the brief or the 
 5. **Process** — ordered rungs and pre-decided skips. **Every brief names the Builder's model and
    effort; every same-family seat runs at or above that model** (`core/REVIEW.md` peer tier), **reporting expected and observed
    model+effort and any mismatch rather than silently substituting.** **Gating budget:** the brief precommits seats, maximum rounds and the STAKES
-   (what a wrong ship costs; live or irreversible state touched); stakes size the budget above the tier floor, never below. Past 2× the plan the PM stops
-   and the Principal decides, never another repair round, answering in order and recording each: (1) RULE #1: an accepted finding with named harm left?
+   (what a wrong ship costs; live or irreversible state touched); stakes size the budget above the tier floor, never below. Past 2× the planned rounds or seat-runs, whichever first, the PM stops
+   and the Principal decides, never another repair round, answering in order, recording each: (1) RULE #1: an accepted finding with named harm left?
    No ⇒ finish. (2) Root cause: one design cause ⇒ reset that part. (3) KISS: cause deletable or simpler ⇒ simplify. (4) Zoom Out: failing piece
    separable ⇒ split; whole not worth its cost ⇒ Owner DECISION NEEDED. **No scheduled check-ins;** speak when something changes. Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
