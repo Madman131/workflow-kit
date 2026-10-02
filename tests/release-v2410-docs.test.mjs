@@ -51,6 +51,23 @@ test("the README note names the changes, the new tests and the upgrade steps", (
   assert.match(n, /never shipped before v2\.41\.0/);
 });
 
+test("the older releases' Upgrading bullets are unchanged (a replace-all must not recur) and the WORKFLOW-trim sentence is exact", () => {
+  const r = flat("README.md");
+  for (const [from, to, first] of [
+    ["v2.40.0", "v2.39.2", "Re-run `init --force` and re-trust the hooks as above; an adopter hand-edits rule 8 of their existing `core/OWNER_COMMS.md` (a per-repo file; D-106)."],
+    ["v2.39.2", "v2.39.1", "Re-run `init --force`; `OWNER_COMMS` is a per-repo file, so an adopter hand-edits rule 8."],
+    ["v2.39.1", "v2.39.0", "Re-run `init --force`."],
+    ["v2.39.0", "v2.38.0", "Re-run `init --force` (or copy the `## Thread restart` section into `AGENTS.md`)."],
+    ["v2.38.0", "v2.37.1", "Re-run `init --force` to refresh the template, or copy the three sections by hand."],
+    ["v2.37.1", "v2.37.0", "`init --force` adds the `UserPromptSubmit` group and the Stop registration exactly once and never duplicates them or the existing `PreToolUse` group. Without `init`, copy"],
+  ]) {
+    const sec = r.slice(r.indexOf(`## What's new in ${from}`), r.indexOf(`## What's new in ${to}`));
+    assert.ok(sec.includes(`- **Upgrading.** ${first}`), `${from}'s Upgrading bullet is intact`);
+    assert.ok(!sec.includes("ROUTING's Authority section"), `${from} carries no v2.41.0 text`);
+  }
+  assert.match(r, /three restatements of the push-GO rule .* and the clause "; the parent stays terminal" \(L97; L101 still says it\) were removed to make room: each idea survives elsewhere in the file and no rule changed/);
+});
+
 test("version is 2.41.0 everywhere", () => {
   assert.equal(read("VERSION").trim(), "2.41.0");
   assert.equal(JSON.parse(read("package.json")).version, "2.41.0");
