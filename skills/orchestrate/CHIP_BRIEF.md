@@ -26,7 +26,7 @@ memory of the program**. Everything it needs is in the brief or the referenced r
    (what a wrong ship costs; live or irreversible state touched); stakes size the budget above the tier floor, never below. Past 2× the planned rounds or seat-runs, whichever first, the PM stops
    and the Principal decides, never another repair round, answering in order, recording each: (1) RULE #1: an accepted finding with named harm left?
    No ⇒ finish. (2) Root cause: one design cause ⇒ reset that part. (3) KISS: cause deletable or simpler ⇒ simplify. (4) Zoom Out: failing piece
-   separable ⇒ split; whole not worth its cost ⇒ Owner DECISION NEEDED. **No scheduled check-ins;** speak when something changes. Repair-controller text below applies only if `repairController` is true. Aggregate repair briefs declare
+   separable ⇒ split; whole not worth its cost ⇒ Owner DECISION NEEDED. **No scheduled check-ins;** speak when something changes. Repair-controller text below applies only where the controller is on (`repairController`). Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
    event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
    frontier process-review ID. **Review logs never ride in the changeset under review.** **A Builder the

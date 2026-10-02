@@ -53,7 +53,7 @@ import { fileURLToPath } from "node:url";
 // Codex lane's multi-target `apply_patch` envelopes without knowing what a patch looks like.
 import { extractTargets, resolvePatchBase, resolveProjectRoot, toRepoRelative } from "./payload-targets.mjs";
 import {
-  deriveAggregateRepairState, deriveRepairState, loadRepairEventsForProject,
+  deriveAggregateRepairState, deriveRepairState, loadRepairEventsForProject, repairLedgerPath,
   validateRepairDispatch, verifyRepairWorkerWrite,
 } from "./repair-dispatch-state.mjs";
 
@@ -134,12 +134,12 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   let raw;
   if (readConfig) {
     raw = readConfig(file);
-    if (raw === undefined) return { ok: true, briefPathDirs: [], repairController: false };
+    if (raw === undefined) return { ok: true, briefPathDirs: [], repairController: false, repairControllerSet: false };
     if (raw === null) return { ok: false };
   } else {
     let st;
     try { st = lstatSync(file); }
-    catch (e) { if (e && e.code === "ENOENT") return { ok: true, briefPathDirs: [], repairController: false }; return { ok: false }; }
+    catch (e) { if (e && e.code === "ENOENT") return { ok: true, briefPathDirs: [], repairController: false, repairControllerSet: false }; return { ok: false }; }
     if (st.isSymbolicLink() || !st.isFile()) return { ok: false };
     try { raw = readFileSync(file, "utf8"); } catch { return { ok: false }; }
   }
@@ -152,9 +152,26 @@ export function loadBriefConfig(projectRoot, { readConfig } = {}) {
   // boolean is malformed and fails CLOSED like `briefPathDirs`, i.e. the controller stays ON.
   const rc = parsed.repairController === undefined ? false : parsed.repairController;
   if (typeof rc !== "boolean") return { ok: false, key: "repairController" };
-  const out = { ok: true, briefPathDirs: dirs, repairController: rc };
+  // `repairControllerSet` separates an absent key from an explicit false: only an ABSENT key lets an existing
+  // repair ledger keep the controller on (see `ledgerKeepsControllerOn`).
+  const out = { ok: true, briefPathDirs: dirs, repairController: rc, repairControllerSet: parsed.repairController !== undefined };
   // `pairedPm*` keys (retired in v2.37.0) may still sit in an older adopter's config: ignored, never fatal.
   return out;
+}
+
+// v2.43.0: with the `repairController` key ABSENT, an existing repair ledger keeps the controller ON exactly as
+// at base, so an upgrade that landed the new hook but not the key (a refused `init --force`, a byte-copy port)
+// never silently drops enforcement. lstat only: the ledger is never read or created here. Only ENOENT or an
+// empty regular file means "no ledger"; a non-empty file, a symlink, a non-regular file, any other lstat error
+// and an unresolvable Git common dir all fail CLOSED (controller ON).
+export function ledgerKeepsControllerOn(projectRoot) {
+  let file;
+  try { file = repairLedgerPath(projectRoot); } catch { return true; }
+  if (!file) return true;
+  try {
+    const st = lstatSync(file);
+    return !(st.isFile() && !st.isSymbolicLink() && st.size === 0);
+  } catch (e) { return !(e && e.code === "ENOENT"); }
 }
 
 export function loadTaskId(projectRoot, { readTaskLane } = {}) {
@@ -599,11 +616,13 @@ export function main({ stdin = process.stdin, cwd = process.cwd(), emit = emitDe
     }
 
     const taskId = loadTaskId(root);
-    // Controller OFF (default; the config parsed and `repairController` is not true): no ledger is read,
+    // Controller OFF (default; the config parsed, `repairController` is not true, and an ABSENT key has no repair
+    // ledger to preserve): no ledger is read,
     // the controller has an empty history, and no source write is admission-checked. A malformed config
     // (`config.ok` false) never reaches this branch, so it keeps the controller ON. Every other check
     // below is unchanged.
-    const controllerOff = config.ok && !config.repairController;
+    const controllerOff = config.ok && !config.repairController &&
+      (config.repairControllerSet || !ledgerKeepsControllerOn(root));
     const controller = controllerOff
       ? { ok: true, events: [], aggregate_events: [], observed_overrides: [] }
       : loadRepairEventsForProject(root);

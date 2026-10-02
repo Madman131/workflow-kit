@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, loadBriefConfig, sidecarState,
+  ALLOW_STATES, briefTargets, denyReason, isBriefPath, isSendTool, ledgerKeepsControllerOn, loadBriefConfig, sidecarState,
   adjudicateFirst, ledgerRows, repairDeclarationState, writeLedger,
 } from "../hooks/guard-brief-rung.mjs";
 import { toRepoRelative } from "../hooks/payload-targets.mjs";
@@ -334,11 +334,11 @@ test("every deny state produces a message that names the state's OWN remediation
 
 test("a corrupt kit.config.json fails CLOSED rather than silently narrowing scope", () => {
   const read = (v) => () => v;
-  assert.deepEqual(loadBriefConfig("/r", { readConfig: read(undefined) }), { ok: true, briefPathDirs: [], repairController: false },
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read(undefined) }), { ok: true, briefPathDirs: [], repairController: false, repairControllerSet: false },
     "absent config ⇒ portable defaults, a legitimate minimal state");
-  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"briefPathDirs":["d"]}') }), { ok: true, briefPathDirs: ["d"], repairController: false });
-  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"repairController":true}') }), { ok: true, briefPathDirs: [], repairController: true });
-  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"repairController":false}') }), { ok: true, briefPathDirs: [], repairController: false });
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"briefPathDirs":["d"]}') }), { ok: true, briefPathDirs: ["d"], repairController: false, repairControllerSet: false });
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"repairController":true}') }), { ok: true, briefPathDirs: [], repairController: true, repairControllerSet: true });
+  assert.deepEqual(loadBriefConfig("/r", { readConfig: read('{"repairController":false}') }), { ok: true, briefPathDirs: [], repairController: false, repairControllerSet: true });
   for (const bad of ['"true"', "1", "0", "null", '"yes"', "[]", "{}"]) {
     const got = loadBriefConfig("/r", { readConfig: read(`{"repairController":${bad}}`) });
     assert.equal(got.ok, false, `repairController ${bad} is malformed, not a quiet off`);
@@ -1062,7 +1062,7 @@ const OWNED = /owned by another ACTIVE repair program/;
 const relabel = (dir) => writeFileSync(path.join(dir, ".claude", "task-lane.json"), JSON.stringify({
   mode: "in-thread", sessionId: "s2", taskId: "task2", tier: "T1" }));
 
-for (const rc of ["off", "absent"]) {
+for (const rc of ["off"]) {
   test(`v2.43.0 (${rc}): a source write the controller denies at base is admitted, and nothing is announced`, () => {
     // The same fixture as GLOBAL ACTIVE PATH OWNERSHIP, whose opted-in run denies with OWNED.
     const { dir, cleanup } = adopt({ rc });
@@ -1174,4 +1174,69 @@ test("v2.43.0: a malformed repairController fails CLOSED — markdown writes den
         `${bad}: the active repair program still binds the source write — a config error never narrows the control`);
     } finally { cleanup(); }
   }
+});
+
+// ── v2.43.0 (D-144): an ABSENT key lets an existing repair ledger keep the controller ON (lstat only) ───
+
+test("v2.43.0 (absent key): a non-empty regular ledger keeps the controller ON — the state a refused `init --force` leaves", () => {
+  const { dir, cleanup } = adopt({ rc: "absent" });
+  try {
+    mkdirSync(path.join(dir, "src"));
+    writeFileSync(path.join(dir, "src", "x.mjs"), "export const x = 1;\n");
+    seedStoredLegacy(dir);
+    relabel(dir);
+    assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, OWNED, "the controller still binds the source write");
+    // …and explicit false beats the same ledger.
+    writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: false }));
+    assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "");
+    // …and with no config FILE at all the absent-key rule is the same.
+    rmSync(path.join(dir, ".claude", "kit.config.json"));
+    assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, OWNED);
+  } finally { cleanup(); }
+});
+
+test("v2.43.0 (absent key): an unreadable non-empty ledger and a symlinked ledger both fail CLOSED, as at base", () => {
+  for (const shape of ["corrupt", "symlink"]) {
+    const { dir, cleanup } = adopt({ rc: "absent" });
+    try {
+      const ledgerDir = path.join(dir, ".git", "workflow-kit");
+      mkdirSync(ledgerDir, { recursive: true });
+      const ledger = path.join(ledgerDir, "repair-events-v1.jsonl");
+      if (shape === "corrupt") writeFileSync(ledger, "{not json at all\n");
+      else { writeFileSync(path.join(dir, "elsewhere.jsonl"), ""); symlinkSync(path.join(dir, "elsewhere.jsonl"), ledger); }
+      assert.match(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, DENY, `${shape}: controller ON ⇒ the source write denies`);
+      writeFileSync(path.join(dir, ".claude", "kit.config.json"), JSON.stringify({ repairController: false }));
+      assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "", `${shape}: explicit false wins`);
+    } finally { cleanup(); }
+  }
+});
+
+test("v2.43.0 (absent key): a missing or an empty regular ledger means OFF", () => {
+  for (const shape of ["missing", "empty"]) {
+    const { dir, cleanup } = adopt({ rc: "absent" });
+    try {
+      if (shape === "empty") {
+        mkdirSync(path.join(dir, ".git", "workflow-kit"), { recursive: true });
+        writeFileSync(path.join(dir, ".git", "workflow-kit", "repair-events-v1.jsonl"), "");
+      }
+      assert.equal(guardRun(dir, writeCall(dir, "src/x.mjs")).stdout, "", `${shape} ledger: OFF`);
+    } finally { cleanup(); }
+  }
+});
+
+test("v2.43.0: ledgerKeepsControllerOn fails closed on a non-git tree and never creates a ledger", () => {
+  const plain = mkdtempSync(path.join(os.tmpdir(), "kit-rung-plain-"));
+  try {
+    assert.equal(ledgerKeepsControllerOn(plain), true, "no resolvable Git common dir ⇒ ON");
+  } finally { rmSync(plain, { recursive: true, force: true }); }
+  const odd = adopt({ rc: "absent" });
+  try {
+    writeFileSync(path.join(odd.dir, ".git", "workflow-kit"), "a file where the ledger directory belongs");
+    assert.equal(ledgerKeepsControllerOn(odd.dir), true, "an lstat error other than ENOENT (ENOTDIR here) ⇒ ON");
+  } finally { odd.cleanup(); }
+  const { dir, cleanup } = adopt({ rc: "absent" });
+  try {
+    assert.equal(ledgerKeepsControllerOn(dir), false);
+    assert.equal(existsSync(path.join(dir, ".git", "workflow-kit")), false, "the check created nothing");
+  } finally { cleanup(); }
 });
