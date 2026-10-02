@@ -1,4 +1,4 @@
-# workflow-kit — v2.42.0
+# workflow-kit — v2.43.0
 
 ## How to start a build
 
@@ -11,6 +11,18 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.43.0 — the repair-round controller is opt-in
+
+One guard branch, one `init` step, and conditional prose. The repair-round controller (the ledger, the worker-receipt check on source writes, the repair-dispatch rules) is now **off by default**. A repo opts in with `"repairController": true` in `.claude/kit.config.json`.
+
+- **Switch.** `repairController` is a boolean; absent means `false`. Any non-boolean value is MALFORMED and fails closed exactly like a bad `briefPathDirs`: the controller stays ON and a markdown write is denied until the file is fixed.
+- **Off repos.** `hooks/guard-brief-rung.mjs` reads no repair ledger, admission-checks no source write, and evaluates every dispatch against an empty history, so the controller can never cause a deny or a notice. Every other check is unchanged: brief freshness, sidecar, session binding, rung already spent, and the malformed-config deny. A brief whose sidecar declares `dispatch_kind: "repair"` is still refused (an off repo has no ledger to bind), and the refusal names the switch.
+- **Opted-in repos.** Behave byte-for-byte as in v2.42.0. `hooks/repair-dispatch-state.mjs`, `scripts/record-repair-event.mjs` and `scripts/confirm-repair-brief.mjs` are untouched.
+- **`init` keeps existing users opted in.** When the target's `<git-common-dir>/workflow-kit/repair-events-v1.jsonl` exists and is non-empty and `repairController` is absent, `init` writes `"repairController": true` (a plain run adds only that key and keeps a `.bak`; `--force` carries it through the rewrite) and prints one line saying why. An explicit value, true or false, is never flipped.
+- **Docs.** `core/WORKFLOW.md`, `skills/orchestrate/CHIP_BRIEF.md` § 5, the `/orchestrate` SKILL, `PORTABILITY.md`, the `BINDINGS` template and this README say the controller is opt-in where a statement would otherwise be false. Budgets held, not raised: `core/WORKFLOW.md` is at its 25600 B cap (one sentence on the non-blocking-adjacents route was cut; the SKILL still routes green non-blockers to successors), the SKILL stays at 1400 words and CHIP_BRIEF under 1000, by trimming.
+- **New tests.** `tests/release-v2430-docs.test.mjs`, plus the opt-in cases in `tests/brief-rung.test.mjs` and `tests/init-force.test.mjs`.
+- **Upgrading.** Re-run `init --force`. A repo that already has a repair ledger stays on automatically; any other repo is now off and needs nothing. To turn it on, add `"repairController": true` to `.claude/kit.config.json`. No `.codex/hooks.json` entry changes.
 
 ## What's new in v2.42.0 — a gating budget is precommitted; a bare closing label no longer counts at the Stop sensor
 
@@ -1238,7 +1250,7 @@ may declare `{"class":"status"}` instead, and that declaration is LEDGERED for t
 spot-check: the guard does not decide what is load-bearing, because that is a semantic call a hook
 must not make for its consumer (`core/INVARIANTS.md` rule 1).
 
-**The same guard also gates SOURCE writes** once a repair program is live — a scope worth stating
+**The same guard also gates SOURCE writes** once a repair program is live, in a repo that opted in with `repairController: true` — a scope worth stating
 plainly, because it is the half most likely to block you. While a gate round stands at NO-GO with
 disposition REMEDIATE and no eligible recorded close, a write to a path that repair claimed is
 admitted only from a session holding a verified worker receipt. Every other disposition holds

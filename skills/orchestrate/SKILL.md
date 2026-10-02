@@ -74,7 +74,7 @@ into a private worktree.
    default to the workhorse tier at standard effort, **never below the Builder's model** (`core/REVIEW.md`
    peer tier); **evidence escalates them, appetite does not.**
 5. **One discretionary frontier firing per changeset**; default is the PM's fold-check
-   (`/frontier-review`). Required planning/process consults are outside it, never review loops.
+   (`/frontier-review`). Required planning/process consults sit outside it.
    Verdicts are evidence, never repair authority: require concrete supported-use harm; route green
    non-blockers to parent-linked successors. R1 permits one bounded batch unless the mechanism
    repeated; harm-bearing R2 and repeated R1 require one root kind plus a root exit with closure
@@ -84,7 +84,7 @@ into a private worktree.
    `.agents/skills/orchestrate/PROTOCOLS.md`. The controller binds typed
    `owner_decision`/`successor` review and exact continuation proposal; runtime model/effort is
    procedure, not controller-authenticated identity.
-   Round events: `scripts/record-repair-event.mjs`; repair-brief byte confirmation is CHIP_BRIEF § 5.
+   Round events (opt-in `repairController`): `scripts/record-repair-event.mjs`; repair-brief byte confirmation is CHIP_BRIEF § 5.
 6. **PM diligence.** Re-run evidence on the final head, not the summary; remote stages await fresh GO.
 
 *What every brief must carry: `.agents/skills/orchestrate/CHIP_BRIEF.md`. The incident behind each

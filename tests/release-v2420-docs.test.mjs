@@ -95,8 +95,6 @@ test("the README note names what ships and not what was dropped, and the older U
   }
 });
 
-test("version is 2.42.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.42.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.42.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.42\.0$/m);
+test("the v2.42.0 release note is still in the README (the version stamp itself moves with each release; v2.43.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.42\.0 — a gating budget is precommitted/m);
 });
