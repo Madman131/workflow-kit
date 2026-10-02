@@ -17,7 +17,7 @@ test("CHIP_BRIEF § 5 carries the gating budget: precommit, stakes, 2x trip wire
   assert.ok(i > b.indexOf("5. **Process**") && i < b.indexOf("6. **Standing rules**"), "the clause sits in § 5");
   const g = b.slice(i, b.indexOf("Aggregate repair briefs"));
   assert.match(g, /precommits seats, maximum rounds and the STAKES \(what a wrong ship costs; live or irreversible state touched\); stakes size the budget above the tier floor, never below\./);
-  assert.match(g, /Past 2× the plan the PM stops and the Principal decides, never another repair round, answering in order and recording each:/);
+  assert.match(g, /Past 2× the planned rounds or seat-runs, whichever first, the PM stops and the Principal decides, never another repair round, answering in order, recording each:/);
   const order = ["(1) RULE #1", "(2) Root cause", "(3) KISS", "(4) Zoom Out"].map((t) => g.indexOf(t));
   assert.ok(order.every((n) => n >= 0) && order.every((n, k) => k === 0 || n > order[k - 1]), "the four questions appear in the fixed order");
   assert.match(g, /whole not worth its cost ⇒ Owner DECISION NEEDED\./);
@@ -39,13 +39,18 @@ test("the Codex and Claude entry templates carry the twin, and no longer call ev
   for (const rel of ["templates/AGENTS.md.tmpl", "templates/CLAUDE.md.tmpl"]) {
     const t = flat(rel);
     assert.match(t, /## Gating budget and check-ins/, rel);
-    assert.match(t, /the brief precommits seats, rounds and the STAKES; past 2× that plan the PM stops and the Principal runs RULE #1 → root cause → KISS → Zoom Out, recording each answer, never another repair round\./, rel);
+    assert.match(t, /the brief precommits seats, rounds and the STAKES; past 2× its rounds or seat-runs, whichever first, the PM stops and the Principal runs RULE #1 → root cause → KISS → Zoom Out, recording each answer, never another repair round\./, rel);
     assert.match(t, /No scheduled check-ins; a heartbeat that arrives anyway follows `core\/OWNER_COMMS\.md` rule 8\./, rel);
     assert.match(t, /`\.agents\/skills\/orchestrate\/CHIP_BRIEF\.md` § 5/, rel);
     assert.ok(!/both Stop sensors remain Claude-only|the two Stop sensors \(Owner-comms, token ledger\) are Claude-lane only/.test(t), `${rel} lost the stale all-Stop-sensors-are-Claude-only claim`);
   }
   assert.match(flat("templates/AGENTS.md.tmpl"), /On Stop it registers one more SENSOR, `sensor-stop-notice` \(blocks once, fails open\)\./);
   assert.match(flat("templates/CLAUDE.md.tmpl"), /`sensor-stop-notice` is registered on Codex `Stop` only\./);
+});
+
+test("BINDINGS template has the STATE-head and architecture-REFERENCE slot core/README points at", () => {
+  const b = flat("templates/BINDINGS.md.tmpl");
+  assert.match(b, /\*\*STATE:\*\* current-state head = \{\{STATE_DOC\}\} · deep architecture REFERENCE = \{\{ARCH_REFERENCE_DOC\}\}/);
 });
 
 test("core/README names no adopter's files, gives the STATE fallback, and keeps git and the PR as the source for gate status", () => {
@@ -57,9 +62,9 @@ test("core/README names no adopter's files, gives the STATE fallback, and keeps 
   assert.ok(!/`core\/README\.md` names `docs\/PIL_ARCHITECTURE/.test(flat("PORTABILITY.md")), "PORTABILITY no longer lists core/README.md as carrying origin names");
 });
 
-test("the sensor header states the closing-label and relayed-answer rules, and its installed copies stay identical", () => {
+test("the sensor header states the closing-label and relayed-answer rules", () => {
   const h = read("hooks/sensor-stop-notice.mjs");
-  assert.match(h, /a relayed answer, i\.e\. a non-notice\s*\/\/\s*delegation after the ask, counts as one/);
+  assert.match(h, /non-notice\s*\/\/\s*delegation after the ask from the SAME thread that opened the ask's turn; an Owner-initiated turn's ask needs an Owner message/);
   assert.match(h, /label that carries text/);
 });
 
@@ -70,7 +75,8 @@ test("the README note names what ships and not what was dropped, and the older U
   assert.match(n, /No scheduled check-ins\./);
   assert.match(n, /The `\/orchestrate` SKILL is unchanged \(0 words added\)/);
   assert.match(n, /trigger \(c\): the final must END with a rule-8 label that carries text/);
-  assert.match(n, /RELAYED by the delegating thread/);
+  assert.match(n, /RELAYED by the thread that opened the ask's turn/);
+  assert.match(n, /whichever comes first/);
   assert.match(n, /Trigger \(b\) is unchanged\./);
   assert.match(n, /\(NB-K5\)/);
   assert.match(n, /\(NB-K6, NB-K8\)/);
