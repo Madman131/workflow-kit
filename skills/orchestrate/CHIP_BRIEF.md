@@ -9,12 +9,10 @@ memory of the program**. Everything it needs on turn one is in the brief or the 
 ## The nine sections
 1. **Identity and order** — which chip this is, which chips must have landed first, and the
    VERSION this one ships. State the version as a rule ("bump the minor from the repo's real head"),
-   not only as a number: a printed number goes stale the moment another chip lands, and a worker
-   that trusts it ships a wrong stamp.
+   not only a number: a printed number goes stale when another chip lands.
 2. **The program record** — the one file holding the program's state and rulings. **NAME THE ENTRIES
    this chip needs; never say "read it whole."** **The binding lessons are not there** — they live
-   in `.agents/skills/orchestrate/PROTOCOLS.md` and `RUNG_ZERO.md`; the record is where they were
-   DISCOVERED.
+   in `.agents/skills/orchestrate/PROTOCOLS.md` and `RUNG_ZERO.md`.
 3. **Startup gate** — the sole-writer CHECK, never called a proof (lane declarations, main checkout
    and every worktree; it finds only writers who DECLARED, and the body states what it misses),
    and a startup confirmation back to the orchestrator naming the base SHA, the version, and the
@@ -24,7 +22,11 @@ memory of the program**. Everything it needs on turn one is in the brief or the 
 4. **Scope** — what ships, user-visible done, its proof, and what does NOT. Name artifacts.
 5. **Process** — ordered rungs and pre-decided skips. **Every brief names the Builder's model and
    effort; every same-family seat runs at or above that model** (`core/REVIEW.md` peer tier), **reporting expected and observed
-   model+effort and any mismatch rather than silently substituting.** Aggregate repair briefs declare
+   model+effort and any mismatch rather than silently substituting.** **Gating budget:** the brief precommits seats, maximum rounds and the STAKES
+   (what a wrong ship costs; live or irreversible state touched); stakes size the budget above the tier floor, never below. Past 2× the plan the PM stops
+   and the Principal decides, never another repair round, answering in order and recording each: (1) RULE #1: an accepted finding with named harm left?
+   No ⇒ finish. (2) Root cause: one design cause ⇒ reset that part. (3) KISS: cause deletable or simpler ⇒ simplify. (4) Zoom Out: failing piece
+   separable ⇒ split; whole not worth its cost ⇒ Owner DECISION NEEDED. **No scheduled check-ins;** speak when something changes. Aggregate repair briefs declare
    `aggregate_controller:"aggregate_v2"`, task, changeset, the exact PM disposition and panel-close
    event IDs, next round, repeated-mechanism boolean, root-exit ID for a root-kind dispatch, and any required
    frontier process-review ID. **Review logs never ride in the changeset under review.** **A Builder the
@@ -48,8 +50,7 @@ memory of the program**. Everything it needs on turn one is in the brief or the 
    **It NEVER reaches a Principal-required ruling, Owner reservation, external/live/irreversible action, missing
    gate/admission, or stopped/revoked authority. The examples below are
    EXAMPLES, not a closed set** — a repo reserves what it reserves, and any list a portable file
-   ships is short in every repo it is wrong about. **Short used to mean "ask the Owner"; keyed to a
-   timeout it means "proceed without them", so the property is what binds, never the count.** A ratification that did not arrive did
+   ships is short in every repo it is wrong about. A ratification that did not arrive did
    not happen: waiting on one, keep building everything it does not touch and seat nothing
    that depends on it.
    **For a delegated program, cite the Principal decision/record and its limits; it binds execution but
@@ -65,14 +66,10 @@ memory of the program**. Everything it needs on turn one is in the brief or the 
    actually hit.
 
 ## Three failures worth designing against
-- **A brief re-presented after a delay carries stale facts.** Version numbers, chip ids and "the
-  next chip is X" all rot. Mark every volatile field verify-on-arrival; the worker
-  confirms them in its startup message rather than acting on them.
-- **Verbatim is not safe by default.** A clause TRUE in the source repo can be FALSE in the
-  target, where the doctrine differs. Check every ported claim against the TARGET's
-  doctrine, not merely for leaked names. Likewise, when a claim's provenance receipt is stripped
-  because it does not belong in the target, DOWNGRADE the claim with it — a stripped receipt
-  silently converts a proven claim into an asserted one.
-- **Adapt the remedy to the target's defect surface.** A source fix ported whole can carry machinery
-  the target does not need, or the target may already be immune. Port the half that
-  applies, and pin any accidental immunity so a future change reddens it.
+- **A re-presented brief carries stale facts.** Mark version numbers, chip ids and "the next chip is X"
+  verify-on-arrival; the worker confirms them in its startup message.
+- **Verbatim is not safe.** A clause TRUE in the source repo can be FALSE in the target: check every ported
+  claim against the TARGET's doctrine, not merely for leaked names. When a provenance receipt is stripped,
+  DOWNGRADE the claim with it.
+- **Adapt the remedy to the target's defect surface.** Port the half that applies, and pin any accidental
+  immunity so a future change reddens it.
