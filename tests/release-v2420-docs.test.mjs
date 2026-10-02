@@ -62,9 +62,9 @@ test("core/README names no adopter's files, gives the STATE fallback, and keeps 
   assert.ok(!/`core\/README\.md` names `docs\/PIL_ARCHITECTURE/.test(flat("PORTABILITY.md")), "PORTABILITY no longer lists core/README.md as carrying origin names");
 });
 
-test("the sensor header states the closing-label and relayed-answer rules", () => {
+test("the sensor header states the closing-label rule and that relay recognition is deferred", () => {
   const h = read("hooks/sensor-stop-notice.mjs");
-  assert.match(h, /non-notice\s*\/\/\s*delegation after the ask from the SAME thread that opened the ask's turn; an Owner-initiated turn's ask needs an Owner message/);
+  assert.match(h, /A relayed Owner answer is NOT recognised \(deferred until a Codex relay rollout is observed\)/);
   assert.match(h, /label that carries text/);
 });
 
@@ -75,7 +75,7 @@ test("the README note names what ships and not what was dropped, and the older U
   assert.match(n, /No scheduled check-ins\./);
   assert.match(n, /The `\/orchestrate` SKILL is unchanged \(0 words added\)/);
   assert.match(n, /trigger \(c\): the final must END with a rule-8 label that carries text/);
-  assert.match(n, /RELAYED by the thread that opened the ask's turn/);
+  assert.match(n, /NB-K2\(ii\) is deferred until a Codex relay rollout is observed/);
   assert.match(n, /whichever comes first/);
   assert.match(n, /Trigger \(b\) is unchanged\./);
   assert.match(n, /\(NB-K5\)/);

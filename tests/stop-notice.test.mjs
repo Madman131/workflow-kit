@@ -176,7 +176,7 @@ test("trigger (c): an unanswered labeled ask stays LAST — the final message mu
   allows(stop(dir, [...earlier, F.questionReply(T1, CALL)], "Working."), "NEGATIVE: a question reply is an Owner message");
 }));
 
-test("NB-K2 (v2.42.0): trigger (c) needs a label WITH text at the END; a RELAYED Owner answer counts as answered (fail open)", () => withDir((dir) => {
+test("NB-K2 (v2.42.0): trigger (c) needs a label WITH text at the END; a relayed answer is not recognised", () => withDir((dir) => {
   const earlier = [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Ready.\n\n**AUTHORIZATION NEEDED:** push 97b3b1a to origin."), F.taskStarted(T1), F.agentsMd(T1), F.envContext(T1)];
   // (i) a bare label names no action: it blocks; the same label with text passes.
   blocks(stop(dir, earlier, "No change.\n\n**ACTION NEEDED:**"));
@@ -184,25 +184,11 @@ test("NB-K2 (v2.42.0): trigger (c) needs a label WITH text at the END; a RELAYED
   allows(stop(dir, earlier, "No change.\n\n**ACTION NEEDED:** run the handed-over command"), "label with text on the same line");
   allows(stop(dir, earlier, "No change.\n\n**ACTION NEEDED:**\nrun the handed-over command"), "text on the next line of the same paragraph counts");
   allows(stop(dir, earlier, "No change.\n\n**DECISION NEEDED: approve or decline**"), "text inside the bold counts");
-  // (ii) a relayed answer clears only from the thread that OPENED the ask's turn. T0 below is opened by ARCHITECT's directive.
+  // A relayed answer is NOT recognised (deferred until a Codex relay rollout is observed): a non-Owner, non-notice delegation after the ask does not clear (c).
   const opened = [F.agentsMd(T0), F.taskStarted(T0), F.delegation(T0, F.ARCHITECT, "send_message_to_thread", "DIRECTIVE: build it"), F.assistant(T0, "Ready.\n\n**AUTHORIZATION NEEDED:** push 97b3b1a to origin."), F.taskStarted(T1), F.agentsMd(T1)];
-  const reply = (from, text, to = from) => [F.delegation(T1, from, "send_message_to_thread", text), F.sent(T1, to)];
-  allows(stop(dir, [...opened, ...reply(F.ARCHITECT, "DIRECTIVE: Josh's push GO, relayed. Josh's words: \"Approved push\".")], "Pushed."), "(a) a same-thread relay clears (c)");
-  allows(stop(dir, [...opened, ...reply(F.ARCHITECT, "CONSULT: which branch?")], "Replied."), "(a) ANY non-notice message from the opening thread clears it: fail open");
-  // Opus's scenario: the PM messages a WORKER, the WORKER replies "DONE:" -> that is not an answer.
-  blocks(stop(dir, [...opened, F.sent(T1, F.OTHER), F.delegation(T1, F.OTHER, "send_message_to_thread", "DONE: tests green"), ], "Worker finished."));
-  blocks(stop(dir, [...opened, ...reply(F.OTHER, "CONSULT: another Architect asks something", F.OTHER)], "Replied."));      // (b) a different thread does not clear it
-  // (c) an ask made in an Owner-initiated turn stays open after a PM delegation; an Owner message still answers it.
-  const ownerTurn = [F.agentsMd(T0), F.taskStarted(T0), F.ownerSays(T0, "go\n"), F.assistant(T0, "Ready.\n\n**AUTHORIZATION NEEDED:** push 97b3b1a to origin."), F.taskStarted(T1), F.agentsMd(T1)];
-  blocks(stop(dir, [...ownerTurn, ...reply(F.ARCHITECT, "DIRECTIVE: go")], "Pushed."));
-  allows(stop(dir, [...ownerTurn, F.ownerSays(T1, "approved\n")], "Pushed."), "an Owner message answers an Owner-turn ask");
-  // (d) a notice never answers, from any thread; a delegation BEFORE the ask is not an answer.
-  blocks(stop(dir, [...opened, F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "STATUS: Josh merged PR #25.")], "Closed out."));
-  blocks(stop(dir, [...opened, F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "STOP: paused; next action: wait; actor: Owner")], "Closed out."));
-  // tail-capped text (the ask's turn start is absent) cannot name an opener: fail OPEN for any non-notice delegation.
-  allows(stop(dir, [F.assistant(T0, "Ready.\n\n**AUTHORIZATION NEEDED:** push 97b3b1a to origin."), F.taskStarted(T1), F.agentsMd(T1), ...reply(F.OTHER, "DIRECTIVE: go")], "Pushed."), "unknown opener fails open");
-  // (b) is NOT loosened: a relayed message does not answer an async ask.
-  blocks(stop(dir, [...start(), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL), F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "DIRECTIVE: go"), F.sent(T1, F.ARCHITECT)], "Pending."));
+  blocks(stop(dir, [...opened, F.delegation(T1, F.ARCHITECT, "send_message_to_thread", "DIRECTIVE: Josh's push GO, relayed."), F.sent(T1, F.ARCHITECT)], "Pushed."));
+  blocks(stop(dir, [...opened, F.sent(T1, F.OTHER), F.delegation(T1, F.OTHER, "send_message_to_thread", "DONE: tests green")], "Worker finished."));
+  allows(stop(dir, [...opened, F.ownerSays(T1, "approved\n")], "Pushed."), "an Owner message still answers the ask");
 }));
 
 test("label helpers: a label opens a line; the last paragraph decides END", () => {
