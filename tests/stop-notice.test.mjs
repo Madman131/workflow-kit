@@ -89,6 +89,7 @@ test("a block names the thread and the four fields, and fires ONCE: stop_hook_ac
   assert.ok(reason.includes(F.ARCHITECT), "names the delegating thread id");
   assert.match(reason, /STOP: <reason>; next action: <action>; actor: <who must act>/, "reason, next action, who must act");
   assert.match(reason, /\*\*DECISION NEEDED:\*\*.*\*\*AUTHORIZATION NEEDED\*\*/, "the Owner ask under a rule-8 label");
+  assert.match(reason, /\*\*KIT GAP-ACTION NEEDED:\*\*/, "the forced reply names the KIT GAP label too (v2.41.0)");
   assert.match(reason, /END the message with it/);
   // The "Send thread …" line names the thread even when only trigger (b) fired.
   const askOnly = [...start(), F.delegation(T1, F.ARCHITECT), F.sent(T1, F.ARCHITECT), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)];
@@ -153,6 +154,7 @@ test("trigger (b): an async Owner ask with no recorded answer needs a rule-8 lab
   blocks(stop(dir, [...start(), F.ownerSays(T1, "go ahead\n"), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)], "Pending."));   // an Owner message BEFORE the ask does not answer it
   blocks(stop(dir, [...ask, F.envContext(T1), F.openPage(T1), F.hookPrompt(T1, "x")], "Pending."));                           // host-injected user messages do not answer it
   allows(stop(dir, [F.taskStarted(T0), F.asyncAsk(T0, CALL), F.asyncAck(T0, CALL), F.assistant(T0, "x"), ...start()], "Continuing."), "NEGATIVE: the ask belongs to an earlier turn");
+  allows(stop(dir, ask, "Status.\n\n**KIT GAP-ACTION NEEDED:** the kit lacks a route; evidence docs/x.md; the project holds only the blocked step."), "(b) NEGATIVE: a KIT GAP-ACTION NEEDED label counts (v2.41.0)");
   blocks(stop(dir, ask, "Plain text. DECISION NEEDED: not bold, not a line start"));        // a bare mention is not a label
 }));
 
@@ -162,6 +164,8 @@ test("trigger (c): an unanswered labeled ask stays LAST — the final message mu
   assert.match(reason, /does not END with a rule-8 label/);
   allows(stop(dir, earlier, "No change.\n\n**DECISION NEEDED:** Authorize the Astra process review?"), "NEGATIVE: re-ends with the ask");
   allows(stop(dir, earlier, "No change.\n\n- **ACTION NEEDED:** run the handed-over command\n  then reply done"), "a bulleted label paragraph counts");
+  allows(stop(dir, earlier, "No change.\n\n**KIT GAP-ACTION NEEDED:** forward the gap to the Workflow-Kit Architect"), "(c) NEGATIVE: a final that ENDS with a KIT GAP-ACTION NEEDED label passes (v2.41.0)");
+  blocks(stop(dir, earlier, "**KIT GAP-ACTION NEEDED:** forward the gap\n\nStatus text after it."));          // buried above status text still blocks
   blocks(stop(dir, earlier, "**DECISION NEEDED:** Authorize the Astra process review?\n\nAutomatic approval rejected the payload. Nothing else changed."));   // buried above status text
   allows(stop(dir, [...earlier, F.ownerSays(T1, "yes, authorized\n")], "Working on it."), "NEGATIVE: an Owner message came since");
   allows(stop(dir, [F.taskStarted(T0), F.assistant(T0, "**QUESTION:** which branch?"), F.ownerSays(T0, "main\n"), F.taskStarted(T1)], "Working."), "NEGATIVE: answered inside the earlier turn");
@@ -178,6 +182,13 @@ test("label helpers: a label opens a line; the last paragraph decides END", () =
   assert.equal(hasLabel("**AUTHORIZATION NEEDED**"), true);
   assert.equal(hasLabel("**QUESTION:** x"), true);
   assert.equal(hasLabel("**RECOMMENDATION:** x"), false, "a recommendation is not an Owner ask");
+  assert.equal(hasLabel("**KIT GAP-ACTION NEEDED:** x"), true, "v2.41.0 label");
+  assert.equal(hasLabel("a\n- **KIT GAP-ACTION NEEDED:** x"), true);
+  assert.equal(hasLabel("**KIT GAP ACTION NEEDED:** x"), false, "Josh's label has the hyphen; a spaced spelling is not it");
+  assert.equal(hasLabel("**KIT GAP:** x"), false, "the bare prefix is not the label");
+  assert.equal(hasLabel("mid-line **KIT GAP-ACTION NEEDED:** x"), false);
+  assert.equal(endsWithLabel("status\n\n**KIT GAP-ACTION NEEDED:** the gap\ndetail"), true);
+  assert.equal(endsWithLabel("**KIT GAP-ACTION NEEDED:** the gap\n\nstatus"), false);
   assert.equal(hasLabel("mid-line **DECISION NEEDED:** x"), false);
   assert.equal(hasLabel(null), false);
   assert.equal(endsWithLabel("status\n\n**DECISION NEEDED:** x\ndetail"), true);

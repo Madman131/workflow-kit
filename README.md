@@ -1,4 +1,4 @@
-# workflow-kit — v2.40.0
+# workflow-kit — v2.41.0
 
 ## How to start a build
 
@@ -11,6 +11,18 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.41.0 — a kit gap is reported, never waited on
+
+Prose, one sensor regex and one shipped selftest script. The Stop sensor's registered command is unchanged, so `init` adds no new `.codex/hooks.json` entry; whether Codex keys hook trust to the entry or to the file bytes was not tested here, so after `init --force` run `node scripts/check-codex-hooks-armed.mjs` (it checks `apply_patch` only) and re-approve hooks if Codex prompts "Hooks need review".
+
+- **`**KIT GAP-ACTION NEEDED:**` label.** `core/OWNER_COMMS.md` rule 8 lists it: a defect or missing route in the installed workflow kit; the line names the gap, its evidence path and the project action it holds, if any, and the Owner forwards it to the Workflow-Kit Architect. It counts as an outstanding Owner action under the "ENDS every final response" paragraph.
+- **A kit gap is never a project dependency.** `skills/architect-build/ROUTING.md` § Authority: report it once under that label; never design, build or co-design the kit fix inside a project chip or with a kit thread; the project continues covered work, holds only the blocked action, or proceeds under an Owner-owned recorded exception. The `/orchestrate` SKILL is unchanged (0 words added).
+- **Owner replacement-design route.** `core/WORKFLOW.md`, at the reserved-paths sentence: without typed parent records only an Owner-recorded replacement reworks those paths, as a FRESH program disclosing the parent in the current-state snapshot, the brief and every commit body, fabricating, reconstructing or backfilling no record; a typed parent keeps the Owner-child route. Doctrine only: no controller or guard code changed. WORKFLOW sits 34 bytes under its 25600 B method cap, so three restatements of the push-GO rule (in the "Pushing is a separate axis", core-document and "Shipping" paragraphs, L65, L67 and L107) and the clause "; the parent stays terminal" (L97; L101 still says it) were removed to make room: each idea survives elsewhere in the file and no rule changed.
+- **Stop sensor.** `hooks/sensor-stop-notice.mjs` counts `KIT GAP-ACTION NEEDED` as a rule-8 label (a final that carries or ends with it satisfies the triggers) and the forced reply names it. Both hook trees stay byte-identical.
+- **`--selftest` now exists.** The wrapper exec'd a `scripts/codex-gate-selftest.sh` the kit never shipped before v2.41.0, so `--selftest` was dead; it ships now and pins the verdict contract (`init --with-gate-runners` installs it). Adopters' existing `scripts/codex-gate.sh` copies have the same dead `--selftest`; re-run `init --force --with-gate-runners` to get the script.
+- **New tests.** The extended `tests/stop-notice.test.mjs`, and `tests/release-v2410-docs.test.mjs`.
+- **Upgrading.** Re-run `init --force` (add `--with-gate-runners` if you use the runners). An adopter hand-edits rule 8 of their existing `core/OWNER_COMMS.md` (a per-repo file) and ROUTING's Authority section if they keep a customized copy.
 
 ## What's new in v2.40.0 — no silent PM stop: directives are recorded before they are sent
 

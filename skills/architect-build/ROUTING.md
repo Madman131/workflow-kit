@@ -55,6 +55,8 @@ baseline, access, risk and budget. Examples—never an allowlist—include direc
 model/seat choice, tier/wording and approved-provider routing. PM is sole execution chain,
 proceeds automatically on covered work, and returns concrete conflicts.
 
+A kit gap is never a project dependency. Report it once under `KIT GAP-ACTION NEEDED`; never design, build or co-design the kit fix inside a project chip or with a kit thread. The project continues covered work, holds only the blocked action, or proceeds under an Owner-owned recorded exception.
+
 Within recorded delegation, Principal evaluates blueprint, Rule #1, KISS, Zoom Out, root cause, alternatives;
 decides proceed/simplify/defer/stop/escalate. For proceed/simplify, Principal
 directs completion through one PM.

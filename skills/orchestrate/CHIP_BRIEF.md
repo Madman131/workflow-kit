@@ -56,7 +56,7 @@ memory of the program**. Everything it needs on turn one is in the brief or the 
    never supplies Owner GO. Name target-repo Owner reservations, namely merge/push GO, irreversible or live acts,
    money, credentials/access and a change of direction or scope; all route THROUGH PM.**
    **Give the orchestrator-facing
-   labels (`CONSULT:` / `RULING NEEDED:`). The generated `core/OWNER_COMMS.md` rule 8 is the sole
+   labels (`CONSULT:` / `RULING NEEDED:`).** The generated `core/OWNER_COMMS.md` rule 8 is the sole
    source for Owner-facing labels and form; do not duplicate its list in this portable brief.
 8. **Accumulated corrections** — the rulings and lessons this chip inherits, especially any that
    CONTRADICT what the brief said when it was first written. A superseded instruction left standing
