@@ -122,7 +122,7 @@ const GATE_RE = new RegExp(CMD_START + PREFIX + RUNNERS);
 const LADDER = {
   T0: "self-check → proceed",
   T1: "one blind cold reviewer → proceed",
-  T2: "cold panel (≥2 angle seats + 1 free adversary) → cross-family lens [if avail; REQUIRED if flagged] → external gate → fresh Owner remote GO (exact head + target)",
+  T2: "2 cold seats, different families, one the free adversary → fresh Owner remote GO (exact head + target); an action flag or declared stakes ADD ≥2 angles + free, a REQUIRED cross-family lens, the external gate and frontier · xhigh",
   T3: "HISTORICAL T3 only: cold panel (≥3 angle seats + 1 free adversary) → BOTH cross-family families (lens + external, lens REQUIRED) → fresh Owner remote GO (exact head + target)",
 };
 
