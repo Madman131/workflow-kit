@@ -365,7 +365,7 @@ more of the leaned-on family than it did; the verdict records the active binding
 ### What it does
 Codex is a **different model family** from Claude, so it catches blind spots a same-family Claude panel misses.
 Two roles (pick ONE per artifact — never both for the same review):
-- **External gate** — the authority review at T2/T3, *after* the same-family cold passes. Consumes the external-gate
+- **External gate** — the authority review at flagged or high-stakes T2 and historical T3, *after* the same-family cold passes. Consumes the external-gate
   budget; its verdict is consumed under the project's collaboration framework.
 - **Budget-free cross-family lens** — a cheap shift-left advisory read (not the
   authority). Gemini is the *default* budget-free lens; use Codex here when you want a second family cheaply.

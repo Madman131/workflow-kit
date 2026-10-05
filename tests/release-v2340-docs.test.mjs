@@ -19,23 +19,23 @@ test("K1/K2: WORKFLOW § Steer defines the three action flags and what each ADDS
   const w = flat(read("core/WORKFLOW.md"));
   const steer = w.slice(w.indexOf("## Steer"), w.indexOf("## Gate"));
   assert.match(steer, /\*\*Action flags\*\*, from concrete effects, never labels: \*\*irreversible\*\* · \*\*money\/ledger\*\* · \*\*auth\/credential\*\*\./);
-  assert.match(steer, /A flagged change is at least T2;/);
-  assert.match(steer, /each flag ADDS a \*\*REQUIRED cross-family lens\*\*/);
+  assert.match(steer, /A flagged change is at least T2\./);
+  assert.match(steer, /\*\*Each flag, or Principal-declared stakes, ADDS the full depth: ≥2 angles \+ free, a REQUIRED cross-family lens\*\*/);
   assert.match(steer, /\(same-family-only never discharges it\)/);
-  assert.match(steer, /the \*\*frontier · xhigh\*\* gate \(`core\/GATES\.md` matrix\) and a \*\*named Owner GO for the flagged live effect\*\* \(irreversible act, money movement, credential change\), not for building or committing\./);
+  assert.match(steer, /\*\*the external gate\*\* and the \*\*frontier · xhigh\*\* gate \(`core\/GATES\.md` matrix\)\. A flag also ADDS a \*\*named Owner GO for the flagged live effect\*\* \(irreversible act, money movement, credential change\), not for building or committing\./);
   assert.match(steer, /New work is never T3: it is T2 plus its action flags\./);
 });
 
 test("K3/K4: the T2 row and the prose-cap clause keep the lens REQUIRED under a flag", () => {
   const w = flat(read("core/WORKFLOW.md"));
-  assert.match(w, /\| \*\*T2\*\* \|[^|]*cross-family lens \[if avail; REQUIRED if flagged\] → external/);
+  assert.match(w, /\| \*\*T2\*\* \|[^|]*2 cold seats, different families, one the free adversary/);
   assert.match(w, /the \*\*cross-family lens stays REQUIRED under an action flag or at historical T3\*\*/);
 });
 
 test("K5/K6: REVIEW makes the flagged lens REQUIRED, with no same-family discharge and no route discharge", () => {
   const r = flat(read("core/REVIEW.md"));
   assert.match(r, /an \*\*action flag\*\* \(`core\/WORKFLOW\.md` § Steer\) makes the cross-family lens below required/);
-  assert.match(r, /\*\*At unflagged T2 it is skipped cleanly when unavailable; under an action flag or at historical T3 it is REQUIRED\*\*/);
+  assert.match(r, /\*\*At unflagged T2 it is the second seat \(no other family available ⇒ the availability route records same-family-only\); under an action flag or at historical T3 it is REQUIRED\*\*/);
   assert.match(r, /\*\*A flagged change has no same-family discharge:\*\* with no different family seated it is \*\*not gradable\*\* → Owner/);
   assert.match(r, /critical boundaries, T3 honesty and a flagged change's cross-family lens remain\./);
 });
@@ -52,7 +52,7 @@ test("K8: RUNG_ZERO names what a flag IS, never below T2, and points to WORKFLOW
 });
 
 test("K9: the core README pipeline map carries the flag", () => {
-  assert.match(flat(read("core/README.md")), /cross-family capstone\[if avail; REQUIRED if flagged\] → external/);
+  assert.match(flat(read("core/README.md")), /T2 two cold seats from different families, a flag or declared stakes adding the full depth/);
 });
 
 test("K10: WORKFLOW states the v3 lineage clause, derived from the controller's constants", () => {

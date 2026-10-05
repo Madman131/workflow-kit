@@ -282,7 +282,7 @@ test("new T0/T1/T2 depth and historical T3 preserve separate action authority", 
   assert.match(w, /Historical T3.*Owner obligations through closure and descendants/);
   assert.match(a, /controlling instructions are never T0/);
   assert.match(a, /controlling-doc restructure = \*\*T2\*\*/);
-  assert.match(r, /new\s+controlling-document restructure receives the full normal T2 panel/);
+  assert.match(r, /new\s+controlling-document restructure receives the normal T2 review/);
   assert.match(g, /rare cell follows the actual action, not the T2 label/);
   assert.match(o, /irreversible write requires its own GO \*\*per write\*\*/);
   assert.match(w, /unbounded production read.*Otherwise hold execution/s);
@@ -385,7 +385,7 @@ test("rung ORDER binds, and says WHICH of its two rules is mechanically checkabl
   // The rule that stops a cheap green from buying a lighter panel.
   assert.match(w, /"The budget-free rungs cleared it, so the panel can be lighter" is FORBIDDEN/);
   // The tier table must actually carry the rungs the block governs, or the rule points at nothing.
-  assert.match(w, /\*\*T2\*\*\s*\|\s*pre-flight → \*\*contract lens, PRE-CODE\*\* → cold panel/);
+  assert.match(w, /\*\*T2\*\*\s*\|\s*pre-flight → contract lens, PRE-CODE \*\(new design only; not fixes or ports\)\* → \*\*2 cold seats, different families, one the free adversary\*\*/);
   assert.match(w, /\*\*T1\*\*\s*\|\s*pre-flight → one blind cold reviewer \(\*\*cross-family by default\*\*\)/);
 });
 
@@ -405,7 +405,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   // Instruction artifacts are the class this kit IS, so its own harm mapping must ship.
   assert.match(f, /an ambiguity admitting a harmful reading counts, because the implementer picks/);
   // The misreading that would make this rule harmful: cutting seats instead of repairs.
-  assert.match(f, /It reduces the number of REPAIRS, never the DEPTH of review — cutting seats is the misreading/);
+  assert.match(f, /It reduces the number of REPAIRS; review weight follows stakes/);
 
   // The ladder's emission is where the rule is actually EXECUTED, so the funnel and its ratio pin here.
   const w = read("core/WORKFLOW.md");
@@ -414,7 +414,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
   // with every test green (see scripts/check-doc-size.mjs's 2026-08-13 cap-record entry for the
   // full incident, corrected alongside this pin). Restored in § Steer, and now pinned on BOTH
   // surfaces that carry it, not only the one that happened to already have a pin.
-  assert.match(w, /cuts REPAIRS, never review DEPTH — cutting seats is the misreading/);
+  assert.match(w, /Review weight follows stakes: a standard T2 is two cold seats; a flag or declared stakes keeps the full depth/);
   assert.match(w, /does this hurt \*\*\(1\) the Owner\/user, \(2\) the usability of the product, or \(3\) the FUNCTIONALITY of the code\*\*/);
   assert.match(w, /\*\*Blank ⇒ NOTE\*\* \*\(Precedence below and the carve-outs — irreversible · prod write · gate-ran-lighter-than-mandate — screen FIRST; none exit here\)\*: recorded here/);
   assert.match(w, /The pricing flip: dropping a harmless finding is FREE; chasing one owes the work/);
@@ -431,7 +431,7 @@ test("RULE #1 ships with all THREE harm targets, on every surface that applies i
 
   // ⚠ THE EXECUTION AXIS. Without this sentence the chip ships a licence to loosen a DATA gate:
   // some readers hold no code/data separation, and "gates got cheaper" reads as "all gates".
-  assert.match(w, /RULE #1 cuts REPAIRS, never review DEPTH.*New work is never T3: it is T2 plus its action flags/);
+  assert.match(w, /Review weight follows stakes.*New work is never T3: it is T2 plus its action flags/);
   // v2.34.0: the frontier·xhigh gate and Owner GO now ride on the action flag (pinned in release-v2340-docs K1).
   assert.match(w, /irreversible: \*\*named Owner GO per write\*\*/);
 
@@ -490,7 +490,7 @@ test("the retired chase machinery is gone and the finite aggregate controller re
   // THE TIER ROW, Owner-ruled at v2.9.0 after two seats independently flagged the T1-for-all-core-docs
   // row as the seat cut FOUNDATIONS calls the misreading. The SPLIT is the rule — depth follows
   // whether anything is built from the text — so pin both halves, not the prose around them.
-  assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → FULL T2: panel \+ wording approval under above authority/);
+  assert.match(w, /Text something follows — gate machinery, seat definitions, designs and plans code will implement, binding templates → T2: its two cold seats \+ wording approval under above authority/);
   assert.match(w, /the Principal decides tier, wording and intermediate steps through PM/);
   assert.match(w, /Owner alone: push\/deploy\/publication GO; irreversible or live acts; money; credentials\/access; change of direction or scope/);
   assert.match(w, /Text nothing follows — records, history, README-class description → ONE blind cold reviewer/);

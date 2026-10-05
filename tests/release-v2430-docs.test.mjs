@@ -65,10 +65,8 @@ test("the README note states the switch, the absent-key ledger rule, the off and
   assert.match(n, /No `\.codex\/hooks\.json` entry changes\./);
 });
 
-test("version is 2.43.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.43.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.43.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.43\.0$/m);
+test("the v2.43.0 release note is still in the README (the version stamp itself moves with each release; v2.44.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.43\.0 — the repair-round controller is opt-in/m);
 });
 
 test("no codex hook registration changed: the shipped Codex registration template is byte-identical to the base", () => {
