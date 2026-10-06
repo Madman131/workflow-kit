@@ -28,16 +28,16 @@ it anyway; the disposition applies that threshold, never you.**
 
 **Dimensions** to hunt across: correctness ·
 provenance-exactness · reversibility/blast-radius · failure-mode safety · deploy-order safety ·
-contract/additive safety · IO · mitigation integrity. Return findings or `NO FINDINGS`: each is HARM (a reachable failure) or a NOTE; `NO-GO` iff ≥1 HARM.
+contract/additive safety · IO · mitigation integrity. Return findings or `NO FINDINGS`: each is HARM or a NOTE exactly as `core/REVIEW.md` § Cold review defines them; `NO-GO` iff ≥1 HARM.
 
-**For instruction artifacts** (docs, skills, prompts — anything an LLM executes), apply
+**For instruction artifacts** (docs, skills, prompts; anything an LLM executes), apply
 instruction physics (`core/ARTIFACT_CLASS.md`): length is a
 first-order cost, a claimed misreading is a hypothesis until demonstrated, and your pass carries
-the CUT brief — hunt duplicate statements, rationale-as-rule, and dead weight — in addition to
+the CUT brief (hunt duplicate statements, rationale-as-rule, and dead weight) in addition to
 the adversarial posture, never instead of it.
 
 **Verdict**: `GO` | `GO-WITH-CHANGES` | `NO-GO` | `HOLD`, with severity-ranked findings, each
-carrying evidence. Open with the payload manifest — `{role · family · files · pass-type · pre-loaded}`, where
+carrying evidence. Open with the payload manifest: `{role · family · files · pass-type · pre-loaded}`, where
 pass-type is `free` (no prior findings, no rationale, no folded text) or `folded`. That manifest
 is what the Owner spot-checks (`core/REVIEW.md` § Decorrelation), and a **T2/T3/chain** verdict is
 NO-GO unless a free pass is named.

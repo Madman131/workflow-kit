@@ -25,7 +25,7 @@ test("findings-only seats: HARM is a reachable failure, the verdict is derived, 
   assert.match(r, /a NO-GO naming no HARM reads as GO plus notes/);
   assert.match(r, /Only a \*\*CONFIRMED\*\* \(PM-accepted\) HARM stops work or opens a round\./);
   assert.doesNotMatch(r, /any FAIL ⇒ overall NO-GO/);
-  assert.match(flat("agents/cold-reviewer.md"), /each is HARM \(a reachable failure\) or a NOTE; `NO-GO` iff ≥1 HARM/);
+  assert.match(flat("agents/cold-reviewer.md"), /`NO-GO` iff ≥1 HARM/); // the HARM/NOTE wording moved to a pointer in v2.44.1 (release-v2441-docs)
   assert.match(flat("templates/codex-cold-reviewer.toml.tmpl"), /The verdict line is mechanical: NO-GO iff ≥1 HARM\./);
 });
 
@@ -107,8 +107,6 @@ test("the README note says what changed and what did NOT", () => {
   assert.match(n, /- \*\*Upgrading\.\*\* Re-run `init --force`\./);
 });
 
-test("version is 2.44.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.44.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.44.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.44\.0$/m);
+test("the v2.44.0 release note is still in the README (the version stamp itself moves with each release; v2.44.1 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.44\.0 — findings-only seats, a lighter standard T2, and no seat for a byte-copy port/m);
 });

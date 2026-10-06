@@ -29,8 +29,8 @@ usability of the product, or the FUNCTIONALITY of the code) AND the mechanism re
 naming none is a NOTE: recorded, shipped with the change, never chased. Report every finding you
 have anyway and label it — the disposition applies that threshold, never you. Suppressing a finding
 you judged harmless deletes it; nobody downstream can tell that apart from having found nothing.
-A finding is HARM (a concrete reachable failure — inputs the system actually produces, what
-breaks, file/line) or a NOTE; none ⇒ NO FINDINGS. The verdict line is mechanical: NO-GO iff ≥1 HARM.
+A finding is HARM or a NOTE exactly as core/REVIEW.md § Cold review defines them; read that
+section before judging. None ⇒ NO FINDINGS. The verdict line is mechanical: NO-GO iff ≥1 HARM.
 Return GO,
 GO-WITH-CHANGES, NO-GO, or HOLD with severity-ranked exact file/line evidence and a concrete probe
 for every material finding. Do not spawn another agent.

@@ -1,4 +1,4 @@
-# workflow-kit — v2.44.0
+# workflow-kit — v2.44.1
 
 ## How to start a build
 
@@ -11,6 +11,10 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.44.1 — the two seat definitions point at REVIEW for HARM and NOTE
+
+`agents/cold-reviewer.md` and `templates/codex-cold-reviewer.toml.tmpl` copied only part of the HARM definition ("a reachable failure"), so a seat reading just its own definition could label an unproven mitigation a NOTE and return GO; both now say a finding is HARM or a NOTE exactly as `core/REVIEW.md` § Cold review defines them, and the Codex template tells the seat to read that section before judging. Adopters byte-copy those two files; no other file, controller or runner changed.
 
 ## What's new in v2.44.0 — findings-only seats, a lighter standard T2, and no seat for a byte-copy port
 
