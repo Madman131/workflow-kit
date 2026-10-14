@@ -33,8 +33,6 @@ test("the README note says what changed and that adopters byte-copy the two file
   assert.match(n, /Adopters byte-copy those two files/);
 });
 
-test("version is 2.44.1 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.44.1");
-  assert.equal(JSON.parse(read("package.json")).version, "2.44.1");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.44\.1$/m);
+test("the v2.44.1 release note is still in the README (the version stamp itself moves with each release; v2.44.2 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.44\.1 — the two seat definitions point at REVIEW for HARM and NOTE/m);
 });

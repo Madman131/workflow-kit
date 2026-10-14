@@ -7,7 +7,7 @@ import process from "node:process";
 import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const LIMIT = 81920, JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.1-pro-high", SUBSCRIPTION_EFFORT = "high", SUBSCRIPTION_TIMEOUT_SECONDS = 600, SUBSCRIPTION_STDOUT_LIMIT = 4 * 1024 * 1024, SUBSCRIPTION_STDERR_LIMIT = 1024 * 1024, MANUAL_TRANSPORT = "operator-attested-manual-gemini-subscription-v1";
+const LIMIT = 81920, JOURNAL = "docs/journal/gemini_review_log.md", SUBSCRIPTION_MODEL = "gemini-3.8-flash-high", SUBSCRIPTION_EFFORT = "high", SUBSCRIPTION_TIMEOUT_SECONDS = 600, SUBSCRIPTION_STDOUT_LIMIT = 4 * 1024 * 1024, SUBSCRIPTION_STDERR_LIMIT = 1024 * 1024, MANUAL_TRANSPORT = "operator-attested-manual-gemini-subscription-v1";
 const INVARIANTS = ["core/INVARIANTS.md", "core/REPO_INVARIANTS.md"], HEX = /^[0-9a-f]{40}$/, SHA256 = /^[0-9a-f]{64}$/, MODEL = /^[A-Za-z0-9._-]+$/, RIG = /^[A-Za-z0-9._:-]{1,120}$/;
 const MODES = new Set(["100644", "100755"]), BOUNDARIES = ["public_contract", "storage_migration", "write_path", "read_path", "doctor_parity"];
 const FRAGMENT_KINDS = new Set(["frozen_source", "deleted_source", "per_file_diff"]);

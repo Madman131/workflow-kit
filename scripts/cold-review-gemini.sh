@@ -39,7 +39,7 @@
 #   --selftest  run the deterministic legacy fake-agy reliability harness (no network/model call)
 set -uo pipefail
 
-MODEL="Gemini 3.1 Pro (High)"  # gate-binding-ok: out-of-matrix — the Gemini cross-family seat; core/GATES.md § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
+MODEL="Gemini 3.8 Flash (High)"  # gate-binding-ok: out-of-matrix — the Gemini cross-family seat; core/GATES.md § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
 MAX_FILE_BYTES=120000
 CANARY_SPAN=32768
 CANARY_MIN=2
