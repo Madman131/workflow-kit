@@ -31,3 +31,12 @@ test("version is 2.44.2 everywhere", () => {
   assert.equal(JSON.parse(read("package.json")).version, "2.44.2");
   assert.match(read("README.md"), /^# workflow-kit — v2\.44\.2$/m);
 });
+
+test("both Gemini review prompts (design and code) open with the no-tool-calls sentence", () => {
+  const sentence = "Do not call any tool or run any command: everything you need is in this message, and tool calls are denied. Reply in text only. ";
+  const sh = read("scripts/cold-review-gemini.sh");
+  const starts = [...sh.matchAll(/^  PROMPT='(.*)/gm)].map((m) => m[1]);
+  assert.equal(starts.length, 2, "exactly the design and code PROMPT assignments");
+  for (const t of starts) assert.ok(t.startsWith(sentence), "prompt must start with the no-tool sentence");
+  assert.match(read("README.md"), /both review prompts now forbid tool calls because Gemini 3\.8 Flash calls tools/);
+});

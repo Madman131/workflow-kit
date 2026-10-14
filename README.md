@@ -14,7 +14,7 @@
 
 ## What's new in v2.44.2 — the Gemini cross-family seat moves to Gemini 3.8 Flash (High)
 
-Antigravity retired Gemini 3.1 Pro, so `agy` rejected the old model name and every Gemini seat failed; `scripts/cold-review-gemini.sh` and `scripts/gemini-frozen-gate.mjs` now bind `Gemini 3.8 Flash (High)` / `gemini-3.8-flash-high` at `high` effort, and `core/GATES.md` names the new model. Adopters byte-copy those two scripts and `core/GATES.md`.
+Antigravity retired Gemini 3.1 Pro, so `agy` rejected the old model name and every Gemini seat failed; `scripts/cold-review-gemini.sh` and `scripts/gemini-frozen-gate.mjs` now bind `Gemini 3.8 Flash (High)` / `gemini-3.8-flash-high` at `high` effort, and `core/GATES.md` names the new model, and both review prompts now forbid tool calls because Gemini 3.8 Flash calls tools. Adopters byte-copy those two scripts and `core/GATES.md`.
 
 ## What's new in v2.44.1 — the two seat definitions point at REVIEW for HARM and NOTE
 
