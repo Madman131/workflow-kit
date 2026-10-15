@@ -915,7 +915,7 @@ if [ -n "$DESIGN_FILE" ]; then
     echo; echo "=== WHAT SAME-FAMILY REVIEWERS ALREADY FOUND + FOLDED (hunt what they MISSED, not these) ==="; folded_notes || return 1
     echo; echo "=== THE DESIGN / SPEC UNDER REVIEW: $DESIGN_FILE ==="; cat "${DESIGN_FILE_CANONICAL:-$DESIGN_FILE}"
   }
-  PROMPT='Do not call any tool or run any command: everything you need is in this message, and tool calls are denied. Reply in text only. You are an independent CROSS-FAMILY reviewer auditing a DESIGN / SPEC (there is NO code yet — do NOT ask for a diff). Same-family (Claude/Opus) reviewers have ALREADY reviewed this and folded the fixes listed in the "ALREADY FOUND + FOLDED" section. Your job is to find what they MISSED — your value is decorrelated blind spots, so hunt the classes a same-family panel tends to wave through.
+  PROMPT='You are an independent CROSS-FAMILY reviewer auditing a DESIGN / SPEC (there is NO code yet — do NOT ask for a diff). Same-family (Claude/Opus) reviewers have ALREADY reviewed this and folded the fixes listed in the "ALREADY FOUND + FOLDED" section. Your job is to find what they MISSED — your value is decorrelated blind spots, so hunt the classes a same-family panel tends to wave through.
 
 Hunt, ranked by severity (BLOCKER / HIGH / MEDIUM / LOW), each with the exact §section, the concrete failure scenario, why it matters, and the fix:
 1. INTER-SECTION CONTRADICTIONS — two sections that specify incompatible behavior (e.g. "outside the lock" in one section vs "under the lock" in another). Read the WHOLE doc and cross-check sections against each other.
@@ -1082,7 +1082,7 @@ $(<"$TMPD/validate.err")"
     fi
     echo "=== THE DIFF (what changed — review THIS, using the context above) ==="; printf '%s\n' "$DIFF"
   }
-  PROMPT='Do not call any tool or run any command: everything you need is in this message, and tool calls are denied. Reply in text only. You are a senior engineer doing an independent CROSS-FAMILY cold review before this change is committed/deployed. You are NOT the author; your value is catching what same-family reviewers miss alike. You are NOT working blind — you are given: (1) PIL PROJECT INVARIANTS, (2) the DESIGN/ACCEPTANCE CONTEXT, (3) the FULL CONTENT of every changed file, (4) THE DIFF. Review the DIFF, but USE (1)-(3) to judge it.
+  PROMPT='You are a senior engineer doing an independent CROSS-FAMILY cold review before this change is committed/deployed. You are NOT the author; your value is catching what same-family reviewers miss alike. You are NOT working blind — you are given: (1) PIL PROJECT INVARIANTS, (2) the DESIGN/ACCEPTANCE CONTEXT, (3) the FULL CONTENT of every changed file, (4) THE DIFF. Review the DIFF, but USE (1)-(3) to judge it.
 
 Find, ranked by severity (BLOCKER / HIGH / MEDIUM / LOW), each with file:line, what is wrong, why it matters, and the single check that confirms or refutes it:
 1. INVARIANT VIOLATIONS — esp. boolean env reads mishandling the string "false" (truthy!); holding the write lock across a network/LLM call; a non-ADDITIVE change to a cached tool output shape; rendering a value from a derived source when an authoritative source-of-truth column exists; consent gating; migration / deploy-order safety; DuckDB gotchas; the librarian / exact-provenance rules.
@@ -1131,7 +1131,7 @@ RESPONSE_DONE="PIL-DONE-$(LC_ALL=C od -An -tx1 -N12 /dev/urandom 2>/dev/null | t
 if ! [[ "$RESPONSE_DONE" =~ ^PIL-DONE-[0-9a-f]{24}$ ]]; then ATTEMPT_DETAIL="secure random response-completion generation failed"; record_attempt FAILED_DELIVERY "$ATTEMPT_DETAIL"; exit 3; fi
 RECEIPT_INSTRUCTION="--- DELIVERY RECEIPT (mandatory) ---
 Read the complete artifact through its final line. Begin your reply with the exact random receipt token on that final line. After the substantive review and overall verdict, end your reply with the exact response-completion token '$RESPONSE_DONE' as the final nonblank line. A reply missing either boundary token is NOT a verdict."
-INLINE_COMBINED="$PROMPT
+INLINE_COMBINED="Do not call any tool or run any command: everything you need is in this message, and tool calls are denied. Reply in text only. $PROMPT
 
 $RECEIPT_INSTRUCTION
 
