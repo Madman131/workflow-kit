@@ -1300,7 +1300,7 @@ else
   fi
   [ "$FILE_ACTUAL" -le "$GATE_MAX" ] || GATE_VALID=0
   if ! resolve_agy; then ATTEMPT_DETAIL="'agy' not found on PATH or at ~/.local/bin/agy"; record_attempt FAILED_TOOL "$ATTEMPT_DETAIL"; exit 127; fi
-  FILE_PROMPT="$PROMPT
+  FILE_PROMPT="Do not run any command; read review_payload.txt only with your file-reading tool. Reply in text only. $PROMPT
 
 --- HOW THE MATERIALS ARE DELIVERED (read this first) ---
 The full review materials (the PIL invariants, the design/acceptance context, the FULL content of every changed file, and THE DIFF) are in a file named review_payload.txt in your workspace — absolute path ${TMPD}/review_payload.txt; it is the only file in the directory added for this review. They are NOT inline in this message. Read that file IN FULL, end to end, before you review. Its last line is 'RECEIPT: <token>'. Begin your reply with that exact token on its own line to confirm you reached the payload EOF; the distributed random canaries prove sampled regions across the payload. Then produce your review exactly as instructed above."

@@ -40,8 +40,9 @@ test("the no-tool sentence opens the INLINE message only: absent from both PROMP
   for (const t of starts) assert.ok(!t.includes("tool calls are denied"), "PROMPT must not carry the no-tool sentence (FILE mode inherits it)");
   const inline = sh.match(/^INLINE_COMBINED="(.*)$/m);
   assert.ok(inline && inline[1].startsWith(sentence + "$PROMPT"), "INLINE_COMBINED must open with the sentence, then $PROMPT");
-  const file = sh.slice(sh.indexOf('FILE_PROMPT="$PROMPT'));
-  assert.ok(!file.slice(0, 600).includes("tool calls are denied"), "FILE_PROMPT must not carry the sentence");
+  const file = sh.slice(sh.indexOf('FILE_PROMPT="'));
+  assert.ok(!file.slice(0, 600).includes("tool calls are denied"), "FILE_PROMPT must not carry the inline sentence");
+  assert.ok(file.startsWith('FILE_PROMPT="Do not run any command; read review_payload.txt only with your file-reading tool. Reply in text only. $PROMPT'), "FILE_PROMPT must open with the file-read-only sentence");
   assert.equal(sh.split("tool calls are denied").length - 1, 1, "the sentence appears exactly once in the script");
   assert.match(read("README.md"), /the inline review message now forbids tool calls because Gemini 3\.8 Flash calls tools/);
 });
