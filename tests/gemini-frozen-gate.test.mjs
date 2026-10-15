@@ -129,7 +129,7 @@ test("export is local-only and binds deterministic packets to the exact approved
   const f = fixture(); try {
     const source = readFileSync(runner, "utf8"); assert.doesNotMatch(source, /\bfetch\s*\(/); assert.doesNotMatch(source, /GEMINI_API_KEY/);
     const output = exportHandoff(f), handoff = JSON.parse(readFileSync(path.join(f.dir, ".gemini-gate/handoff/handoff.json"), "utf8"));
-    assert.match(output.handoff_id, /^PIL-GEMINI-HANDOFF-[0-9a-f]{24}$/); assert.equal(handoff.tuple.candidate, f.candidate); assert.equal(handoff.plan_id.length, 64); assert.equal(handoff.manual_transport.model, "gemini-3.1-pro-high"); assert.equal(handoff.packets.length, 3); assert.equal(existsSync(path.join(f.dir, journal)), false); assert.deepEqual(readdirSync(path.join(f.dir, ".gemini-gate/handoff/replies")), []);
+    assert.match(output.handoff_id, /^PIL-GEMINI-HANDOFF-[0-9a-f]{24}$/); assert.equal(handoff.tuple.candidate, f.candidate); assert.equal(handoff.plan_id.length, 64); assert.equal(handoff.manual_transport.model, "gemini-3.8-flash-high"); assert.equal(handoff.packets.length, 3); assert.equal(existsSync(path.join(f.dir, journal)), false); assert.deepEqual(readdirSync(path.join(f.dir, ".gemini-gate/handoff/replies")), []);
     assert.ok(handoff.packets.every(item => item.prompt_sha256 === sha(readFileSync(path.join(f.dir, ".gemini-gate/handoff/packets", item.filename)))));
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });

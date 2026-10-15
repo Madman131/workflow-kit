@@ -39,7 +39,7 @@
 #   --selftest  run the deterministic legacy fake-agy reliability harness (no network/model call)
 set -uo pipefail
 
-MODEL="Gemini 3.1 Pro (High)"  # gate-binding-ok: out-of-matrix — the Gemini cross-family seat; core/GATES.md § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
+MODEL="Gemini 3.8 Flash (High)"  # gate-binding-ok: out-of-matrix — the Gemini cross-family seat; core/GATES.md § Model · effort matrix binds the Codex and Claude gate columns only. Read by an adopting repo's seat-binding checker; the kit ships none.
 MAX_FILE_BYTES=120000
 CANARY_SPAN=32768
 CANARY_MIN=2
@@ -1131,7 +1131,7 @@ RESPONSE_DONE="PIL-DONE-$(LC_ALL=C od -An -tx1 -N12 /dev/urandom 2>/dev/null | t
 if ! [[ "$RESPONSE_DONE" =~ ^PIL-DONE-[0-9a-f]{24}$ ]]; then ATTEMPT_DETAIL="secure random response-completion generation failed"; record_attempt FAILED_DELIVERY "$ATTEMPT_DETAIL"; exit 3; fi
 RECEIPT_INSTRUCTION="--- DELIVERY RECEIPT (mandatory) ---
 Read the complete artifact through its final line. Begin your reply with the exact random receipt token on that final line. After the substantive review and overall verdict, end your reply with the exact response-completion token '$RESPONSE_DONE' as the final nonblank line. A reply missing either boundary token is NOT a verdict."
-INLINE_COMBINED="$PROMPT
+INLINE_COMBINED="Do not call any tool or run any command: everything you need is in this message, and tool calls are denied. Reply in text only. $PROMPT
 
 $RECEIPT_INSTRUCTION
 
@@ -1300,7 +1300,7 @@ else
   fi
   [ "$FILE_ACTUAL" -le "$GATE_MAX" ] || GATE_VALID=0
   if ! resolve_agy; then ATTEMPT_DETAIL="'agy' not found on PATH or at ~/.local/bin/agy"; record_attempt FAILED_TOOL "$ATTEMPT_DETAIL"; exit 127; fi
-  FILE_PROMPT="$PROMPT
+  FILE_PROMPT="Do not run any command; read review_payload.txt only with your file-reading tool. Reply in text only. $PROMPT
 
 --- HOW THE MATERIALS ARE DELIVERED (read this first) ---
 The full review materials (the PIL invariants, the design/acceptance context, the FULL content of every changed file, and THE DIFF) are in a file named review_payload.txt in your workspace — absolute path ${TMPD}/review_payload.txt; it is the only file in the directory added for this review. They are NOT inline in this message. Read that file IN FULL, end to end, before you review. Its last line is 'RECEIPT: <token>'. Begin your reply with that exact token on its own line to confirm you reached the payload EOF; the distributed random canaries prove sampled regions across the payload. Then produce your review exactly as instructed above."

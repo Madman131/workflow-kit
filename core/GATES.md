@@ -526,7 +526,7 @@ Copy `scripts/cold-review-gemini.sh`, `scripts/gemini-gate-supervisor.mjs`, `scr
 
 ### Purpose
 
-`scripts/cold-review-gemini.sh` uses Gemini 3.1 Pro High through the Antigravity CLI to cold-review a design or code changeset before commit/deploy. Its value is decorrelated blind spots. It is read-only with respect to code, Git, and production; its default durable side effect is an append to `docs/journal/gemini_review_log.md`.
+`scripts/cold-review-gemini.sh` uses Gemini 3.8 Flash High through the Antigravity CLI to cold-review a design or code changeset before commit/deploy. Its value is decorrelated blind spots. It is read-only with respect to code, Git, and production; its default durable side effect is an append to `docs/journal/gemini_review_log.md`.
 
 Before every real model invocation, the runner creates a private-index snapshot commit from the caller's
 current artifact and checks it out in a temporary **detached worktree**. Payload assembly, Git discovery,
@@ -714,7 +714,7 @@ passed to its version probe and provider. Receipts bind the stable subscription 
 exact supported `1.2.2` version, model, effort, settings fingerprint, and nonsecret rig ID, never an
 operator home path. The runner rechecks that exact settings fingerprint after each provider response
 and before any receipt or aggregate. It requires
-`gemini-3.1-pro-high` at `high` effort, an empty disposable system-temp workspace, and exactly one
+`gemini-3.8-flash-high` at `high` effort, an empty disposable system-temp workspace, and exactly one
 NDJSON standard-input user event containing the complete prompt, so private review material is never
 an `agy` command-line argument. It passes `--input-format stream-json`, `--sandbox`,
 `--disable-slash-commands`, `--output-format stream-json`, and `--print-timeout <N>s`; it never passes
