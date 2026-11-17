@@ -1,6 +1,6 @@
 // v2.45.0 KIT-REVIEW-HYGIENE: (a) the design prompt never claims a prior review that did not happen;
 // (b) the frozen review tree carries no prior verdicts (Gemini log + adopter-declared reviewRecordPaths),
-// except what is part of the candidate diff. Real runs use a fake `agy`; no model is ever called.
+// except a record the change EDITS (bytes the base already has). Real runs use a fake `agy`; no model is ever called.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -112,16 +112,20 @@ test("(b) the Gemini log IS kept when the candidate edits bytes the base has", (
 
 const DENY = { reviewRecordPaths: [{ glob: "docs/chips/**", reason: "prior gate verdicts" }] };
 
-test("(b) a declared record is absent; a candidate path matching the glob is present", () => {
-  const dir = repo({ "docs/chips/old-verdict.md": "VERDICT old\n", "docs/chips/sub/deep.md": "deep verdict\n", "docs/chips/touched.md": "v1\n", "docs/chips/renamed-old.md": "r\n", "docs/chips/removed.md": "gone\n" }); try {
+test("(b) one keep rule: a declared record is kept only when the change edits bytes the base has", () => {
+  const dir = repo({ "docs/chips/untouched.md": "u\n", "docs/chips/edited.md": "line one\nline two\n", "docs/chips/appended.md": "a1\n", "docs/chips/deleted-line.md": "k\nx\n", "docs/chips/swapped.md": "s\n", "docs/chips/renamed-old.md": "r\n", "docs/chips/removed.md": "gone\n" }); try {
     config(dir, DENY); git(dir, "add", "-A"); git(dir, "commit", "-qm", "cfg");
-    put(dir, "docs/chips/touched.md", "v1\nv2 candidate edit\n");              // modified
-    put(dir, "docs/chips/new-untracked.md", "candidate addition\n");            // untracked addition
-    renameSync(path.join(dir, "docs/chips/renamed-old.md"), path.join(dir, "docs/chips/renamed-new.md")); // rename = old D + new A
-    rmSync(path.join(dir, "docs/chips/removed.md"));                           // deleted by the candidate
+    put(dir, "docs/chips/edited.md", "line one\nline TWO changed\n");         // bytes changed: KEPT
+    put(dir, "docs/chips/deleted-line.md", "k\n");                           // bytes deleted: KEPT
+    put(dir, "docs/chips/appended.md", "a1\na2 appended\n");                  // pure append: dropped
+    put(dir, "docs/chips/new-untracked.md", "R1 verdict\n");                  // untracked: dropped
+    rmSync(path.join(dir, "docs/chips/swapped.md")); symlinkSync("../keep.md", path.join(dir, "docs/chips/swapped.md")); // symlink swapped in: dropped
+    renameSync(path.join(dir, "docs/chips/renamed-old.md"), path.join(dir, "docs/chips/renamed-new.md")); // new path untracked: dropped
+    rmSync(path.join(dir, "docs/chips/removed.md"));
     const r = review(dir); assert.ok(r.ran, r.stderr);
-    for (const gone of ["docs/chips/old-verdict.md", "docs/chips/sub/deep.md", "docs/chips/renamed-old.md", "docs/chips/removed.md"]) assert.ok(!r.tracked.includes(gone) && !r.disk.includes(gone), `${gone} dropped`);
-    for (const kept of ["docs/chips/touched.md", "docs/chips/new-untracked.md", "docs/chips/renamed-new.md", "docs/keep.md"]) assert.ok(r.tracked.includes(kept) && r.disk.includes(kept), `${kept} kept (candidate or unmatched)`);
+    for (const gone of ["untouched", "appended", "new-untracked", "swapped", "renamed-old", "renamed-new", "removed"]) assert.ok(!r.tracked.includes(`docs/chips/${gone}.md`) && !r.disk.includes(`docs/chips/${gone}.md`), `${gone} dropped`);
+    for (const kept of ["edited", "deleted-line"]) assert.ok(r.tracked.includes(`docs/chips/${kept}.md`) && r.disk.includes(`docs/chips/${kept}.md`), `${kept} kept (the change edits its existing bytes)`);
+    assert.ok(r.tracked.includes("docs/keep.md"));
   } finally { cleanup(dir); }
 });
 
@@ -202,13 +206,15 @@ test("(b) code mode: the diff and file list never show a dropped record as a del
   const dir = repo({ "src.mjs": "export const a = 1;\n", "docs/chips/verdict.md": "SECRET-VERDICT-TEXT\n" }); try {
     config(dir, DENY); git(dir, "add", "-A"); git(dir, "commit", "-qm", "cfg");
     put(dir, "src.mjs", "export const a = 2;\n");
+    writeFileSync(path.join(dir, "docs/chips/verdict.md"), "SECRET-VERDICT-TEXT\nSECRET-APPENDED-TEXT\n"); // pure append
+    put(dir, "docs/chips/new-record.mjs", "export const SECRET_UNTRACKED_TEXT = 1;\n");               // untracked code-ish record
     const agy = fakeAgy();
     try {
       const r = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--no-log"], { cwd: dir, encoding: "utf8", env: { ...process.env, GEMINI_AGY_BIN: agy.bin, AGY_DIR: agy.dir, GEMINI_ALLOW_CODE_MODE: "1" } });
       const args = existsSync(path.join(agy.dir, "args")) ? readFileSync(path.join(agy.dir, "args"), "utf8") : null;
       assert.ok(args !== null, r.stderr);
       assert.match(args, /export const a = 2;/, "the real change is reviewed");
-      assert.doesNotMatch(args, /SECRET-VERDICT-TEXT|docs\/chips\/verdict\.md/, "the dropped record does not leak through a deletion hunk");
+      assert.doesNotMatch(args, /SECRET-VERDICT-TEXT|SECRET-APPENDED-TEXT|SECRET_UNTRACKED_TEXT|docs\/chips\/(verdict|new-record)/, "no dropped record (deleted, appended or untracked) reaches the diff payload");
     } finally { rmSync(agy.dir, { recursive: true, force: true }); }
   } finally { cleanup(dir); }
 });

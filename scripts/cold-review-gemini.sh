@@ -528,12 +528,12 @@ run_gc_sweep() {
 # being anything but an array of { glob, reason } objects with non-empty strings ABORTS the frozen run
 # (FAIL CLOSED). The list is never silently dropped.
 #
-# CANDIDATE RULE: a path that differs between ARTIFACT_BASE_SHA and the snapshot (changed, added,
-# untracked-added, deleted; a rename is its two paths) is part of the change under review and is NEVER
-# dropped by the deny-list. The Gemini log follows one rule of its own: it is kept only when the caller
-# tree EDITS or DELETES bytes the base commit has AND is still a regular file. A pure addition (the
-# runner's own append, which dirties the log after every logged run), a new untracked log, and a
-# symlink or other non-regular entry in its place are all dropped.
+# ONE KEEP RULE, for the log and every declared record: a matched path is DROPPED unless the caller tree
+# EDITS or DELETES bytes the base commit already has AND the entry is still a regular file. So an
+# untracked or newly added file, a pure append (the runner's own append dirties the log after every logged
+# run), and a symlink or other non-regular entry swapped in are all dropped; an edit inside a tracked
+# record is kept because it is part of the change under review. Predicate: `git diff-index --cached
+# --numstat` against the base reports deletions > 0 (or binary) for a regular file the base also has.
 #
 # MATCHING: each glob is wrapped as git pathspec `:(glob,top)<glob>`, case-SENSITIVE (core.ignorecase is
 # forced off), against the freeze index paths, never the filesystem. `*` stays inside one path segment,
@@ -578,31 +578,31 @@ if (fst) {
     rules.push({ glob: g, reason: r.reason });
   });
 }
-// 2. The candidate = every path that differs between the base commit and the snapshot index.
-const candidate = new Set(nul(git("diff-index", "--cached", "--name-only", "-z", "--no-renames", base)));
+// 2. ONE keep rule for the log and every declared record (see the shell comment): kept only when the
+// caller tree edits/deletes bytes the base commit has and the entry is still a regular file.
+const modes = new Map();
+{ const recs = nul(git("ls-files", "-s", "-z")); for (const r of recs) { const t = r.indexOf("\t"); if (t > 0) modes.set(r.slice(t + 1), r.slice(0, t)); } }
+const stats = new Map();
+{ const parts = git("diff-index", "--cached", "--numstat", "-z", "--no-renames", base).toString("utf8").split("\0");
+  for (let i = 0; i + 0 < parts.length; i++) { const m = /^(-|\d+)\t(-|\d+)\t(.*)$/s.exec(parts[i]); if (m) stats.set(m[3], m); } }
+const keeps = (p) => {
+  if (!/^100(644|755) /.test(modes.get(p) || "")) return false;
+  const st = stats.get(p); if (!st) return false;                       // unchanged vs base
+  let baseHas = true; try { git("cat-file", "-e", base + ":" + p); } catch { baseHas = false; }
+  return baseHas && (st[2] === "-" || Number(st[2]) > 0);
+};
 const drop = new Set(); const perRule = [];
-// 3. The durable Gemini log: dropped unless the caller tree edits/deletes bytes the base has.
-const entry = nul(git("ls-files", "-s", "-z", "--", ":(literal,top)" + logRel));
-if (entry.length) {
-  const regular = /^100(644|755) /.test(entry[0]);
-  let baseHas = true; try { git("cat-file", "-e", base + ":" + logRel); } catch { baseHas = false; }
-  let editsBase = false;
-  if (regular && baseHas && candidate.has(logRel)) {
-    const stat = git("diff-index", "--cached", "--numstat", "--no-renames", base, "--", ":(literal,top)" + logRel).toString("utf8").split("\t");
-    editsBase = stat[0] === "-" || Number(stat[1]) > 0;
-  }
-  if (!editsBase) drop.add(logRel);
-}
-// 4. Declared records, minus anything in the candidate.
+// 3. The durable Gemini log, then the declared records.
+if (modes.has(logRel) && !keeps(logRel)) drop.add(logRel);
 for (const r of rules) {
   const hits = nul(git("ls-files", "-z", "--cached", "--", ":(glob,top)" + r.glob));
-  let n = 0; for (const h of hits) if (!candidate.has(h) && !drop.has(h)) { drop.add(h); n++; }
+  let n = 0; for (const h of hits) if (!keeps(h) && !drop.has(h)) { drop.add(h); n++; }
   perRule.push({ glob: r.glob, matched: hits.length, dropped: n });
 }
 const out = [...drop].sort();
 if (out.length) cp.execFileSync("git", ["-C", root, "update-index", "--force-remove", "-z", "--stdin"], { env, input: out.join("\0") + "\0", maxBuffer: 1 << 29 });
 fs.writeFileSync(outFile, out.length ? out.join("\0") + "\0" : "");
-for (const r of perRule) console.error("[cold-review-gemini] reviewRecordPaths " + JSON.stringify(r.glob) + ": " + r.dropped + " dropped, " + (r.matched - r.dropped) + " kept (in the candidate diff or already dropped)");
+for (const r of perRule) console.error("[cold-review-gemini] reviewRecordPaths " + JSON.stringify(r.glob) + ": " + r.dropped + " dropped, " + (r.matched - r.dropped) + " kept (edited in the change, or already dropped)");
 JS
   [ -n "$helper_js" ] || { ATTEMPT_DETAIL="cannot load the review-record helper"; return 1; }
   ATTEMPT_DETAIL="$(GIT_INDEX_FILE="$FREEZE_INDEX" node -e "$helper_js" "$SOURCE_REPO_ROOT" "$ARTIFACT_BASE_SHA" "$FREEZE_INDEX" "$FREEZE_DROPPED_FILE" "docs/journal/gemini_review_log.md" 2>&1 >/dev/null)"; rc=$?

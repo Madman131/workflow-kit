@@ -24,7 +24,7 @@ test("the identity check uses the stored URL at every shipped site, never the re
 
 test("REVIEW says the runner drops the Gemini log and declared reviewRecordPaths, and that this is not certification", () => {
   const r = flat("core/REVIEW.md");
-  assert.match(r, /The Gemini runner omits its own log and the adopter-declared `reviewRecordPaths` records from its frozen tree \(a path in the candidate diff stays\); that narrows the leak, certifies nothing, and the `pre-loaded` residual stands\./);
+  assert.match(r, /The Gemini runner omits its own log and the adopter-declared `reviewRecordPaths` records from its frozen tree, keeping one only when the change edits its existing bytes; the Codex runner does not yet exclude review records \(successor KIT-CODEX-FROZEN-TREE\)\. This certifies nothing; the `pre-loaded` residual stands\./);
 });
 
 test("the README note says what changed, why, and what adopters byte-copy versus hand-edit", () => {
@@ -36,6 +36,10 @@ test("the README note says what changed, why, and what adopters byte-copy versus
   assert.match(n, /Byte-copy `scripts\/cold-review-gemini\.sh`/);
   assert.match(n, /Hand-edit the adopted `CLAUDE\.md`, `AGENTS\.md` and `BINDINGS\.md` copies and the ID card/);
   assert.match(n, /`init` does not write the key/);
+  assert.match(n, /DROPPED when it is untracked, newly added, a pure append, or a swapped-in symlink/);
+  assert.match(n, /KEPT only when the change edits or deletes bytes the base commit already has/);
+  assert.match(n, /the Codex runner \(`scripts\/codex-gate\.sh`\) reads the live repo and does not yet exclude review records; its successor is KIT-CODEX-FROZEN-TREE/);
+  assert.doesNotMatch(n, /never dropped/);
 });
 
 test("version is 2.45.0 everywhere", () => {
