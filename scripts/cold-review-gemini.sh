@@ -197,6 +197,7 @@ START_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ATTEMPT_ID="PIL-GATE-$(date +%s)-$$-${RANDOM}${RANDOM}"
 HEAD_SHA="$(git -C "$SOURCE_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 ARTIFACT_BASE_SHA="$HEAD_SHA"; ARTIFACT_SHA=""; ARTIFACT_REF=""; FROZEN_WORKTREE=""; ARTIFACT_WAS_DETACHED=0; FREEZE_INDEX=""
+FREEZE_DROPPED_FILE=""; FREEZE_DROPPED_EXCLUDES=()
 LOG="$SOURCE_REPO_ROOT/docs/journal/gemini_review_log.md"
 TMPD=""; LOCK_DIR=""; LOCK_COMMON=""; LOCK_HELD=0; SUPERVISOR_PID=""; ATTEMPT_RECORDED=0
 DELIVERY="UNSELECTED"; PAYLOAD_BYTES=0; COMBINED_BYTES=0; FILE_BYTES=0; REVIEW=""; RECEIPT=""
@@ -518,6 +519,133 @@ run_gc_sweep() {
     --protect-sha "$ARTIFACT_SHA" --prune 1>&2 2>&1 || true
 }
 
+# Drop prior review verdicts from the PRIVATE freeze index (never the caller's real index).
+#
+# Dropped: (1) the durable Gemini log, and (2) every path the adopter declares in
+# `.claude/kit.config.json` -> reviewRecordPaths: [{ "glob": "<git pathspec glob>", "reason": "<why>" }, ...].
+# It follows the `worktreeRoots` seam: a missing file or a missing key is an empty list; the file being
+# unreadable, symlinked (or under a symlinked .claude), not JSON, not an object, or `reviewRecordPaths`
+# being anything but an array of { glob, reason } objects with non-empty strings ABORTS the frozen run
+# (FAIL CLOSED). The list is never silently dropped.
+#
+# ONE KEEP RULE, for the log and every declared record: a matched path is KEPT iff (i) its base entry is a
+# regular file, (ii) its new entry is a regular file, and (iii) the change DELETES at least one base line
+# (`git diff -a --numstat` deletions > 0, computed in the helper because a `-diff`/`binary` attribute makes
+# numstat print `-` even with -a). Binary, `-diff` and NUL files, and a change that adds .gitattributes,
+# score like any other file. Everything else is DROPPED:
+# untracked or new, unchanged, ANY pure insertion (top, middle or end; the runner's own append dirties the
+# log after every logged run, and a newest-first log gains rows at the top), a symlink on either side,
+# deleted. Only an edit or removal of existing base lines KEEPS a path.
+# A path the caller DELETED or renamed away is absent from the freeze index but present in the base, so
+# every base-side path matching a rule is also listed as dropped, or the base-vs-artifact diff would print
+# its full text as a deletion hunk. The bound `--folded` input (the sanctioned prior-review channel) is
+# exempt from the drop, or a valid `--design --folded <record>` run would abort on its own input.
+#
+# MATCHING: each glob is wrapped as git pathspec `:(glob,top)<glob>`, case-SENSITIVE (core.ignorecase is
+# forced off), against the freeze index paths, never the filesystem. `*` stays inside one path segment,
+# `**` crosses segments, and a bare directory glob (`docs/chips`) matches every path beneath it. A
+# symlink is matched as its own path and never followed. Globs that are absolute, start with `./` or `:`,
+# hold a `..` segment, a NUL/newline, or leading/trailing whitespace are REFUSED rather than normalized.
+#
+# Every dropped path is listed (NUL-separated) in $FREEZE_DROPPED_FILE, so the code-mode diff and the
+# slice validator can exclude the deletions it would otherwise show (a deleted record's diff would leak
+# the very bytes dropped here).
+freeze_drop_review_records() {
+  local helper_js="" rc=0
+  FREEZE_DROPPED_FILE="$TMPD/freeze-dropped-paths.nul"
+  : > "$FREEZE_DROPPED_FILE" || { ATTEMPT_DETAIL="cannot create the dropped-review-record list"; return 1; }
+  IFS= read -r -d '' helper_js <<'JS'
+const fs = require("fs"), path = require("path"), cp = require("child_process");
+const [root, base, indexFile, outFile, logRel, exemptRel] = process.argv.slice(1);
+const die = (m) => { console.error("reviewRecordPaths: " + m); process.exit(1); };
+const env = { ...process.env, GIT_INDEX_FILE: indexFile }; for (const k of ["GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_ICASE_PATHSPECS", "GIT_NOGLOB_PATHSPECS"]) delete env[k];
+const git = (...a) => cp.execFileSync("git", ["-C", root, "-c", "core.ignorecase=false", ...a], { env, maxBuffer: 1 << 29 });
+const nul = (buf) => buf.toString("utf8").split("\0").filter(Boolean);
+// 1. Load and validate the declared list (fail closed).
+const lst = (p) => { try { return fs.lstatSync(p); } catch (e) { if (e && e.code === "ENOENT") return null; die("cannot stat " + p + ": " + e.message); } };
+const dir = path.join(root, ".claude"), file = path.join(dir, "kit.config.json");
+const dst = lst(dir); let rules = [];
+if (dst && dst.isSymbolicLink()) die(".claude must be a real directory, not a symlink");
+if (dst && !dst.isDirectory()) die(".claude must be a directory, not a regular file");
+const fst = dst ? lst(file) : null;
+if (fst) {
+  if (fst.isSymbolicLink() || !fst.isFile()) die(".claude/kit.config.json must be a regular file, not a symlink");
+  let parsed; try { parsed = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { die(".claude/kit.config.json is unreadable or not valid JSON (" + e.message + ")"); }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) die(".claude/kit.config.json must be a JSON object");
+  const declared = parsed.reviewRecordPaths === undefined ? [] : parsed.reviewRecordPaths;
+  if (!Array.isArray(declared)) die("reviewRecordPaths must be an array of { glob, reason } objects");
+  declared.forEach((r, i) => {
+    const at = "reviewRecordPaths[" + i + "]";
+    if (r === null || typeof r !== "object" || Array.isArray(r)) die(at + " must be an object { glob, reason }");
+    if (typeof r.glob !== "string" || !r.glob.trim()) die(at + ".glob must be a non-empty string");
+    if (typeof r.reason !== "string" || !r.reason.trim()) die(at + ".reason must be a non-empty string (state why this path is a prior review record)");
+    const g = r.glob;
+    if (g !== g.trim() || /[\0\r\n]/.test(g)) die(at + ".glob has leading/trailing whitespace or a control character: " + JSON.stringify(g));
+    if (g.startsWith("/") || g.startsWith("./") || g.startsWith(":") || g.split("/").includes("..")) die(at + ".glob must be a repo-relative git glob without a leading ./ or / or :, and without a .. segment: " + JSON.stringify(g));
+    rules.push({ glob: g, reason: r.reason });
+  });
+}
+// 2. ONE keep rule for the log and every declared record (see the shell comment).
+const baseTree = new Map(); for (const r of nul(git("ls-tree", "-r", "-z", base))) { const t = r.indexOf("\t"); if (t > 0) { const f = r.slice(0, t).split(" "); baseTree.set(r.slice(t + 1), { mode: f[0], sha: f[2] }); } }
+const newTree = new Map(); for (const r of nul(git("ls-files", "-s", "-z"))) { const t = r.indexOf("\t"); if (t > 0) { const f = r.slice(0, t).split(" "); newTree.set(r.slice(t + 1), { mode: f[0], sha: f[1] }); } }
+const regular = (e) => !!e && (e.mode === "100644" || e.mode === "100755");
+// Deletions > 0 exactly as `git diff --numstat -a` would score it, but computed here: a `-diff` or `binary`
+// attribute makes numstat print "-" even with -a, which would rescue an append. Lines keep their terminator
+// (so a CRLF conversion counts as an edit, while an unterminated final base line may gain one); the base has no deletion iff its lines are a
+// subsequence of the new lines, which is what a pure insertion (top, middle or end) is.
+const lines = (buf) => buf.toString("latin1").match(/[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$/g) || [];
+const bare = (l) => l.replace(/(?:\r\n|\r|\n)$/, "");
+// A base file with no final terminator gains one when text is appended after it: only its LAST line may
+// match a new line equal to it plus any terminator (CRLF, CR or LF).
+const hasDeletion = (bsha, nsha) => {
+  const bl = lines(git("cat-file", "blob", bsha)), nl = lines(git("cat-file", "blob", nsha));
+  const open = bl.length > 0 && bare(bl[bl.length - 1]) === bl[bl.length - 1]; let i = 0;
+  for (const l of nl) { if (i >= bl.length) break; if (l === bl[i] || (open && i === bl.length - 1 && l !== bl[i] && bare(l) === bl[i])) i++; }
+  return i < bl.length;
+};
+const keeps = (p) => {
+  const b = baseTree.get(p), n = newTree.get(p);
+  if (!regular(b) || !regular(n) || b.sha === n.sha) return false;
+  return hasDeletion(b.sha, n.sha);   // pure insertions (any position, any file type) drop
+};
+const drop = new Set(); const perRule = [];
+// 3. The durable Gemini log, then the declared records (in the index, and base-side paths now absent from it).
+if (newTree.has(logRel) && !keeps(logRel)) drop.add(logRel);
+if (baseTree.has(logRel) && !newTree.has(logRel)) drop.add(logRel);
+for (const r of rules) {
+  const hits = nul(git("ls-files", "-z", "--cached", "--", ":(glob,top)" + r.glob));
+  const gone = nul(git("diff-index", "--cached", "-z", "--name-only", "--no-renames", "--diff-filter=D", base, "--", ":(glob,top)" + r.glob));
+  let n = 0;
+  for (const h of hits) if (h !== exemptRel && !keeps(h) && !drop.has(h)) { drop.add(h); n++; }
+  for (const h of gone) if (h !== exemptRel && !drop.has(h)) { drop.add(h); n++; }
+  perRule.push({ glob: r.glob, matched: hits.length + gone.length, dropped: n });
+}
+const out = [...drop].sort();
+const inIndex = out.filter((p) => newTree.has(p));
+if (inIndex.length) cp.execFileSync("git", ["-C", root, "update-index", "--force-remove", "-z", "--stdin"], { env, input: inIndex.join("\0") + "\0", maxBuffer: 1 << 29 });
+fs.writeFileSync(outFile, out.length ? out.join("\0") + "\0" : "");
+for (const r of perRule) console.error("[cold-review-gemini] reviewRecordPaths " + JSON.stringify(r.glob) + ": " + r.dropped + " dropped, " + (r.matched - r.dropped) + " kept (edited in the change, exempt, or already dropped)");
+JS
+  [ -n "$helper_js" ] || { ATTEMPT_DETAIL="cannot load the review-record helper"; return 1; }
+  ATTEMPT_DETAIL="$(GIT_INDEX_FILE="$FREEZE_INDEX" node -e "$helper_js" "$SOURCE_REPO_ROOT" "$ARTIFACT_BASE_SHA" "$FREEZE_INDEX" "$FREEZE_DROPPED_FILE" "docs/journal/gemini_review_log.md" "$([ "$FOLDED_IS_FILE" = "1" ] && printf %s "$FOLDED_SRC")" 2>&1 >/dev/null)"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    ATTEMPT_DETAIL="cannot drop prior review records from the review artifact (fail closed): $ATTEMPT_DETAIL"
+    return 1
+  fi
+  [ -n "$ATTEMPT_DETAIL" ] && printf '%s\n' "$ATTEMPT_DETAIL" >&2
+  ATTEMPT_DETAIL=""
+  return 0
+}
+
+# Pathspec excludes for every dropped record, so base-vs-artifact diffs show no deletion of them.
+load_dropped_excludes() {
+  FREEZE_DROPPED_EXCLUDES=()
+  local p
+  [ -n "${FREEZE_DROPPED_FILE:-}" ] && [ -f "$FREEZE_DROPPED_FILE" ] || return 0
+  while IFS= read -r -d '' p; do FREEZE_DROPPED_EXCLUDES+=(":(exclude,literal,top)$p"); done < "$FREEZE_DROPPED_FILE"
+  return 0
+}
+
 freeze_artifact() {
   local snapshot_tree
   ARTIFACT_BASE_SHA="$(git -C "$SOURCE_REPO_ROOT" rev-parse HEAD 2>/dev/null)" \
@@ -526,18 +654,12 @@ freeze_artifact() {
   rm -f "$FREEZE_INDEX" "$FREEZE_INDEX.lock"
   GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" read-tree "$ARTIFACT_BASE_SHA" \
     || { ATTEMPT_DETAIL="cannot seed the private review-artifact index"; return 1; }
-  # Snapshot the caller tree without touching its real index. The durable Gemini log is a prior
-  # verdict record, never review material; retain its base-tree entry so it cannot pollute a later
-  # gate or make a reviewer repeat a stale verdict.
+  # Snapshot the caller tree without touching its real index, then drop prior review verdicts from it:
+  # the durable Gemini log and the adopter-declared `reviewRecordPaths`. A tool-capable seat reading the
+  # frozen tree would otherwise find earlier verdicts and be primed by them. See freeze_drop_review_records.
   GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" add -A -- . \
     || { ATTEMPT_DETAIL="cannot stage the private review-artifact index"; return 1; }
-  if git -C "$SOURCE_REPO_ROOT" cat-file -e "$ARTIFACT_BASE_SHA:docs/journal/gemini_review_log.md" 2>/dev/null; then
-    GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" reset -q "$ARTIFACT_BASE_SHA" -- docs/journal/gemini_review_log.md \
-      || { ATTEMPT_DETAIL="cannot exclude the durable Gemini log from the review artifact"; return 1; }
-  else
-    GIT_INDEX_FILE="$FREEZE_INDEX" git -C "$SOURCE_REPO_ROOT" rm -q --cached --ignore-unmatch -- docs/journal/gemini_review_log.md \
-      || { ATTEMPT_DETAIL="cannot exclude an untracked Gemini log from the review artifact"; return 1; }
-  fi
+  freeze_drop_review_records || return 1
   # Runner-owned gate artifacts under the one canonical $GATE_ARTIFACT_DIR/ are never review material.
   # It is gitignored (so `git add -A` skips it in the common case); this drop from the freeze index is
   # defense-in-depth for the rare force-added entry, matching the validator's exact-prefix exclusion.
@@ -573,7 +695,7 @@ freeze_artifact() {
 
 run_slice_tool() {
   if [ -n "$ARTIFACT_SHA" ]; then
-    GEMINI_GATE_ARTIFACT_PARENT="$ARTIFACT_BASE_SHA" node "$REVIEW_SCRIPT_DIR/gemini-gate-slices.mjs" "$@"
+    GEMINI_GATE_ARTIFACT_PARENT="$ARTIFACT_BASE_SHA" GEMINI_GATE_DROPPED_PATHS_FILE="$FREEZE_DROPPED_FILE" node "$REVIEW_SCRIPT_DIR/gemini-gate-slices.mjs" "$@"
   else
     node "$REVIEW_SCRIPT_DIR/gemini-gate-slices.mjs" "$@"
   fi
@@ -741,7 +863,9 @@ invariants() {
 # --folded may be a file path or literal text.
 folded_notes() {
   local folded_path="${FOLDED_SRC_CANONICAL:-$FOLDED_SRC}"
-  [ -n "$FOLDED_SRC" ] || { echo "(none provided — assume the same-family panel found nothing; hunt broadly)"; return; }
+  # No --folded means NO prior review is claimed anywhere. design-mode build_payload prints no FOLDED
+  # section in that case; this branch must never assert that a prior panel "found nothing".
+  [ -n "$FOLDED_SRC" ] || return 0
   if [ "$FOLDED_IS_FILE" = "1" ] || { [ "$DRY_RUN" = "1" ] && [ -f "$FOLDED_SRC" ]; }; then
     [ -f "$folded_path" ] || return 1
     echo "(from $FOLDED_SRC)"; echo; cat "$folded_path"
@@ -912,10 +1036,16 @@ if [ -n "$DESIGN_FILE" ]; then
   LABEL="design:$DESIGN_FILE"
   build_payload() {
     echo "=== PIL PROJECT INVARIANTS (the design must not violate these) ==="; invariants || return 1
-    echo; echo "=== WHAT SAME-FAMILY REVIEWERS ALREADY FOUND + FOLDED (hunt what they MISSED, not these) ==="; folded_notes || return 1
+    if [ -n "$FOLDED_SRC" ]; then
+      echo; echo "=== WHAT SAME-FAMILY REVIEWERS ALREADY FOUND + FOLDED (hunt what they MISSED, not these) ==="; folded_notes || return 1
+    fi
     echo; echo "=== THE DESIGN / SPEC UNDER REVIEW: $DESIGN_FILE ==="; cat "${DESIGN_FILE_CANONICAL:-$DESIGN_FILE}"
   }
-  PROMPT='You are an independent CROSS-FAMILY reviewer auditing a DESIGN / SPEC (there is NO code yet — do NOT ask for a diff). Same-family (Claude/Opus) reviewers have ALREADY reviewed this and folded the fixes listed in the "ALREADY FOUND + FOLDED" section. Your job is to find what they MISSED — your value is decorrelated blind spots, so hunt the classes a same-family panel tends to wave through.
+  # Two variants. Folded: the seat is told a same-family review already happened (the --folded section
+  # is in the payload). Free: no prior review is claimed and no FOLDED section exists; the seat is the
+  # first, independent review (REVIEW § Decorrelation: the free pass gets no prior findings).
+  DESIGN_PROMPT_HEAD='You are an independent CROSS-FAMILY reviewer auditing a DESIGN / SPEC (there is NO code yet — do NOT ask for a diff). '
+  DESIGN_PROMPT_MID='
 
 Hunt, ranked by severity (BLOCKER / HIGH / MEDIUM / LOW), each with the exact §section, the concrete failure scenario, why it matters, and the fix:
 1. INTER-SECTION CONTRADICTIONS — two sections that specify incompatible behavior (e.g. "outside the lock" in one section vs "under the lock" in another). Read the WHOLE doc and cross-check sections against each other.
@@ -933,9 +1063,16 @@ VERDICT: GO  (or VERDICT: NO-GO)
 INSPECTED SCOPE: <the specific design sections and artifact you inspected>
 
 Discipline:
-- You have the full design + the invariants + what was already folded. Judge the MECHANISM, not prose style. Cross-reference sections — the best catches are contradictions and missed failure modes, not typos.
+'
+  DESIGN_PROMPT_TAIL='- Separate CONFIRMED problems from suspicions; abstain over guessing — a confident wrong finding is the worst outcome. If the design is genuinely sound, say so plainly. Rank by severity. No filler.'
+  if [ -n "$FOLDED_SRC" ]; then
+    PROMPT="$DESIGN_PROMPT_HEAD"'Same-family (Claude/Opus) reviewers have ALREADY reviewed this and folded the fixes listed in the "ALREADY FOUND + FOLDED" section. Your job is to find what they MISSED — your value is decorrelated blind spots, so hunt the classes a same-family panel tends to wave through.'"$DESIGN_PROMPT_MID"'- You have the full design + the invariants + what was already folded. Judge the MECHANISM, not prose style. Cross-reference sections — the best catches are contradictions and missed failure modes, not typos.
 - Do NOT re-report anything already in the "ALREADY FOUND + FOLDED" list. Find NEW issues.
-- Separate CONFIRMED problems from suspicions; abstain over guessing — a confident wrong finding is the worst outcome. If the design is genuinely sound, say so plainly. Rank by severity. No filler.'
+'"$DESIGN_PROMPT_TAIL"
+  else
+    PROMPT="$DESIGN_PROMPT_HEAD"'You are the first, independent review of this design. Your value is decorrelated blind spots, so hunt the classes a same-family panel tends to wave through.'"$DESIGN_PROMPT_MID"'- You have the full design + the invariants. Judge the MECHANISM, not prose style. Cross-reference sections — the best catches are contradictions and missed failure modes, not typos.
+'"$DESIGN_PROMPT_TAIL"
+  fi
 
 # =========================== CODE MODE (default) ===========================
 else
@@ -986,7 +1123,8 @@ $(<"$TMPD/validate.err")"
       [ -f "$SLICE_DIFF" ] || return 1
       cat "$SLICE_DIFF" || return 1
     elif [ -n "$ARTIFACT_SHA" ]; then
-      git diff "$ARTIFACT_BASE_SHA" "$ARTIFACT_SHA" -- . ':(exclude)docs/journal/gemini_review_log.md' || return 1
+      load_dropped_excludes
+      git diff "$ARTIFACT_BASE_SHA" "$ARTIFACT_SHA" -- . ':(exclude)docs/journal/gemini_review_log.md' ${FREEZE_DROPPED_EXCLUDES[@]+"${FREEZE_DROPPED_EXCLUDES[@]}"} || return 1
     else
       git diff HEAD -- . ':(exclude)docs/journal/gemini_review_log.md' || return 1
       untracked="$(git ls-files --others --exclude-standard)" || return 1
@@ -1003,7 +1141,8 @@ $(<"$TMPD/validate.err")"
     local tracked untracked f relative changed_canonical
     : > "$TMPD/review-files.txt" || return 1
     if [ -n "$ARTIFACT_SHA" ]; then
-      git diff --name-only "$ARTIFACT_BASE_SHA" "$ARTIFACT_SHA" > "$TMPD/changed-files.txt" || return 1
+      load_dropped_excludes
+      git diff --name-only "$ARTIFACT_BASE_SHA" "$ARTIFACT_SHA" -- . ':(exclude)docs/journal/gemini_review_log.md' ${FREEZE_DROPPED_EXCLUDES[@]+"${FREEZE_DROPPED_EXCLUDES[@]}"} > "$TMPD/changed-files.txt" || return 1
     else
       tracked="$(git diff --name-only HEAD)" || return 1
       untracked="$(git ls-files --others --exclude-standard)" || return 1

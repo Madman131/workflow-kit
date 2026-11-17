@@ -1,4 +1,4 @@
-# workflow-kit — v2.44.2
+# workflow-kit — v2.45.0
 
 ## How to start a build
 
@@ -11,6 +11,16 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.45.0 — the Gemini review stops claiming a prior review and drops prior verdicts from its frozen tree
+
+Three fixes to what a Gemini seat is told and can read, plus one new `kit.config.json` key.
+
+- **No false "already folded" premise.** `scripts/cold-review-gemini.sh` `--design` told the seat that same-family reviewers "have ALREADY reviewed this and folded the fixes" even when no `--folded` was given, so the free pass was primed to believe the design was vetted. Without `--folded` the prompt now says the seat is the first, independent review and the payload carries no FOLDED section; with `--folded` the wording is byte-identical to v2.44.2. The code, slice, finalize and frozen modes, `scripts/codex-gate.sh` and `scripts/gemini-frozen-gate.mjs` never claimed a prior review.
+- **Prior verdicts are dropped from the frozen review tree.** The runner used to keep the base-tree `docs/journal/gemini_review_log.md` and every tracked review record in the worktree a tool-capable seat reads. It now removes the Gemini log and every path matching the new adopter-declared `reviewRecordPaths` in `.claude/kit.config.json`: an array of `{ "glob": "<git pathspec glob>", "reason": "<why>" }`, `reason` mandatory. Globs are case-sensitive git `:(glob)` pathspecs from the repo root (`*` stays inside one path segment, `**` crosses them, a bare directory matches beneath it); one that is absolute, starts with `./` or `:`, or holds a `..` segment is refused. A missing file or key is an empty list; a symlinked or unreadable file, bad JSON, a non-object, or a malformed entry aborts the frozen run (fail closed). One rule covers the Gemini log and every declared record: a match is DROPPED when it is untracked, newly added, unchanged, deleted or renamed away, a symlink on either side, or a pure insertion (at the top, middle or end, in a text, binary or NUL file alike), and KEPT only when both sides are regular files and the change deletes or edits at least one existing base line. Whole-file CRLF-to-LF (or LF-to-CRLF) conversion counts as an edit, so that record is KEPT. A record moved OUT of the declared glob shows in full as a new file, so declare archive locations too. The bound `--folded` input is exempt, because it is the sanctioned prior-review channel. Dropped records (including ones the change deleted) are also excluded from the code-mode diff and the slice validator so a deletion hunk cannot leak them. This narrows what a seat can read and is still not certification: git history stays reachable and `pre-loaded` remains a log (`core/REVIEW.md` § Cold review). The frozen worktree shares the caller's `.git`, so `git show HEAD^:<record>` still reads a dropped record. Residuals: the Codex runner (`scripts/codex-gate.sh`) reads the live repo and does not yet exclude review records, and an absolute symlink at a non-matching path can still reach a live record (frozen-tree escape); both belong to successor KIT-CODEX-FROZEN-TREE.
+- **The identity check reads the stored URL.** `git remote get-url origin` prints the `url.<base>.insteadOf`-rewritten form, so a global SSH-to-HTTPS rewrite made the check disagree with the entry stub. `skills/boot`, `skills/closeout`, `templates/AGENTS.md.tmpl`, `templates/BINDINGS.md.tmpl` and `templates/CLAUDE.md.tmpl` now run `git config --get remote.origin.url`. The global rewrite is untouched.
+
+**Adopters.** Byte-copy `scripts/cold-review-gemini.sh`, `scripts/gemini-gate-slices.mjs`, `core/REVIEW.md` and the two skills. Hand-edit the adopted `CLAUDE.md`, `AGENTS.md` and `BINDINGS.md` copies and the ID card (they are rendered from the templates), and declare your own `reviewRecordPaths` (for example your `docs/chips/*-verdicts.md` records) in `.claude/kit.config.json`. `init` does not write the key.
 
 ## What's new in v2.44.2 — the Gemini cross-family seat moves to Gemini 3.8 Flash (High)
 
@@ -1813,8 +1823,8 @@ a checklist over doctrine the kit already carries, never a restatement of it.
 
 - **Three new shared-body dual-lane skills** (the v1.3 mechanism, unchanged — one canonical body
   under `.agents/skills/<name>/`, a thin shim per harness, zero `init` edits):
-  - **`/boot`** — the start-of-session ritual: the identity fingerprint (`git remote get-url
-    origin` against the entry stub's table — never a path), the nine-doc boot set read in order,
+  - **`/boot`** — the start-of-session ritual: the identity fingerprint (`git config --get
+    remote.origin.url` against the entry stub's table — never a path), the nine-doc boot set read in order,
     the other-lane dirty-file check, the task-lane declaration, and the tier recommendation
     (`core/WORKFLOW.md` § Steer) before the first write.
   - **`/closeout`** — the PROCEDURE over `core/OPERATE.md` § End-of-work closeout: inventory →

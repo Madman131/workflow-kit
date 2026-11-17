@@ -17,7 +17,7 @@ Word budget: 600 (Owner-ratified 2026-08-04). The PROCEDURE over `core/OPERATE.m
   exact remaining remote boundary. "Ready to archive?" is receipt-only: inspect and report.
 
 ## 1. Identity ritual — before every commit/push
-**In the checkout you are pushing from**, run `git remote get-url origin` and
+**In the checkout you are pushing from**, run `git config --get remote.origin.url` and
 `git branch --show-current`; confirm both against the entry stub's fingerprint. Not
 path-pinned — a pinned path reports the MAIN checkout's branch from inside a worktree.
 
