@@ -36,9 +36,11 @@ test("the README note says what changed, why, and what adopters byte-copy versus
   assert.match(n, /Byte-copy `scripts\/cold-review-gemini\.sh`/);
   assert.match(n, /Hand-edit the adopted `CLAUDE\.md`, `AGENTS\.md` and `BINDINGS\.md` copies and the ID card/);
   assert.match(n, /`init` does not write the key/);
-  assert.match(n, /DROPPED when it is untracked, newly added, a pure append, or a swapped-in symlink/);
-  assert.match(n, /KEPT only when the change edits or deletes bytes the base commit already has/);
-  assert.match(n, /the Codex runner \(`scripts\/codex-gate\.sh`\) reads the live repo and does not yet exclude review records; its successor is KIT-CODEX-FROZEN-TREE/);
+  assert.match(n, /DROPPED when it is untracked, newly added, unchanged, deleted or renamed away, a symlink on either side, or a pure insertion \(at the top, middle or end/);
+  assert.match(n, /KEPT only when both sides are regular files and the change deletes or edits at least one existing base line/);
+  assert.match(n, /The bound `--folded` input is exempt, because it is the sanctioned prior-review channel/);
+  assert.match(n, /`git show HEAD\^:<record>` still reads a dropped record/);
+  assert.match(n, /an absolute symlink at a non-matching path can still reach a live record \(frozen-tree escape\); both belong to successor KIT-CODEX-FROZEN-TREE/);
   assert.doesNotMatch(n, /never dropped/);
 });
 

@@ -129,6 +129,74 @@ test("(b) one keep rule: a declared record is kept only when the change edits by
   } finally { cleanup(dir); }
 });
 
+// R1 repair: deleted/renamed records, the --folded exemption, and the byte-prefix predicate.
+function codeReview(dir, extra = []) {
+  const agy = fakeAgy();
+  try {
+    const r = spawnSync("bash", ["scripts/cold-review-gemini.sh", "--no-log", ...extra], { cwd: dir, encoding: "utf8", env: { ...process.env, GEMINI_AGY_BIN: agy.bin, AGY_DIR: agy.dir, GEMINI_ALLOW_CODE_MODE: "1" } });
+    const args = existsSync(path.join(agy.dir, "args")) ? readFileSync(path.join(agy.dir, "args"), "utf8") : null;
+    return { ...r, args, disk: existsSync(path.join(agy.dir, "disk")) ? readFileSync(path.join(agy.dir, "disk"), "utf8") : "" };
+  } finally { rmSync(agy.dir, { recursive: true, force: true }); }
+}
+const recordRepo = () => { const dir = repo({ "src.mjs": "export const a = 1;\n", "docs/chips/verdict.md": "SECRET-DELETED-TEXT\n", "docs/chips/other.md": "SECRET-OTHER-TEXT\n" }); config(dir, DENY); git(dir, "add", "-A"); git(dir, "commit", "-qm", "cfg"); put(dir, "src.mjs", "export const a = 2;\n"); return dir; };
+for (const [name, mutate, outOfGlob] of [
+  ["rm", (d) => rmSync(path.join(d, "docs/chips/verdict.md")), false],
+  ["git rm", (d) => git(d, "rm", "-q", "docs/chips/verdict.md"), false],
+  ["rename within the glob", (d) => renameSync(path.join(d, "docs/chips/verdict.md"), path.join(d, "docs/chips/moved.md")), false],
+  ["rename out of the glob (the new path is not a record)", (d) => { renameSync(path.join(d, "docs/chips/verdict.md"), path.join(d, "docs/plain-moved.md")); }, true],
+]) {
+  test(`(b) code mode: a record deleted by ${name} never reaches the reviewer`, () => {
+    const dir = recordRepo(); try {
+      mutate(dir); const r = codeReview(dir); assert.ok(r.args !== null, r.stderr);
+      assert.match(r.args, /export const a = 2;/);
+      assert.doesNotMatch(r.args, /docs\/chips\/verdict\.md/, "no deletion hunk or file entry for the record");
+      if (!outOfGlob) assert.doesNotMatch(r.args, /SECRET-DELETED-TEXT/, "no record text in the payload");
+      assert.doesNotMatch(r.args, /SECRET-OTHER-TEXT/);
+    } finally { cleanup(dir); }
+  });
+}
+test("(b) the slice validator scope ignores records deleted by rm, git rm and rename", () => {
+  const dir = repo({ "docs/chips/a.md": "a\n", "docs/chips/b.md": "b\n", "docs/chips/c.md": "c\n" }); try {
+    const base = git(dir, "rev-parse", "HEAD"); rmSync(path.join(dir, "docs/chips/a.md")); git(dir, "rm", "-q", "docs/chips/b.md"); renameSync(path.join(dir, "docs/chips/c.md"), path.join(dir, "docs/chips/c2.md")); git(dir, "add", "-A"); put(dir, "docs/design.md", "# design\nedited\n");
+    put(dir, "m.json", JSON.stringify({ version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: base, files: ["docs/design.md"] }, uncovered: [], slices: [
+      { name: "s1", kind: "coverage", files: ["docs/design.md"], contract_context: ["docs/design.md"], fragments: [] }, { name: "x", kind: "cross_boundary", files: ["docs/design.md"], contract_context: ["docs/design.md"], fragments: [] }] }));
+    const dropped = path.join(dir, "..", `dropped2-${path.basename(dir)}.nul`); writeFileSync(dropped, "docs/chips/a.md\0docs/chips/b.md\0docs/chips/c.md\0docs/chips/c2.md\0");
+    const run = (env) => spawnSync(process.execPath, ["scripts/gemini-gate-slices.mjs", "fingerprint", "--repo", ".", "--manifest", "m.json"], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
+    assert.doesNotMatch(run({ GEMINI_GATE_ARTIFACT_PARENT: base, GEMINI_GATE_DROPPED_PATHS_FILE: dropped }).stderr, /scope\.files does not equal/);
+    rmSync(dropped, { force: true });
+  } finally { cleanup(dir); }
+});
+test("(b) a deleted record's base path is in the runner's dropped list (rm, git rm, rename)", () => {
+  const sh = readFileSync(path.join(root, "scripts/cold-review-gemini.sh"), "utf8");
+  assert.match(sh, /--diff-filter=D/, "the helper lists base-side records absent from the freeze index");
+});
+test("(b) --design --folded <record matching a declared glob> is exempt from the drop and runs", () => {
+  const dir = repo({ "docs/chips/r1_cold_review.md": "prior findings the PM chose to fold\n", "docs/chips/other.md": "o\n" }); try {
+    config(dir, DENY); git(dir, "add", "-A"); git(dir, "commit", "-qm", "cfg");
+    const r = review(dir, ["--folded", "docs/chips/r1_cold_review.md"]); assert.ok(r.ran, r.stderr);
+    assert.ok(r.disk.includes("docs/chips/r1_cold_review.md"), "the sanctioned --folded channel stays");
+    assert.ok(!r.disk.includes("docs/chips/other.md"), "other records are still dropped");
+  } finally { cleanup(dir); }
+});
+test("(b) predicate: any pure insertion (top, middle, end; binary, -diff, NUL) is dropped; an edit of an existing line is kept; a base symlink replaced by a file is dropped", () => {
+  const dir = repo({ ".gitattributes": "*.bin binary\n*.nd -diff\n", "docs/chips/a.bin": "base\n", "docs/chips/b.nd": "base\n", "docs/chips/c.dat": Buffer.from("base\0x\n"), "docs/chips/top.md": "old row\n", "docs/chips/mid.md": "one\nthree\n", "docs/chips/edit.md": "one\ntwo\n", "docs/chips/table.md": "| a |\n| b |\ntrailer\n", "docs/chips/was-link-target.md": "t\n" }); try {
+    symlinkSync("was-link-target.md", path.join(dir, "docs/chips/was-link.md")); config(dir, DENY); git(dir, "add", "-A"); git(dir, "commit", "-qm", "cfg");
+    writeFileSync(path.join(dir, "docs/chips/a.bin"), "base\nappended\n"); writeFileSync(path.join(dir, "docs/chips/b.nd"), "base\nappended\n"); writeFileSync(path.join(dir, "docs/chips/c.dat"), Buffer.from("base\0x\n\0more\n"));
+    writeFileSync(path.join(dir, "docs/chips/top.md"), "NEW top row\nold row\n"); writeFileSync(path.join(dir, "docs/chips/mid.md"), "one\ntwo inserted\nthree\n"); writeFileSync(path.join(dir, "docs/chips/table.md"), "| a |\n| b |\n| c |\ntrailer\n");
+    writeFileSync(path.join(dir, "docs/chips/edit.md"), "one\nTWO edited\n");
+    rmSync(path.join(dir, "docs/chips/was-link.md")); put(dir, "docs/chips/was-link.md", "now a regular file\n");
+    put(dir, ".gitattributes", "*.bin binary\n*.nd -diff\n*.md -diff\n");   // the change adds attributes: must not rescue an insertion
+    const r = review(dir); assert.ok(r.ran, r.stderr);
+    for (const gone of ["a.bin", "b.nd", "c.dat", "top.md", "mid.md", "table.md", "was-link.md", "was-link-target.md"]) assert.ok(!r.tracked.includes(`docs/chips/${gone}`), `${gone} dropped`);
+    assert.ok(r.tracked.includes("docs/chips/edit.md"), "an edited existing line is kept");
+  } finally { cleanup(dir); }
+});
+test("(b) the helper clears every pathspec-mode env var and says why .claude is rejected", () => {
+  const sh = readFileSync(path.join(root, "scripts/cold-review-gemini.sh"), "utf8");
+  for (const k of ["GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_ICASE_PATHSPECS", "GIT_NOGLOB_PATHSPECS"]) assert.ok(sh.includes(`"${k}"`), k);
+  const dir = repo(); try { rmSync(path.join(dir, ".gitignore")); put(dir, ".claude", "i am a file\n"); const r = review(dir); assert.equal(r.status, 3); assert.match(r.stderr, /\.claude must be a directory, not a regular file/); } finally { cleanup(dir); }
+});
+
 test("(b) glob semantics: * stays in a segment, ** crosses, a bare directory matches beneath it, matching is case-sensitive, a symlink is matched as its own path", () => {
   const files = { "docs/chips/a.md": "a\n", "docs/chips/sub/b.md": "b\n", "docs/other/d.md": "d\n", "notes/rec-1.md": "r1\n", "deep/er/rec-2.md": "r2\n" };
   const run = (globs, mutate = () => {}) => {

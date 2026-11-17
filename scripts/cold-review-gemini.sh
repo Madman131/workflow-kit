@@ -528,12 +528,18 @@ run_gc_sweep() {
 # being anything but an array of { glob, reason } objects with non-empty strings ABORTS the frozen run
 # (FAIL CLOSED). The list is never silently dropped.
 #
-# ONE KEEP RULE, for the log and every declared record: a matched path is DROPPED unless the caller tree
-# EDITS or DELETES bytes the base commit already has AND the entry is still a regular file. So an
-# untracked or newly added file, a pure append (the runner's own append dirties the log after every logged
-# run), and a symlink or other non-regular entry swapped in are all dropped; an edit inside a tracked
-# record is kept because it is part of the change under review. Predicate: `git diff-index --cached
-# --numstat` against the base reports deletions > 0 (or binary) for a regular file the base also has.
+# ONE KEEP RULE, for the log and every declared record: a matched path is KEPT iff (i) its base entry is a
+# regular file, (ii) its new entry is a regular file, and (iii) the change DELETES at least one base line
+# (`git diff -a --numstat` deletions > 0, computed in the helper because a `-diff`/`binary` attribute makes
+# numstat print `-` even with -a). Binary, `-diff` and NUL files, and a change that adds .gitattributes,
+# score like any other file. Everything else is DROPPED:
+# untracked or new, unchanged, ANY pure insertion (top, middle or end; the runner's own append dirties the
+# log after every logged run, and a newest-first log gains rows at the top), a symlink on either side,
+# deleted. Only an edit or removal of existing base lines KEEPS a path.
+# A path the caller DELETED or renamed away is absent from the freeze index but present in the base, so
+# every base-side path matching a rule is also listed as dropped, or the base-vs-artifact diff would print
+# its full text as a deletion hunk. The bound `--folded` input (the sanctioned prior-review channel) is
+# exempt from the drop, or a valid `--design --folded <record>` run would abort on its own input.
 #
 # MATCHING: each glob is wrapped as git pathspec `:(glob,top)<glob>`, case-SENSITIVE (core.ignorecase is
 # forced off), against the freeze index paths, never the filesystem. `*` stays inside one path segment,
@@ -550,16 +556,17 @@ freeze_drop_review_records() {
   : > "$FREEZE_DROPPED_FILE" || { ATTEMPT_DETAIL="cannot create the dropped-review-record list"; return 1; }
   IFS= read -r -d '' helper_js <<'JS'
 const fs = require("fs"), path = require("path"), cp = require("child_process");
-const [root, base, indexFile, outFile, logRel] = process.argv.slice(1);
+const [root, base, indexFile, outFile, logRel, exemptRel] = process.argv.slice(1);
 const die = (m) => { console.error("reviewRecordPaths: " + m); process.exit(1); };
-const env = { ...process.env, GIT_INDEX_FILE: indexFile }; delete env.GIT_LITERAL_PATHSPECS; delete env.GIT_GLOB_PATHSPECS;
+const env = { ...process.env, GIT_INDEX_FILE: indexFile }; for (const k of ["GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_ICASE_PATHSPECS", "GIT_NOGLOB_PATHSPECS"]) delete env[k];
 const git = (...a) => cp.execFileSync("git", ["-C", root, "-c", "core.ignorecase=false", ...a], { env, maxBuffer: 1 << 29 });
 const nul = (buf) => buf.toString("utf8").split("\0").filter(Boolean);
 // 1. Load and validate the declared list (fail closed).
 const lst = (p) => { try { return fs.lstatSync(p); } catch (e) { if (e && e.code === "ENOENT") return null; die("cannot stat " + p + ": " + e.message); } };
 const dir = path.join(root, ".claude"), file = path.join(dir, "kit.config.json");
 const dst = lst(dir); let rules = [];
-if (dst && (dst.isSymbolicLink() || !dst.isDirectory())) die(".claude must be a real directory, not a symlink");
+if (dst && dst.isSymbolicLink()) die(".claude must be a real directory, not a symlink");
+if (dst && !dst.isDirectory()) die(".claude must be a directory, not a regular file");
 const fst = dst ? lst(file) : null;
 if (fst) {
   if (fst.isSymbolicLink() || !fst.isFile()) die(".claude/kit.config.json must be a regular file, not a symlink");
@@ -578,34 +585,41 @@ if (fst) {
     rules.push({ glob: g, reason: r.reason });
   });
 }
-// 2. ONE keep rule for the log and every declared record (see the shell comment): kept only when the
-// caller tree edits/deletes bytes the base commit has and the entry is still a regular file.
-const modes = new Map();
-{ const recs = nul(git("ls-files", "-s", "-z")); for (const r of recs) { const t = r.indexOf("\t"); if (t > 0) modes.set(r.slice(t + 1), r.slice(0, t)); } }
-const stats = new Map();
-{ const parts = git("diff-index", "--cached", "--numstat", "-z", "--no-renames", base).toString("utf8").split("\0");
-  for (let i = 0; i + 0 < parts.length; i++) { const m = /^(-|\d+)\t(-|\d+)\t(.*)$/s.exec(parts[i]); if (m) stats.set(m[3], m); } }
+// 2. ONE keep rule for the log and every declared record (see the shell comment).
+const baseTree = new Map(); for (const r of nul(git("ls-tree", "-r", "-z", base))) { const t = r.indexOf("\t"); if (t > 0) { const f = r.slice(0, t).split(" "); baseTree.set(r.slice(t + 1), { mode: f[0], sha: f[2] }); } }
+const newTree = new Map(); for (const r of nul(git("ls-files", "-s", "-z"))) { const t = r.indexOf("\t"); if (t > 0) { const f = r.slice(0, t).split(" "); newTree.set(r.slice(t + 1), { mode: f[0], sha: f[1] }); } }
+const regular = (e) => !!e && (e.mode === "100644" || e.mode === "100755");
+// Deletions > 0 exactly as `git diff --numstat -a` would score it, but computed here: a `-diff` or `binary`
+// attribute makes numstat print "-" even with -a, which would rescue an append. Lines keep their terminator
+// (so CRLF and a missing final newline count as edits); the base has no deletion iff its lines are a
+// subsequence of the new lines, which is what a pure insertion (top, middle or end) is.
+const lines = (buf) => buf.toString("latin1").match(/[^\n]*\n|[^\n]+$/g) || [];
+const hasDeletion = (bsha, nsha) => { const bl = lines(git("cat-file", "blob", bsha)), nl = lines(git("cat-file", "blob", nsha)); let i = 0; for (const l of nl) if (i < bl.length && l === bl[i]) i++; return i < bl.length; };
 const keeps = (p) => {
-  if (!/^100(644|755) /.test(modes.get(p) || "")) return false;
-  const st = stats.get(p); if (!st) return false;                       // unchanged vs base
-  let baseHas = true; try { git("cat-file", "-e", base + ":" + p); } catch { baseHas = false; }
-  return baseHas && (st[2] === "-" || Number(st[2]) > 0);
+  const b = baseTree.get(p), n = newTree.get(p);
+  if (!regular(b) || !regular(n) || b.sha === n.sha) return false;
+  return hasDeletion(b.sha, n.sha);   // pure insertions (any position, any file type) drop
 };
 const drop = new Set(); const perRule = [];
-// 3. The durable Gemini log, then the declared records.
-if (modes.has(logRel) && !keeps(logRel)) drop.add(logRel);
+// 3. The durable Gemini log, then the declared records (in the index, and base-side paths now absent from it).
+if (newTree.has(logRel) && !keeps(logRel)) drop.add(logRel);
+if (baseTree.has(logRel) && !newTree.has(logRel)) drop.add(logRel);
 for (const r of rules) {
   const hits = nul(git("ls-files", "-z", "--cached", "--", ":(glob,top)" + r.glob));
-  let n = 0; for (const h of hits) if (!keeps(h) && !drop.has(h)) { drop.add(h); n++; }
-  perRule.push({ glob: r.glob, matched: hits.length, dropped: n });
+  const gone = nul(git("diff-index", "--cached", "-z", "--name-only", "--no-renames", "--diff-filter=D", base, "--", ":(glob,top)" + r.glob));
+  let n = 0;
+  for (const h of hits) if (h !== exemptRel && !keeps(h) && !drop.has(h)) { drop.add(h); n++; }
+  for (const h of gone) if (h !== exemptRel && !drop.has(h)) { drop.add(h); n++; }
+  perRule.push({ glob: r.glob, matched: hits.length + gone.length, dropped: n });
 }
 const out = [...drop].sort();
-if (out.length) cp.execFileSync("git", ["-C", root, "update-index", "--force-remove", "-z", "--stdin"], { env, input: out.join("\0") + "\0", maxBuffer: 1 << 29 });
+const inIndex = out.filter((p) => newTree.has(p));
+if (inIndex.length) cp.execFileSync("git", ["-C", root, "update-index", "--force-remove", "-z", "--stdin"], { env, input: inIndex.join("\0") + "\0", maxBuffer: 1 << 29 });
 fs.writeFileSync(outFile, out.length ? out.join("\0") + "\0" : "");
-for (const r of perRule) console.error("[cold-review-gemini] reviewRecordPaths " + JSON.stringify(r.glob) + ": " + r.dropped + " dropped, " + (r.matched - r.dropped) + " kept (edited in the change, or already dropped)");
+for (const r of perRule) console.error("[cold-review-gemini] reviewRecordPaths " + JSON.stringify(r.glob) + ": " + r.dropped + " dropped, " + (r.matched - r.dropped) + " kept (edited in the change, exempt, or already dropped)");
 JS
   [ -n "$helper_js" ] || { ATTEMPT_DETAIL="cannot load the review-record helper"; return 1; }
-  ATTEMPT_DETAIL="$(GIT_INDEX_FILE="$FREEZE_INDEX" node -e "$helper_js" "$SOURCE_REPO_ROOT" "$ARTIFACT_BASE_SHA" "$FREEZE_INDEX" "$FREEZE_DROPPED_FILE" "docs/journal/gemini_review_log.md" 2>&1 >/dev/null)"; rc=$?
+  ATTEMPT_DETAIL="$(GIT_INDEX_FILE="$FREEZE_INDEX" node -e "$helper_js" "$SOURCE_REPO_ROOT" "$ARTIFACT_BASE_SHA" "$FREEZE_INDEX" "$FREEZE_DROPPED_FILE" "docs/journal/gemini_review_log.md" "$([ "$FOLDED_IS_FILE" = "1" ] && printf %s "$FOLDED_SRC")" 2>&1 >/dev/null)"; rc=$?
   if [ "$rc" -ne 0 ]; then
     ATTEMPT_DETAIL="cannot drop prior review records from the review artifact (fail closed): $ATTEMPT_DETAIL"
     return 1
