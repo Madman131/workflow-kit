@@ -26,19 +26,18 @@ otherwise have to predict against — a reviewer holds no shell, so an unshipped
 unanswerable question. The packet **excludes append-only review artifacts** (a review log): a diff
 containing one ships prior verdicts to a seat that must not see them. ⚠ **AND A PACKET THAT SHIPS
 COMMIT BODIES SHIPS THE REVIEW HISTORY — build the diff with `git diff`, never `git log -p`.** This
-is the failure mode the subject-vs-body discipline CREATES: once findings are deliberately moved out
-of subjects and into bodies, the bodies are where every measurement, verdict and residual lives, so
-one convenience flag hands a seat the entire record at the last step and defeats the control that
-put them there. **The SUBJECT is injected and the BODY is not — that asymmetry only holds while the
+is the failure mode the subject-vs-body discipline CREATES: findings now live in bodies, so one
+convenience flag hands a seat the entire record and defeats the control. **The SUBJECT is injected and the BODY is not — that asymmetry only holds while the
 packet respects it.** **At a design gate the spec IS
 the artifact** (§ Cross-family lens, artifact-mode (a)), so a spec narrating its own review history
 folds every seat that reads it — ship a redacted contract with no round narration. **A filename
 blocklist is not exclusion; only packet CONTENTS are** — a seat's own `grep` defeats a blocklist, so
-what leaks is governed by what you send, never by what you ask it not to read. **The packet MUST carry
+what leaks is governed by what you send, never by what you ask it not to read. The Gemini runner
+omits its own log and the adopter-declared `reviewRecordPaths` records from its frozen tree (a path in
+the candidate diff stays); that narrows the leak, certifies nothing, and the `pre-loaded` residual stands. **The packet MUST carry
 every new or changed file in full** — a diffstat is not a diff, and `git diff` omits untracked files,
 so a seat handed one can only inherit the claim it was seated to test. **Do not answer a leak risk by
-taking the seat's tools away:** a tool-less seat cannot reach `.gitignore` or any file it excludes,
-and in the changeset that first proposed that rule both BLOCKERs were reachable only with tools.
+taking the seat's tools away:** a tool-less seat cannot reach `.gitignore` or any file it excludes.
 Removing them trades a bounded leak for an unbounded blind spot.
 
 **Ports need no seat.** Byte-copying kit text or hook blobs already gated at the kit owes no seat: the proof is blob identity, the target's free rungs and the Principal's read of the diff. A hand-adapted sentence in a target gets one cold seat (T1), unless it is gate machinery (`core/WORKFLOW.md` core-document rule).

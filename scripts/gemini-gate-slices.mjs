@@ -384,6 +384,14 @@ const tracked = git(repo, ["diff", "--name-only", "--diff-filter=ACMRD", baseCom
 const untrackedList = git(repo, ["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean);
 const untracked = new Set(untrackedList);
 const excluded = new Set(["docs/journal/gemini_review_log.md"]);
+// The runner drops prior review records from the frozen tree (cold-review-gemini.sh
+// freeze_drop_review_records); they then read as deletions against the base. Only the runner supplies
+// this file, and only together with the artifact-parent value, so a stray env var cannot widen scope.
+if (artifactParent && process.env.GEMINI_GATE_DROPPED_PATHS_FILE) {
+  let dropped;
+  try { dropped = fs.readFileSync(process.env.GEMINI_GATE_DROPPED_PATHS_FILE, "utf8"); } catch (error) { fail(`cannot read the dropped review-record list: ${error.message}`); }
+  for (const dropPath of dropped.split("\0")) if (dropPath) excluded.add(dropPath);
+}
 const manifestRel = relativeIfInside(repo, manifestPath);
 if (manifestRel) excluded.add(manifestRel);
 // Exclusion is by RECOGNIZED EXACT PATH — the durable log, the manifest, and the one canonical

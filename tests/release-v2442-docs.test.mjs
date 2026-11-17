@@ -35,9 +35,13 @@ test("version is 2.44.2 everywhere", () => {
 test("the no-tool sentence opens the INLINE message only: absent from both PROMPT strings and from FILE_PROMPT", () => {
   const sentence = "Do not call any tool or run any command: everything you need is in this message, and tool calls are denied. Reply in text only. ";
   const sh = read("scripts/cold-review-gemini.sh");
+  // v2.45.0: the design PROMPT is assembled from DESIGN_PROMPT_HEAD/MID/TAIL (a folded and a free variant),
+  // so the one literal `PROMPT='` start left is the code prompt; the design pieces are checked by name.
   const starts = [...sh.matchAll(/^  PROMPT='(.*)/gm)].map((m) => m[1]);
-  assert.equal(starts.length, 2, "exactly the design and code PROMPT assignments");
-  for (const t of starts) assert.ok(!t.includes("tool calls are denied"), "PROMPT must not carry the no-tool sentence (FILE mode inherits it)");
+  assert.equal(starts.length, 1, "exactly the code PROMPT assignment");
+  const pieces = [...sh.matchAll(/^  DESIGN_PROMPT_(?:HEAD|MID|TAIL)='([\s\S]*?)'$/gm)].map((m) => m[1]);
+  assert.equal(pieces.length, 3, "the design prompt's head, mid and tail pieces");
+  for (const t of [...starts, ...pieces]) assert.ok(!t.includes("tool calls are denied"), "PROMPT must not carry the no-tool sentence (FILE mode inherits it)");
   const inline = sh.match(/^INLINE_COMBINED="(.*)$/m);
   assert.ok(inline && inline[1].startsWith(sentence + "$PROMPT"), "INLINE_COMBINED must open with the sentence, then $PROMPT");
   const file = sh.slice(sh.indexOf('FILE_PROMPT="'));
