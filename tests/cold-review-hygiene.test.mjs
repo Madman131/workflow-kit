@@ -213,11 +213,23 @@ test("(b) code mode: the diff and file list never show a dropped record as a del
   } finally { cleanup(dir); }
 });
 
-test("(b) the slice validator ignores runner-dropped paths only when the runner supplies both inputs", () => {
-  const src = readFileSync(path.join(root, "scripts/gemini-gate-slices.mjs"), "utf8");
-  assert.match(src, /if \(artifactParent && process\.env\.GEMINI_GATE_DROPPED_PATHS_FILE\)/);
-  const sh = readFileSync(path.join(root, "scripts/cold-review-gemini.sh"), "utf8");
-  assert.match(sh, /GEMINI_GATE_ARTIFACT_PARENT="\$ARTIFACT_BASE_SHA" GEMINI_GATE_DROPPED_PATHS_FILE="\$FREEZE_DROPPED_FILE"/);
+test("(b) the slice validator ignores runner-dropped paths (incl. non-ASCII names) only when the runner supplies both inputs", () => {
+  const dir = repo({ "docs/chips/Üni.md": "v\n", "docs/chips/plain.md": "v\n" }); try {
+    const base = git(dir, "rev-parse", "HEAD");
+    rmSync(path.join(dir, "docs/chips/Üni.md")); rmSync(path.join(dir, "docs/chips/plain.md")); put(dir, "docs/design.md", "# design\nedited\n");
+    put(dir, "m.json", JSON.stringify({ version: 2, approval: { status: "DRAFT", by: "pm", expected_plan_id: "" }, scope: { base_commit: base, files: ["docs/design.md"] }, uncovered: [], slices: [
+      { name: "s1", kind: "coverage", files: ["docs/design.md"], contract_context: ["docs/design.md"], fragments: [] }, { name: "x", kind: "cross_boundary", files: ["docs/design.md"], contract_context: ["docs/design.md"], fragments: [] }] }));
+    const dropped = path.join(dir, "..", `dropped-${path.basename(dir)}.nul`); writeFileSync(dropped, "docs/chips/Üni.md\0docs/chips/plain.md\0");
+    const run = (env) => spawnSync(process.execPath, ["scripts/gemini-gate-slices.mjs", "fingerprint", "--repo", ".", "--manifest", "m.json"], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
+    const without = run({}); assert.match(without.stderr, /scope\.files does not equal the actual changed surface/);
+    const onlyFile = run({ GEMINI_GATE_DROPPED_PATHS_FILE: dropped }); assert.match(onlyFile.stderr, /scope\.files does not equal/, "the list alone (no runner artifact parent) widens nothing");
+    const both = run({ GEMINI_GATE_ARTIFACT_PARENT: base, GEMINI_GATE_DROPPED_PATHS_FILE: dropped }); assert.doesNotMatch(both.stderr, /scope\.files does not equal/, both.stderr);
+    rmSync(dropped, { force: true });
+  } finally { cleanup(dir); }
+});
+const sliceSh = readFileSync(path.join(root, "scripts/cold-review-gemini.sh"), "utf8");
+test("(b) the runner hands the slice validator the dropped-paths file together with the artifact parent", () => {
+  assert.match(sliceSh, /GEMINI_GATE_ARTIFACT_PARENT="\$ARTIFACT_BASE_SHA" GEMINI_GATE_DROPPED_PATHS_FILE="\$FREEZE_DROPPED_FILE"/);
 });
 
 test("(b) no other runner builds a review worktree or states a prior review", () => {
