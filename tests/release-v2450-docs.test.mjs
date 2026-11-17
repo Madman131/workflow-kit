@@ -41,6 +41,8 @@ test("the README note says what changed, why, and what adopters byte-copy versus
   assert.match(n, /The bound `--folded` input is exempt, because it is the sanctioned prior-review channel/);
   assert.match(n, /`git show HEAD\^:<record>` still reads a dropped record/);
   assert.match(n, /an absolute symlink at a non-matching path can still reach a live record \(frozen-tree escape\); both belong to successor KIT-CODEX-FROZEN-TREE/);
+  assert.match(n, /conversion counts as an edit, so that record is KEPT/);
+  assert.match(n, /moved OUT of the declared glob shows in full as a new file, so declare archive locations too/);
   assert.doesNotMatch(n, /never dropped/);
 });
 

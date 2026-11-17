@@ -191,6 +191,19 @@ test("(b) predicate: any pure insertion (top, middle, end; binary, -diff, NUL) i
     assert.ok(r.tracked.includes("docs/chips/edit.md"), "an edited existing line is kept");
   } finally { cleanup(dir); }
 });
+test("(b) predicate edge cases: terminators, CR-only files, duplicates, reorders", () => {
+  const cases = [  // [name, base, new, kept?]
+    ["nl-append", "b", "b\nc\n", false], ["crlf-open-append", "a\r\nb", "a\r\nb\r\nc\r\n", false], ["unchanged", "b", "b", false],
+    ["extend-line", "b", "bc\n", true], ["drop-final-nl", "b\n", "b", true], ["lf-to-crlf", "a\nb\n", "a\r\nb\r\n", true],
+    ["cr-only-append", "a\rb\r", "a\rb\rc\r", false], ["dup-insert", "x\ny\n", "x\nx\ny\n", false], ["reorder", "a\nb\n", "b\na\n", true],
+  ];
+  const dir = repo(Object.fromEntries(cases.map(([n, b]) => [`docs/chips/${n}.md`, Buffer.from(b)]))); try {
+    config(dir, DENY); git(dir, "add", "-A"); git(dir, "commit", "-qm", "cfg");
+    for (const [n, , nw] of cases) writeFileSync(path.join(dir, `docs/chips/${n}.md`), Buffer.from(nw));
+    const r = review(dir); assert.ok(r.ran, r.stderr);
+    for (const [n, , , kept] of cases) assert.equal(r.tracked.includes(`docs/chips/${n}.md`), kept, `${n}: ${kept ? "kept" : "dropped"}`);
+  } finally { cleanup(dir); }
+});
 test("(b) the helper clears every pathspec-mode env var and says why .claude is rejected", () => {
   const sh = readFileSync(path.join(root, "scripts/cold-review-gemini.sh"), "utf8");
   for (const k of ["GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_ICASE_PATHSPECS", "GIT_NOGLOB_PATHSPECS"]) assert.ok(sh.includes(`"${k}"`), k);

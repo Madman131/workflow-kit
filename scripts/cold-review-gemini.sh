@@ -591,10 +591,18 @@ const newTree = new Map(); for (const r of nul(git("ls-files", "-s", "-z"))) { c
 const regular = (e) => !!e && (e.mode === "100644" || e.mode === "100755");
 // Deletions > 0 exactly as `git diff --numstat -a` would score it, but computed here: a `-diff` or `binary`
 // attribute makes numstat print "-" even with -a, which would rescue an append. Lines keep their terminator
-// (so CRLF and a missing final newline count as edits); the base has no deletion iff its lines are a
+// (so a CRLF conversion counts as an edit, while an unterminated final base line may gain one); the base has no deletion iff its lines are a
 // subsequence of the new lines, which is what a pure insertion (top, middle or end) is.
-const lines = (buf) => buf.toString("latin1").match(/[^\n]*\n|[^\n]+$/g) || [];
-const hasDeletion = (bsha, nsha) => { const bl = lines(git("cat-file", "blob", bsha)), nl = lines(git("cat-file", "blob", nsha)); let i = 0; for (const l of nl) if (i < bl.length && l === bl[i]) i++; return i < bl.length; };
+const lines = (buf) => buf.toString("latin1").match(/[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$/g) || [];
+const bare = (l) => l.replace(/(?:\r\n|\r|\n)$/, "");
+// A base file with no final terminator gains one when text is appended after it: only its LAST line may
+// match a new line equal to it plus any terminator (CRLF, CR or LF).
+const hasDeletion = (bsha, nsha) => {
+  const bl = lines(git("cat-file", "blob", bsha)), nl = lines(git("cat-file", "blob", nsha));
+  const open = bl.length > 0 && bare(bl[bl.length - 1]) === bl[bl.length - 1]; let i = 0;
+  for (const l of nl) { if (i >= bl.length) break; if (l === bl[i] || (open && i === bl.length - 1 && l !== bl[i] && bare(l) === bl[i])) i++; }
+  return i < bl.length;
+};
 const keeps = (p) => {
   const b = baseTree.get(p), n = newTree.get(p);
   if (!regular(b) || !regular(n) || b.sha === n.sha) return false;
