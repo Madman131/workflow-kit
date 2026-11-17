@@ -1,4 +1,4 @@
-# workflow-kit — v2.44.2
+# workflow-kit — v2.45.0
 
 ## How to start a build
 
@@ -11,6 +11,16 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.45.0 — the Gemini review stops claiming a prior review and drops prior verdicts from its frozen tree
+
+Three fixes to what a Gemini seat is told and can read, plus one new `kit.config.json` key.
+
+- **No false "already folded" premise.** `scripts/cold-review-gemini.sh` `--design` told the seat that same-family reviewers "have ALREADY reviewed this and folded the fixes" even when no `--folded` was given, so the free pass was primed to believe the design was vetted. Without `--folded` the prompt now says the seat is the first, independent review and the payload carries no FOLDED section; with `--folded` the wording is byte-identical to v2.44.2. The code, slice, finalize and frozen modes, `scripts/codex-gate.sh` and `scripts/gemini-frozen-gate.mjs` never claimed a prior review.
+- **Prior verdicts are dropped from the frozen review tree.** The runner used to keep the base-tree `docs/journal/gemini_review_log.md` and every tracked review record in the worktree a tool-capable seat reads. It now removes the Gemini log and every path matching the new adopter-declared `reviewRecordPaths` in `.claude/kit.config.json`: an array of `{ "glob": "<git pathspec glob>", "reason": "<why>" }`, `reason` mandatory. Globs are case-sensitive git `:(glob)` pathspecs from the repo root (`*` stays inside one path segment, `**` crosses them, a bare directory matches beneath it); one that is absolute, starts with `./` or `:`, or holds a `..` segment is refused. A missing file or key is an empty list; a symlinked or unreadable file, bad JSON, a non-object, or a malformed entry aborts the frozen run (fail closed). A path in the candidate diff (changed, added, untracked, or either side of a rename) is never dropped, and the Gemini log is kept only when the change edits bytes the base already has. Dropped records are also excluded from the code-mode diff and the slice validator so a deletion hunk cannot leak them. This narrows what a seat can read and is still not certification: git history stays reachable and `pre-loaded` remains a log (`core/REVIEW.md` § Cold review).
+- **The identity check reads the stored URL.** `git remote get-url origin` prints the `url.<base>.insteadOf`-rewritten form, so a global SSH-to-HTTPS rewrite made the check disagree with the entry stub. `skills/boot`, `skills/closeout`, `templates/AGENTS.md.tmpl`, `templates/BINDINGS.md.tmpl` and `templates/CLAUDE.md.tmpl` now run `git config --get remote.origin.url`. The global rewrite is untouched.
+
+**Adopters.** Byte-copy `scripts/cold-review-gemini.sh`, `scripts/gemini-gate-slices.mjs`, `core/REVIEW.md` and the two skills. Hand-edit the adopted `CLAUDE.md`, `AGENTS.md` and `BINDINGS.md` copies and the ID card (they are rendered from the templates), and declare your own `reviewRecordPaths` (for example your `docs/chips/*-verdicts.md` records) in `.claude/kit.config.json`. `init` does not write the key.
 
 ## What's new in v2.44.2 — the Gemini cross-family seat moves to Gemini 3.8 Flash (High)
 

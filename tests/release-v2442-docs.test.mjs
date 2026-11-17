@@ -26,10 +26,8 @@ test("the README carries the v2.44.2 note above v2.44.1's", () => {
   assert.match(n, /Adopters byte-copy those two scripts and `core\/GATES\.md`/);
 });
 
-test("version is 2.44.2 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.44.2");
-  assert.equal(JSON.parse(read("package.json")).version, "2.44.2");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.44\.2$/m);
+test("the v2.44.2 release note is still in the README (the version stamp itself moves with each release; v2.45.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.44\.2 — the Gemini cross-family seat moves to Gemini 3\.8 Flash \(High\)/m);
 });
 
 test("the no-tool sentence opens the INLINE message only: absent from both PROMPT strings and from FILE_PROMPT", () => {
