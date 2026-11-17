@@ -8,7 +8,7 @@ description: Start-of-session ritual — identity fingerprint, the boot-set read
 Word budget: 250. This is the checklist form of the repo's entry stub (`CLAUDE.md` /
 `AGENTS.md`); the stub stays canonical for the rules.
 
-1. **Identity.** Run `git remote get-url origin` and compare it to the fingerprint your entry
+1. **Identity.** Run `git config --get remote.origin.url` and compare it to the fingerprint your entry
    stub records — never trust a path. A mismatch means the wrong checkout: STOP.
 2. **Boot set, in order, whole:** `CLAUDE.md` (Claude) / `AGENTS.md` (Codex) →
    `core/FOUNDATIONS.md` → `core/WORKFLOW.md` → `core/REVIEW.md` → `core/ARTIFACT_CLASS.md` →

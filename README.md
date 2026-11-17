@@ -1813,8 +1813,8 @@ a checklist over doctrine the kit already carries, never a restatement of it.
 
 - **Three new shared-body dual-lane skills** (the v1.3 mechanism, unchanged — one canonical body
   under `.agents/skills/<name>/`, a thin shim per harness, zero `init` edits):
-  - **`/boot`** — the start-of-session ritual: the identity fingerprint (`git remote get-url
-    origin` against the entry stub's table — never a path), the nine-doc boot set read in order,
+  - **`/boot`** — the start-of-session ritual: the identity fingerprint (`git config --get
+    remote.origin.url` against the entry stub's table — never a path), the nine-doc boot set read in order,
     the other-lane dirty-file check, the task-lane declaration, and the tier recommendation
     (`core/WORKFLOW.md` § Steer) before the first write.
   - **`/closeout`** — the PROCEDURE over `core/OPERATE.md` § End-of-work closeout: inventory →

@@ -149,7 +149,7 @@ Index and layer model: `core/README.md`.
 
 ## Access
 - **Repo:** remote `{{REMOTE_URL}}`; run the identity ritual before any commit/push:
-  `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
+  `git -C {{REPO_ROOT_PATH}} config --get remote.origin.url && git -C {{REPO_ROOT_PATH}} branch --show-current`
 - **Multi-writer norm:** canonical in `core/MULTI_AGENT.md` § Multi-writer checkout (ALL agent lanes).
 - **Deploy target:** {{DEPLOY_TARGET}}.
 - **Data:** {{DATA_STORES}}.

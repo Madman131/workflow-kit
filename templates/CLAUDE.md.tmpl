@@ -32,7 +32,7 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
 | Deploy | `{{DEPLOY_TARGET}}` | its own separate target |
 
 **Instant tell:** confirm the remote before trusting the checkout — run
-`git -C <path> remote get-url origin` and read it.
+`git -C <path> config --get remote.origin.url` and read it.
 
 ## Hard rules (the anti-confusion controls)
 1. **Absolute paths only.** Never say or pass "the repo" — name it with its full path.
@@ -42,7 +42,7 @@ Index + layer model: **`core/README.md`**. Do **not** "read everything in `core/
    absolute path in `.claude/kit.config.json` `worktreeRoots` — which is how this repo's private
    worktrees stay writable. A root outside ALL of those is one your file tools cannot reach.)
 3. **Identity ritual before EVERY commit/push:** run
-   `git -C {{REPO_ROOT_PATH}} remote get-url origin && git -C {{REPO_ROOT_PATH}} branch --show-current`
+   `git -C {{REPO_ROOT_PATH}} config --get remote.origin.url && git -C {{REPO_ROOT_PATH}} branch --show-current`
    and confirm the intended remote + branch. **Pushing `{{DEPLOY_BRANCH}}` {{DEPLOY_EFFECT}}** needs a
    fresh Owner GO for the exact head and target, per the method.
 4. **Declare the task lane before the first code write.** `.claude/task-lane.json` binds this session
