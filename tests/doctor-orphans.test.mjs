@@ -227,3 +227,15 @@ test("bad arguments exit 2 and signal nothing", async () => {
     assert.ok(isAlive(b.pid) && isAlive(b.kid));
   } finally { s.cleanup(); }
 });
+
+test("kill-pass: an empty --cwd or --pid-file is a usage error, never 'the current directory'", async () => {
+  const s = sandbox();
+  try {
+    const b = await s.broker("a", s.root);
+    for (const args of [["--reap", "--cwd", ""], ["--stop", "--pid-file", ""]]) {
+      const r = spawnSync(process.execPath, [DOCTOR, ...args], { encoding: "utf8", cwd: s.root });   // the doctor runs IN the broker's cwd
+      assert.equal(r.status, 2, args.join(" "));
+    }
+    assert.ok(isAlive(b.pid) && isAlive(b.kid));
+  } finally { s.cleanup(); }
+});

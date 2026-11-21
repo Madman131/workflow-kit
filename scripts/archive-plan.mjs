@@ -40,7 +40,10 @@ function fail(msg, json) {
 }
 
 // ---------- git facts ----------
-const git = (cwd, args) => spawnSync("git", ["--no-optional-locks", "-C", cwd, ...args], { encoding: "utf8" });
+// An inherited GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (a hook, a wrapper) would make `git -C <cwd>` read ANOTHER repo and
+// report it clean, so every variable that relocates git is removed from the child's environment.
+const cleanEnv = () => { const e = { ...process.env }; for (const k of Object.keys(e)) if (/^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|NAMESPACE|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM)$/.test(k)) delete e[k]; return e; };
+const git = (cwd, args) => spawnSync("git", ["--no-optional-locks", "-C", cwd, ...args], { encoding: "utf8", env: cleanEnv() });
 
 // Returns { pass:boolean, why, note }. Never throws.
 export function unpushedCheck(cwd) {
@@ -62,10 +65,13 @@ export function unpushedCheck(cwd) {
 }
 
 // A LINKED worktree (git dir differs from the common dir) is one the host may clean up; a primary checkout is not.
-function isLinkedWorktree(cwd) {
-  if (!cwd || !existsSync(cwd)) return false;
-  const a = git(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"]), b = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  return a.status === 0 && b.status === 0 && a.stdout.trim() !== b.stdout.trim();
+// Returns the worktree's top-level realpath when it is a LINKED worktree (so two sessions in different subdirectories of one
+// worktree still match), else null.
+function linkedWorktreeRoot(cwd) {
+  if (!cwd || !existsSync(cwd)) return null;
+  const a = git(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"]), b = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]), t = git(cwd, ["rev-parse", "--show-toplevel"]);
+  if (a.status !== 0 || b.status !== 0 || t.status !== 0 || a.stdout.trim() === b.stdout.trim()) return null;
+  return rp(t.stdout.trim());
 }
 const rp = (p) => { try { return realpathSync(p); } catch { return p; } };
 
@@ -89,7 +95,7 @@ export function plan(list, { me, done = [], waiting = [], ownerYes = false } = {
     if (isArchitect(s)) return "an Architect thread (never archived)";
     if (!doneSet.has(s.sessionId)) return "not asserted landed and verified";
     if (waitingSet.has(s.sessionId)) return "waiting on the Owner";
-    if (s.prState === "OPEN") return `PR open${s.prNumber != null ? ` (#${s.prNumber})` : ""}`;
+    if (String(s.prState ?? "").toUpperCase() === "OPEN") return `PR open${s.prNumber != null ? ` (#${s.prNumber})` : ""}`;
     const g = gitFacts(s);
     if (!g.pass) return g.why;
     return null;
@@ -115,7 +121,7 @@ export function plan(list, { me, done = [], waiting = [], ownerYes = false } = {
     while (stack.length) for (const c of children.get(stack.pop()) ?? []) if (!seen.has(c.sessionId)) { seen.add(c.sessionId); out.push(c); stack.push(c.sessionId); }
     return out;
   };
-  const worktreeKey = (s) => (isLinkedWorktree(s.cwd) ? rp(s.cwd) : null);
+  const worktreeKey = (s) => linkedWorktreeRoot(s.cwd);
 
   // Guard 9, to a fixpoint.
   const alsoTaken = new Map();
@@ -194,6 +200,8 @@ function main(argv) {
   try { data = JSON.parse(raw); } catch (e) { fail(`the session list is not valid JSON (${e.message})`, o.json); }
   const list = Array.isArray(data) ? data : Array.isArray(data?.sessions) ? data.sessions : null;
   if (!list) fail("the session list must be a JSON array (or an object with a `sessions` array)", o.json);
+  const seen = new Set();
+  list.forEach((s) => { if (s && typeof s.sessionId === "string") { if (seen.has(s.sessionId)) fail(`session ${s.sessionId} appears twice in the list`, o.json); seen.add(s.sessionId); } });
   list.forEach((s, i) => { if (!s || typeof s !== "object" || typeof s.sessionId !== "string" || !s.sessionId) fail(`session list entry ${i} has no sessionId`, o.json); });
   const p = plan(list, { me: o.me, done: o.done, waiting: o.waiting, ownerYes: o.ownerYes });
   console.log(o.json ? JSON.stringify(p, null, 2) : render(p));

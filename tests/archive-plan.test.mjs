@@ -290,3 +290,31 @@ test("the Architect's run over the PMs it started, and a PM's run over its build
     assert.equal(rb.keep[0].why, "not asserted landed and verified");
   } finally { L.cleanup(); }
 });
+
+test("kill-pass: an inherited GIT_DIR cannot make a dirty worktree read clean", () => {
+  const L = lab();
+  try {
+    const a = sess({ cwd: L.repos.dirty });
+    const r = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId], { env: { ...process.env, GIT_DIR: path.join(L.repos.clean, ".git"), GIT_WORK_TREE: L.repos.clean } });
+    assert.equal(kept(r.out, a).why, "unpushed work: uncommitted changes in its worktree");
+  } finally { L.cleanup(); }
+});
+
+test("kill-pass: prState is compared case-insensitively, and sessions in two subdirectories of one linked worktree are one worktree", () => {
+  const L = lab();
+  try {
+    const open = sess({ prState: "open" });
+    assert.match(kept(plan([open], [open.sessionId]), open).why, /^PR open/);
+    const wt = L.linked("wt3"); const sub = path.join(wt, "sub"); mkdirSync(sub);
+    const a = sess({ cwd: wt }), b = sess({ cwd: sub });
+    const p = plan([a, b], [a.sessionId]);                               // b (in a subdirectory) is not done
+    assert.match(kept(p, a).why, /^it shares its worktree with a session that stays: /);
+  } finally { L.cleanup(); }
+});
+
+test("kill-pass: a duplicate sessionId is malformed input (exit 2, nothing planned)", () => {
+  const a = sess();
+  const r = spawnSync(process.execPath, [SCRIPT, "--json", "--me", ME, "--owner-yes", "--done", a.sessionId], { input: JSON.stringify([a, { ...a, isArchived: true }]), encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.deepEqual(JSON.parse(r.stdout).archive, []);
+});

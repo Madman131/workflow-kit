@@ -216,6 +216,7 @@ async function main(argv) {
     else if (a === "--claude-dir") o.claudeDir = argv[++i];
     else usage(`unknown argument ${a}`);
   }
+  if ((o.pidFile !== null && !o.pidFile) || o.cwds.some((d) => !d)) usage("--pid-file and --cwd take a non-empty path (an empty one would resolve to the current directory)");
   if (!Number.isFinite(o.brokerHours) || !Number.isFinite(o.idleHours)) usage("--broker-hours and --idle-hours take a number");
   if (o.stop && o.reap) usage("--stop and --reap are separate runs");
   if (o.stop && !o.pidFile) usage("--stop needs --pid-file <file>");
