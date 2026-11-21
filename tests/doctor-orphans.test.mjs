@@ -44,8 +44,9 @@ function sandbox() {
     const pidFile = path.join(dir, "broker.pid");
     const p = spawn(process.execPath, [script, "serve", "--endpoint", `unix:${dir}/broker.sock`, "--cwd", cwd, "--pid-file", pidFile], { stdio: "ignore" });
     track(p.pid);
-    for (let i = 0; i < 100 && !existsSync(pidFile + ".child"); i++) await sleep(50);
-    assert.ok(existsSync(pidFile + ".child"), "the fake broker came up");
+    const ready = () => existsSync(pidFile + ".child") && /^\d+$/.test(readFileSync(pidFile + ".child", "utf8")) && /^\d+$/.test(readFileSync(pidFile, "utf8"));   // written, not merely created
+    for (let i = 0; i < 200 && !ready(); i++) await sleep(50);
+    assert.ok(ready(), "the fake broker came up");
     const kid = track(Number(readFileSync(pidFile + ".child", "utf8")));
     return { pid: p.pid, kid, pidFile, dir };
   }
