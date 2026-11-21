@@ -9,6 +9,16 @@ let ordinal = 0;
 const line = (type, payload, extra = {}) => JSON.stringify({ timestamp: "2026-09-30T23:40:26.937Z", ordinal: ++ordinal, type, payload, ...extra });
 const turnMeta = (turnId) => ({ turn_id: turnId, create_time: 1790811770.588618 });
 
+// session_meta — the FIRST line of every rollout (v2.46.0 check (d)). Keys and nesting copied from real rollouts under ~/.codex/sessions
+// (2026-11-21); ids, cwd, base_instructions and the nested git/context blocks are dropped. The three observed seat shapes:
+//   Desktop       originator "Codex Desktop",  source "vscode", thread_source "user"
+//   headless seat originator "codex_exec",     source "exec",   thread_source "user"
+//   Claude plugin originator "Claude Code",    source "vscode", (no thread_source)
+export const sessionMeta = ({ originator = "Codex Desktop", source = "vscode", thread_source = "user" } = {}) => line("session_meta", {
+  session_id: "00000000-dddd-7000-8000-00000000000d", id: "00000000-dddd-7000-8000-00000000000d", timestamp: "2026-11-05T17:38:54.568Z",
+  originator, cli_version: "0.164.0-alpha.11.1", source, ...(thread_source === undefined ? {} : { thread_source }), model_provider: "openai", history_mode: "paginated",
+});
+
 // event_msg / task_started — the turn start; payload.turn_id equals the Stop payload's turn_id.
 export const taskStarted = (turnId) => line("event_msg", { type: "task_started", turn_id: turnId, root_turn_id: turnId, started_at: 1790811626, model_context_window: 258400, collaboration_mode_kind: "default" });
 
