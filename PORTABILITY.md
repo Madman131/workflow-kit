@@ -568,12 +568,13 @@ wrong section passes, and it proves nothing about what the section says. It is d
 Owner contract and allows on every doubt. It runs only on a main-session `Stop` payload (`hook_event_name`
 `"Stop"`, no `agent_id`, an explicit `stop_hook_active:false`, a string `last_assistant_message`); a
 `--agent` main session sends `agent_type` WITHOUT `agent_id` (observed) and is checked. Known residuals: a
-headless `claude -p` run in an adopter gets one nudge, and a stop while background agents run is a stop and
+headless `claude -p` run in an adopter prints the follow-up as its result, and a stop while background agents run is a stop and
 gets one nudge. In Codex the same check runs inside `sensor-stop-notice.mjs` (the contract and the
 predicate are loaded from the sibling `guard-owner-comms.mjs`; without it only this check is skipped), and
-it skips headless `codex exec` seats (`source:"exec"`, `originator:"codex_exec"`, because `-o` keeps the
-last message), Claude's codex plugin (`originator:"Claude Code"`), a rollout with no `session_meta`, and a
-non-`"user"` `thread_source`; a Codex subagent's shape is unobserved. Off switch for this check in both
+it runs only for `source` `vscode` or `cli` and skips headless `codex exec` seats (`-o` keeps the
+last message), `mcp` and unknown sources, Claude's codex plugin (`originator:"Claude Code"`), a rollout with no
+`session_meta`, and a non-`"user"` `thread_source`; it reads the contract at `--project-dir`; an
+`AUTHORIZATION NEEDED` label's text runs to the next label or the end of the divider section; a Codex subagent's shape is unobserved. Off switch for this check in both
 lanes: `WORKFLOW_KIT_OWNER_DIVIDER="false"`.
 
 What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method

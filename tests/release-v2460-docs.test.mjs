@@ -48,7 +48,10 @@ test("the README note says what changed, the measured facts, the residuals and w
   assert.match(n, /`\*{7}INFORMATION FOR <OWNER>\*{8}`/);
   assert.match(n, /Claude Code 2\.1\.312's `Stop` payload carries `last_assistant_message`/);
   assert.match(n, /129 Codex sessions/);
-  assert.match(n, /A headless `claude -p` run in an adopter gets one nudge; a stop while background agents run is a stop and gets one nudge; the Codex subagent `session_meta` shape is unobserved/);
+  assert.match(n, /In a headless `claude -p` run in an adopter the follow-up becomes the printed result; a stop while background agents run is a stop and gets one nudge; the Codex subagent `session_meta` shape is unobserved/);
+  assert.match(n, /runs only for the `vscode` \(Codex Desktop\) and `cli` \(the TUI\) sources/);
+  assert.match(n, /`--project-dir`, then `CLAUDE_PROJECT_DIR`, then the payload `cwd`/);
+  assert.match(n, /`AUTHORIZATION NEEDED` label's text runs past its blank line/);
   assert.match(n, /Byte-copy `hooks\/guard-owner-comms\.mjs` and `hooks\/sensor-stop-notice\.mjs` into BOTH `\.claude\/hooks\/` and `\.codex\/hooks\/`/);
   assert.match(n, /Hand-edit rule 10, the rule-8 sentences and the header note into your own `core\/OWNER_COMMS\.md`/);
   assert.match(n, /No settings or `hooks\.json` change and no re-trust expected; confirm with `node scripts\/check-codex-hooks-armed\.mjs`/);

@@ -305,20 +305,41 @@ function ownerTypedText(s) {
 // checks presence, not form. A non-string text or an empty name fails OPEN (true).
 const ASTERISK_LINE_RE = /^[ \t]*\*{3,}[ \t]*$/;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-export function hasOwnerDivider(text, ownerName) {
-  if (typeof text !== "string" || typeof ownerName !== "string" || !ownerName.trim()) return true;
-  const name = ownerName.trim().split(/\s+/).map(escapeRe).join("[ \\t]+");
-  const info = new RegExp(String.raw`^[ \t]*(?:#{1,6}[ \t]+)?[*_]{0,3}[ \t]*INFORMATION[ \t]+FOR[ \t]+${name}[ \t]*[*_]{0,3}[ \t]*:?[ \t]*[*_]{0,3}[ \t]*$`, "i");
-  const oneLine = new RegExp(String.raw`^[ \t]*\*+[ \t]*INFORMATION[ \t]+FOR[ \t]+${name}[ \t]*\*+[ \t]*$`, "i");
+// EVERY pattern below is LINEAR: each whitespace run is tied to a required token, and the stars around a one-line divider are stripped by a
+// loop, not matched lazily (a stacked `[ \t]*` run is polynomial, and a Stop hook that outruns its timeout is killed and loses the whole nudge).
+// The name may also be spelled `ownerName.toUpperCase()` (the form dividerReason teaches), so names like Weiß or ﬁona always pass.
+function nameSource(ownerName) {
+  const spell = (n) => n.trim().split(/\s+/).map(escapeRe).join("[ \\t]+");
+  const a = spell(ownerName), b = spell(ownerName.toUpperCase());
+  return a === b ? a : `(?:${a}|${b})`;
+}
+// The index of the LAST divider line (the one-line divider itself, or the INFORMATION line of the legacy two-line form), or -1.
+// EXPORTED: sensor-stop-notice.mjs uses it for trigger (c) when an Owner contract loads.
+export function lastDividerIndex(text, ownerName) {
+  if (typeof text !== "string" || typeof ownerName !== "string" || !ownerName.trim()) return -1;
+  const name = nameSource(ownerName);
+  const mid = new RegExp(String.raw`^INFORMATION[ \t]+FOR[ \t]+${name}$`, "i");
+  const info = new RegExp(String.raw`^(?:#{1,6}[ \t]+)?(?:[*_]{1,3}[ \t]*)?INFORMATION[ \t]+FOR[ \t]+${name}(?:[ \t]*[*_]{1,3})?(?:[ \t]*:)?(?:[ \t]*[*_]{1,3})?$`, "i");
   const lines = text.split(/\r?\n/);
-  if (lines.some((l) => oneLine.test(l))) return true;
+  let last = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (!ASTERISK_LINE_RE.test(lines[i])) continue;
+    const t = lines[i].trim();
+    if (t.length > 8 && t[0] === "*" && t[t.length - 1] === "*") {          // one-line form: stars on BOTH sides, counts ignored
+      let a = 0, b = t.length;
+      while (a < b && t[a] === "*") a++;
+      while (b > a && t[b - 1] === "*") b--;
+      if (mid.test(t.slice(a, b).trim())) { last = i; continue; }
+    }
+    if (!ASTERISK_LINE_RE.test(lines[i])) continue;                          // legacy two-line form
     let j = i + 1;
     while (j < lines.length && !lines[j].trim()) j++;
-    if (j < lines.length && info.test(lines[j])) return true;
+    if (j < lines.length && info.test(lines[j].trim())) { last = j; i = j; }
   }
-  return false;
+  return last;
+}
+export function hasOwnerDivider(text, ownerName) {
+  if (typeof text !== "string" || typeof ownerName !== "string" || !ownerName.trim()) return true;
+  return lastDividerIndex(text, ownerName) >= 0;
 }
 export function dividerReason(ownerName) {
   const who = String(ownerName);
@@ -431,7 +452,8 @@ function main(raw) {
       reasons.map((r) => `  • ${r}`).join("\n") +
       "\nKeep every fact, caveat, risk and ask — a blocker is never 'detail'. Cut the narration and the " +
       "unrequested inventory; offer it in one clause. Do not apologise or explain the correction; just send the better answer." +
-      (dividerOwed ? `\n${dividerReason(contract.ownerName)} Make it ONE follow-up that fixes both and ends with that section.` : ""),
+      (dividerOwed ? `\n${dividerReason(contract.ownerName)} Make it ONE follow-up that fixes both and ends with that section.`
+        : `\nYour follow-up becomes the last message and is not re-checked, so it must END with the rule 10 divider section: *******INFORMATION FOR ${contract.ownerName.toUpperCase()}********, then Status, What happened, What you need to know, What I need from you.`),
   }));
   process.exit(0);
 }

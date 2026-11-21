@@ -7,12 +7,13 @@
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hasOwnerDivider, dividerReason } from "../hooks/guard-owner-comms.mjs";
+import { hasOwnerDivider, dividerReason, lastDividerIndex } from "../hooks/guard-owner-comms.mjs";
 import { endsWithLabel, hasLabel } from "../hooks/sensor-stop-notice.mjs";
 import * as F from "./stop-notice-fixtures.mjs";
 
@@ -35,8 +36,8 @@ function withDir(fn) {
   try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 const armed = (dir, name = "Josh") => { mkdirSync(path.join(dir, "core"), { recursive: true }); writeFileSync(path.join(dir, "core", "OWNER_COMMS.md"), `# x\n\n## How to talk to ${name} — Owner, not a developer\n`); };
-function spawn(script, payload, env, cwd) {
-  const r = spawnSync(process.execPath, [script], { encoding: "utf8", cwd, input: typeof payload === "string" ? payload : JSON.stringify(payload), env: cleanEnv(env) });
+function spawn(script, payload, env, cwd, args = []) {
+  const r = spawnSync(process.execPath, [script, ...args], { encoding: "utf8", cwd, input: typeof payload === "string" ? payload : JSON.stringify(payload), env: cleanEnv(env) });
   assert.equal(r.status, 0, `exit 0 on every path: ${r.stderr}`);
   return r;
 }
@@ -175,11 +176,11 @@ test("Claude lane: rule-1 narration AND no divider give ONE block carrying both"
 }));
 
 // ---------- Codex lane ----------
-function codexStop(dir, lines, final, { meta = F.sessionMeta(), extra = {}, env = {}, contract = true, script = SENSOR } = {}) {
-  if (contract) armed(dir);
+function codexStop(dir, lines, final, { meta = F.sessionMeta(), extra = {}, env = {}, contract = true, script = SENSOR, args = [], contractDir = dir } = {}) {
+  if (contract) armed(contractDir);
   const file = path.join(dir, "rollout.jsonl");
   writeFileSync(file, F.transcript(...(meta ? [meta] : []), ...lines, F.assistant(T1, final)));
-  return spawn(script, { session_id: "s", turn_id: T1, transcript_path: file, cwd: dir, hook_event_name: "Stop", model: "gpt-test", permission_mode: "default", stop_hook_active: false, last_assistant_message: final, ...extra }, env, os.tmpdir());
+  return spawn(script, { session_id: "s", turn_id: T1, transcript_path: file, cwd: dir, hook_event_name: "Stop", model: "gpt-test", permission_mode: "default", stop_hook_active: false, last_assistant_message: final, ...extra }, env, os.tmpdir(), args);
 }
 const turn = (t = T1) => [F.agentsMd(t), F.taskStarted(t)];
 
@@ -322,3 +323,89 @@ test("kill-pass: a second stop after either block never blocks again (no wedge),
   allows(claudeRun(dir, { final: "Let me check the config.", payload: { stop_hook_active: true } }));
   allows(codexStop(dir, [...turn(), F.delegation(T1, F.ARCHITECT)], "Done.", { extra: { stop_hook_active: true } }));
 }));
+
+// ---------- R1 repair batch ----------
+const LATE = [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Waiting.\n\n**ACTION NEEDED:** run the build."), F.agentsMd(T1), F.taskStarted(T1)];
+
+test("R1-a: the Codex contract root follows --project-dir, so a session in a subdirectory is still checked", () => withDir((repo) => {
+  const sub = path.join(repo, "packages", "app"); mkdirSync(sub, { recursive: true });
+  const reason = blocks(codexStop(sub, turn(), "Done. Built and tested.", { contractDir: repo, args: ["--project-dir", repo], extra: { cwd: sub } }));
+  assert.match(reason, /OWNER DIVIDER MISSING/);
+  allows(codexStop(sub, turn(), `Done.\n\n${SECTION}`, { contractDir: repo, args: ["--project-dir", repo], extra: { cwd: sub } }));
+  allows(codexStop(sub, turn(), "Done.", { contractDir: repo, args: [], extra: { cwd: sub } }), "without --project-dir the root is the session cwd, which holds no contract");
+}));
+
+test("R1-b: (d) runs only for the vscode and cli sources; mcp, unknown and missing are silent", () => withDir((dir) => {
+  const none = "Done. Built and tested.";
+  for (const source of ["mcp", "unknown", "", null, 7]) allows(codexStop(dir, turn(), none, { meta: F.sessionMeta({ source }) }), `source ${JSON.stringify(source)}`);
+  assert.match(blocks(codexStop(dir, turn(), none, { meta: F.sessionMeta({ source: "cli" }) })), /OWNER DIVIDER MISSING/, "cli is the TUI: checked");
+  assert.match(blocks(codexStop(dir, turn(), none, { meta: F.sessionMeta({ source: "vscode" }) })), /OWNER DIVIDER MISSING/);
+  allows(codexStop(dir, turn(), none, { meta: F.sessionMeta({ source: "cli", originator: "Claude Code" }) }), "the originator denies still apply");
+}));
+
+test("R1-c: every divider pattern is linear, in both lanes (each under 1 s)", () => {
+  const bad = [`${STARS}\nINFORMATION FOR JOSH${" ".repeat(100000)}x`, "*".repeat(100000), `*INFORMATION FOR X${"*".repeat(100000)}a`, `*INFORMATION FOR JOSH${" ".repeat(100000)}x`, `*****\n${"#".repeat(50000)} INFORMATION FOR JOSH`, `${"*".repeat(50000)}${" ".repeat(50000)}INFORMATION FOR`, `**INFORMATION FOR JOSH${" *".repeat(50000)}x`];
+  for (const t of bad) {
+    for (const [name, fn] of [["hasOwnerDivider", () => hasOwnerDivider(t, "Josh")], ["lastDividerIndex", () => lastDividerIndex(t, "Josh")], ["hasOwnerDivider X", () => hasOwnerDivider(t, "X")], ["endsWithLabel", () => endsWithLabel(t)], ["endsWithLabel strict", () => endsWithLabel(t, "Josh", lastDividerIndex)]]) {
+      const t0 = Date.now(); fn(); assert.ok(Date.now() - t0 < 1000, `${name} on ${JSON.stringify(t.slice(0, 30))}… took ${Date.now() - t0} ms`);
+    }
+  }
+  // every accepted form still accepted
+  for (const t of [ONE, `***INFORMATION FOR JOSH***`, `   ******* INFORMATION FOR JOSH ********   `, `${STARS}\n**INFORMATION FOR JOSH:**`, `${STARS}\n## INFORMATION FOR JOSH`]) assert.equal(hasOwnerDivider(t, "Josh"), true, t);
+});
+
+test("R1-c: both hooks, spawned, finish on the hostile inputs and still exit 0", () => withDir((dir) => {
+  const hostile = `${STARS}\nINFORMATION FOR JOSH${" ".repeat(100000)}x`;
+  const t0 = Date.now();
+  assert.match(blocks(claudeRun(dir, { final: hostile })), /OWNER DIVIDER MISSING/);
+  assert.match(blocks(codexStop(dir, turn(), hostile)), /OWNER DIVIDER MISSING/);
+  assert.ok(Date.now() - t0 < 20000);
+}));
+
+test("R1-d: with a contract, (c) needs the OWNER's divider; without one it stays name-agnostic", () => withDir((dir) => {
+  const near = "Done.\n\n***** INFORMATION FOR JOSH now *****\n\n1. **DECISION NEEDED:** go?\n   a) yes\n\nReply like 1) a";
+  const r = blocks(codexStop(dir, LATE, near));
+  assert.match(r, /an earlier labeled Owner ask is still unanswered/, "a near-miss line is not a divider, so the last-paragraph rule blocks");
+  withDir((bare) => allows(codexStop(bare, LATE, near, { contract: false }), "no contract: name-agnostic, the region after the line holds a numbered ask"));
+  const ctx = codexStop(dir, LATE, "**ACTION NEEDED:** run X\n*Information for context*");
+  assert.doesNotMatch(blocks(ctx), /earlier labeled Owner ask/, "the italic line is no divider: the label-with-text paragraph passes (c) as with no divider");
+  assert.equal(endsWithLabel("**ACTION NEEDED:** run X\n*Information for context*"), false, "agnostic: that line IS read as a divider with an empty region");
+  allows(codexStop(dir, LATE, CORRECT), "the real divider still passes (c) with a contract");
+}));
+
+test("R1-e: an AUTHORIZATION NEEDED label's text runs past a blank line to the next label or the end of the section", () => withDir((dir) => {
+  for (const ask of ["1. **AUTHORIZATION NEEDED**\n\nPush v2.46.0 to origin?", "**AUTHORIZATION NEEDED**\n\nPush v2.46.0 to origin?"]) {
+    allows(codexStop(dir, LATE, `Done.\n\n${ONE}\n\n**Status:** Waiting on you\n\n${ask}`), JSON.stringify(ask));
+  }
+  assert.equal(endsWithLabel(`${ONE}\n\n**ACTION NEEDED:**\n\nrun this`), false, "the other labels keep the blank-line rule");
+  assert.equal(endsWithLabel(`${ONE}\n\n**AUTHORIZATION NEEDED**\n\n`), false, "a bare AUTHORIZATION label with nothing after it still fails");
+}));
+
+test("R1-f: the rule-1 block text always tells the follow-up to END with the divider section", () => withDir((dir) => {
+  const r = blocks(claudeRun(dir, { final: `Let me check the config and report back.\n\n${SECTION}` }));
+  assert.match(r, /narrates the work/);
+  assert.match(r, /Cut the narration and the unrequested inventory; offer it in one clause\. Do not apologise or explain the correction; just send the better answer\./, "the existing sentences are unchanged");
+  assert.match(r, /must END with the rule 10 divider section: \*{7}INFORMATION FOR JOSH\*{8}/);
+}));
+
+test("R1-g: a stale v2.45.0 sibling skips (d), says so on stderr, and exits 0", () => withDir((dir) => {
+  let old; try { old = execFileSync("git", ["-C", KIT, "show", "4037608a4f4a26c5ca7295785bb9016d7ed6ddf1:hooks/guard-owner-comms.mjs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { return; }   // no v2.45.0 object here
+  const h = path.join(dir, "stale", ".codex", "hooks"); mkdirSync(h, { recursive: true });
+  writeFileSync(path.join(h, "guard-owner-comms.mjs"), old);
+  for (const f of ["sensor-stop-notice.mjs", "payload-targets.mjs"]) copyFileSync(path.join(KIT, "hooks", f), path.join(h, f));
+  const r = codexStop(dir, turn(), "Done. Built and tested.", { script: path.join(h, "sensor-stop-notice.mjs") });
+  allows(r, "(d) skipped");
+  assert.match(r.stderr, /guard-owner-comms\.mjs is stale/);
+  const a = blocks(codexStop(dir, [...turn(), F.delegation(T1, F.ARCHITECT)], "Done.", { script: path.join(h, "sensor-stop-notice.mjs") }));
+  assert.match(a, /STOP NOTICE OWED/, "(a)-(c) still run");
+}));
+
+test("R1-h: the divider spelled with the name in capitals always passes (Weiß, ﬁona)", () => {
+  for (const name of ["Weiß", "ﬁona", "Josh", "Mary Ann"]) {
+    const taught = `*******INFORMATION FOR ${name.toUpperCase()}********`;
+    assert.equal(hasOwnerDivider(taught, name), true, name);
+    assert.ok(dividerReason(name).includes(taught), `${name}: the block text teaches exactly that spelling`);
+    assert.equal(hasOwnerDivider(`${STARS}\nINFORMATION FOR ${name.toUpperCase()}`, name), true, `${name} legacy`);
+  }
+  assert.equal(hasOwnerDivider("*******INFORMATION FOR OTHER********", "Weiß"), false);
+});

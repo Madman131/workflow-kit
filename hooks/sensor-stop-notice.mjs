@@ -88,32 +88,49 @@ export const hasLabel = (text) => typeof text === "string" && LABEL_LINE.test(te
 // A divider, name-agnostic here: the one-line form (asterisks, `INFORMATION FOR <anything>`, asterisks) or the legacy two-line form (an
 // asterisks-only line, 3 or more, then as the next non-blank line `INFORMATION FOR <anything>`; accepted in v2.46.0 only).
 const ASTERISK_LINE = /^[ \t]*\*{3,}[ \t]*$/;
-const INFO_LINE = /^[ \t]*(?:#{1,6}[ \t]+)?[*_]{0,3}[ \t]*INFORMATION[ \t]+FOR[ \t]+\S[^\n]*$/i;
-const ONE_LINE_DIVIDER = /^[ \t]*\*+[ \t]*INFORMATION[ \t]+FOR[ \t]+\S.*?\*+[ \t]*$/i;
-// The text after the LAST divider line, or null when there is none.
-function afterLastDivider(text) {
-  const lines = text.split(/\r?\n/);
+const INFO_HEAD = /^(?:#{1,6}[ \t]+)?(?:[*_]{1,3}[ \t]*)?INFORMATION[ \t]+FOR[ \t]+\S/i;   // every pattern here is linear: no stacked whitespace runs, no lazy tails
+const ONE_LINE_MID = /^INFORMATION[ \t]+FOR[ \t]+\S/i;
+// The index of the LAST divider line, name-agnostic (used only when no Owner contract loads), or -1.
+function agnosticLastDivider(lines) {
   let at = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (ONE_LINE_DIVIDER.test(lines[i])) { at = i; continue; }
+    const t = lines[i].trim();
+    if (t.length > 8 && t[0] === "*" && t[t.length - 1] === "*") {
+      let x = 0, y = t.length;
+      while (x < y && t[x] === "*") x++;
+      while (y > x && t[y - 1] === "*") y--;
+      if (ONE_LINE_MID.test(t.slice(x, y).trim())) { at = i; continue; }
+    }
     if (!ASTERISK_LINE.test(lines[i])) continue;
     let j = i + 1;
     while (j < lines.length && !lines[j].trim()) j++;
-    if (j < lines.length && INFO_LINE.test(lines[j])) { at = j; i = j; }
+    if (j < lines.length && INFO_HEAD.test(lines[j].trim())) { at = j; i = j; }
   }
+  return at;
+}
+// The text after the LAST divider line, or null when there is none. With a contract (ownerName and the sibling's lastDividerIndex) the
+// divider must be the OWNER's, so `***** INFORMATION FOR JOSH now *****` or `*Information for context*` is no divider; without one, any name.
+function afterLastDivider(text, ownerName, lastIdx) {
+  const lines = text.split(/\r?\n/);
+  let at = -1;
+  if (typeof ownerName === "string" && typeof lastIdx === "function") { try { at = lastIdx(text, ownerName); } catch { at = agnosticLastDivider(lines); } }
+  else at = agnosticLastDivider(lines);
   return at < 0 ? null : lines.slice(at + 1).join("\n");
 }
-export function endsWithLabel(text) {
+export function endsWithLabel(text, ownerName, lastIdx) {
   if (typeof text !== "string") return false;
-  const region = afterLastDivider(text);
+  const region = afterLastDivider(text, ownerName, lastIdx);
   if (region !== null) {
-    // Rule 10: each label's text runs to the next label line or the next blank line; a bare label does not count.
+    // Rule 10: each label's text runs to the next label line or the next blank line; a bare label does not count. AUTHORIZATION NEEDED is the
+    // exception: its rule-8 form is the label, a blank line, then the question, so its text runs to the next label line or the end of the region.
     const marks = [...region.matchAll(new RegExp(LABEL_LINE.source, "gm"))];
     return marks.some((m, k) => {
       const from = m.index + m[0].length;
       let to = k + 1 < marks.length ? marks[k + 1].index : region.length;
-      const blank = region.slice(from, to).search(/\n[ \t\r]*\n/);
-      if (blank !== -1) to = from + blank;
+      if (!/AUTHORIZATION NEEDED/.test(m[0])) {
+        const blank = region.slice(from, to).search(/\n[ \t\r]*\n/);
+        if (blank !== -1) to = from + blank;
+      }
       return /[\p{L}\p{N}]/u.test(region.slice(from, to));
     });
   }
@@ -188,7 +205,7 @@ export function scan(text) {
 }
 
 // EXPORTED for the test. Returns the list of reasons the stop owes a notice (empty ⇒ allow).
-export function evaluate(sc, finalText) {
+export function evaluate(sc, finalText, ownerName, lastIdx) {
   const reasons = [];
   const ts = sc.turnStart;
   const inTurn = sc.delegations.filter((d) => d.i > ts && !d.notice);
@@ -201,7 +218,7 @@ export function evaluate(sc, finalText) {
     reasons.push("this turn asked the Owner through request_user_input_async (an acknowledgement is not an answer) and your final message carries no rule-8 label");
   }
   const earlierAsk = [...sc.finals].reverse().find((f) => f.i < ts && hasLabel(f.text));
-  if (earlierAsk && !sc.owners.some((o) => o > earlierAsk.i) && !endsWithLabel(finalText)) {
+  if (earlierAsk && !sc.owners.some((o) => o > earlierAsk.i) && !endsWithLabel(finalText, ownerName, lastIdx)) {
     reasons.push("an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label");
   }
   return { reasons, thread: last ? last.tid : null };
@@ -219,21 +236,40 @@ export function blockReason({ reasons, thread }, extra = []) {
   ].join("\n");
 }
 
+// The sibling modules, loaded ONCE per Stop. Dynamic, so a missing file skips only what needs it ((d), and the Owner-specific (c) divider).
+// `stale` is a sibling that loaded but lacks a function this file calls (a v2.45.0 guard-owner-comms.mjs has no hasOwnerDivider).
+async function loadOwner(ev) {
+  const out = { g: null, contract: null, stale: false };
+  try {
+    const g = await import(new URL("./guard-owner-comms.mjs", import.meta.url).href);
+    const t = await import(new URL("./payload-targets.mjs", import.meta.url).href);
+    if (typeof g.hasOwnerDivider !== "function" || typeof g.dividerReason !== "function" || typeof g.ownerContract !== "function") { out.stale = true; return out; }
+    // The Owner contract lives at the PROJECT root: `--project-dir` (the registration passes it) → CLAUDE_PROJECT_DIR → ev.cwd → process.cwd(),
+    // never the session cwd alone, which is a subdirectory in a monorepo.
+    out.contract = g.ownerContract(t.resolveProjectRoot(ev));
+    out.g = g;
+  } catch { /* a missing or broken sibling: skip */ }
+  return out;
+}
 // Check (d). Returns the divider block text, or null (owed nothing / cannot tell). Never throws: every doubt is silence.
-async function dividerOwed(ev, sc) {
+function dividerOwed(ev, sc, o) {
   if (process.env.WORKFLOW_KIT_OWNER_DIVIDER === "false") return null;
   const m = sc.meta;
   if (!m) return null;                                   // no session_meta (a tail read dropped it, or an odd rollout): cannot tell
-  if (typeof m.source !== "string" || m.source === "exec") return null;   // headless `codex exec`: `-o` keeps the LAST message, a block would replace the verdict
-  if (m.originator === "codex_exec") return null;        // the same headless seat, spelled by originator
+  // A DECLARED NARROWING toward silence: only `vscode` (observed in Codex Desktop) and `cli` (the TUI, Owner-facing by construction) are checked.
+  // `exec` is a headless seat (`-o` keeps the LAST message, so a block would replace the verdict); `mcp` and any other or missing source are
+  // unobserved, and their returned message could be replaced the same way.
+  if (m.source !== "vscode" && m.source !== "cli") return null;
+  if (m.originator === "codex_exec") return null;        // the headless seat, spelled by originator
   if (m.originator === "Claude Code") return null;       // Claude's codex plugin: the last message returns to a Claude session, never to the Owner
   if (m.thread_source !== undefined && m.thread_source !== "user") return null;   // a spawned thread: unobserved, fails toward silence
+  if (o.stale) {
+    try { process.stderr.on("error", () => {}); process.stderr.write("sensor-stop-notice WARN: the sibling guard-owner-comms.mjs is stale (no hasOwnerDivider/dividerReason/ownerContract); the Owner divider check is SKIPPED. Byte-copy the v2.46.0 hooks.\n"); } catch { /* best effort */ }
+    return null;
+  }
   try {
-    const g = await import(new URL("./guard-owner-comms.mjs", import.meta.url).href);   // dynamic: a missing sibling skips only this check
-    const root = typeof ev.cwd === "string" && ev.cwd ? ev.cwd : process.cwd();
-    const contract = g.ownerContract(root);
-    if (!contract) return null;                          // dormant: no completed Owner contract
-    return g.hasOwnerDivider(ev.last_assistant_message, contract.ownerName) ? null : g.dividerReason(contract.ownerName);
+    if (!o.g || !o.contract) return null;                // missing sibling or dormant (no completed Owner contract)
+    return o.g.hasOwnerDivider(ev.last_assistant_message, o.contract.ownerName) ? null : o.g.dividerReason(o.contract.ownerName);
   } catch { return null; }
 }
 
@@ -253,8 +289,9 @@ async function main(raw) {
   const sc = scan(text);
   if (sc.turnStart < 0) return ALLOW();
   if (typeof ev.turn_id === "string" && sc.turnId && ev.turn_id !== sc.turnId) return ALLOW();   // the transcript is not at this turn: say nothing
-  const verdict = evaluate(sc, finalText);
-  const divider = await dividerOwed(ev, sc);
+  const o = await loadOwner(ev);   // once, before evaluate: (c) uses the Owner-specific divider when a contract loads
+  const verdict = evaluate(sc, finalText, o.contract ? o.contract.ownerName : undefined, o.g ? o.g.lastDividerIndex : undefined);
+  const divider = dividerOwed(ev, sc, o);
   if (!verdict.reasons.length && !divider) return ALLOW();
   // Only (d): its text alone, with no "send thread X a STOP notice" lines. (a)-(c) as well: today's lines unchanged plus the divider instruction.
   process.stdout.write(JSON.stringify({ decision: "block", reason: verdict.reasons.length ? blockReason(verdict, divider ? [`- ${divider}`] : []) : divider }));
