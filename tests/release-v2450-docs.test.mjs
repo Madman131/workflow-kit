@@ -46,8 +46,6 @@ test("the README note says what changed, why, and what adopters byte-copy versus
   assert.doesNotMatch(n, /never dropped/);
 });
 
-test("version is 2.45.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.45.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.45.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.45\.0$/m);
+test("the v2.45.0 release note is still in the README (the version stamp itself moves with each release; v2.46.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.45\.0 — the Gemini review stops claiming a prior review/m);
 });
