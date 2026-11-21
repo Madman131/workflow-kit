@@ -10,9 +10,10 @@ const flat = (p) => read(p).replace(/\s+/g, " ");
 
 test("OWNER_COMMS rule 10 carries the divider, the four headings, numbering, lettering and the empty case", () => {
   const raw = read("templates/OWNER_COMMS.md.tmpl"), t = flat("templates/OWNER_COMMS.md.tmpl");
-  assert.match(raw, /^ {3}\*{21}\n {3}INFORMATION FOR \{\{OWNER_NAME\}\}$/m, "the literal divider and the name line");
+  assert.match(raw, /^ {3}\*{7}INFORMATION FOR \{\{OWNER_NAME\}\}\*{8}$/m, "the literal one-line divider");
+  assert.doesNotMatch(raw, /^ *\*{21}$/m, "the retired two-line form is not named in the doctrine");
   assert.match(t, /^.*10\. \*\*End every stop with the divider\.\*\*/);
-  assert.match(t, /the house form writes the name in capitals; the sensor matches it in any case/);
+  assert.match(t, /the house form writes the name in capitals; the sensor matches the name in any case/);
   for (const h of ["**Status**", "**What happened**", "**What you need to know**", "**What I need from you**"]) assert.ok(t.includes(h), h);
   assert.match(t, /\*\*repeated in full, never "as I said above"\*\*/);
   assert.match(t, /Number every ask 1, 2, 3 across the section/);
@@ -43,6 +44,8 @@ test("the README note says what changed, the measured facts, the residuals and w
   const r = flat("README.md");
   const n = r.slice(r.indexOf("## What's new in v2.46.0"), r.indexOf("## What's new in v2.45.0"));
   assert.ok(n.length > 1500, "the v2.46.0 note sits above v2.45.0's");
+  assert.match(n, /\*\*The one-line form is canonical\.\*\* The sensor also still accepts the earlier two-line form .* in v2\.46\.0 only, so sessions already using it are not bounced; it will be dropped in a later release/);
+  assert.match(n, /`\*{7}INFORMATION FOR <OWNER>\*{8}`/);
   assert.match(n, /Claude Code 2\.1\.312's `Stop` payload carries `last_assistant_message`/);
   assert.match(n, /129 Codex sessions/);
   assert.match(n, /A headless `claude -p` run in an adopter gets one nudge; a stop while background agents run is a stop and gets one nudge; the Codex subagent `session_meta` shape is unobserved/);

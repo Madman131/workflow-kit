@@ -57,7 +57,7 @@
 //       (c) stays silent for it.
 //
 //   (c) (v2.46.0) is reconciled with rule 10: a numbered ask counts as a label line (`1. **DECISION NEEDED:** …`, `2) **ACTION NEEDED:** …`,
-//       `**1) DECISION NEEDED:**`), and when the final holds a divider (an asterisks-only line then `INFORMATION FOR <any name>`; name-agnostic
+//       `**1) DECISION NEEDED:**`), and when the final holds a divider (the one-line `*****INFORMATION FOR <any name>*****` or the legacy asterisks-only line then `INFORMATION FOR <any name>`; name-agnostic
 //       because (c) works without an Owner contract) the region that must hold a label with text is everything AFTER THE LAST divider, so a
 //       numbered ask list followed by a closing "Reply like 1) a" line passes. With no divider the last-paragraph rule is unchanged.
 //   (d) (v2.46.0, rule 10) the final message of an OWNER-FACING session has no `INFORMATION FOR <Owner>` divider. It runs only when: its own off
@@ -85,14 +85,17 @@ export const hasLabel = (text) => typeof text === "string" && LABEL_LINE.test(te
 // The final must END with a label that CARRIES TEXT (v2.42.0): a bare label line ("**ACTION NEEDED:**" and nothing after it in the
 // last paragraph) names no action and does not count. The text is whatever follows the label token, up to the next label line or the end
 // of the last paragraph, and it must hold a letter or digit.
-// A divider: an asterisks-only line (3 or more) then, as the next non-blank line, `INFORMATION FOR <anything>` (name-agnostic here).
+// A divider, name-agnostic here: the one-line form (asterisks, `INFORMATION FOR <anything>`, asterisks) or the legacy two-line form (an
+// asterisks-only line, 3 or more, then as the next non-blank line `INFORMATION FOR <anything>`; accepted in v2.46.0 only).
 const ASTERISK_LINE = /^[ \t]*\*{3,}[ \t]*$/;
 const INFO_LINE = /^[ \t]*(?:#{1,6}[ \t]+)?[*_]{0,3}[ \t]*INFORMATION[ \t]+FOR[ \t]+\S[^\n]*$/i;
-// The text after the LAST divider, or null when there is none.
+const ONE_LINE_DIVIDER = /^[ \t]*\*+[ \t]*INFORMATION[ \t]+FOR[ \t]+\S.*?\*+[ \t]*$/i;
+// The text after the LAST divider line, or null when there is none.
 function afterLastDivider(text) {
   const lines = text.split(/\r?\n/);
   let at = -1;
   for (let i = 0; i < lines.length; i++) {
+    if (ONE_LINE_DIVIDER.test(lines[i])) { at = i; continue; }
     if (!ASTERISK_LINE.test(lines[i])) continue;
     let j = i + 1;
     while (j < lines.length && !lines[j].trim()) j++;

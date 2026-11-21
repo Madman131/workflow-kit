@@ -21,7 +21,8 @@ const GUARD = path.join(KIT, "hooks", "guard-owner-comms.mjs");
 const SENSOR = path.join(KIT, "hooks", "sensor-stop-notice.mjs");
 const T1 = "01a0f4b0-ddaa-7820-ae21-1a5b2b480dc0", T0 = "01a0f490-e119-75c3-b726-41d2c914c51c", CALL = "call_CVaRgrUcdfM4FMOHnSWkUTF7";
 const STARS = "*********************";
-const SECTION = [STARS, "INFORMATION FOR JOSH", "", "**Status:** Done", "", "**What happened**", "- built it", "", "**Nothing needed from you.**"].join("\n");
+const ONE = "*******INFORMATION FOR JOSH********";
+const SECTION = [ONE, "", "**Status:** Done", "", "**What happened**", "- built it", "", "**Nothing needed from you.**"].join("\n");
 
 function cleanEnv(extra = {}) {
   const e = { ...process.env };
@@ -44,7 +45,14 @@ const allows = (r, why) => assert.equal(r.stdout, "", why || "expected silence")
 
 test("predicate: present in plain, fenced, bold, heading, CRLF, lower-case and blank-line forms", () => {
   const yes = {
-    plain: `notes\n${STARS}\nINFORMATION FOR JOSH\n`,
+    oneLine: `notes\n${ONE}\n`,
+    oneLineOtherCounts: `***INFORMATION FOR JOSH***\n`,
+    oneLineUneven: `*INFORMATION FOR JOSH************\n`,
+    oneLineSpaces: `   ******* INFORMATION FOR JOSH ********   \n`,
+    oneLineFenced: `\`\`\`\n${ONE}\n\`\`\`\n`,
+    oneLineLower: `*******information for josh********`,
+    oneLineCrlf: `x\r\n${ONE}\r\n`,
+    legacyPlain: `notes\n${STARS}\nINFORMATION FOR JOSH\n`,
     fenced: `notes\n\`\`\`\n${STARS}\nINFORMATION FOR JOSH\n\`\`\`\n`,
     boldColonInside: `${STARS}\n**INFORMATION FOR JOSH:**\n`,
     boldColonOutside: `${STARS}\n**INFORMATION FOR JOSH**:\n`,
@@ -66,6 +74,12 @@ test("predicate: present in plain, fenced, bold, heading, CRLF, lower-case and b
 test("predicate: absent when there is no asterisk line, only an inline mention, another name, extra text, or asterisks with no INFORMATION line", () => {
   const no = {
     noAsterisks: "INFORMATION FOR JOSH\n",
+    starsLeftOnly: "*******INFORMATION FOR JOSH\n",
+    starsRightOnly: "INFORMATION FOR JOSH********\n",
+    wordsInside: "*** INFORMATION FOR JOSH NOW ***\n",
+    oneLineOtherName: "*******INFORMATION FOR MARY********\n",
+    oneLinePrefixName: "*******INFORMATION FOR JOSHUA********\n",
+    oneLineProse: "I end with *******INFORMATION FOR JOSH******** always.\n",
     dashes: "---------------------\nINFORMATION FOR JOSH\n",
     twoAsterisks: "**\nINFORMATION FOR JOSH\n",
     inlineProse: `I will end with ${STARS} and INFORMATION FOR JOSH next time.\n`,
@@ -90,8 +104,9 @@ test("predicate: absent when there is no asterisk line, only an inline mention, 
 
 test("dividerReason names the rule, the Owner in capitals, the four headings, numbering, lettering and the empty case", () => {
   const r = dividerReason("Josh");
-  for (const needle of ["rule 10", "INFORMATION FOR JOSH", STARS, "LAST message", "ONE follow-up", "Status", "What happened", "What you need to know", "What I need from you", "numbered 1, 2, 3", "a), b), c)", "Nothing needed from you", "once per turn"]) assert.ok(r.includes(needle), needle);
+  for (const needle of ["rule 10", ONE, "LAST message", "ONE follow-up", "Status", "What happened", "What you need to know", "What I need from you", "numbered 1, 2, 3", "a), b), c)", "Nothing needed from you", "once per turn"]) assert.ok(r.includes(needle), needle);
   assert.ok(!r.includes("INFORMATION FOR Josh"), "capitals");
+  assert.ok(!r.includes(STARS), "the retired two-line form is not taught");
 });
 
 // ---------- Claude lane ----------
@@ -228,6 +243,8 @@ test("(c): numbered asks count as labels; a divider moves the region to after th
   assert.equal(hasLabel("**1) DECISION NEEDED:** go?"), true);
   assert.equal(hasLabel("   - **QUESTION:** why?"), true, "the bulleted form is unchanged");
   assert.equal(hasLabel("1. DECISION NEEDED: go?"), false, "unbolded stays unlabeled");
+  assert.equal(endsWithLabel(`${ONE}\n\n1. **DECISION NEEDED:** go?\n   a) yes\n\nReply like 1) a`), true, "the one-line divider moves the region too");
+  assert.equal(endsWithLabel(`**ACTION NEEDED:** old\n\n${ONE}\n\n**Nothing needed from you.**`), false, "one-line: the region after the divider holds no label");
   assert.equal(endsWithLabel(`${STARS}\nINFORMATION FOR JOSH\n\n1. **DECISION NEEDED:** go?\n   a) yes\n\nReply like 1) a`), true, "a closing reply line after a numbered ask passes");
   assert.equal(endsWithLabel(`${STARS}\nINFORMATION FOR JOSH\n\n**ACTION NEEDED:**\n\nrun this`), false, "a bare label does not count");
   assert.equal(endsWithLabel(`**ACTION NEEDED:** old ask\n\n${STARS}\nINFORMATION FOR MARY\n\n**Nothing needed from you.**`), false, "the region after the LAST divider holds no label");
@@ -242,8 +259,7 @@ const CORRECT = [
   "- Edited two files.",
   "- Ran the checks.",
   "",
-  STARS,
-  "INFORMATION FOR JOSH",
+  ONE,
   "",
   "**Status:** Waiting on you",
   "",
@@ -267,7 +283,8 @@ const CORRECT = [
   "",
   "Reply like 1) a 2) done",
 ].join("\n");
-const WITHOUT = CORRECT.split("\n").filter((_, i) => i < 4 || i > 5).join("\n").replace(/^\*{21}$/m, "");
+const WITHOUT = CORRECT.split("\n").filter((l) => l !== ONE).join("\n");
+const CORRECT_LEGACY = CORRECT.replace(ONE, `${STARS}\nINFORMATION FOR JOSH`);
 
 test("collision, Claude lane: the correct message passes narration and size with a non-short user prompt; without its divider it blocks once on the divider only", () => withDir((dir) => {
   allows(claudeRun(dir, { final: CORRECT }));
@@ -276,6 +293,13 @@ test("collision, Claude lane: the correct message passes narration and size with
   const reason = blocks(claudeRun(dir, { final: WITHOUT }));
   assert.match(reason, /OWNER DIVIDER MISSING/);
   assert.doesNotMatch(reason, /narrates|SIZE MISMATCH/);
+}));
+
+test("collision, legacy two-line form: still passes both sensors in v2.46.0", () => withDir((dir) => {
+  assert.equal(hasOwnerDivider(CORRECT_LEGACY, "Josh"), true);
+  allows(claudeRun(dir, { final: CORRECT_LEGACY }));
+  allows(codexStop(dir, [...turn(), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)], CORRECT_LEGACY), "(b)");
+  allows(codexStop(dir, [F.agentsMd(T0), F.taskStarted(T0), F.assistant(T0, "Waiting.\n\n**ACTION NEEDED:** run the build."), ...turn()], CORRECT_LEGACY), "(c)");
 }));
 
 test("collision, Codex lane: the correct message passes (b) and (c) and (d); without its divider it blocks once on the divider only", () => withDir((dir) => {

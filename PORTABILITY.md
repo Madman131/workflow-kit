@@ -562,7 +562,7 @@ it catches nothing at all. **Saying
 not** — which is the claim-inflation this document exists to refuse.
 
 **Rule 10, the divider (v2.46.0), is a third check, and it is presence only.** The Owner reads only what
-is below the line of asterisks and `INFORMATION FOR <OWNER>` in a turn's LAST message. In Claude this
+is below the one-line divider `*******INFORMATION FOR <OWNER>********` in a turn's LAST message (the earlier two-line form is still accepted in v2.46.0 only). In Claude this
 hook blocks once when the final message has no such divider; it never inspects the form, so a fenced or
 wrong section passes, and it proves nothing about what the section says. It is dormant without a completed
 Owner contract and allows on every doubt. It runs only on a main-session `Stop` payload (`hook_event_name`
