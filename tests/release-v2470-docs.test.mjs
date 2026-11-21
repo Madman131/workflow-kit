@@ -2,8 +2,11 @@
 // the budgets and the version. The scripts' behaviour is pinned in tests/archive-plan.test.mjs and tests/doctor-orphans.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, statSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const flat = (p) => read(p).replace(/\s+/g, " ");
@@ -80,7 +83,8 @@ test("(e) the README note says what changed, the measured leak, the residuals an
   assert.match(n, /never signals a Claude process, never uses `pkill` and never sends `SIGKILL`/);
   assert.match(n, /Nine guards each keep a session/);
   assert.match(n, /It acts only when your instructions carry the Owner's standing yes/);
-  assert.match(n, /`init` does not install the two new scripts; copy them\./);
+  assert.match(n, /The only `bin\/init\.mjs` change is that it now installs the two new scripts\./);
+  assert.match(n, /`init --force` now installs the two scripts; an existing adopter can also byte-copy them\./);
   assert.match(n, /\*\*The push-effect sentences follow your Deploy line \(D-264, D-279\)\.\*\*/);
   assert.match(n, /\*\*Adopters\.\*\* Byte-copy `scripts\/doctor-orphans\.mjs`, `scripts\/archive-plan\.mjs`, `skills\/closeout\/SKILL\.md`, `skills\/closeout\/ARCHIVE\.md`, `core\/MULTI_AGENT\.md` and `core\/GATES\.md`/);
 });
@@ -91,9 +95,42 @@ test("version is 2.47.0 everywhere", () => {
   assert.match(read("README.md"), /^# workflow-kit — v2\.47\.0$/m);
 });
 
-test("no registration and no budgeted template changed: init, the settings template, the Codex config and the two stub templates are byte-identical to v2.46.0", () => {
-  let diff = "";
-  try { diff = execFileSync("git", ["-C", new URL("..", import.meta.url).pathname, "diff", "--name-only", "3e4958fe8ee28558adcb0b118c6365f923465729", "--", ["bin", "init" + ".mjs"].join("/"), "templates/settings.json", "codex", "templates/CLAUDE.md.tmpl", "templates/AGENTS.md.tmpl", "hooks"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
-  catch { return; }   // no v2.46.0 object here (a tarball, a shallow clone, or a later release has moved the base): nothing to compare
-  assert.equal(diff.trim(), "", "no Stop registration moved, and the 8,192 B stubs did not grow");
+const KIT = fileURLToPath(new URL("..", import.meta.url));
+const BASE = "3e4958fe8ee28558adcb0b118c6365f923465729";   // v2.46.0
+
+test("no registration and no budgeted template changed: settings.json, codex/, hooks/ and the two stub templates are byte-identical to v2.46.0, and init changes ONLY by the two script copies and their log line", () => {
+  let names, initDiff;
+  try {
+    names = execFileSync("git", ["-C", KIT, "diff", "--name-only", BASE, "--", "templates/settings.json", "codex", "templates/CLAUDE.md.tmpl", "templates/AGENTS.md.tmpl", "hooks"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    initDiff = execFileSync("git", ["-C", KIT, "diff", "-U0", BASE, "--", "bin/init.mjs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch { return; }   // no v2.46.0 object here (a tarball, a shallow clone, or a later release has moved the base): nothing to compare
+  assert.equal(names.trim(), "", "no Stop registration moved, and the 8,192 B stubs did not grow");
+  const lines = initDiff.split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l));
+  const removed = lines.filter((l) => l[0] === "-"), added = lines.filter((l) => l[0] === "+");
+  assert.equal(removed.length, 1, "only the scripts/: log line is rewritten");
+  assert.match(removed[0], /scripts\/: check-doc-size\.mjs/);
+  assert.equal(added.length, 4, "a comment, two copyGuarded lines and the log line");
+  assert.ok(added.some((l) => /copyGuarded\(path\.join\(KIT_ROOT, "scripts", "doctor-orphans\.mjs"\), path\.join\(T, "scripts", "doctor-orphans\.mjs"\), force\);/.test(l)));
+  assert.ok(added.some((l) => /copyGuarded\(path\.join\(KIT_ROOT, "scripts", "archive-plan\.mjs"\), path\.join\(T, "scripts", "archive-plan\.mjs"\), force\);/.test(l)));
+  assert.ok(added.some((l) => /doctor-orphans\.mjs \(report-only unless given an explicit --stop\/--reap\) \+ archive-plan\.mjs \(archives nothing\)/.test(l)));
+});
+
+test("a fresh init installs both scripts and ARCHIVE.md, and every script ARCHIVE.md cites resolves and runs in that adopter", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kit-v2470-adopter-")), prompts = mkdtempSync(path.join(os.tmpdir(), "kit-v2470-prompts-"));
+  try {
+    execFileSync("git", ["init", "-q", dir]);
+    const hermetic = [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter);
+    const r = spawnSync(process.execPath, [path.join(KIT, "bin", "init.mjs"), "--target", dir, "--repo-name", "adopter", "--codex-prompts-dir", prompts], { encoding: "utf8", env: { ...process.env, PATH: hermetic } });
+    assert.equal(r.status, 0, r.stderr);
+    for (const f of ["scripts/doctor-orphans.mjs", "scripts/archive-plan.mjs", ".agents/skills/closeout/ARCHIVE.md", ".agents/skills/closeout/SKILL.md"]) assert.ok(existsSync(path.join(dir, f)), `${f} installed`);
+    assert.equal(readFileSync(path.join(dir, "scripts/archive-plan.mjs"), "utf8"), read("scripts/archive-plan.mjs"), "byte-identical copy");
+    assert.equal(readFileSync(path.join(dir, "scripts/doctor-orphans.mjs"), "utf8"), read("scripts/doctor-orphans.mjs"), "byte-identical copy");
+    const cited = [...new Set([...readFileSync(path.join(dir, ".agents/skills/closeout/ARCHIVE.md"), "utf8").matchAll(/\b(?:scripts|core|skills)\/[\w./-]+\.(?:mjs|md)\b/g)].map((m) => m[0]))];
+    assert.ok(cited.includes("scripts/archive-plan.mjs") && cited.includes("scripts/doctor-orphans.mjs"));
+    for (const c of cited) assert.ok([dir, path.join(dir, ".agents")].some((root) => existsSync(path.join(root, c))), `ARCHIVE.md cites ${c}; it must exist in the adopter`);
+    // the installed copies run: an empty list plans nothing, and a bad flag is a usage error, not a crash
+    const plan = spawnSync(process.execPath, [path.join(dir, "scripts/archive-plan.mjs"), "--me", "x", "--json"], { input: "[]", encoding: "utf8" });
+    assert.equal(plan.status, 0); assert.deepEqual(JSON.parse(plan.stdout).archive, []);
+    assert.equal(spawnSync(process.execPath, [path.join(dir, "scripts/doctor-orphans.mjs"), "--bogus"], { encoding: "utf8" }).status, 2);
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(prompts, { recursive: true, force: true }); }
 });
