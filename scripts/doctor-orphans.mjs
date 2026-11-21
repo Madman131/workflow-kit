@@ -20,8 +20,9 @@
 //             a transcript written within --idle-hours, else GONE; UNKNOWN when the environment cannot be read), and a
 //             shared-root hint (another live Claude process's cwd is inside the broker's --cwd; `lsof -a -d cwd`, else unknown).
 //   LIKELY LEFTOVER = identity shape proven AND owner GONE AND older than --broker-hours (default 24). A hint, never a verdict.
-//   claude    each live Claude session process (pid, session id from `--resume=`, transcript, last activity, idle after
-//             --idle-hours); the desktop `disclaimer --pgroup` wrapper rows are dropped so a session counts once.
+//   claude    EVERY live Claude process (pid, session = the `--resume=` uuid, else CLAUDE_CODE_HOST_SESSION_ID from its environment,
+//             else unknown; transcript, last activity and idle after --idle-hours only when there is a uuid, else "unknown"); the
+//             desktop `disclaimer --pgroup` wrapper rows are dropped so a session counts once.
 //
 // A process table is read with `/bin/ps -A -ww -o pid=,ppid=,stat=,etime=,rss=,command=` (macOS and Linux; the PATH ps only if
 // /bin/ps is absent). Any other platform, or a ps that fails, reports that and exits 0. Every run prints, verbatim, the sentence
@@ -123,6 +124,18 @@ export function readOwnerEnv(pid) {
   } catch { return none; }
 }
 
+// Every live Claude process except the desktop `disclaimer --pgroup` wrapper rows; the --resume subset is what owners match against.
+const claudeProcessRows = (rows) => rows.filter((r) => alive(r) && CLAUDE_RE.test(r.command) && !WRAPPER_RE.test(r.command));
+// One environment variable of a process (macOS `ps -wwE`, Linux /proc/<pid>/environ), or null.
+function readEnvVar(pid, name) {
+  try {
+    if (process.platform === "linux") { const v = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").find((x) => x.startsWith(`${name}=`)); return v ? v.slice(name.length + 1) : null; }
+    const r = spawnSync(PS, ["-wwE", "-o", "command=", "-p", String(pid)], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    if (r.error || r.status !== 0) return null;
+    const m = new RegExp(`(?:^| )${name}=(\\S+)`).exec(r.stdout.replace(/\n$/, ""));
+    return m ? m[1] : null;
+  } catch { return null; }
+}
 const claudeSessionRows = (rows) => rows.filter((r) => alive(r) && CLAUDE_RE.test(r.command) && !WRAPPER_RE.test(r.command) && RESUME_RE.test(r.command));
 
 function findTranscript(sessionId, claudeDir, hint) {
@@ -157,8 +170,8 @@ const inside = (dir, root) => dir === root || dir.startsWith(root.endsWith("/") 
 
 // ---------- report ----------
 export function buildReport(rows, { brokerHours = 24, idleHours = 24, claudeDir = path.join(os.homedir(), ".claude") } = {}) {
-  const sessionRows = claudeSessionRows(rows);
-  const cwds = claudeCwds(sessionRows.map((r) => r.pid));
+  const procRows = claudeProcessRows(rows);
+  const cwds = claudeCwds(procRows.map((r) => r.pid));
   const brokers = rows.filter((r) => BROKER_LOOSE.test(r.command) && !isClaude(r.command)).map((r) => {
     const id = proveBroker(r), a = parseBrokerArgv(r.command);
     const kids = descendants(rows, r.pid);
@@ -172,10 +185,15 @@ export function buildReport(rows, { brokerHours = 24, idleHours = 24, claudeDir 
       owner, olderThanBrokerHours: old, sharedRoot, likelyLeftover: id.proven && owner.state === "gone" && old,
     };
   });
-  const sessions = sessionRows.map((r) => {
-    const sessionId = RESUME_RE.exec(r.command)[1].toLowerCase();
-    const tr = findTranscript(sessionId, claudeDir, null);
-    return { pid: r.pid, ageSeconds: r.age, rssMb: Math.round(r.rssKb / 1024), sessionId, transcript: tr?.path ?? null, lastActivity: tr ? new Date(tr.mtimeMs).toISOString() : null, idle: tr ? Date.now() - tr.mtimeMs > idleHours * 3600_000 : null };
+  // EVERY live Claude process is listed. Its session is the --resume uuid, else CLAUDE_CODE_HOST_SESSION_ID from its environment,
+  // else unknown; with no uuid the transcript and idle fields are "unknown" (never guessed).
+  const sessions = procRows.map((r) => {
+    const m = RESUME_RE.exec(r.command);
+    const host = m ? null : readEnvVar(r.pid, "CLAUDE_CODE_HOST_SESSION_ID");
+    const base = { pid: r.pid, ageSeconds: r.age, rssMb: Math.round(r.rssKb / 1024) };
+    if (!m) return { ...base, sessionId: host ?? "unknown", sessionSource: host ? "env" : "unknown", transcript: "unknown", lastActivity: "unknown", idle: "unknown" };
+    const sessionId = m[1].toLowerCase(), tr = findTranscript(sessionId, claudeDir, null);
+    return { ...base, sessionId, sessionSource: "resume", transcript: tr?.path ?? null, lastActivity: tr ? new Date(tr.mtimeMs).toISOString() : null, idle: tr ? Date.now() - tr.mtimeMs > idleHours * 3600_000 : null };
   });
   return { mode: "report-only", notice: NOTICE, brokerHours, idleHours, brokers, claudeSessions: sessions };
 }
@@ -188,7 +206,7 @@ function printReport(rep) {
     L.push(`    owner ${b.owner.sessionId ? `${b.owner.sessionId} ${b.owner.state === "alive" ? "LOOKS ALIVE" : "GONE"}${b.owner.via ? " via " + b.owner.via : ""}  transcript ${b.owner.transcript ?? "none"}  last activity ${b.owner.lastActivity ?? "unknown"}` : "UNKNOWN"}`);
     L.push(`    identity shape ${b.identityShapeOk ? "OK" : "NOT OK: " + b.identityReason}`);
   }
-  for (const s of rep.claudeSessions) L.push(`  claude pid ${s.pid} ${s.rssMb} MB session ${s.sessionId} last activity ${s.lastActivity ?? "unknown"}${s.idle ? " (IDLE)" : ""}`);
+  for (const s of rep.claudeSessions) L.push(`  claude pid ${s.pid} ${s.rssMb} MB session ${s.sessionId}${s.sessionSource === "env" ? " (from CLAUDE_CODE_HOST_SESSION_ID)" : ""} last activity ${s.lastActivity ?? "unknown"}${s.idle === true ? " (IDLE)" : ""}`);
   const lo = rep.brokers.filter((b) => b.likelyLeftover);
   if (lo.length) L.push(`Likely leftover brokers (owner gone, older than ${rep.brokerHours} h): ${lo.map((b) => b.pid).join(", ")}. Whether to stop them is the Owner's decision.`);
   return L.join("\n");

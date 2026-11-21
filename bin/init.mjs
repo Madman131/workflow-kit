@@ -1158,7 +1158,7 @@ function main() {
   // v2.27: the two REPORT tools. Read-only; they need no binding and never mutate the repo.
   copyGuarded(path.join(KIT_ROOT, "scripts", "worktree-census.mjs"), path.join(T, "scripts", "worktree-census.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "token-report.mjs"), path.join(T, "scripts", "token-report.mjs"), force);
-  // v2.47.0: the archive step's two scripts. doctor-orphans only reports unless given an explicit --stop/--reap; archive-plan archives nothing.
+  // v2.47.0: the archive step's two scripts. doctor-orphans is report-only (no stop mode); archive-plan archives nothing.
   copyGuarded(path.join(KIT_ROOT, "scripts", "doctor-orphans.mjs"), path.join(T, "scripts", "doctor-orphans.mjs"), force);
   copyGuarded(path.join(KIT_ROOT, "scripts", "archive-plan.mjs"), path.join(T, "scripts", "archive-plan.mjs"), force);
   const runners = ["codex-gate.sh", "codex-gate-selftest.sh", "cold-review-gemini.sh", "cold-review-gemini-selftest.sh", "gemini-gate-supervisor.mjs", "gemini-gate-slices.mjs", "gemini-frozen-gate.mjs", "gemini-frozen-gate-selftest.mjs"];
@@ -1170,7 +1170,7 @@ function main() {
     }
     const guard = path.join(T, "scripts", "codex-gate-guard", "claude");
     if (copyGuarded(path.join(KIT_ROOT, "scripts", "codex-gate-guard", "claude"), guard, force) === "written") chmodX(guard);
-    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + doctor-orphans.mjs (report-only unless given an explicit --stop/--reap) + archive-plan.mjs (archives nothing) + gate runners (need codex/agy; frozen Gemini normally uses subscription agy with strict manual fallback; no frozen API key or REST route — see the kit's PORTABILITY.md)`);
+    log(`  scripts/: check-doc-size.mjs + record-repair-event.mjs + confirm-repair-brief.mjs + worktree-census.mjs + token-report.mjs (report-only) + doctor-orphans.mjs (report-only; no stop mode) + archive-plan.mjs (archives nothing) + gate runners (need codex/agy; frozen Gemini normally uses subscription agy with strict manual fallback; no frozen API key or REST route — see the kit's PORTABILITY.md)`);
   } else {
     // Skipped is not UNEXAMINED: runners a previous adopt installed are mechanism kept-files even
     // when this run omits the flag — read-only compared, like the skipped .codex lane below.

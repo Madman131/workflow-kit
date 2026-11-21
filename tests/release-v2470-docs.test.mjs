@@ -138,7 +138,7 @@ test("no registration and no budgeted template changed: settings.json, codex/, h
   assert.equal(added.length, 4, "a comment, two copyGuarded lines and the log line");
   assert.ok(added.some((l) => /copyGuarded\(path\.join\(KIT_ROOT, "scripts", "doctor-orphans\.mjs"\), path\.join\(T, "scripts", "doctor-orphans\.mjs"\), force\);/.test(l)));
   assert.ok(added.some((l) => /copyGuarded\(path\.join\(KIT_ROOT, "scripts", "archive-plan\.mjs"\), path\.join\(T, "scripts", "archive-plan\.mjs"\), force\);/.test(l)));
-  assert.ok(added.some((l) => /doctor-orphans\.mjs \(report-only unless given an explicit --stop\/--reap\) \+ archive-plan\.mjs \(archives nothing\)/.test(l)));
+  assert.ok(added.some((l) => /doctor-orphans\.mjs \(report-only; no stop mode\) \+ archive-plan\.mjs \(archives nothing\)/.test(l)));
 });
 
 test("a fresh init installs both scripts and ARCHIVE.md, and every script ARCHIVE.md cites resolves and runs in that adopter", () => {

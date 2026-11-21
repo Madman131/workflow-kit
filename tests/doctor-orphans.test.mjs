@@ -220,3 +220,39 @@ test("a stop-shaped flag is a usage error (exit 2, 'this tool never stops a proc
     assert.ok(isAlive(b.pid) && isAlive(b.kid));
   } finally { s.cleanup(); }
 });
+
+// ---------- D-292: every live Claude process is listed, with its session from --resume, else the host-session env, else unknown ----------
+async function bareClaude(s, name, envExtra) {                           // a fake desktop process: `claude --output-format stream-json`, NO --resume
+  const bin = path.join(s.root, name, "claude"); mkdirSync(path.dirname(bin), { recursive: true });
+  writeFileSync(bin, "#!/usr/bin/env node\nsetInterval(()=>{},1e6)\n"); chmodSync(bin, 0o755);
+  const p = spawn(bin, ["--output-format", "stream-json"], { stdio: "ignore", env: (() => { const e = { ...baseEnv(), ...envExtra }; if (!envExtra.CLAUDE_CODE_HOST_SESSION_ID) delete e.CLAUDE_CODE_HOST_SESSION_ID; return e; })() }); s.track(p.pid);   // the host shell may carry one
+  await sleep(300);
+  return p;
+}
+
+test("D-292 every live Claude process is listed: a --resume uuid, no --resume but CLAUDE_CODE_HOST_SESSION_ID, and neither", async () => {
+  const s = sandbox();
+  try {
+    const id = U(20), host = "local_4a3359c0-aaaa-4aaa-8aaa-000000000001";
+    const tdir = path.join(s.root, "dotclaude", "projects", "-slug"); mkdirSync(tdir, { recursive: true });
+    const tr = path.join(tdir, `${id}.jsonl`); writeFileSync(tr, "{}\n");
+    const withResume = await s.claude(id), withHost = await bareClaude(s, "h", { CLAUDE_CODE_HOST_SESSION_ID: host }), neither = await bareClaude(s, "n", {});
+    const wrapper = path.join(s.root, "disclaimer"); writeFileSync(wrapper, "#!/usr/bin/env node\nsetInterval(()=>{},1e6)\n"); chmodSync(wrapper, 0o755);
+    const w = spawn(wrapper, ["--pgroup", path.join(s.root, "claude"), "--output-format", "stream-json"], { stdio: "ignore" }); s.track(w.pid);
+    await sleep(300);
+    const rep = s.report();
+    const by = (p) => rep.claudeSessions.find((x) => x.pid === p.pid);
+    assert.deepEqual([by(withResume).sessionId, by(withResume).sessionSource, by(withResume).transcript], [id, "resume", tr]);
+    assert.equal(typeof by(withResume).idle, "boolean");
+    const h = by(withHost);
+    assert.deepEqual([h.sessionId, h.sessionSource, h.transcript, h.lastActivity, h.idle], [host, "env", "unknown", "unknown", "unknown"], "an env session id has no known transcript: never guessed");
+    const n = by(neither);
+    assert.deepEqual([n.sessionId, n.sessionSource, n.transcript, n.lastActivity, n.idle], ["unknown", "unknown", "unknown", "unknown", "unknown"]);
+    assert.equal(by(w), undefined, "the disclaimer --pgroup wrapper row stays dropped");
+    const text = s.doctor(["--claude-dir", path.join(s.root, "dotclaude")]).stdout;
+    assert.match(text, new RegExp(`claude pid ${withHost.pid} \\d+ MB session ${host} \\(from CLAUDE_CODE_HOST_SESSION_ID\\) last activity unknown`));
+    assert.match(text, new RegExp(`claude pid ${neither.pid} \\d+ MB session unknown last activity unknown`));
+    assert.match(text, new RegExp(`claude pid ${withResume.pid} \\d+ MB session ${id}`));
+    assert.ok([withResume, withHost, neither, w].every((x) => isAlive(x.pid)), "nothing was signalled");
+  } finally { s.cleanup(); }
+});
