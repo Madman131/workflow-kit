@@ -71,7 +71,9 @@ test("the v2.43.0 release note is still in the README (the version stamp itself 
 
 test("no codex hook registration changed: the shipped Codex registration template is byte-identical to the base", () => {
   let diff = "";
-  try { diff = execFileSync("git", ["-C", KIT, "diff", "--name-only", "f1c921dabb8f91a0a75f241ff20c10241f0fbadb", "--", "templates/codex-hooks.json", "codex", "hooks/sensor-stop-notice.mjs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
+  try { diff = execFileSync("git", ["-C", KIT, "diff", "--name-only", "f1c921dabb8f91a0a75f241ff20c10241f0fbadb", "--", "templates/codex-hooks.json", "codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
   catch { return; }   // no base object here (a tarball or shallow clone): nothing to compare
-  assert.equal(diff.trim(), "", "codex registration and the sensors are unchanged, so no Owner re-trust is owed");
+  // v2.46.0 edits the bytes of hooks/sensor-stop-notice.mjs on purpose (check (d)); Codex keys trust to the hooks.json ENTRY, which stays
+  // unchanged, and tests/release-v2460-docs.test.mjs pins that entry against v2.45.0. So only the registration template is compared here.
+  assert.equal(diff.trim(), "", "the codex registration is unchanged, so no Owner re-trust is owed");
 });

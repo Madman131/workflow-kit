@@ -33,7 +33,14 @@
 //     prompts, open-page markers, skill bodies) or "# AGENTS.md instructions"; a question reply counts as one.
 //   A final message: response_item, role "assistant", payload.phase "final_answer".
 //
-// THE THREE TRIGGERS (one block, reasons combined):
+// SESSION SHAPE (v2.46.0, for check (d)). The FIRST line of every rollout is {"type":"session_meta","payload":{…,"originator":…,
+//   "source":…,"thread_source":…}}. Measured over 129 rollouts under ~/.codex/sessions (2026-11-21, the probe receipt for (d)):
+//     headless seat (scripts/codex-gate.sh, `codex exec -C <repo> -o OUT`):  originator "codex_exec",   source "exec",   thread_source "user"
+//     Claude's codex plugin (its last message returns to a Claude session):  originator "Claude Code",  source "vscode", no thread_source
+//     Codex Desktop:                                                           originator "Codex Desktop" or "codex_work_desktop", source "vscode", thread_source "user"
+//   A Codex subagent's session_meta is UNOBSERVED; an unobserved thread_source fails toward silence (see (d)).
+//
+// THE FOUR CHECKS (one block, reasons combined; (a)-(c) are the original three):
 //   (a) a delegation ARRIVED IN THIS TURN (an earlier turn's, or an Owner-initiated turn with none, never counts), it is
 //       not a notice, and this turn sent nothing to its thread. A notice owes no reply: an <input> that, trimmed, opens
 //       with `STOP:` or `STATUS:` (ping-pong breaker, D-108/D-109); `CONSULT:`, `RULING NEEDED:` and directives still owe
@@ -49,7 +56,18 @@
 //       UNOBSERVED: how a scheduled heartbeat arrives; if one arrives as a plain user message it reads as an Owner message and
 //       (c) stays silent for it.
 //
-// OFF SWITCH: WORKFLOW_KIT_STOP_NOTICE_SENSOR="false" (explicit string compare).
+//   (c) (v2.46.0, D-267) now applies ONLY to a final with NO divider: a final WITH one (the Owner's own, once a contract loads; else any name) is
+//       governed by rule 10, whose no-repeat clause says an unchanged ask is not re-listed. A numbered ask (`1. **DECISION NEEDED:** …`,
+//       `2) **ACTION NEEDED:** …`, `**1) DECISION NEEDED:**`) counts as a label line. When (d) blocks in the same stop, (c)'s reason is dropped;
+//       (a) and (b) still combine with (d). (b) is unchanged: an async ask made this turn is a NEW ask.
+//   (d) (v2.46.0, rule 10) the final message of an OWNER-FACING session has no `INFORMATION FOR <Owner>` divider. It runs only when: its own off
+//       switch is unset; the transcript's first session_meta was found (the 64 MB tail read can drop it: silence); `source` is "vscode" or "cli"
+//       (never exec, mcp or unknown); `originator` is neither "codex_exec" (a headless seat: `-o` keeps the LAST message, so a block would replace the verdict) nor
+//       "Claude Code" (the plugin's last message returns to a Claude session, never to the Owner); `thread_source` is absent or "user" (a spawned
+//       thread is unobserved and fails toward silence). The predicate and the Owner's name come from the sibling guard-owner-comms.mjs, loaded
+//       dynamically: a missing sibling skips (d) only. No Owner contract in `cwd` (dormant) also skips it.
+//
+// OFF SWITCHES: WORKFLOW_KIT_STOP_NOTICE_SENSOR="false" (all of this file) and WORKFLOW_KIT_OWNER_DIVIDER="false" (check (d) only); explicit string compares.
 
 import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -60,12 +78,42 @@ const MAX_BYTES = 64 * 1024 * 1024;   // a real day-long PM rollout is ~15 MB; a
 
 // A rule-8 label opens a (possibly bulleted) line. AUTHORIZATION NEEDED carries no colon in its rule-8 form. KIT GAP-ACTION NEEDED
 // (v2.41.0) is the Owner's label for a defect in the installed kit; it is an Owner action until forwarded, so it counts like the others.
-const LABEL_LINE = /^[ \t]*(?:[-*+][ \t]+)?\*\*[ \t]*(?:AUTHORIZATION NEEDED|DECISION NEEDED|KIT GAP-ACTION NEEDED|ACTION NEEDED|QUESTION)\b/m;
+// v2.46.0: a numbered ask also opens one: an ordered marker before the bold (`1. **…`, `2) **…`) or a number inside it (`**1) …`).
+const LABEL_LINE = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?\*\*[ \t]*(?:\d+[.)]?[ \t]*)?(?:AUTHORIZATION NEEDED|DECISION NEEDED|KIT GAP-ACTION NEEDED|ACTION NEEDED|QUESTION)\b/m;
 
 export const hasLabel = (text) => typeof text === "string" && LABEL_LINE.test(text);
 // The final must END with a label that CARRIES TEXT (v2.42.0): a bare label line ("**ACTION NEEDED:**" and nothing after it in the
 // last paragraph) names no action and does not count. The text is whatever follows the label token, up to the next label line or the end
 // of the last paragraph, and it must hold a letter or digit.
+// A divider, name-agnostic here: the one-line form (asterisks, `INFORMATION FOR <anything>`, asterisks) or the legacy two-line form (an
+// asterisks-only line, 3 or more, then as the next non-blank line `INFORMATION FOR <anything>`; accepted in v2.46.0 only).
+const ASTERISK_LINE = /^[ \t]*\*{3,}[ \t]*$/;
+const INFO_HEAD = /^(?:#{1,6}[ \t]+)?(?:[*_]{1,3}[ \t]*)?INFORMATION[ \t]+FOR[ \t]+\S/i;   // every pattern here is linear: no stacked whitespace runs, no lazy tails
+const ONE_LINE_MID = /^INFORMATION[ \t]+FOR[ \t]+\S/i;
+// The index of the LAST divider line, name-agnostic (used only when no Owner contract loads), or -1.
+function agnosticLastDivider(lines) {
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.length > 8 && t[0] === "*" && t[t.length - 1] === "*") {
+      let x = 0, y = t.length;
+      while (x < y && t[x] === "*") x++;
+      while (y > x && t[y - 1] === "*") y--;
+      if (ONE_LINE_MID.test(t.slice(x, y).trim())) { at = i; continue; }
+    }
+    if (!ASTERISK_LINE.test(lines[i])) continue;
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    if (j < lines.length && INFO_HEAD.test(lines[j].trim())) { at = j; i = j; }
+  }
+  return at;
+}
+// Does the final hold a divider? With a contract (ownerName and the sibling's lastDividerIndex) it must be the OWNER's, so
+// `***** INFORMATION FOR JOSH now *****` or `*Information for context*` is no divider; without one, any name.
+function hasDividerLine(text, ownerName, lastIdx) {
+  if (typeof ownerName === "string" && typeof lastIdx === "function") { try { return lastIdx(text, ownerName) >= 0; } catch { /* fall through */ } }
+  return agnosticLastDivider(text.split(/\r?\n/)) >= 0;
+}
 export function endsWithLabel(text) {
   if (typeof text !== "string") return false;
   const paragraphs = text.trim().split(/\n[ \t]*\n/);
@@ -100,17 +148,21 @@ const isOwnerMessage = (text) => {
 
 // EXPORTED for the test. Reads the transcript text into the few facts the triggers need, in file order.
 export function scan(text) {
-  const out = { turnStart: -1, turnId: null, delegations: [], sends: [], asks: [], owners: [], finals: [] };
+  const out = { turnStart: -1, turnId: null, meta: null, delegations: [], sends: [], asks: [], owners: [], finals: [] };
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
     // Cheap pre-filters keep a 15 MB rollout fast: token and reasoning lines are never parsed.
     if (!(line.includes('"task_started"') || line.includes('"function_call_output"') || line.includes('"McpToolCall"') ||
-          line.includes('"request_user_input_async"') || line.includes('"role":"user"') || line.includes('"final_answer"'))) continue;
+          line.includes('"request_user_input_async"') || line.includes('"role":"user"') || line.includes('"final_answer"') || line.includes('"session_meta"'))) continue;
     let o; try { o = JSON.parse(line); } catch { continue; }
     const p = o && o.payload;
     if (!p || typeof p !== "object") continue;
+    if (o.type === "session_meta") {   // the FIRST one is the session's own; a later mention never replaces it
+      if (!out.meta) out.meta = { originator: p.originator, source: p.source, thread_source: p.thread_source };
+      continue;
+    }
     if (o.type === "event_msg") {
       if (p.type === "task_started") { out.turnStart = i; out.turnId = typeof p.turn_id === "string" ? p.turn_id : null; }
       else if (p.type === "item_completed" && p.item && p.item.type === "McpToolCall" && p.item.server === "codex_app" &&
@@ -135,7 +187,9 @@ export function scan(text) {
 }
 
 // EXPORTED for the test. Returns the list of reasons the stop owes a notice (empty ⇒ allow).
-export function evaluate(sc, finalText) {
+// (c) applies ONLY to a final with NO divider: a final WITH one is governed by rule 10 (D-267: an unchanged ask is not repeated).
+export const C_REASON = "an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label";
+export function evaluate(sc, finalText, ownerName, lastIdx) {
   const reasons = [];
   const ts = sc.turnStart;
   const inTurn = sc.delegations.filter((d) => d.i > ts && !d.notice);
@@ -148,24 +202,62 @@ export function evaluate(sc, finalText) {
     reasons.push("this turn asked the Owner through request_user_input_async (an acknowledgement is not an answer) and your final message carries no rule-8 label");
   }
   const earlierAsk = [...sc.finals].reverse().find((f) => f.i < ts && hasLabel(f.text));
-  if (earlierAsk && !sc.owners.some((o) => o > earlierAsk.i) && !endsWithLabel(finalText)) {
-    reasons.push("an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label");
+  if (earlierAsk && !sc.owners.some((o) => o > earlierAsk.i) && !hasDividerLine(finalText, ownerName, lastIdx) && !endsWithLabel(finalText)) {
+    reasons.push(C_REASON);
   }
   return { reasons, thread: last ? last.tid : null };
 }
 
-export function blockReason({ reasons, thread }) {
+export function blockReason({ reasons, thread }, extra = []) {
   const to = thread ? `thread ${thread}` : "your delegating Architect thread";
   return [
     "STOP NOTICE OWED (workflow-kit sensor; it fires once). Before you end this turn:",
     ...reasons.map((r) => `- ${r}.`),
     `- Send ${to} one message: \`STOP: <reason>; next action: <action>; actor: <who must act>\`, unless the work is fully closed and you say so.`,
     "- Put any Owner ask in your FINAL message under a bold rule-8 label (**DECISION NEEDED:**, **ACTION NEEDED:**, **QUESTION:**, **KIT GAP-ACTION NEEDED:** or **AUTHORIZATION NEEDED**) and END the message with it, never only in an async question tool.",
+    ...extra,
     "Then end the turn.",
   ].join("\n");
 }
 
-function main(raw) {
+// The sibling modules, loaded ONCE per Stop. Dynamic, so a missing file skips only what needs it ((d), and the Owner-specific (c) divider).
+// `stale` is a sibling that loaded but lacks a function this file calls (a v2.45.0 guard-owner-comms.mjs has no hasOwnerDivider).
+async function loadOwner(ev) {
+  const out = { g: null, contract: null, stale: false };
+  try {
+    const g = await import(new URL("./guard-owner-comms.mjs", import.meta.url).href);
+    const t = await import(new URL("./payload-targets.mjs", import.meta.url).href);
+    if (typeof g.hasOwnerDivider !== "function" || typeof g.dividerReason !== "function" || typeof g.ownerContract !== "function") { out.stale = true; return out; }
+    // The Owner contract lives at the PROJECT root: `--project-dir` (the registration passes it) → CLAUDE_PROJECT_DIR → ev.cwd → process.cwd(),
+    // never the session cwd alone, which is a subdirectory in a monorepo.
+    out.contract = g.ownerContract(t.resolveProjectRoot(ev));
+    out.g = g;
+  } catch { /* a missing or broken sibling: skip */ }
+  return out;
+}
+// Check (d). Returns the divider block text, or null (owed nothing / cannot tell). Never throws: every doubt is silence.
+function dividerOwed(ev, sc, o) {
+  if (process.env.WORKFLOW_KIT_OWNER_DIVIDER === "false") return null;
+  const m = sc.meta;
+  if (!m) return null;                                   // no session_meta (a tail read dropped it, or an odd rollout): cannot tell
+  // A DECLARED NARROWING toward silence: only `vscode` (observed in Codex Desktop) and `cli` (the TUI, Owner-facing by construction) are checked.
+  // `exec` is a headless seat (`-o` keeps the LAST message, so a block would replace the verdict); `mcp` and any other or missing source are
+  // unobserved, and their returned message could be replaced the same way.
+  if (m.source !== "vscode" && m.source !== "cli") return null;
+  if (m.originator === "codex_exec") return null;        // the headless seat, spelled by originator
+  if (m.originator === "Claude Code") return null;       // Claude's codex plugin: the last message returns to a Claude session, never to the Owner
+  if (m.thread_source !== undefined && m.thread_source !== "user") return null;   // a spawned thread: unobserved, fails toward silence
+  if (o.stale) {
+    try { process.stderr.on("error", () => {}); process.stderr.write("sensor-stop-notice WARN: the sibling guard-owner-comms.mjs is stale (no hasOwnerDivider/dividerReason/ownerContract); the Owner divider check is SKIPPED. Byte-copy the v2.46.0 hooks.\n"); } catch { /* best effort */ }
+    return null;
+  }
+  try {
+    if (!o.g || !o.contract) return null;                // missing sibling or dormant (no completed Owner contract)
+    return o.g.hasOwnerDivider(ev.last_assistant_message, o.contract.ownerName) ? null : o.g.dividerReason(o.contract.ownerName);
+  } catch { return null; }
+}
+
+async function main(raw) {
   if (process.env.WORKFLOW_KIT_STOP_NOTICE_SENSOR === "false") return ALLOW();
   let ev;
   try { ev = JSON.parse(raw); } catch { return ALLOW(); }
@@ -181,9 +273,14 @@ function main(raw) {
   const sc = scan(text);
   if (sc.turnStart < 0) return ALLOW();
   if (typeof ev.turn_id === "string" && sc.turnId && ev.turn_id !== sc.turnId) return ALLOW();   // the transcript is not at this turn: say nothing
-  const verdict = evaluate(sc, finalText);
-  if (!verdict.reasons.length) return ALLOW();
-  process.stdout.write(JSON.stringify({ decision: "block", reason: blockReason(verdict) }));
+  const o = await loadOwner(ev);   // once, before evaluate: (c) uses the Owner-specific divider when a contract loads
+  const verdict = evaluate(sc, finalText, o.contract ? o.contract.ownerName : undefined, o.g ? o.g.lastDividerIndex : undefined);
+  const divider = dividerOwed(ev, sc, o);
+  // When (d) blocks too, drop (c): the divider section governs the ask under rule 8's no-repeat clause. (a) and (b) still combine with (d).
+  if (divider) verdict.reasons = verdict.reasons.filter((r) => r !== C_REASON);
+  if (!verdict.reasons.length && !divider) return ALLOW();
+  // Only (d): its text alone, with no "send thread X a STOP notice" lines. (a)-(c) as well: today's lines unchanged plus the divider instruction.
+  process.stdout.write(JSON.stringify({ decision: "block", reason: verdict.reasons.length ? blockReason(verdict, divider ? [`- ${divider}`] : []) : divider }));
   process.exit(0);
 }
 
@@ -198,6 +295,6 @@ const isMain = (() => {
 if (isMain) {
   let raw = "";
   process.stdin.on("data", (c) => { raw += c; });
-  process.stdin.on("end", () => { try { main(raw); } catch { ALLOW(); } });
+  process.stdin.on("end", () => { main(raw).catch(ALLOW); });
   process.stdin.on("error", ALLOW);
 }

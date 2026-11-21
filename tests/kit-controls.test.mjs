@@ -189,7 +189,8 @@ test("rules 8 and 9 ship in the GENERATED Owner contract and in the INSTALLED /h
       /\*\*Every rule below binds every message Alex reads — an ordinary chat reply exactly as much as a formal report, a status update or a hand-off\.\*\*/,
       "the contract states that it binds chat replies, and states it BEFORE rule 1");
 
-    assert.doesNotMatch(doc, /^10\. /m, "the rules stop at 9 — a duplicate would renumber silently");
+    assert.doesNotMatch(doc, /^11\. /m, "the rules stop at 10 (v2.46.0 added the divider) — a duplicate would renumber silently");
+    assert.equal((doc.match(/^10\. \*\*End every stop with the divider\.\*\*/gm) || []).length, 1, "rule 10 is the divider, exactly once");
     // The labels alone are not the rule. Pin both the nonauthorization bullet shape and the
     // authorization block order so neither can disappear while the labels remain.
     assert.match(rule8[0], /bold, standalone bulleted line led by/,

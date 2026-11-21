@@ -1,4 +1,4 @@
-# workflow-kit — v2.45.0
+# workflow-kit — v2.46.0
 
 ## How to start a build
 
@@ -11,6 +11,21 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.46.0 — every stop ends with the Owner divider, checked by the two Stop sensors
+
+The Owner reads only what is below the divider in an agent's last message, so a final message without one is now nudged once.
+
+- **New rule 10 in `core/OWNER_COMMS.md`.** Every stop (done, blocked, waiting, asking) ends with the one-line divider `*******INFORMATION FOR <OWNER>********` (7 asterisks, the name in capitals, 8 asterisks), then four headings: Status, What happened, What you need to know (everything that still matters, repeated in full, never "as I said above") and What I need from you (asks numbered across the section, each on its own bold rule-8 label, options lettered; or **Nothing needed from you.**). Rule 1 still leads with the answer, and rule 8's labeled asks now sit numbered in that section.
+- **Claude lane.** `hooks/guard-owner-comms.mjs` blocks once when a main-session final message has no divider (exported `hasOwnerDivider` and `dividerReason`). It checks presence only, reads the payload's `last_assistant_message`, and runs only on `hook_event_name:"Stop"` with no `agent_id` and an explicit `stop_hook_active:false`. It never keys on `agent_type`: a session started with `--agent` sends it without an `agent_id`.
+- **Codex lane.** `hooks/sensor-stop-notice.mjs` gains the same check as its fourth, loading the predicate and the Owner's name from the sibling file (a missing sibling skips only that check). It runs only for the `vscode` (Codex Desktop) and `cli` (the TUI) sources, never for headless `codex exec` seats, `mcp` or an unknown source, Claude's codex plugin, a rollout with no `session_meta` or a non-`user` `thread_source`. It finds the Owner contract at the project root (`--project-dir`, then `CLAUDE_PROJECT_DIR`, then the payload `cwd`), so a session started in a subdirectory is still checked. Its "ask stays last" trigger (c) now accepts numbered asks and applies only to a final with no divider (the Owner's own, once a contract loads).
+- **Measured.** Claude Code 2.1.312's `Stop` payload carries `last_assistant_message` and, for a main session, no `agent_id`; the first rollout line of 129 Codex sessions is a `session_meta` whose `originator`, `source` and `thread_source` separate seats from the Owner's sessions (receipt in the sensor's header).
+- **No repeats (D-267).** Rule 8's "every later final response ends with that exact action" clause is replaced: when nothing changed for the Owner since your last message, the section is the divider and one line, **No change since my last message.**; an open ask is re-listed only when something changed or it is new. `skills/orchestrate/SKILL.md` line "and is re-listed only when something changed (rule 8)" follows. In the Codex sensor trigger (c) now applies only to a final with no divider (a final with one is governed by rule 10), its region logic is removed, and when (d) blocks in the same stop (c)'s reason is dropped; (a) and (b) still combine with (d). The doctrine and tests that pinned the old clause moved with it.
+- **The one-line form is canonical.** The sensor also still accepts the earlier two-line form (an asterisks-only line, then `INFORMATION FOR <OWNER>`) in v2.46.0 only, so sessions already using it are not bounced; it will be dropped in a later release. Star counts are ignored but stars are required on both sides, and the name must be the Owner's.
+- **No new hook, no registration change.** `templates/settings.json` and the `.codex/hooks.json` entry are byte-identical, so no adopter re-trusts. `WORKFLOW_KIT_OWNER_DIVIDER="false"` turns the divider check off in both lanes.
+- **Residuals.** In a headless `claude -p` run in an adopter the follow-up becomes the printed result; a stop while background agents run is a stop and gets one nudge; the Codex subagent `session_meta` shape is unobserved.
+
+**Adopters.** Byte-copy `hooks/guard-owner-comms.mjs` and `hooks/sensor-stop-notice.mjs` into BOTH `.claude/hooks/` and `.codex/hooks/` (byte-identical). Byte-copy `skills/orchestrate/SKILL.md`. Hand-edit rule 10, the rule-8 no-repeat clause and sentences, and the header note into your own `core/OWNER_COMMS.md` (a per-repo `[G]` file). No settings or `hooks.json` change and no re-trust expected; confirm with `node scripts/check-codex-hooks-armed.mjs`.
 
 ## What's new in v2.45.0 — the Gemini review stops claiming a prior review and drops prior verdicts from its frozen tree
 

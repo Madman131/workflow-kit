@@ -26,6 +26,16 @@
 // same words in the closing message mean the answer is narrating work instead of reporting it.
 //   1. NARRATION in the final message — announcing work rather than stating the result.
 //   2. SIZE MISMATCH — a short question answered at length.
+//   3. THE DIVIDER (v2.46.0, rule 10) — the final message of a MAIN-session turn must end with the one-line divider
+//      `*******INFORMATION FOR <OWNER>********` (the legacy two-line form is still accepted in v2.46.0 only): the Owner reads only what is below it. It reads the
+//      payload's `last_assistant_message`, not the transcript, and runs only when ALL hold:
+//      `hook_event_name` is "Stop" (SubagentStop is its own event), the payload has no `agent_id`, and
+//      `stop_hook_active` is an explicit `false`. It keys NEVER on `agent_type`: a main session started with
+//      `--agent` sends `hook_event_name:"Stop"` WITH `agent_type` and no `agent_id` (observed, Claude Code
+//      2.1.312), and that is the Owner's own session. A payload without a string `last_assistant_message`
+//      skips it. Presence only, never form (a fenced section counts). A headless `claude -p` run in an adopter
+//      gets one nudge; so does a stop while background agents run. Off switch for this check alone:
+//      WORKFLOW_KIT_OWNER_DIVIDER="false". The Codex lane runs the same predicate from `sensor-stop-notice.mjs`.
 //
 // WHY FAIL OPEN, when this kit's write guards fail CLOSED: those fail closed because the cost of a
 // wrong write is unrecoverable. Here the cost of a wrong BLOCK is a wedged session that cannot finish
@@ -286,6 +296,61 @@ function ownerTypedText(s) {
   return s.replace(HARNESS_OPEN_TAIL_RE, " ").trim();
 }
 
+// ---- rule 10: the Owner divider (v2.46.0). EXPORTED, side-effect free: sensor-stop-notice.mjs loads it in the Codex lane. ----
+// TRUE for EITHER form. (a) CANONICAL, one line: one or more asterisks, `INFORMATION FOR <name>`, one or more asterisks, nothing
+// else (star counts are ignored and need not match; stars are REQUIRED on both sides; any case; flexible whitespace in the name and
+// between stars and text). (b) LEGACY two-line form, accepted in v2.46.0 only so sessions already using it are not bounced: an
+// asterisks-only line (3 or more) whose next NON-BLANK line is `INFORMATION FOR <name>` (optional `#` heading marks, `*`/`_` emphasis,
+// one trailing colon, nothing else). Code fences are NOT stripped: Josh's own format shows the section fenced, and this
+// checks presence, not form. A non-string text or an empty name fails OPEN (true).
+const ASTERISK_LINE_RE = /^[ \t]*\*{3,}[ \t]*$/;
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// EVERY pattern below is LINEAR: each whitespace run is tied to a required token, and the stars around a one-line divider are stripped by a
+// loop, not matched lazily (a stacked `[ \t]*` run is polynomial, and a Stop hook that outruns its timeout is killed and loses the whole nudge).
+// The name may also be spelled `ownerName.toUpperCase()` (the form dividerReason teaches), so names like Weiß or ﬁona always pass.
+function nameSource(ownerName) {
+  const spell = (n) => n.trim().split(/\s+/).map(escapeRe).join("[ \\t]+");
+  const a = spell(ownerName), b = spell(ownerName.toUpperCase());
+  return a === b ? a : `(?:${a}|${b})`;
+}
+// The index of the LAST divider line (the one-line divider itself, or the INFORMATION line of the legacy two-line form), or -1.
+// EXPORTED: sensor-stop-notice.mjs uses it for trigger (c) when an Owner contract loads.
+export function lastDividerIndex(text, ownerName) {
+  if (typeof text !== "string" || typeof ownerName !== "string" || !ownerName.trim()) return -1;
+  const name = nameSource(ownerName);
+  const mid = new RegExp(String.raw`^INFORMATION[ \t]+FOR[ \t]+${name}$`, "i");
+  const info = new RegExp(String.raw`^(?:#{1,6}[ \t]+)?(?:[*_]{1,3}[ \t]*)?INFORMATION[ \t]+FOR[ \t]+${name}(?:[ \t]*[*_]{1,3})?(?:[ \t]*:)?(?:[ \t]*[*_]{1,3})?$`, "i");
+  const lines = text.split(/\r?\n/);
+  let last = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.length > 8 && t[0] === "*" && t[t.length - 1] === "*") {          // one-line form: stars on BOTH sides, counts ignored
+      let a = 0, b = t.length;
+      while (a < b && t[a] === "*") a++;
+      while (b > a && t[b - 1] === "*") b--;
+      if (mid.test(t.slice(a, b).trim())) { last = i; continue; }
+    }
+    if (!ASTERISK_LINE_RE.test(lines[i])) continue;                          // legacy two-line form
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    if (j < lines.length && info.test(lines[j].trim())) { last = j; i = j; }
+  }
+  return last;
+}
+export function hasOwnerDivider(text, ownerName) {
+  if (typeof text !== "string" || typeof ownerName !== "string" || !ownerName.trim()) return true;
+  return lastDividerIndex(text, ownerName) >= 0;
+}
+export function dividerReason(ownerName) {
+  const who = String(ownerName);
+  return `OWNER DIVIDER MISSING (core/OWNER_COMMS.md rule 10). ${who} reads ONLY what is below the divider in the LAST message of a turn, and your final message has none. ` +
+    `A Stop hook cannot retract it, so send ONE follow-up that stands on its own and ENDS with the one-line divider *******INFORMATION FOR ${who.toUpperCase()}******** ` +
+    `(7 asterisks, the text in capitals, 8 asterisks), then four headings: Status (one line); What happened (outcomes); ` +
+    "What you need to know (everything that still matters, repeated in full, never \"as I said above\"); What I need from you " +
+    "(every ask numbered 1, 2, 3 across the section, each on its own bold rule-8 label such as **DECISION NEEDED:**, options lettered a), b), c) inside one ask, " +
+    "a command in its own code block; or write **Nothing needed from you.**), or, if nothing has changed since your last message, the divider and the single line **No change since my last message.** This fires once per turn.";
+}
+
 function main(raw) {
   if (process.env.WORKFLOW_KIT_COMMS_GUARD === "false") return ALLOW();
   let input;
@@ -368,6 +433,15 @@ function main(raw) {
     }
   }
 
+  // Rule 10, after every early return above. Only a real MAIN-session Stop payload qualifies (see the header).
+  const dividerOwed = process.env.WORKFLOW_KIT_OWNER_DIVIDER !== "false" &&
+    input.hook_event_name === "Stop" && !("agent_id" in input) && input.stop_hook_active === false &&
+    typeof input.last_assistant_message === "string" && !hasOwnerDivider(input.last_assistant_message, contract.ownerName);
+
+  if (!reasons.length && dividerOwed) {
+    process.stdout.write(JSON.stringify({ decision: "block", reason: dividerReason(contract.ownerName) }));
+    process.exit(0);
+  }
   if (!reasons.length) return ALLOW();
   process.stdout.write(JSON.stringify({
     decision: "block",
@@ -377,7 +451,9 @@ function main(raw) {
       "Send a corrected FOLLOW-UP that stands on its own:\n" +
       reasons.map((r) => `  • ${r}`).join("\n") +
       "\nKeep every fact, caveat, risk and ask — a blocker is never 'detail'. Cut the narration and the " +
-      "unrequested inventory; offer it in one clause. Do not apologise or explain the correction; just send the better answer.",
+      "unrequested inventory; offer it in one clause. Do not apologise or explain the correction; just send the better answer." +
+      (dividerOwed ? `\n${dividerReason(contract.ownerName)} Make it ONE follow-up that fixes both and ends with that section.`
+        : `\nYour follow-up becomes the last message and is not re-checked, so it must END with the rule 10 divider section: *******INFORMATION FOR ${contract.ownerName.toUpperCase()}********, then Status, What happened, What you need to know, What I need from you.`),
   }));
   process.exit(0);
 }
