@@ -334,7 +334,7 @@ test("R1 item 1: this session's own worktree STAYS (--me-cwd), and a side sessio
     let r = spawnSync(process.execPath, [SCRIPT, "--json", "--me", ME, "--owner-yes", "--done", a.sessionId], { input: JSON.stringify([a]), encoding: "utf8" }).stdout;
     let p = JSON.parse(r);
     assert.equal(p.mode, "report-only"); assert.deepEqual(p.archive, []);
-    assert.match(p.notes.join(" "), /archive mode needs --me-cwd <this session's absolute cwd> and --list-limit <the limit passed to list_sessions>: REPORT-ONLY/);
+    assert.match(p.notes.join(" "), /archive mode needs --me-cwd <this session's absolute cwd, an existing directory> and --list-limit <the limit passed to list_sessions>: REPORT-ONLY/);
     p = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId, "--me-cwd", wt]).out;
     assert.equal(kept(p, a).why, "it shares a worktree with this session, which stays");
     // a finished side session taken along that lives in a worktree where another session STAYS keeps the parent
@@ -420,11 +420,12 @@ test("R1 item 5: only MERGED or CLOSED (or no PR at all) passes", () => {
   assert.deepEqual(archived(p), pass.map((s) => s.sessionId));
 });
 
-test("R1 item 6: the Architect guard matches the word, so 'architecture docs' is archivable", () => {
-  const docs = sess({ title: "Architecture docs pass", name: "architecture-docs" }), arch = sess({ title: "Kit Architect", name: "kit-lead" }), dashed = sess({ name: "kit-architect-main" });
-  const p = plan([docs, arch, dashed], [docs, arch, dashed].map((s) => s.sessionId));
-  assert.deepEqual(archived(p), [docs.sessionId]);
-  assert.match(kept(p, arch).why, /Architect thread/); assert.match(kept(p, dashed).why, /Architect thread/);
+test("R1 item 6 (+R2 cheap LOWs): the Architect guard is architect(?!ur): look-alikes are kept, 'architecture' is archivable", () => {
+  const kept4 = [sess({ name: "architect_kit" }), sess({ title: "Architect2" }), sess({ name: "KitArchitect" }), sess({ title: "The architects" }), sess({ title: "Kit Architect", name: "kit-lead" }), sess({ name: "kit-architect-main" })];
+  const ok = [sess({ title: "Architecture docs pass", name: "architecture-docs" }), sess({ title: "Architectural review" })];
+  const all = [...kept4, ...ok], p = plan(all, all.map((s) => s.sessionId));
+  assert.deepEqual(archived(p), ok.map((s) => s.sessionId));
+  for (const s of kept4) assert.match(kept(p, s).why, /Architect thread/);
 });
 
 test("R1 item 7: a session with Remote Control active is flagged, in JSON and in text", () => {
@@ -455,4 +456,33 @@ test("R1 item 9: a plan larger than a pipe buffer arrives whole (no exit() right
   const r = spawnSync(process.execPath, [SCRIPT, "--json", "--me", ME], { input: JSON.stringify(xs), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   assert.ok(r.stdout.length > 150 * 1024, `output is ${r.stdout.length} bytes`);
   assert.equal(JSON.parse(r.stdout).keep.length, 400);
+});
+
+test("R2 LOWs: --me-cwd must be an existing directory; Remote Control strings and side sessions count", () => {
+  const a = sess();
+  for (const bad of ["/nonexistent-r2/dir", NONGIT + "/no-such", "relative/dir", ME_CWD + "/../" + path.basename(ME_CWD) + "/file-not-dir"]) {
+    const r = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId, "--me-cwd", bad]).out;
+    assert.equal(r.mode, "report-only", bad); assert.deepEqual(r.archive, []);
+    assert.match(r.notes.join(" "), /--me-cwd <this session's absolute cwd, an existing directory>/);
+  }
+  const file = path.join(ME_CWD, "a-file"); writeFileSync(file, "x");
+  assert.equal(run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId, "--me-cwd", file]).out.mode, "report-only");
+  const strs = [sess({ remoteControlActive: "true" }), sess({ remoteControlActive: "TRUE" }), sess({ remoteControlActive: "false" })];
+  const p = plan(strs, strs.map((s) => s.sessionId));
+  assert.deepEqual(p.archive.map((e) => e.needsRemoteControlOff === true), [true, true, false]);
+  const parent = sess(), child = sess({ startedBy: parent.sessionId, remoteControlActive: true });
+  const q = plan([parent, child], [parent.sessionId, child.sessionId]);
+  assert.equal(q.archive[0].needsRemoteControlOff, true); assert.equal(q.archive[0].note, "turn Remote Control off first");
+  assert.equal(q.archive[0].alsoTaken[0].needsRemoteControlOff, true);
+});
+
+test("M4: a list without the `linked` filter shows non-family sessions (no startedBy) that share a worktree, and they keep the session", () => {
+  const L = lab();
+  try {
+    const wt = L.linked("r2m4");
+    const a = sess({ cwd: wt }), stranger = { sessionId: "local_stranger-0000-4000-8000-000000000000", title: "Hand-started chat", cwd: wt, isArchived: false, isRunning: true };
+    const p = plan([a, stranger], [a.sessionId]);
+    assert.equal(kept(p, stranger).why, "not started by you");
+    assert.match(kept(p, a).why, /shares a worktree with Hand-started chat .*, which stays/);
+  } finally { L.cleanup(); }
 });

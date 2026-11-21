@@ -12,7 +12,7 @@
 //                 { "sessionId":"local_…", "title":"…", "name":"pm-x", "cwd":"…", "isArchived":false, "isRunning":true,
 //                   "prNumber":48, "prState":"MERGED", "lastActivityAt":"…", "startedBy":"local_…", "remoteControlActive":false }
 //                 (or { "sessions": [ … ] }). The host EXCLUDES the CURRENT session from its own list.
-//   --me-cwd      this session's cwd (`get_session self`). Its worktree STAYS: no session sharing it is archived.
+//   --me-cwd      this session's cwd (`get_session self`; an existing directory). Its worktree STAYS: no session sharing it is archived.
 //   --list-limit  the `limit` the agent passed to `list_sessions`. A list holding that many entries or more may be cut
 //                 short (the host's default limit is 20), which would hide side sessions and sharers: nothing is planned.
 //   --done        the agent asserts: that session's work is landed, verified, and has nothing left to do. Repeatable.
@@ -23,7 +23,7 @@
 //
 // THE GUARDS — each one KEEPS the session, and the first that fires names the reason:
 //   1 startedBy is not --me · 2 it is this session · 3 already archived (skipped) · 4 an Architect thread (title or name
-//   matches /\barchitect\b/i) · 5 not asserted --done · 6 --waiting · 7 it has a PR that is not MERGED or CLOSED (OPEN, DRAFT,
+//   matches /architect(?!ur)/i: architect_kit, Architect2, KitArchitect and architects, not architecture) · 5 not asserted --done · 6 --waiting · 7 it has a PR that is not MERGED or CLOSED (OPEN, DRAFT,
 //   a PR number with no state, anything else) · 8 its cwd cannot be VERIFIED clean and pushed (no cwd, a relative or ~ cwd, a
 //   cwd and parent both missing, a git dir or bare repo, uncommitted or untracked changes, commits on no remote, an index
 //   flag that hides changes, a submodule with either, or git failing) · 9 THE CASCADE.
@@ -36,15 +36,15 @@
 // taken along with it, is also the worktree of a session that STAYS (this session, or any kept one). Removing a session
 // can strand its parent, so the plan repeats to a fixpoint. An archived entry lists `alsoTaken`, so the receipt can name them.
 // RESIDUALS (kept, documented): ignored files are not checked; a branch squash-merged and then pruned reads as unpushed
-// and stays kept (it fails safe); an Architect-look-alike name (`architects`) is not matched; the host's cleanup of a primary
+// and stays kept (it fails safe); the host's cleanup of a primary
 // checkout is not modelled (only LINKED worktrees are compared).
-// An entry whose `remoteControlActive` is true carries `needsRemoteControlOff: true` and the note to turn Remote Control
+// An entry whose `remoteControlActive` is true (or the string "true"), or whose taken-along side session has it, carries `needsRemoteControlOff: true` and the note to turn Remote Control
 // off first (the host refuses to archive a session with a Remote Control client attached).
 //
 // Exit 0 always for a plan; 2 for malformed input or arguments (an error message, nothing planned).
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,6 +60,8 @@ const cleanEnv = () => {
   return e;
 };
 const git = (cwd, args) => spawnSync("git", ["--no-optional-locks", "-C", cwd, ...args], { encoding: "utf8", env: cleanEnv(), maxBuffer: 256 * 1024 * 1024 });
+const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
+const truthy = (v) => v === true || (typeof v === "string" && /^(true|1|yes|on)$/i.test(v.trim()));
 const rp = (p) => { try { return realpathSync(p); } catch { return p; } };
 
 const cannot = (why) => ({ pass: false, why: `cannot verify: ${why}` });
@@ -121,13 +123,13 @@ export function plan(list, { me, meCwd = null, listLimit = null, done = [], wait
   for (const id of waiting) if (!byId.has(id)) notes.push(`--waiting ${id}: not in the session list (ignored)`);
   const label = (s) => s.name || s.title || s.sessionId;
   const entry = (s, why, extra = {}) => ({ sessionId: s.sessionId, name: s.name ?? null, title: s.title ?? null, why, ...extra });
-  const isArchitect = (s) => /\barchitect\b/i.test(`${s.title ?? ""}\n${s.name ?? ""}`);
+  const isArchitect = (s) => /architect(?!ur)/i.test(`${s.title ?? ""}\n${s.name ?? ""}`);
 
   // Archive mode needs the three facts that make it safe; without them the same plan is a report.
   let act = ownerYes;
   if (ownerYes) {
     const missing = [];
-    if (typeof meCwd !== "string" || !path.isAbsolute(meCwd)) missing.push("--me-cwd <this session's absolute cwd>");
+    if (typeof meCwd !== "string" || !path.isAbsolute(meCwd) || !isDir(meCwd)) missing.push("--me-cwd <this session's absolute cwd, an existing directory>");
     if (!Number.isInteger(listLimit) || listLimit < 1) missing.push("--list-limit <the limit passed to list_sessions>");
     if (missing.length) { act = false; notes.push(`archive mode needs ${missing.join(" and ")}: REPORT-ONLY`); }
   } else notes.push("no --owner-yes: nothing is to be archived; this lists what would be");
@@ -208,8 +210,9 @@ export function plan(list, { me, meCwd = null, listLimit = null, done = [], wait
   for (const s of sessions) {
     if (cand.has(s.sessionId)) {
       const g = facts(s);
-      const e = entry(s, `started by you; asserted landed and verified; ${g.note ? g.note : "its worktree is clean and pushed"}`, { alsoTaken: (alsoTaken.get(s.sessionId) ?? []).map((d) => ({ sessionId: d.sessionId, name: d.name ?? null })) });
-      if (s.remoteControlActive === true) { e.needsRemoteControlOff = true; e.note = "turn Remote Control off first"; }
+      const taken = (alsoTaken.get(s.sessionId) ?? []).map((d) => ({ sessionId: d.sessionId, name: d.name ?? null, ...(truthy(d.remoteControlActive) ? { needsRemoteControlOff: true } : {}) }));
+      const e = entry(s, `started by you; asserted landed and verified; ${g.note ? g.note : "its worktree is clean and pushed"}`, { alsoTaken: taken });
+      if (truthy(s.remoteControlActive) || taken.some((t) => t.needsRemoteControlOff)) { e.needsRemoteControlOff = true; e.note = "turn Remote Control off first"; }
       archive.push(e);
     } else keep.push(entry(s, kept.get(s.sessionId)));
   }
@@ -224,7 +227,7 @@ function render(p) {
     L.push(`${title} (${xs.length})`);
     for (const x of xs) {
       L.push(`  ${x.name ?? x.title ?? x.sessionId}  [${x.sessionId}]  ${x.why}${x.needsRemoteControlOff ? `  (${x.note})` : ""}`);
-      for (const a of x.alsoTaken ?? []) L.push(`      also taken by the host: ${a.name ?? "?"} [${a.sessionId}]`);
+      for (const a of x.alsoTaken ?? []) L.push(`      also taken by the host: ${a.name ?? "?"} [${a.sessionId}]${a.needsRemoteControlOff ? "  (turn Remote Control off first)" : ""}`);
     }
   };
   rows(p.mode === "archive" ? "ARCHIVE" : "WOULD ARCHIVE", p.mode === "archive" ? p.archive : p.reportOnly);
