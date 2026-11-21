@@ -24,15 +24,17 @@ test("orchestrate SKILL carries no-silent-stop and the Owner action staying last
   assert.match(s, /Architect's one-shot idle subscription/);
   assert.match(s, /an Owner pause gets one notice, then quiet/);
   assert.match(s, /never only an async question tool/);
-  assert.match(s, /while outstanding ENDS every final response \(rule 8\)/);
+  assert.match(s, /and is re-listed only when something changed \(rule 8\)/);   // D-267: the repeat clause "while outstanding ENDS every final response" is removed by Owner ruling
   assert.match(s, /ask routing: `core\/REVIEW\.md` § External gate/);
 });
 
 test("OWNER_COMMS rule 8 keeps the outstanding Owner action last and bounds the licence", () => {
   const t = flat("templates/OWNER_COMMS.md.tmpl");
-  assert.match(t, /While Owner input is outstanding, EVERY later final response ENDS with that exact action under its bold label/);
-  assert.match(t, /never a vague "the blocker remains" pointer and never buried above status text/);
-  assert.match(t, /stays silent where the host allows it; otherwise it re-ends with the same action/);
+  // D-267 (Owner ruling): the "EVERY later final response ENDS with that exact action" repeat clause is replaced by a no-repeat clause.
+  assert.match(t, /If nothing has changed for \{\{OWNER_NAME\}\} since your last message \(no new outcome, no new ask, no answer from them\), do not repeat the section: write the divider and ONE line, \*\*No change since my last message\.\*\*/);
+  assert.match(t, /Re-list an open ask only when something changed or the ask is new, and then as a numbered labeled ask in the section, never a vague "the blocker remains" pointer/);
+  assert.match(t, /stays silent where the host allows it; otherwise it is that one line/);
+  assert.doesNotMatch(t, /EVERY later final response ENDS/, "the old repeat clause is gone");
   assert.match(t, /no licence to re-issue tool prompts, retry a rejected transmission or widen an authorization/i);
 });
 

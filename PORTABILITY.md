@@ -573,8 +573,9 @@ gets one nudge. In Codex the same check runs inside `sensor-stop-notice.mjs` (th
 predicate are loaded from the sibling `guard-owner-comms.mjs`; without it only this check is skipped), and
 it runs only for `source` `vscode` or `cli` and skips headless `codex exec` seats (`-o` keeps the
 last message), `mcp` and unknown sources, Claude's codex plugin (`originator:"Claude Code"`), a rollout with no
-`session_meta`, and a non-`"user"` `thread_source`; it reads the contract at `--project-dir`; an
-`AUTHORIZATION NEEDED` label's text runs to the next label or the end of the divider section; a Codex subagent's shape is unobserved. Off switch for this check in both
+`session_meta`, and a non-`"user"` `thread_source`; it reads the contract at `--project-dir`; its "ask stays last"
+trigger (c) applies only to a final with NO divider (the Owner's own once a contract loads; a final with one is governed by rule 10,
+whose no-repeat clause re-lists an open ask only when something changed), and when (d) blocks in the same stop (c)'s reason is dropped; a Codex subagent's shape is unobserved. Off switch for this check in both
 lanes: `WORKFLOW_KIT_OWNER_DIVIDER="false"`.
 
 What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method

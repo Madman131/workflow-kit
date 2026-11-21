@@ -237,21 +237,17 @@ test("Codex lane: the sensor copied ALONE (no sibling) still runs (a)-(c), skips
   allows(codexStop(dir, turn(), "Done. Built and tested.", { script }), "(d) alone is skipped without the sibling");
 }));
 
-// ---------- trigger (c) with numbered asks ----------
-test("(c): numbered asks count as labels; a divider moves the region to after the last divider", () => {
+// ---------- trigger (c): numbered asks are labels (the region logic of the first v2.46.0 build is gone, D-267) ----------
+test("(c): numbered asks count as labels, and endsWithLabel keeps its base last-paragraph semantics", () => {
   assert.equal(hasLabel("1. **DECISION NEEDED:** go?"), true);
   assert.equal(hasLabel("2) **ACTION NEEDED:** run it"), true);
   assert.equal(hasLabel("**1) DECISION NEEDED:** go?"), true);
   assert.equal(hasLabel("   - **QUESTION:** why?"), true, "the bulleted form is unchanged");
   assert.equal(hasLabel("1. DECISION NEEDED: go?"), false, "unbolded stays unlabeled");
-  assert.equal(endsWithLabel(`${ONE}\n\n1. **DECISION NEEDED:** go?\n   a) yes\n\nReply like 1) a`), true, "the one-line divider moves the region too");
-  assert.equal(endsWithLabel(`**ACTION NEEDED:** old\n\n${ONE}\n\n**Nothing needed from you.**`), false, "one-line: the region after the divider holds no label");
-  assert.equal(endsWithLabel(`${STARS}\nINFORMATION FOR JOSH\n\n1. **DECISION NEEDED:** go?\n   a) yes\n\nReply like 1) a`), true, "a closing reply line after a numbered ask passes");
-  assert.equal(endsWithLabel(`${STARS}\nINFORMATION FOR JOSH\n\n**ACTION NEEDED:**\n\nrun this`), false, "a bare label does not count");
-  assert.equal(endsWithLabel(`**ACTION NEEDED:** old ask\n\n${STARS}\nINFORMATION FOR MARY\n\n**Nothing needed from you.**`), false, "the region after the LAST divider holds no label");
-  assert.equal(endsWithLabel(`${STARS}\nINFORMATION FOR X\n\n1. **ACTION NEEDED:** a\n\n${STARS}\nINFORMATION FOR X\n\n**Nothing needed from you.**`), false, "only the last divider counts");
-  assert.equal(endsWithLabel("intro\n\n**ACTION NEEDED:** run it\n"), true, "no divider: the last-paragraph rule stands");
-  assert.equal(endsWithLabel("**ACTION NEEDED:** run it\n\nclosing line"), false, "no divider: a closing paragraph still defeats it");
+  assert.equal(endsWithLabel("intro\n\n1. **DECISION NEEDED:** go?\n   a) yes"), true, "a numbered ask in the last paragraph passes");
+  assert.equal(endsWithLabel("intro\n\n**ACTION NEEDED:** run it\n"), true);
+  assert.equal(endsWithLabel("**ACTION NEEDED:** run it\n\nclosing line"), false, "a closing paragraph still defeats it");
+  assert.equal(endsWithLabel("**ACTION NEEDED:**\n\nrun this"), false, "a bare label does not count");
 });
 
 // ---------- the collision: ONE correct divider message passes everything ----------
@@ -313,10 +309,10 @@ test("collision, Codex lane: the correct message passes (b) and (c) and (d); wit
   const reason = blocks(codexStop(dir, [...turn(), F.asyncAsk(T1, CALL), F.asyncAck(T1, CALL)], WITHOUT));
   assert.match(reason, /OWNER DIVIDER MISSING/);
   assert.doesNotMatch(reason, /STOP NOTICE OWED/, "(b) is satisfied by the labels, so only the divider is owed");
-  // And a bare 'Reply like' ending after an earlier ask WITHOUT a divider is today's (c) behaviour, unchanged.
+  // The same message minus its divider after an earlier ask: (d) only now; (c)'s reason is dropped (D-267).
   const c = blocks(codexStop(dir, early, WITHOUT));
-  assert.match(c, /STOP NOTICE OWED/);
   assert.match(c, /OWNER DIVIDER MISSING/);
+  assert.doesNotMatch(c, /earlier labeled Owner ask/);
 }));
 
 test("kill-pass: a second stop after either block never blocks again (no wedge), in both lanes", () => withDir((dir) => {
@@ -362,23 +358,45 @@ test("R1-c: both hooks, spawned, finish on the hostile inputs and still exit 0",
   assert.ok(Date.now() - t0 < 20000);
 }));
 
-test("R1-d: with a contract, (c) needs the OWNER's divider; without one it stays name-agnostic", () => withDir((dir) => {
-  const near = "Done.\n\n***** INFORMATION FOR JOSH now *****\n\n1. **DECISION NEEDED:** go?\n   a) yes\n\nReply like 1) a";
-  const r = blocks(codexStop(dir, LATE, near));
-  assert.match(r, /an earlier labeled Owner ask is still unanswered/, "a near-miss line is not a divider, so the last-paragraph rule blocks");
-  withDir((bare) => allows(codexStop(bare, LATE, near, { contract: false }), "no contract: name-agnostic, the region after the line holds a numbered ask"));
-  const ctx = codexStop(dir, LATE, "**ACTION NEEDED:** run X\n*Information for context*");
-  assert.doesNotMatch(blocks(ctx), /earlier labeled Owner ask/, "the italic line is no divider: the label-with-text paragraph passes (c) as with no divider");
-  assert.equal(endsWithLabel("**ACTION NEEDED:** run X\n*Information for context*"), false, "agnostic: that line IS read as a divider with an empty region");
-  allows(codexStop(dir, LATE, CORRECT), "the real divider still passes (c) with a contract");
+const NOCHANGE = `${ONE}\n\n**No change since my last message.**`;
+
+test("D-5(i): a divider whose section is only the no-change line passes every hook, with (c) armed and (b) not owed", () => withDir((dir) => {
+  allows(claudeRun(dir, { final: NOCHANGE }), "guard, long prompt");
+  allows(claudeRun(dir, { final: NOCHANGE, user: "ready to ship?" }), "guard, short prompt");
+  allows(codexStop(dir, LATE, NOCHANGE), "sensor: earlier labeled ask, no Owner message since, divider present");
+  assert.equal(hasOwnerDivider(NOCHANGE, "Josh"), true);
+  assert.ok(dividerReason("Josh").includes("**No change since my last message.**"), "D-4: the block text offers the single line");
 }));
 
-test("R1-e: an AUTHORIZATION NEEDED label's text runs past a blank line to the next label or the end of the section", () => withDir((dir) => {
-  for (const ask of ["1. **AUTHORIZATION NEEDED**\n\nPush v2.46.0 to origin?", "**AUTHORIZATION NEEDED**\n\nPush v2.46.0 to origin?"]) {
-    allows(codexStop(dir, LATE, `Done.\n\n${ONE}\n\n**Status:** Waiting on you\n\n${ask}`), JSON.stringify(ask));
-  }
-  assert.equal(endsWithLabel(`${ONE}\n\n**ACTION NEEDED:**\n\nrun this`), false, "the other labels keep the blank-line rule");
-  assert.equal(endsWithLabel(`${ONE}\n\n**AUTHORIZATION NEEDED**\n\n`), false, "a bare AUTHORIZATION label with nothing after it still fails");
+test("D-5(ii): a no-divider final with an earlier unanswered ask in an Owner-facing session gives ONE block, the divider only", () => withDir((dir) => {
+  const r = blocks(codexStop(dir, LATE, "Still waiting on the build."));
+  assert.match(r, /OWNER DIVIDER MISSING/);
+  assert.doesNotMatch(r, /STOP NOTICE OWED|earlier labeled Owner ask/, "(c) is dropped when (d) blocks");
+  // (a) still combines with (d)
+  const both = blocks(codexStop(dir, [...LATE, F.delegation(T1, F.ARCHITECT)], "Still waiting."));
+  assert.match(both, /received a message from thread/);
+  assert.match(both, /OWNER DIVIDER MISSING/);
+  assert.doesNotMatch(both, /earlier labeled Owner ask/);
+}));
+
+test("D-5(iii): the same with a dormant contract: (c) blocks exactly as base", () => withDir((dir) => {
+  const r = blocks(codexStop(dir, LATE, "Still waiting on the build.", { contract: false }));
+  assert.match(r, /an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label/);
+  assert.doesNotMatch(r, /OWNER DIVIDER MISSING/);
+}));
+
+test("D-5(iv): a malformed divider counts as no divider with a contract; a divider satisfies (c) and a name-agnostic one does without a contract", () => withDir((dir) => {
+  const near = "Done.\n\n***** INFORMATION FOR JOSH now *****\n\n1. **DECISION NEEDED:** go?";
+  assert.equal(hasOwnerDivider(near, "Josh"), false);
+  const r = blocks(codexStop(dir, LATE, near));
+  assert.match(r, /OWNER DIVIDER MISSING/);
+  assert.doesNotMatch(r, /earlier labeled Owner ask/);
+  withDir((bare) => allows(codexStop(bare, LATE, "Done.\n\n*Information for context*\n\nnothing", { contract: false }), "no contract: any-name divider satisfies (c)"));
+  // a final WITH the divider satisfies (c) even when its section holds a bare label: the divider rules govern its content
+  allows(codexStop(dir, LATE, `${ONE}\n\n**ACTION NEEDED:**\n\nrun this`));
+  // with a contract the italic line is no divider, so (c) falls to the last-paragraph rule and (d) blocks
+  const ctx = blocks(codexStop(dir, LATE, "**ACTION NEEDED:** run X\n*Information for context*"));
+  assert.match(ctx, /OWNER DIVIDER MISSING/);
 }));
 
 test("R1-f: the rule-1 block text always tells the follow-up to END with the divider section", () => withDir((dir) => {

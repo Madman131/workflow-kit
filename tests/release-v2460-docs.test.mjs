@@ -26,7 +26,10 @@ test("OWNER_COMMS reconciles rules 1 and 8 and the header note with rule 10", ()
   assert.match(t, /The answer still leads; rule 10 adds the divider section after it\.\*\*/);
   assert.match(t, /brevity below the divider never drops a fact/);
   assert.match(t, /Under rule 10 the labeled asks and the AUTHORIZATION NEEDED form sit in the divider section, numbered 1, 2, 3/);
-  assert.match(t, /ENDS with that exact action under its bold label \(a `\*\*KIT GAP-ACTION NEEDED:\*\*` line is one until the Owner has forwarded it\), never a vague "the blocker remains" pointer and never buried above status text\. Under rule 10 that action is a numbered ask in the section below the divider\./);
+  assert.match(t, /do not repeat the section: write the divider and ONE line, \*\*No change since my last message\.\*\*/);
+  assert.doesNotMatch(t, /EVERY later final response ENDS/, "D-267: the repeat clause is gone");
+  assert.match(t, /a turn where nothing changed has that single line as its section \(rule 8\)/);
+  assert.match(t, /This is no licence to re-issue tool prompts, retry a rejected transmission or widen an authorization/);
   assert.match(t.replace(/ > /g, " "), /the divider half of rule 10 is checked by that same hook in Claude and by `\.codex\/hooks\/sensor-stop-notice\.mjs` in Codex/);
 });
 
@@ -40,6 +43,16 @@ test("PORTABILITY says what the divider check does, where it is dormant and that
   assert.match(p, /`WORKFLOW_KIT_OWNER_DIVIDER="false"`/);
 });
 
+test("the README note states the no-repeat change, the (c) narrowing and the SKILL line (D-267)", () => {
+  const r = flat("README.md");
+  const n = r.slice(r.indexOf("## What's new in v2.46.0"), r.indexOf("## What's new in v2.45.0"));
+  assert.match(n, /\*\*No repeats \(D-267\)\.\*\*/);
+  assert.match(n, /\*\*No change since my last message\.\*\*/);
+  assert.match(n, /trigger \(c\) now applies only to a final with no divider/);
+  assert.match(n, /`skills\/orchestrate\/SKILL\.md` line "and is re-listed only when something changed \(rule 8\)"/);
+  assert.match(flat("PORTABILITY.md"), /trigger \(c\) applies only to a final with NO divider/);
+});
+
 test("the README note says what changed, the measured facts, the residuals and what adopters copy", () => {
   const r = flat("README.md");
   const n = r.slice(r.indexOf("## What's new in v2.46.0"), r.indexOf("## What's new in v2.45.0"));
@@ -51,9 +64,8 @@ test("the README note says what changed, the measured facts, the residuals and w
   assert.match(n, /In a headless `claude -p` run in an adopter the follow-up becomes the printed result; a stop while background agents run is a stop and gets one nudge; the Codex subagent `session_meta` shape is unobserved/);
   assert.match(n, /runs only for the `vscode` \(Codex Desktop\) and `cli` \(the TUI\) sources/);
   assert.match(n, /`--project-dir`, then `CLAUDE_PROJECT_DIR`, then the payload `cwd`/);
-  assert.match(n, /`AUTHORIZATION NEEDED` label's text runs past its blank line/);
   assert.match(n, /Byte-copy `hooks\/guard-owner-comms\.mjs` and `hooks\/sensor-stop-notice\.mjs` into BOTH `\.claude\/hooks\/` and `\.codex\/hooks\/`/);
-  assert.match(n, /Hand-edit rule 10, the rule-8 sentences and the header note into your own `core\/OWNER_COMMS\.md`/);
+  assert.match(n, /Hand-edit rule 10, the rule-8 no-repeat clause and sentences, and the header note into your own `core\/OWNER_COMMS\.md`/);
   assert.match(n, /No settings or `hooks\.json` change and no re-trust expected; confirm with `node scripts\/check-codex-hooks-armed\.mjs`/);
 });
 

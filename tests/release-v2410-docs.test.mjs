@@ -12,7 +12,7 @@ const flat = (rel) => read(rel).replace(/\s+/g, " ");
 test("OWNER_COMMS rule 8 names KIT GAP-ACTION NEEDED, its content, and counts it as an outstanding Owner action", () => {
   const t = flat("templates/OWNER_COMMS.md.tmpl");
   assert.match(t, /A defect or missing route in the installed workflow kit goes under `\*\*KIT GAP-ACTION NEEDED:\*\*`: name the gap, its evidence path and the project action it holds, if any\. The Owner forwards it to the Workflow-Kit Architect for remediation\./);
-  assert.match(t, /\(a `\*\*KIT GAP-ACTION NEEDED:\*\*` line is one until the Owner has forwarded it\)/);
+  // D-267 removed the repeat clause that carried "(a KIT GAP-ACTION NEEDED line is one until the Owner has forwarded it)"; the label text above stays.
   assert.match(t, /`\*\*ACTION NEEDED:\*\*` \(a step only the Owner can perform, such as running a handed-over command\)/, "the v2.39.2 label text is unchanged");
 });
 

@@ -44,7 +44,7 @@ An unsure consult never times out, waiting rather than becoming authority. **Nev
 consult or a wait:** send it, name what you do meanwhile, and do it. **No silent stop:** a PM ending a turn with work owed first sends its Architect `STOP:` reason, next
 action, who must act (Claude backstop: Architect's one-shot idle subscription); an Owner pause gets one
 notice, then quiet. An Owner ask goes in the final message under its rule-8 label, never only an async
-question tool, and while outstanding ENDS every final response (rule 8). Review availability, ask routing:
+question tool, and is re-listed only when something changed (rule 8). Review availability, ask routing:
 `core/REVIEW.md` § External gate; authority unchanged.
 
 ## Standing duties

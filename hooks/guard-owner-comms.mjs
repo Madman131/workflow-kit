@@ -348,7 +348,7 @@ export function dividerReason(ownerName) {
     `(7 asterisks, the text in capitals, 8 asterisks), then four headings: Status (one line); What happened (outcomes); ` +
     "What you need to know (everything that still matters, repeated in full, never \"as I said above\"); What I need from you " +
     "(every ask numbered 1, 2, 3 across the section, each on its own bold rule-8 label such as **DECISION NEEDED:**, options lettered a), b), c) inside one ask, " +
-    "a command in its own code block; or write **Nothing needed from you.**). This fires once per turn.";
+    "a command in its own code block; or write **Nothing needed from you.**), or, if nothing has changed since your last message, the divider and the single line **No change since my last message.** This fires once per turn.";
 }
 
 function main(raw) {

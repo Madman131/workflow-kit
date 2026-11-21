@@ -56,13 +56,13 @@
 //       UNOBSERVED: how a scheduled heartbeat arrives; if one arrives as a plain user message it reads as an Owner message and
 //       (c) stays silent for it.
 //
-//   (c) (v2.46.0) is reconciled with rule 10: a numbered ask counts as a label line (`1. **DECISION NEEDED:** …`, `2) **ACTION NEEDED:** …`,
-//       `**1) DECISION NEEDED:**`), and when the final holds a divider (the one-line `*****INFORMATION FOR <any name>*****` or the legacy asterisks-only line then `INFORMATION FOR <any name>`; name-agnostic
-//       because (c) works without an Owner contract) the region that must hold a label with text is everything AFTER THE LAST divider, so a
-//       numbered ask list followed by a closing "Reply like 1) a" line passes. With no divider the last-paragraph rule is unchanged.
+//   (c) (v2.46.0, D-267) now applies ONLY to a final with NO divider: a final WITH one (the Owner's own, once a contract loads; else any name) is
+//       governed by rule 10, whose no-repeat clause says an unchanged ask is not re-listed. A numbered ask (`1. **DECISION NEEDED:** …`,
+//       `2) **ACTION NEEDED:** …`, `**1) DECISION NEEDED:**`) counts as a label line. When (d) blocks in the same stop, (c)'s reason is dropped;
+//       (a) and (b) still combine with (d). (b) is unchanged: an async ask made this turn is a NEW ask.
 //   (d) (v2.46.0, rule 10) the final message of an OWNER-FACING session has no `INFORMATION FOR <Owner>` divider. It runs only when: its own off
-//       switch is unset; the transcript's first session_meta was found (the 64 MB tail read can drop it: silence); `source` is a string and not
-//       "exec"; `originator` is neither "codex_exec" (a headless seat: `-o` keeps the LAST message, so a block would replace the verdict) nor
+//       switch is unset; the transcript's first session_meta was found (the 64 MB tail read can drop it: silence); `source` is "vscode" or "cli"
+//       (never exec, mcp or unknown); `originator` is neither "codex_exec" (a headless seat: `-o` keeps the LAST message, so a block would replace the verdict) nor
 //       "Claude Code" (the plugin's last message returns to a Claude session, never to the Owner); `thread_source` is absent or "user" (a spawned
 //       thread is unobserved and fails toward silence). The predicate and the Owner's name come from the sibling guard-owner-comms.mjs, loaded
 //       dynamically: a missing sibling skips (d) only. No Owner contract in `cwd` (dormant) also skips it.
@@ -108,32 +108,14 @@ function agnosticLastDivider(lines) {
   }
   return at;
 }
-// The text after the LAST divider line, or null when there is none. With a contract (ownerName and the sibling's lastDividerIndex) the
-// divider must be the OWNER's, so `***** INFORMATION FOR JOSH now *****` or `*Information for context*` is no divider; without one, any name.
-function afterLastDivider(text, ownerName, lastIdx) {
-  const lines = text.split(/\r?\n/);
-  let at = -1;
-  if (typeof ownerName === "string" && typeof lastIdx === "function") { try { at = lastIdx(text, ownerName); } catch { at = agnosticLastDivider(lines); } }
-  else at = agnosticLastDivider(lines);
-  return at < 0 ? null : lines.slice(at + 1).join("\n");
+// Does the final hold a divider? With a contract (ownerName and the sibling's lastDividerIndex) it must be the OWNER's, so
+// `***** INFORMATION FOR JOSH now *****` or `*Information for context*` is no divider; without one, any name.
+function hasDividerLine(text, ownerName, lastIdx) {
+  if (typeof ownerName === "string" && typeof lastIdx === "function") { try { return lastIdx(text, ownerName) >= 0; } catch { /* fall through */ } }
+  return agnosticLastDivider(text.split(/\r?\n/)) >= 0;
 }
-export function endsWithLabel(text, ownerName, lastIdx) {
+export function endsWithLabel(text) {
   if (typeof text !== "string") return false;
-  const region = afterLastDivider(text, ownerName, lastIdx);
-  if (region !== null) {
-    // Rule 10: each label's text runs to the next label line or the next blank line; a bare label does not count. AUTHORIZATION NEEDED is the
-    // exception: its rule-8 form is the label, a blank line, then the question, so its text runs to the next label line or the end of the region.
-    const marks = [...region.matchAll(new RegExp(LABEL_LINE.source, "gm"))];
-    return marks.some((m, k) => {
-      const from = m.index + m[0].length;
-      let to = k + 1 < marks.length ? marks[k + 1].index : region.length;
-      if (!/AUTHORIZATION NEEDED/.test(m[0])) {
-        const blank = region.slice(from, to).search(/\n[ \t\r]*\n/);
-        if (blank !== -1) to = from + blank;
-      }
-      return /[\p{L}\p{N}]/u.test(region.slice(from, to));
-    });
-  }
   const paragraphs = text.trim().split(/\n[ \t]*\n/);
   const last = paragraphs[paragraphs.length - 1];
   const starts = [...last.matchAll(new RegExp(LABEL_LINE.source, "gm"))];
@@ -205,6 +187,8 @@ export function scan(text) {
 }
 
 // EXPORTED for the test. Returns the list of reasons the stop owes a notice (empty ⇒ allow).
+// (c) applies ONLY to a final with NO divider: a final WITH one is governed by rule 10 (D-267: an unchanged ask is not repeated).
+export const C_REASON = "an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label";
 export function evaluate(sc, finalText, ownerName, lastIdx) {
   const reasons = [];
   const ts = sc.turnStart;
@@ -218,8 +202,8 @@ export function evaluate(sc, finalText, ownerName, lastIdx) {
     reasons.push("this turn asked the Owner through request_user_input_async (an acknowledgement is not an answer) and your final message carries no rule-8 label");
   }
   const earlierAsk = [...sc.finals].reverse().find((f) => f.i < ts && hasLabel(f.text));
-  if (earlierAsk && !sc.owners.some((o) => o > earlierAsk.i) && !endsWithLabel(finalText, ownerName, lastIdx)) {
-    reasons.push("an earlier labeled Owner ask is still unanswered and your final message does not END with a rule-8 label");
+  if (earlierAsk && !sc.owners.some((o) => o > earlierAsk.i) && !hasDividerLine(finalText, ownerName, lastIdx) && !endsWithLabel(finalText)) {
+    reasons.push(C_REASON);
   }
   return { reasons, thread: last ? last.tid : null };
 }
@@ -292,6 +276,8 @@ async function main(raw) {
   const o = await loadOwner(ev);   // once, before evaluate: (c) uses the Owner-specific divider when a contract loads
   const verdict = evaluate(sc, finalText, o.contract ? o.contract.ownerName : undefined, o.g ? o.g.lastDividerIndex : undefined);
   const divider = dividerOwed(ev, sc, o);
+  // When (d) blocks too, drop (c): the divider section governs the ask under rule 8's no-repeat clause. (a) and (b) still combine with (d).
+  if (divider) verdict.reasons = verdict.reasons.filter((r) => r !== C_REASON);
   if (!verdict.reasons.length && !divider) return ALLOW();
   // Only (d): its text alone, with no "send thread X a STOP notice" lines. (a)-(c) as well: today's lines unchanged plus the divider instruction.
   process.stdout.write(JSON.stringify({ decision: "block", reason: verdict.reasons.length ? blockReason(verdict, divider ? [`- ${divider}`] : []) : divider }));
