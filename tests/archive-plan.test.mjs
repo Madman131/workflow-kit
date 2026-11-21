@@ -14,11 +14,14 @@ const ME = "local_11111111-aaaa-4aaa-8aaa-111111111111";
 const G = ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main"];
 const git = (cwd, ...a) => execFileSync("git", [...G, "-C", cwd, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
+const NONGIT = mkdtempSync(path.join(os.tmpdir(), "archive-plan-nongit-"));   // a real, non-git directory: the default cwd of a fixture session
+const ME_CWD = mkdtempSync(path.join(os.tmpdir(), "archive-plan-me-"));      // this session's own (non-worktree) cwd
+const arch = (args) => (args.includes("--owner-yes") ? [...args, ...(args.includes("--me-cwd") ? [] : ["--me-cwd", ME_CWD]), ...(args.includes("--list-limit") ? [] : ["--list-limit", "200"])] : args);
 let seq = 0;
 const sess = (over = {}) => {
   const n = ++seq;
   return {
-    sessionId: `local_${String(n).padStart(8, "0")}-0000-4000-8000-000000000000`, title: `Session ${n}`, cwd: "/nonexistent/worktree-removed",
+    sessionId: `local_${String(n).padStart(8, "0")}-0000-4000-8000-000000000000`, title: `Session ${n}`, cwd: NONGIT,
     isArchived: false, isRunning: true, prNumber: 48, prState: "MERGED", lastActivityAt: "2026-11-21T18:56:45.580Z",
     name: `pm-thing-${n}`, startedBy: ME, ...over,
   };
@@ -43,6 +46,7 @@ function lab() {
 }
 
 const run = (list, args = [], { env, stdin = true } = {}) => {
+  args = arch(args);
   const r = stdin
     ? spawnSync(process.execPath, [SCRIPT, "--json", ...args], { input: JSON.stringify(list), encoding: "utf8", env: env ?? process.env })
     : spawnSync(process.execPath, [SCRIPT, "--json", ...args], { encoding: "utf8", env: env ?? process.env });
@@ -76,7 +80,7 @@ test("no --owner-yes: report-only, the would-archive set is listed and `archive`
   assert.deepEqual(r.out.reportOnly.map((x) => x.sessionId), [a.sessionId]);
   assert.match(r.out.notes.join(" "), /no --owner-yes/);
   const text = spawnSync(process.execPath, [SCRIPT, "--me", ME, "--done", a.sessionId], { input: JSON.stringify([a]), encoding: "utf8" }).stdout;
-  assert.match(text, /mode REPORT-ONLY \(no standing Owner yes passed; archive nothing\)/);
+  assert.match(text, /mode REPORT-ONLY \(nothing to be archived from this plan\)/);
   assert.match(text, /WOULD ARCHIVE \(1\)/);
 });
 
@@ -132,10 +136,10 @@ test("guard 8: uncommitted changes, unpushed commits, a repo with no remote, and
     const dirty = sess({ cwd: L.repos.dirty }), unpushed = sess({ cwd: L.repos.unpushed }), noRemote = sess({ cwd: L.repos.noRemote }), viaLink = sess({ cwd: link }), clean = sess({ cwd: L.repos.clean });
     const all = [dirty, unpushed, noRemote, viaLink, clean];
     const p = plan(all, all.map((s) => s.sessionId));
-    assert.equal(kept(p, dirty).why, "unpushed work: uncommitted changes in its worktree");
+    assert.equal(kept(p, dirty).why, "unpushed work: uncommitted or untracked changes in its worktree");
     assert.equal(kept(p, unpushed).why, "unpushed work: 1 commit(s) on no remote");
     assert.match(kept(p, noRemote).why, /unpushed work: 1 commit\(s\) on no remote/);
-    assert.equal(kept(p, viaLink).why, "unpushed work: uncommitted changes in its worktree");
+    assert.equal(kept(p, viaLink).why, "unpushed work: uncommitted or untracked changes in its worktree");
     assert.deepEqual(archived(p), [clean.sessionId]);
   } finally { L.cleanup(); }
 });
@@ -151,12 +155,12 @@ test("guard 8: a git that cannot run means `cannot verify` and KEEPS", () => {
   } finally { L.cleanup(); }
 });
 
-test("guard 8: a missing cwd passes with a note, a non-git cwd passes", () => {
+test("guard 8: an absolute cwd that is gone but whose parent exists passes with a note; an existing non-git cwd passes", () => {
   const L = lab();
   try {
-    const gone = sess({ cwd: path.join(L.root, "removed") }), plain = sess({ cwd: L.repos.nonGit }), noCwd = sess({ cwd: undefined });
-    const p = plan([gone, plain, noCwd], [gone, plain, noCwd].map((s) => s.sessionId));
-    assert.deepEqual(archived(p), [gone, plain, noCwd].map((s) => s.sessionId));
+    const gone = sess({ cwd: path.join(L.root, "removed") }), plain = sess({ cwd: L.repos.nonGit });
+    const p = plan([gone, plain], [gone, plain].map((s) => s.sessionId));
+    assert.deepEqual(archived(p), [gone, plain].map((s) => s.sessionId));
     assert.match(p.archive[0].why, /worktree already removed/);
     assert.match(p.archive[1].why, /not a git work tree/);
   } finally { L.cleanup(); }
@@ -200,12 +204,12 @@ test("guard 9: a linked worktree shared with a session that stays keeps both; a 
     const wt = L.linked("wt1");
     const a = sess({ cwd: wt }), b = sess({ cwd: wt });
     let p = plan([a, b], [a.sessionId]);                                 // b is not done
-    assert.match(kept(p, a).why, /^it shares its worktree with a session that stays: /);
+    assert.match(kept(p, a).why, /^it shares a worktree with .*, which stays$/);
     assert.equal(kept(p, b).why, "not asserted landed and verified");
     p = plan([a, b], [a.sessionId, b.sessionId]);                        // both finished: both go
     assert.deepEqual(archived(p), [a.sessionId, b.sessionId]);
-    p = plan([a, sess({ cwd: wt, sessionId: ME })], [a.sessionId]);      // this session works in it
-    assert.equal(kept(p, a).why, "it shares its worktree with this session");
+    p = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId, "--me-cwd", wt]).out;   // this session works in it
+    assert.equal(kept(p, a).why, "it shares a worktree with this session, which stays");
     const x = sess({ cwd: L.repos.clean }), y = sess({ cwd: L.repos.clean });
     p = plan([x, y], [x.sessionId]);                                     // a primary checkout is never cleaned up
     assert.deepEqual(archived(p), [x.sessionId]);
@@ -221,7 +225,7 @@ test("guard 9 reaches a fixpoint: a session stranded by a stranded session is ke
       const p = plan(list, [x.sessionId, y.sessionId]);
       assert.deepEqual(archived(p), []);
       assert.match(kept(p, y).why, /side session it would take with it is not finished/);
-      assert.match(kept(p, x).why, /shares its worktree with a session that stays/);
+      assert.match(kept(p, x).why, /shares a worktree with .*, which stays/);
     }
   } finally { L.cleanup(); }
 });
@@ -296,7 +300,7 @@ test("kill-pass: an inherited GIT_DIR cannot make a dirty worktree read clean", 
   try {
     const a = sess({ cwd: L.repos.dirty });
     const r = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId], { env: { ...process.env, GIT_DIR: path.join(L.repos.clean, ".git"), GIT_WORK_TREE: L.repos.clean } });
-    assert.equal(kept(r.out, a).why, "unpushed work: uncommitted changes in its worktree");
+    assert.equal(kept(r.out, a).why, "unpushed work: uncommitted or untracked changes in its worktree");
   } finally { L.cleanup(); }
 });
 
@@ -308,7 +312,7 @@ test("kill-pass: prState is compared case-insensitively, and sessions in two sub
     const wt = L.linked("wt3"); const sub = path.join(wt, "sub"); mkdirSync(sub);
     const a = sess({ cwd: wt }), b = sess({ cwd: sub });
     const p = plan([a, b], [a.sessionId]);                               // b (in a subdirectory) is not done
-    assert.match(kept(p, a).why, /^it shares its worktree with a session that stays: /);
+    assert.match(kept(p, a).why, /^it shares a worktree with .*, which stays$/);
   } finally { L.cleanup(); }
 });
 
@@ -317,4 +321,138 @@ test("kill-pass: a duplicate sessionId is malformed input (exit 2, nothing plann
   const r = spawnSync(process.execPath, [SCRIPT, "--json", "--me", ME, "--owner-yes", "--done", a.sessionId], { input: JSON.stringify([a, { ...a, isArchived: true }]), encoding: "utf8" });
   assert.equal(r.status, 2);
   assert.deepEqual(JSON.parse(r.stdout).archive, []);
+});
+
+// ---------- R1: the host cleans the archived session's worktree, so every guard must see what the cleanup would destroy ----------
+
+test("R1 item 1: this session's own worktree STAYS (--me-cwd), and a side session's worktree counts too (M4)", () => {
+  const L = lab();
+  try {
+    const wt = L.linked("r1wt1");
+    const a = sess({ cwd: wt });
+    // archive mode without --me-cwd or --list-limit is REPORT-ONLY, with the reason
+    let r = spawnSync(process.execPath, [SCRIPT, "--json", "--me", ME, "--owner-yes", "--done", a.sessionId], { input: JSON.stringify([a]), encoding: "utf8" }).stdout;
+    let p = JSON.parse(r);
+    assert.equal(p.mode, "report-only"); assert.deepEqual(p.archive, []);
+    assert.match(p.notes.join(" "), /archive mode needs --me-cwd <this session's absolute cwd> and --list-limit <the limit passed to list_sessions>: REPORT-ONLY/);
+    p = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId, "--me-cwd", wt]).out;
+    assert.equal(kept(p, a).why, "it shares a worktree with this session, which stays");
+    // a finished side session taken along that lives in a worktree where another session STAYS keeps the parent
+    const parent = sess({ cwd: L.repos.clean }), child = sess({ startedBy: parent.sessionId, cwd: L.linked("r1wt2") }), stayer = sess({ cwd: child.cwd, startedBy: "local_other" });
+    p = plan([parent, child, stayer], [parent.sessionId, child.sessionId]);
+    assert.deepEqual(archived(p), []);
+    assert.match(kept(p, parent).why, /^a side session it would take with it \(.*\) shares a worktree with .*, which stays$/);
+    // a kept session anywhere in the list stays: the same worktree, no descendants
+    const k = sess({ cwd: wt, startedBy: "local_other" }), x = sess({ cwd: wt });
+    assert.match(kept(plan([x, k], [x.sessionId]), x).why, /shares a worktree with .*, which stays/);
+  } finally { L.cleanup(); }
+});
+
+test("R1 item 2: untracked files, config injection, index flags and submodules cannot hide work", () => {
+  const L = lab();
+  try {
+    const hidden = (mutate) => { const d = L.linked(`r1h${++seq}`); mutate(d); return d; };
+    const untracked = (d) => writeFileSync(path.join(d, "new.txt"), "x");
+    const cases = [
+      ["untracked file under showUntrackedFiles=no in repo config", hidden((d) => { git(d, "config", "--local", "status.showUntrackedFiles", "no"); untracked(d); }), {}, /uncommitted or untracked/],
+      ["untracked file under GIT_CONFIG_PARAMETERS", hidden(untracked), { GIT_CONFIG_PARAMETERS: "'status.showuntrackedfiles=no'" }, /uncommitted or untracked/],
+      ["untracked file under GIT_CONFIG_COUNT", hidden(untracked), { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "status.showUntrackedFiles", GIT_CONFIG_VALUE_0: "no" }, /uncommitted or untracked/],
+      ["skip-worktree", hidden((d) => { git(d, "update-index", "--skip-worktree", "f.txt"); writeFileSync(path.join(d, "f.txt"), "changed\n"); }), {}, /cannot verify: index flags/],
+      ["assume-unchanged", hidden((d) => { git(d, "update-index", "--assume-unchanged", "f.txt"); writeFileSync(path.join(d, "f.txt"), "changed\n"); }), {}, /cannot verify: index flags/],
+    ];
+    for (const [label, cwd, env, re] of cases) {
+      const a = sess({ cwd });
+      const r = run([a], ["--me", ME, "--owner-yes", "--done", a.sessionId], { env: { ...process.env, ...env } });
+      assert.match(kept(r.out, a).why, re, label);
+    }
+    // a submodule with an unpushed commit, in a super-project that is itself clean and pushed
+    const subRemote = path.join(L.root, "sub-remote.git"); git(L.root, "init", "-q", "--bare", subRemote);
+    const subSeed = path.join(L.root, "sub-seed"); git(L.root, "clone", "-q", subRemote, subSeed);
+    writeFileSync(path.join(subSeed, "s.txt"), "s\n"); git(subSeed, "add", "s.txt"); git(subSeed, "commit", "-q", "-m", "s"); git(subSeed, "push", "-q", "origin", "HEAD:main");
+    const sup = L.linked("r1sup");
+    git(sup, "-c", "protocol.file.allow=always", "submodule", "add", "-q", "-b", "main", subRemote, "sm");
+    git(sup, "commit", "-q", "-m", "add submodule"); git(sup, "push", "-q", "origin", "HEAD:refs/heads/r1sup");
+    const a = sess({ cwd: sup });
+    assert.deepEqual(archived(plan([a], [a.sessionId])), [a.sessionId], "a clean pushed submodule passes");
+    const sm = path.join(sup, "sm"); writeFileSync(path.join(sm, "t.txt"), "t\n"); git(sm, "add", "t.txt"); git(sm, "commit", "-q", "-m", "local sub commit");
+    git(sup, "add", "sm"); git(sup, "commit", "-q", "-m", "bump submodule"); git(sup, "push", "-q", "origin", "HEAD:refs/heads/r1sup");
+    assert.match(kept(plan([a], [a.sessionId]), a).why, /a submodule has uncommitted changes or commits on no remote/);
+  } finally { L.cleanup(); }
+});
+
+test("R1 item 3: each cwd rule", () => {
+  const L = lab();
+  try {
+    const keepCases = [
+      [undefined, /cannot verify: no cwd is recorded/], ["", /cannot verify: no cwd is recorded/], [42, /cannot verify: no cwd is recorded/],
+      ["relative/dir", /cannot verify: its cwd is not an absolute path/], ["~/work", /cannot verify: its cwd is not an absolute path/],
+      ["/nonexistent-r1/deep/dir", /cannot verify: its cwd and the cwd's parent directory are both missing/],
+      [path.join(L.repos.clean, ".git"), /cannot verify: its cwd is a git directory or a bare repository/],
+      [path.join(L.root, "remote.git"), /cannot verify: its cwd is a git directory or a bare repository/],
+    ];
+    for (const [cwd, re] of keepCases) { const a = sess({ cwd }); assert.match(kept(plan([a], [a.sessionId]), a).why, re, String(cwd)); }
+    const gone = sess({ cwd: path.join(L.root, "removed-dir") });
+    assert.match(plan([gone], [gone.sessionId]).archive[0].why, /worktree already removed/);
+  } finally { L.cleanup(); }
+});
+
+test("R1 item 4: a list that may be truncated plans nothing; archive mode needs --list-limit", () => {
+  const xs = [sess(), sess(), sess()];
+  const ids = xs.map((s) => s.sessionId);
+  let p = run(xs, ["--me", ME, "--owner-yes", "--list-limit", "3", ...ids.flatMap((i) => ["--done", i])]).out;
+  assert.deepEqual(p.archive, []);
+  for (const s of xs) assert.equal(kept(p, s).why, "the list may be truncated; re-list with a larger limit");
+  assert.match(p.notes.join(" "), /holds 3 entries, the limit passed was 3/);
+  p = run(xs, ["--me", ME, "--owner-yes", "--list-limit", "4", ...ids.flatMap((i) => ["--done", i])]).out;
+  assert.deepEqual(archived(p), ids);
+  assert.equal(run(xs, ["--me", ME, "--list-limit", "0"]).status, 2);
+  assert.equal(run(xs, ["--me", ME, "--list-limit", "abc"]).status, 2);
+});
+
+test("R1 item 5: only MERGED or CLOSED (or no PR at all) passes", () => {
+  const mk = (over) => sess(over);
+  const cases = [[mk({ prState: "DRAFT" }), /^PR not MERGED or CLOSED \(DRAFT/], [mk({ prState: " OPEN" }), /^PR open/], [mk({ prNumber: 7, prState: null }), /^PR not MERGED or CLOSED \(state unknown, #7\)/],
+    [mk({ prState: "WEIRD", prNumber: null }), /^PR not MERGED or CLOSED \(WEIRD/]];
+  const pass = [mk({ prState: "MERGED" }), mk({ prState: " closed " }), mk({ prState: "merged" }), mk({ prState: "", prNumber: null }), mk({ prState: undefined, prNumber: undefined }), mk({ prState: null, prNumber: "" })];
+  const all = [...cases.map((c) => c[0]), ...pass];
+  const p = plan(all, all.map((s) => s.sessionId));
+  for (const [s, re] of cases) assert.match(kept(p, s).why, re);
+  assert.deepEqual(archived(p), pass.map((s) => s.sessionId));
+});
+
+test("R1 item 6: the Architect guard matches the word, so 'architecture docs' is archivable", () => {
+  const docs = sess({ title: "Architecture docs pass", name: "architecture-docs" }), arch = sess({ title: "Kit Architect", name: "kit-lead" }), dashed = sess({ name: "kit-architect-main" });
+  const p = plan([docs, arch, dashed], [docs, arch, dashed].map((s) => s.sessionId));
+  assert.deepEqual(archived(p), [docs.sessionId]);
+  assert.match(kept(p, arch).why, /Architect thread/); assert.match(kept(p, dashed).why, /Architect thread/);
+});
+
+test("R1 item 7: a session with Remote Control active is flagged, in JSON and in text", () => {
+  const rc = sess({ remoteControlActive: true }), plain = sess({ remoteControlActive: false });
+  const p = plan([rc, plain], [rc.sessionId, plain.sessionId]);
+  assert.equal(p.archive[0].needsRemoteControlOff, true);
+  assert.equal(p.archive[0].note, "turn Remote Control off first");
+  assert.equal(p.archive[1].needsRemoteControlOff, undefined);
+  const text = spawnSync(process.execPath, [SCRIPT, "--me", ME, "--owner-yes", "--me-cwd", ME_CWD, "--list-limit", "200", "--done", rc.sessionId], { input: JSON.stringify([rc]), encoding: "utf8" }).stdout;
+  assert.match(text, /\(turn Remote Control off first\)/);
+});
+
+test("R1 item 8: 100 sessions over 10 worktrees plan in under 10 s (git facts cached per cwd)", () => {
+  const L = lab();
+  try {
+    const wts = Array.from({ length: 10 }, (_, i) => L.linked(`r1perf${i}`));
+    const xs = Array.from({ length: 100 }, (_, i) => sess({ cwd: wts[i % 10] }));
+    const t = Date.now();
+    const p = plan(xs, xs.map((s) => s.sessionId));
+    const ms = Date.now() - t;
+    assert.ok(ms < 10_000, `took ${ms} ms`);
+    assert.equal(p.archive.length, 100);
+  } finally { L.cleanup(); }
+});
+
+test("R1 item 9: a plan larger than a pipe buffer arrives whole (no exit() right after the write)", () => {
+  const xs = Array.from({ length: 400 }, () => sess({ title: "T".repeat(400) }));
+  const r = spawnSync(process.execPath, [SCRIPT, "--json", "--me", ME], { input: JSON.stringify(xs), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  assert.ok(r.stdout.length > 150 * 1024, `output is ${r.stdout.length} bytes`);
+  assert.equal(JSON.parse(r.stdout).keep.length, 400);
 });
