@@ -19,7 +19,7 @@
 - [PM disposition — riders on a DEFER](#pm-disposition--riders-on-a-defer) — self-contradiction escalates · behavioral defers get a labeled test
 - [Routing — which family gates what](#routing--which-family-gates-what) — pick by WHO BUILT
 - [Model · effort matrix](#model--effort-matrix) — change class → model · effort
-- [Codex gate](#codex-gate) — what it does · how to run · rounds & receipts · retired mechanisms · traps
+- [Codex gate](#codex-gate) — what it does · Codex seats and brokers · how to run · rounds & receipts · retired mechanisms · traps
 - [Retired before shipping: commit-time gate-adjudication records](#retired-before-shipping-commit-time-gate-adjudication-records) —
   why a commit hook cannot count verdicts · do not rebuild
 - [Gemini cross-family gate](#gemini-cross-family-gate) — purpose · commands · delivery vs ingestion ·
@@ -371,6 +371,18 @@ Two roles (pick ONE per artifact — never both for the same review):
   authority). Gemini is the *default* budget-free lens; use Codex here when you want a second family cheaply.
 
 Read-only: run it in a sandbox that cannot write code/git. Its output is a review, not a change.
+
+### Codex seats and brokers
+A Codex gate seat runs `scripts/codex-gate.sh` (`codex exec`), **never** the Claude `openai-codex` plugin. The plugin starts one
+`app-server-broker.mjs` per `--cwd`, and its SessionEnd hook tears down only the broker keyed to the SESSION's cwd, so a seat run with
+`--cwd <packet dir>` is never found: its broker and its `codex app-server` child outlive the thread (measured 2026-11-21: 24 orphaned
+broker trees, 3.2 GB, on one host). `codex exec` leaves no resident process.
+- A plugin seat used anyway stops its own broker on return: `node scripts/doctor-orphans.mjs --stop --pid-file <its pid file>`
+  (the broker's `--pid-file` argument, under a `cxc-*` temp directory).
+- Closeout reaps the brokers whose `--cwd` is one of the changeset's packet dirs:
+  `node scripts/doctor-orphans.mjs --reap --cwd <dir>…` (`skills/closeout/ARCHIVE.md` step 4).
+- With no flag the doctor only reports. It signals a process only after proving it is a broker (its pid file holds its pid and its
+  argv names that file, or its `--cwd` equals a named directory exactly), never by name, and never a Claude process.
 
 ### How to run
 Two transports:
