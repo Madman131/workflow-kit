@@ -14,7 +14,7 @@ Word budget: 600 (Owner-ratified 2026-08-04). The PROCEDURE over `core/OPERATE.m
 - The tier's gate ladder is CLOSED — every verdict dispositioned; an open ladder runs first.
 - **Push authorization.** An imperative **finish / wrap up / close this** authorizes safe local
   closeout only; it is not a fresh push, deploy, merge, activation, or prod-write GO. Report the
-  exact remaining remote boundary. "Ready to archive?" is receipt-only: inspect and report.
+  exact remaining remote boundary. "Ready to archive?" inspects and reports; archiving acts only under § 7.
 
 ## 1. Identity ritual — before every commit/push
 **In the checkout you are pushing from**, run `git config --get remote.origin.url` and
@@ -54,3 +54,6 @@ ARCHIVE-READY`**, list every blocker/residual and its location, and avoid comple
 language. Remove task-owned temporary state only after a verified landing or an explicit
 Owner endpoint; cleanup fails closed on uncommitted content. Report the VERDICT, not the
 sweep (`core/OWNER_COMMS.md` rule 1).
+
+## 7. Archive step
+After the receipt, run `.agents/skills/closeout/ARCHIVE.md`: archive the finished sessions you started, their Codex brokers stopped first. `ARCHIVE-READY` is receipt-only until the Owner's standing yes exists.
