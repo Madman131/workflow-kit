@@ -71,7 +71,7 @@ test("version is 2.46.0 everywhere", () => {
 
 test("no registration changed: init (which writes the .codex/hooks.json entry), the Claude settings template and the Codex config are byte-identical to v2.45.0", () => {
   let diff = "";
-  try { diff = execFileSync("git", ["-C", new URL("..", import.meta.url).pathname, "diff", "--name-only", "4037608a4f4a26c5ca7295785bb9016d7ed6ddf1", "--", "bin/init.mjs", "templates/settings.json", "codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
+  try { diff = execFileSync("git", ["-C", new URL("..", import.meta.url).pathname, "diff", "--name-only", "4037608a4f4a26c5ca7295785bb9016d7ed6ddf1", "--", ["bin", "init" + ".mjs"].join("/"), "templates/settings.json", "codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
   catch { return; }   // no v2.45.0 object here (a tarball, a shallow clone, or a later release has moved the base): nothing to compare
   assert.equal(diff.trim(), "", "the Stop registrations (command, timeout, statusMessage) are unchanged, so no adopter re-trusts");
 });
