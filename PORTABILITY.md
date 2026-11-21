@@ -35,10 +35,10 @@ The Codex column is not the Claude column. Read the qualifier in it as part of t
 | `guard-lane-authoring` (declaration before a code write) | **enforced** | **enforced — only once hook trust is granted** | not enforced |
 | `guard-gate-ladder` (surfaces the tier's ladder; sensor) | **enforced** | **enforced — only once hook trust is granted** | not enforced |
 | `.githooks/pre-commit` (declaration, at commit) | **enforced** | **enforced** | **enforced** |
-| `guard-owner-comms` (Stop; comms nudge) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* | not present |
+| `guard-owner-comms` (Stop; comms nudge, and since v2.46.0 the rule-10 divider) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* | not present |
 | `sensor-token-ledger` (Stop; token telemetry to `.claude/metrics/tokens.jsonl`) — **sensor, fails OPEN** | *telemetry only* | *installed, NOT registered* (this kit has not adapted it to the observed Codex Stop payload) | not present |
 | `sensor-context-pressure` (PreToolUse write; names the digest as owed) — **sensor, fails OPEN** | *nudge only* | *installed, NOT registered* (not adapted for Codex; the observed Codex Stop payload does carry `transcript_path`) | not present |
-| `sensor-stop-notice` (Stop; blocks ONCE so a PM stop reaches its Architect and an Owner ask stays last) — **sensor, fails OPEN** | *not registered* | **registered (v2.40.0); only once hook trust is granted** | not present |
+| `sensor-stop-notice` (Stop; blocks ONCE so a PM stop reaches its Architect, an Owner ask stays last and, since v2.46.0, an Owner-facing final carries the rule-10 divider) — **sensor, fails OPEN** | *not registered* | **registered (v2.40.0); only once hook trust is granted** | not present |
 
 The formula for the Codex write guards, in full, because every word of it is load-bearing:
 **installed · fail-closed by design · INERT unless your Codex run carries hook trust.**
@@ -560,6 +560,21 @@ not a third regex pass. An over-firing fail-open sensor teaches people to switch
 it catches nothing at all. **Saying
 "the sensor was extended" without this paragraph would imply the complaint was mechanized. It was
 not** — which is the claim-inflation this document exists to refuse.
+
+**Rule 10, the divider (v2.46.0), is a third check, and it is presence only.** The Owner reads only what
+is below the line of asterisks and `INFORMATION FOR <OWNER>` in a turn's LAST message. In Claude this
+hook blocks once when the final message has no such divider; it never inspects the form, so a fenced or
+wrong section passes, and it proves nothing about what the section says. It is dormant without a completed
+Owner contract and allows on every doubt. It runs only on a main-session `Stop` payload (`hook_event_name`
+`"Stop"`, no `agent_id`, an explicit `stop_hook_active:false`, a string `last_assistant_message`); a
+`--agent` main session sends `agent_type` WITHOUT `agent_id` (observed) and is checked. Known residuals: a
+headless `claude -p` run in an adopter gets one nudge, and a stop while background agents run is a stop and
+gets one nudge. In Codex the same check runs inside `sensor-stop-notice.mjs` (the contract and the
+predicate are loaded from the sibling `guard-owner-comms.mjs`; without it only this check is skipped), and
+it skips headless `codex exec` seats (`source:"exec"`, `originator:"codex_exec"`, because `-o` keeps the
+last message), Claude's codex plugin (`originator:"Claude Code"`), a rollout with no `session_meta`, and a
+non-`"user"` `thread_source`; a Codex subagent's shape is unobserved. Off switch for this check in both
+lanes: `WORKFLOW_KIT_OWNER_DIVIDER="false"`.
 
 What binds the agent is the **prose in `core/OWNER_COMMS.md`**, exactly as with every other method
 doc. The sensor catches one habitual miss, late, sometimes. Off switch:
