@@ -13,21 +13,23 @@ const flat = (p) => read(p).replace(/\s+/g, " ");
 const words = (p) => read(p).split(/\s+/).filter(Boolean).length;
 const note = () => { const r = flat("README.md"); return r.slice(r.indexOf("## What's new in v2.47.0"), r.indexOf("## What's new in v2.46.0")); };
 
-test("(a) ARCHIVE.md carries the six steps, the standing-yes gate, the report-only cases and the receipt", () => {
+test("(a) ARCHIVE.md carries the six steps, the standing-yes gate, the report-only cases, the limits, the owner reap and the Remote Control remedy", () => {
   const a = flat("skills/closeout/ARCHIVE.md");
-  assert.match(read("skills/closeout/ARCHIVE.md"), /^Word budget: 450, whole file\./m);
-  assert.ok(words("skills/closeout/ARCHIVE.md") <= 450);
+  assert.match(read("skills/closeout/ARCHIVE.md"), /^Word budget: 650, whole file\./m);
+  assert.ok(words("skills/closeout/ARCHIVE.md") <= 650);
   assert.match(a, /A PM archives each session it started once that session's work is landed, verified and has nothing left to do/);
   assert.match(a, /An Architect archives each PM it started once that PM's chip is closed out: landed, verified, digest written, no unpushed work, nothing waiting on the Owner/);
   assert.match(a, /Never the Architect thread, a session you did not start, unpushed work, or anything the Owner is waiting on/);
   assert.match(a, /Archive only when your instructions carry the Owner's standing yes for it; an adopter's Owner must grant it, and you never infer it\. Without it, do steps 2–4 and 6 as a REPORT and archive nothing/);
-  assert.match(a, /A host without session tools, and a Codex lane \(it has no archive tool\), REPORT what it would archive/);
-  assert.match(a, /node scripts\/archive-plan\.mjs --sessions <list\.json> --me <your id> --done <id>… --waiting <id>… --owner-yes --json/);
-  assert.match(a, /A missing script means REPORT, not archive/);
-  assert.match(a, /\*\*Brokers first\.\*\* For each planned session, stop the Codex plugin brokers its seats left: `node scripts\/doctor-orphans\.mjs --reap --cwd <each packet dir it ran seats in>` \(or `--stop --pid-file <file>`\)/);
+  assert.match(a, /`list_sessions \{"linked": true, "limit": 200\}`, and `get_session self` for your id and cwd\. A host without session tools, and a Codex lane \(it has no archive tool\), REPORT/);
+  assert.match(a, /node scripts\/archive-plan\.mjs --sessions <list\.json> --me <your id> --me-cwd <your cwd> --list-limit 200 --done <id>… --waiting <id>… --owner-yes --json/);
+  assert.match(a, /an Architect asserts it for each PM AND each of that PM's finished side sessions, or the cascade keeps the PM/);
+  assert.match(a, /A list of 200 entries may be cut short and plans nothing: re-list with a larger limit\. Report mode is the same command without `--owner-yes`; a missing script means REPORT, not archive/);
+  assert.match(a, /A PM stops its own seats' brokers first: `node scripts\/doctor-orphans\.mjs --reap --owner self`\. After the archive, run the doctor again with no flag: a broker whose owner session is now GONE carries a stop line; run exactly those lines\. In report mode run the doctor with no flag only\. A missing doctor means say "brokers not checked"/);
   assert.match(a, /never `kill` or `pkill` by hand and never touch another session's/);
-  assert.match(a, /Call the host archive tool once per `archive\[\]` id, with a reason\. It cleans up the session's worktree and also archives its `alsoTaken` side sessions/);
-  assert.match(a, /every archived session \(name and id\), every kept one \(name, id, why\), the brokers stopped \(pid and pid file\) and the doctor's report/);
+  assert.match(a, /The host asks for explicit agreement per session; the Owner's standing yes is that agreement for the sessions the plan lists/);
+  assert.match(a, /If it refuses because a Remote Control client is attached \(the plan flags `needsRemoteControlOff`\), turning Remote Control off for that session is part of the archive ONLY where the Owner's standing yes says so; then retry once\. Otherwise KEEP the session and report "needs Remote Control off"\. A refusal for live work keeps it/);
+  assert.match(a, /every archived session \(name and id\), every kept one \(name, id, why\), the brokers stopped \(pid and pid file\), the doctor's report, and any Remote Control action/);
 });
 
 test("(a) /closeout § 7 points at ARCHIVE.md, reconciles 'Ready to archive?' and stays inside its budget", () => {
@@ -35,21 +37,26 @@ test("(a) /closeout § 7 points at ARCHIVE.md, reconciles 'Ready to archive?' an
   assert.ok(words("skills/closeout/SKILL.md") <= 600);
   assert.match(c, /"Ready to archive\?" inspects and reports; archiving acts only under § 7\./);
   assert.doesNotMatch(c, /"Ready to archive\?" is receipt-only/);
-  assert.match(c, /## 7\. Archive step After the receipt, run `\.agents\/skills\/closeout\/ARCHIVE\.md`: archive the finished sessions you started, their Codex brokers stopped first\. `ARCHIVE-READY` is receipt-only until the Owner's standing yes exists\./);
-  assert.match(flat("core/OPERATE.md"), /Where the Owner has granted a standing yes, the lifecycle ends with the archive step \(`skills\/closeout\/ARCHIVE\.md`: finished sessions you started, their Codex brokers stopped first\); without it `ARCHIVE-READY` stays a receipt\./);
+  assert.match(c, /## 7\. Archive step After the receipt, run `\.agents\/skills\/closeout\/ARCHIVE\.md`: archive the finished sessions you started and reap their Codex brokers\. `ARCHIVE-READY` is receipt-only until the Owner's standing yes exists\./);
+  assert.match(flat("core/OPERATE.md"), /Where the Owner has granted a standing yes, the lifecycle ends with the archive step \(`skills\/closeout\/ARCHIVE\.md`: finished sessions you started, their Codex brokers reaped\); without it `ARCHIVE-READY` stays a receipt\./);
 });
 
 test("(b) GATES states the Codex-seat doctrine; REVIEW, BINDINGS and the seat template point at it; REVIEW did not grow", () => {
   const g = flat("core/GATES.md");
   assert.match(g, /^.*### Codex seats and brokers A Codex gate seat runs `scripts\/codex-gate\.sh` \(`codex exec`\), \*\*never\*\* the Claude `openai-codex` plugin\./);
   assert.match(g, /its SessionEnd hook tears down only the broker keyed to the SESSION's cwd, so a seat run with `--cwd <packet dir>` is never found/);
-  assert.match(g, /A plugin seat used anyway stops its own broker on return: `node scripts\/doctor-orphans\.mjs --stop --pid-file <its pid file>`/);
-  assert.match(g, /Closeout reaps the brokers whose `--cwd` is one of the changeset's packet dirs: `node scripts\/doctor-orphans\.mjs --reap --cwd <dir>…`/);
-  assert.match(g, /With no flag the doctor only reports\. It signals a process only after proving it is a broker/);
+  assert.match(g, /so \*\*every broker has ppid 1 from birth\*\*/);
+  assert.match(g, /\*\*Ownership, not ppid\.\*\* The plugin writes `CODEX_COMPANION_SESSION_ID`/);
+  assert.match(g, /A broker whose owner is alive is never an orphan/);
+  assert.match(g, /A plugin seat used anyway stops its own broker on return: `node scripts\/doctor-orphans\.mjs --stop --pid-file <its pid file>`.*or `--reap --owner self`/);
+  assert.match(g, /Closeout \(`\.agents\/skills\/closeout\/ARCHIVE\.md` step 4\) stops a session's own seats with `--reap --owner self`, then archives, then runs the doctor again/);
+  assert.match(g, /`--reap --cwd <dir>…` also exists; it refuses another live session's broker/);
+  assert.match(g, /only its direct `codex app-server` child with it/);
   assert.match(g, /- \[Codex gate\]\(#codex-gate\) — what it does · Codex seats and brokers · how to run/);
   assert.match(flat("core/REVIEW.md"), /A Codex seat runs `scripts\/codex-gate\.sh`, never the Claude `openai-codex` plugin; a plugin seat stops its own broker: `core\/GATES\.md` § Codex seats and brokers\./);
   assert.match(flat("templates/BINDINGS.md.tmpl"), /Never the Claude `openai-codex` plugin \(`core\/GATES\.md` § Codex seats and brokers\)\./);
   assert.match(read("templates/codex-cold-reviewer.toml.tmpl"), /never the Claude `openai-codex` plugin, whose\n# broker outlives the thread \(core\/GATES\.md § Codex seats and brokers\)\./);
+  assert.match(flat("core/REVIEW.md"), /the changed code files\*\* \(each under a per-file cap\) — \*\*but those are assembly limits, not an ingestion budget:/);
   const reviewBytes = statSync(new URL("../core/REVIEW.md", import.meta.url)).size;
   assert.ok(reviewBytes <= 25597, `REVIEW net <= 0 against v2.46.0 (25,597 B); is ${reviewBytes}`);
   assert.ok(reviewBytes <= 25600, "REVIEW is inside the 25,600 B method cap");
@@ -75,12 +82,28 @@ test("(d) the push-effect sentences follow the BINDINGS Deploy line, and every '
   assert.match(flat("core/WORKFLOW.md"), /where the target auto-deploys/);
 });
 
+test("PORTABILITY states the two scripts' platform scope and the lane facts", () => {
+  const p = flat("PORTABILITY.md");
+  assert.match(p, /## The archive step's two scripts \(v2\.47\.0\) — platform scope and lane facts/);
+  assert.match(p, /reads the process table with `\/bin\/ps` and a broker's environment with `ps -wwE` \(macOS\) or `\/proc\/<pid>\/environ` \(Linux\)/);
+  assert.match(p, /The environment is readable only for processes your user owns\. It was measured on macOS; Linux was not exercised\./);
+  assert.match(p, /The Codex lane has no archive tool, and a Claude host without session tools has none either: both REPORT what they would archive/);
+  assert.match(p, /Neither script ever archives; the host does, and only under the Owner's standing yes/);
+});
+
 test("(e) the README note says what changed, the measured leak, the residuals and what adopters copy", () => {
   const n = note();
   assert.ok(n.length > 1500, "the v2.47.0 note sits above v2.46.0's");
   assert.match(n, /36 Claude CLI processes \(5\.9 GB\) and 24 orphaned Codex plugin broker trees \(3\.2 GB\)/);
   assert.match(n, /its SessionEnd hook tears down only the broker keyed to the SESSION's cwd/);
   assert.match(n, /never signals a Claude process, never uses `pkill` and never sends `SIGKILL`/);
+  assert.match(n, /\*\*A broker's owner is the Claude session named in its environment\*\*/);
+  assert.match(n, /\*\*ppid 1 is information only, because the plugin spawns every broker detached\.\*\*/);
+  assert.match(n, /\*\*`--reap --owner <uuid\|self>`\*\* stops every proven broker whose environment names that session/);
+  assert.match(n, /Archive mode needs `--owner-yes`, `--me-cwd` and `--list-limit`; without them it is report-only/);
+  assert.match(n, /turning Remote Control off for that session is part of the archive only where the Owner's standing yes says so/);
+  assert.match(n, /An Architect-look-alike name \(`architects`\) is not matched; ignored files are not checked; a branch squash-merged and then pruned reads as unpushed and stays kept/);
+  assert.match(n, /an orphan whose pid file the plugin already deleted is reported but cannot be proven or stopped/);
   assert.match(n, /Nine guards each keep a session/);
   assert.match(n, /It acts only when your instructions carry the Owner's standing yes/);
   assert.match(n, /The only `bin\/init\.mjs` change is that it now installs the two new scripts\./);
