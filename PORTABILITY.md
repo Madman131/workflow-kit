@@ -815,17 +815,17 @@ no behavioral gain — bounded > tidy). A later version may neutralize the prefi
 ## The archive step's two scripts (v2.47.0) — platform scope and lane facts
 
 `scripts/archive-plan.mjs` and `scripts/doctor-orphans.mjs` are `[P]` tools that `init` installs; the archive step they serve is
-`skills/closeout/ARCHIVE.md`.
-- **Platform.** `doctor-orphans.mjs` reads the process table with `/bin/ps` and a broker's environment with `ps -wwE` (macOS) or
-  `/proc/<pid>/environ` (Linux); any other platform reports that it cannot read the table and exits 0 for a report, 1 for a stop.
-  The environment is readable only for processes your user owns. It was measured on macOS; Linux was not exercised.
-  `archive-plan.mjs` needs only `git` (2.31 or later, for `--path-format=absolute`) and runs anywhere Node does.
-- **The owner rule** needs the Claude `openai-codex` plugin's `CODEX_COMPANION_SESSION_ID` in the broker's environment; where it
-  is absent the owner is unknown and the doctor falls back to the broker's `--cwd` and age.
+`skills/closeout/ARCHIVE.md`. **Neither stops or archives anything.** The doctor is report-only with no stop mode (the kit does not
+decide whose live process may be killed); stopping a leftover broker is the Owner's call.
+- **Platform.** `doctor-orphans.mjs` reads the process table with `/bin/ps`, a broker's environment with `ps -wwE` (macOS) or
+  `/proc/<pid>/environ` (Linux), and a shared-root hint with `lsof -a -d cwd` where `lsof` exists (else the hint says unknown); any
+  other platform reports that it cannot read the table and exits 0. The environment is readable only for processes your user owns. It
+  was measured on macOS; Linux was not exercised. `archive-plan.mjs` needs only `git` (2.31 or later, for `--path-format=absolute`).
+- **The owner** of a broker is the Claude `openai-codex` plugin's `CODEX_COMPANION_SESSION_ID` in its environment; where it is absent
+  the owner is unknown, and an unknown owner is never called a leftover.
 - **Lanes.** The archive call is a Claude Desktop session tool (`list_sessions`, `get_session`, `archive_session`). The Codex lane
-  has no archive tool, and a Claude host without session tools has none either: both REPORT what they would archive, and the
-  step says so. Neither script ever archives; the host does, and only under the Owner's standing yes (an adopter's Owner must
-  grant it).
+  has no archive tool, and a Claude host without session tools has none either: both REPORT what they would archive, and the step
+  says so. The host archives, and only under the Owner's standing yes (an adopter's Owner must grant it).
 
 ## External tool dependencies (only if you use the shipped runners)
 

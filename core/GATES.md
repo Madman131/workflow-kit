@@ -373,22 +373,16 @@ Two roles (pick ONE per artifact — never both for the same review):
 Read-only: run it in a sandbox that cannot write code/git. Its output is a review, not a change.
 
 ### Codex seats and brokers
-A Codex gate seat runs `scripts/codex-gate.sh` (`codex exec`), **never** the Claude `openai-codex` plugin. The plugin starts one
-`app-server-broker.mjs` per `--cwd` (or per git toplevel), always `detached`, so **every broker has ppid 1 from birth**; its
-SessionEnd hook tears down only the broker keyed to the SESSION's cwd, so a seat run with `--cwd <packet dir>` is never found and
-its broker and `codex app-server` child outlive the thread (measured 2026-11-21: 24 orphaned broker trees, 3.2 GB, on one host).
-`codex exec` leaves no resident process.
-- **Ownership, not ppid.** The plugin writes `CODEX_COMPANION_SESSION_ID` (the owning Claude session's uuid) into each broker's
-  environment. `node scripts/doctor-orphans.mjs` (report-only by default) calls a broker an ORPHAN, and prints its stop line, only
-  when its identity is proven and its owner session is gone (no live `--resume=<uuid>` process and no recent transcript), or its
-  owner is unknown and its `--cwd` is gone or it is old. A broker whose owner is alive is never an orphan.
-- A plugin seat used anyway stops its own broker on return: `node scripts/doctor-orphans.mjs --stop --pid-file <its pid file>`
-  (the broker's `--pid-file` argument, under a `cxc-*` temp directory), or `--reap --owner self` for every seat this session started.
-- Closeout (`.agents/skills/closeout/ARCHIVE.md` step 4) stops a session's own seats with `--reap --owner self`, then archives,
-  then runs the doctor again for brokers whose owner is now gone. `--reap --cwd <dir>…` also exists; it refuses another live
-  session's broker.
-- The doctor signals a process only after proving it is a broker (its exact argv, and a pid file that holds its pid), never by
-  name, never a Claude process, and only its direct `codex app-server` child with it.
+A Codex gate seat runs ONLY through `scripts/codex-gate.sh` (`codex exec`); the Claude `openai-codex` plugin is **never** used for a
+gate seat. The plugin starts one `app-server-broker.mjs` per `--cwd` (or per git toplevel), always `detached` (so **every broker has
+ppid 1 from birth**), and its SessionEnd hook tears down only the broker keyed to the SESSION's cwd, so a seat run with
+`--cwd <packet dir>` is never found and its broker and `codex app-server` child outlive the thread (measured 2026-11-21: 24
+orphaned broker trees, 3.2 GB, on one host). `codex exec` leaves no resident process; that is the whole cure.
+- **The kit stops nothing.** `node scripts/doctor-orphans.mjs` is report-only: it lists each broker (its `--cwd`, its owner session
+  from `CODEX_COMPANION_SESSION_ID` and whether the owner looks alive, a shared-root hint, its tree RSS) and each Claude process, and
+  flags a **likely leftover** (owner gone and older than `--broker-hours`). It prints no stop command and has no stop flag.
+  Stopping a process is the Owner's call; closeout (`.agents/skills/closeout/ARCHIVE.md` step 4) puts the report in the receipt
+  and surfaces the likely-leftover list to the Owner as an item to decide.
 
 ### How to run
 Two transports:

@@ -56,4 +56,4 @@ Owner endpoint; cleanup fails closed on uncommitted content. Report the VERDICT,
 sweep (`core/OWNER_COMMS.md` rule 1).
 
 ## 7. Archive step
-After the receipt, run `.agents/skills/closeout/ARCHIVE.md`: archive the finished sessions you started and reap their Codex brokers. `ARCHIVE-READY` is receipt-only until the Owner's standing yes exists.
+After the receipt, run `.agents/skills/closeout/ARCHIVE.md`: archive the finished sessions you started and put the doctor's report in the receipt; leftovers go to the Owner. `ARCHIVE-READY` is receipt-only until the Owner's standing yes exists.
