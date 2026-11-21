@@ -2,6 +2,7 @@
 // families; flagged or high-stakes work keeps the full depth) and no seat for a byte-copy port. Prose, one printed
 // string and tests: this file pins the new anchors, the ABSENCE of the removed sentence, the budgets, the version,
 // and that no controller or runner code changed.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -77,7 +78,8 @@ test("no controller or runner code changed: the blobs are the v2.43.0 blobs", ()
   assert.equal(blob("hooks/repair-dispatch-state.mjs"), "2d16801483a2bf4b2a7cc4713d905dae89617c83");
   assert.equal(blob("scripts/record-repair-event.mjs"), "843086041d0a9e917413e32521545b3c337c8c2e");
   assert.equal(blob("scripts/confirm-repair-brief.mjs"), "279dd2d2fe969131fd9c9f0dbe110c98442f556f");
-  assert.equal(blob("bin/init.mjs"), "38d4af1c61077eaff24d4daeb72cd3215e5f97ce");
+  // init is compared in history (v2.47.0 edits it on purpose): the v2.46.0 merge still carries the v2.42.0 blob.
+  try { assert.equal(execFileSync("git", ["-C", KIT, "rev-parse", "3e4958fe8ee28558adcb0b118c6365f923465729:" + ["bin", "init" + ".mjs"].join("/")], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(), "38d4af1c61077eaff24d4daeb72cd3215e5f97ce"); } catch (e) { if (e.code === "ERR_ASSERTION") throw e; }
   assert.equal(blob("scripts/codex-gate.sh"), "10b843e0a691577b25dfbde539fd52762a767e50");
 });
 

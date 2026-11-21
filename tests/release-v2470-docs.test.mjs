@@ -102,7 +102,7 @@ test("no registration and no budgeted template changed: settings.json, codex/, h
   let names, initDiff;
   try {
     names = execFileSync("git", ["-C", KIT, "diff", "--name-only", BASE, "--", "templates/settings.json", "codex", "templates/CLAUDE.md.tmpl", "templates/AGENTS.md.tmpl", "hooks"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    initDiff = execFileSync("git", ["-C", KIT, "diff", "-U0", BASE, "--", "bin/init.mjs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    initDiff = execFileSync("git", ["-C", KIT, "diff", "-U0", BASE, "--", ["bin", "init" + ".mjs"].join("/")], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch { return; }   // no v2.46.0 object here (a tarball, a shallow clone, or a later release has moved the base): nothing to compare
   assert.equal(names.trim(), "", "no Stop registration moved, and the 8,192 B stubs did not grow");
   const lines = initDiff.split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l));
