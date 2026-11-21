@@ -78,10 +78,8 @@ test("the hook files carry the shipped contract: exports, the off switch and no 
   assert.match(s, /import\(new URL\("\.\/guard-owner-comms\.mjs", import\.meta\.url\)\.href\)/);
 });
 
-test("version is 2.46.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.46.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.46.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.46\.0$/m);
+test("the v2.46.0 release note is still in the README (the version stamp itself moves with each release; v2.47.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.46\.0 — every stop ends with the Owner divider/m);
 });
 
 test("no registration changed: init (which writes the .codex/hooks.json entry), the Claude settings template and the Codex config are byte-identical to v2.45.0", () => {

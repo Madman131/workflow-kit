@@ -1,4 +1,4 @@
-# workflow-kit — v2.46.0
+# workflow-kit — v2.47.0
 
 ## How to start a build
 
@@ -11,6 +11,21 @@
 3. **Either lane works.** Claude Code and Codex run both routes. A **mixed pair** (Architect in one
    harness, PM in the other) has no shared messaging tool, so it runs **file-only**: the durable program
    record carries directions and consults.
+
+## What's new in v2.47.0 — closeout archives the finished sessions you started, and a Codex plugin broker can be found and stopped
+
+A finished thread keeps its Claude process and any Codex plugin broker until the session is archived; this release adds the archive step and the two scripts it needs.
+
+- **Measured (2026-11-21).** One host reached 36 Claude CLI processes (5.9 GB) and 24 orphaned Codex plugin broker trees (3.2 GB) from finished threads. Root cause: the Claude `openai-codex` plugin starts one `app-server-broker.mjs` per `--cwd`, and its SessionEnd hook tears down only the broker keyed to the SESSION's cwd, so a seat run with `--cwd <packet dir>` is never found. A broker's `SIGTERM` runs its own shutdown and exits 0.
+- **`scripts/doctor-orphans.mjs`.** Report-only by default: every broker (pid, ppid, age, tree RSS, `--cwd`, pid file, whether its identity is proven, whether it is an orphan, with the exact stop command) and every Claude session process (session id, transcript, last activity, idle). `--stop --pid-file <f>` and `--reap --cwd <dir>…` stop a broker and its `codex app-server` child, and only after proving it is a broker (its pid file holds its pid and its argv names that file; `--reap` matches the exact `--cwd` realpath, never a prefix). Anything unproven is refused. It never signals a Claude process, never uses `pkill` and never sends `SIGKILL`. `--json` feeds the receipt. macOS and Linux; another platform reports and exits 0.
+- **`scripts/archive-plan.mjs`.** A pure decision script over the host's session list: it archives nothing. Nine guards each keep a session: not started by you, you, already archived, an Architect thread, not asserted done (`--done`), waiting on the Owner (`--waiting`), PR open, uncommitted or unpushed work (or git cannot say), and the cascade, which keeps a session whose side session (or shared linked worktree) is unfinished. Without `--owner-yes` it is report-only. Malformed input exits 2 with nothing planned.
+- **`skills/closeout/ARCHIVE.md` and `/closeout` § 7.** Closeout ends with the archive step: a PM archives the sessions it started once their work is landed, verified and finished; an Architect archives each PM it started once that PM's chip is closed out. It acts only when your instructions carry the Owner's standing yes (an adopter's Owner must grant it); without it the step reports what it would archive. It stops each planned session's Codex brokers first and writes a receipt naming every archived and kept session. The Codex lane and a host without session tools report only. `ARCHIVE-READY` is receipt-only until that yes exists.
+- **Codex seats run `scripts/codex-gate.sh`, never the Claude plugin.** `core/GATES.md` § Codex seats and brokers states the doctrine and the leak; `core/REVIEW.md` (net -29 bytes), the BINDINGS template and the Codex seat template point at it. A plugin seat used anyway stops its own broker on return; closeout reaps the brokers whose `--cwd` is one of the changeset's packet dirs.
+- **The push-effect sentences follow your Deploy line (D-264, D-279).** `core/MULTI_AGENT.md` item 6 and `core/OPERATE.md` said every push auto-deploys; for a publish-only repo that was false. Both now say a push has the effect the BINDINGS Deploy line names, in some repos an auto-deploy. The rule that every push needs a fresh Owner GO is unchanged.
+- **Not changed.** No hook, no `templates/settings.json`, no `.codex/hooks.json` entry and no `bin/init.mjs` change, so no adopter re-trusts. `init` does not install the two new scripts; copy them.
+- **Residuals.** The archive tool's cascade (it also archives a session's side sessions and cleans its worktree) was observed on the host, not read from source, which is why the plan keeps a parent whose side session is unfinished. The doctor proves identity and then signals as two steps; it re-proves immediately before the signal, which narrows but cannot close a pid-reuse window. Linux was not exercised.
+
+**Adopters.** Byte-copy `scripts/doctor-orphans.mjs`, `scripts/archive-plan.mjs`, `skills/closeout/SKILL.md`, `skills/closeout/ARCHIVE.md`, `core/MULTI_AGENT.md` and `core/GATES.md` (and `core/OPERATE.md` and `core/REVIEW.md` where yours are unadapted); hand-edit any adapted copy of those, plus your rendered BINDINGS Codex line. Grant the Owner's standing yes in your instructions for the archive to act; until then it reports. No settings change and no re-trust expected.
 
 ## What's new in v2.46.0 — every stop ends with the Owner divider, checked by the two Stop sensors
 
