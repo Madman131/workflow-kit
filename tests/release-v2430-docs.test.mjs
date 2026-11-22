@@ -15,8 +15,11 @@ const flat = (rel) => read(rel).replace(/\s+/g, " ");
 const words = (rel) => read(rel).split(/\s+/).filter(Boolean).length;
 const blob = (rel) => { const b = readFileSync(path.join(KIT, rel)); return createHash("sha1").update(`blob ${b.length}\0`).update(b).digest("hex"); };
 
-test("init is untouched: bin/init.mjs keeps its v2.42.0 blob", () => {
-  assert.equal(blob("bin/init.mjs"), "38d4af1c61077eaff24d4daeb72cd3215e5f97ce");
+test("init is untouched IN v2.43.0: bin/init.mjs keeps its v2.42.0 blob in history", () => {
+  // History, not the working tree: v2.47.0 edits init on purpose. Compared by git object at the v2.46.0 merge (3e4958f),
+  // which still carries the v2.42.0 blob.
+  let b; try { b = execFileSync("git", ["-C", KIT, "rev-parse", "3e4958fe8ee28558adcb0b118c6365f923465729:" + ["bin", "init" + ".mjs"].join("/")], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return; }   // no such object (tarball, shallow clone)
+  assert.equal(b, "38d4af1c61077eaff24d4daeb72cd3215e5f97ce");
 });
 
 test("the controller code is untouched: the three files keep their v2.42.0 blobs", () => {

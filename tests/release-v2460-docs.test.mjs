@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const flat = (p) => read(p).replace(/\s+/g, " ");
@@ -78,15 +79,15 @@ test("the hook files carry the shipped contract: exports, the off switch and no 
   assert.match(s, /import\(new URL\("\.\/guard-owner-comms\.mjs", import\.meta\.url\)\.href\)/);
 });
 
-test("version is 2.46.0 everywhere", () => {
-  assert.equal(read("VERSION").trim(), "2.46.0");
-  assert.equal(JSON.parse(read("package.json")).version, "2.46.0");
-  assert.match(read("README.md"), /^# workflow-kit — v2\.46\.0$/m);
+test("the v2.46.0 release note is still in the README (the version stamp itself moves with each release; v2.47.0 pins the current one)", () => {
+  assert.match(read("README.md"), /^## What's new in v2\.46\.0 — every stop ends with the Owner divider/m);
 });
 
-test("no registration changed: init (which writes the .codex/hooks.json entry), the Claude settings template and the Codex config are byte-identical to v2.45.0", () => {
+test("no registration changed IN v2.46.0: init (which writes the .codex/hooks.json entry), the Claude settings template and the Codex config are byte-identical between v2.45.0 and v2.46.0", () => {
+  // History, not the working tree: v2.47.0 edits init on purpose (it installs two scripts), so this release is compared
+  // commit to commit, 4037608 (v2.45.0) against 3e4958f (v2.46.0).
   let diff = "";
-  try { diff = execFileSync("git", ["-C", new URL("..", import.meta.url).pathname, "diff", "--name-only", "4037608a4f4a26c5ca7295785bb9016d7ed6ddf1", "--", ["bin", "init" + ".mjs"].join("/"), "templates/settings.json", "codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
-  catch { return; }   // no v2.45.0 object here (a tarball, a shallow clone, or a later release has moved the base): nothing to compare
+  try { diff = execFileSync("git", ["-C", fileURLToPath(new URL("..", import.meta.url)), "diff", "--name-only", "4037608a4f4a26c5ca7295785bb9016d7ed6ddf1", "3e4958fe8ee28558adcb0b118c6365f923465729", "--", ["bin", "init" + ".mjs"].join("/"), "templates/settings.json", "codex"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
+  catch { return; }   // either object absent (a tarball or a shallow clone): nothing to compare
   assert.equal(diff.trim(), "", "the Stop registrations (command, timeout, statusMessage) are unchanged, so no adopter re-trusts");
 });

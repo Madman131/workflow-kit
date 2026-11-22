@@ -812,6 +812,21 @@ passed via `-C` / cwd). Two names still carry the origin repo's prefix and are *
 They are **not renamed in v1.0** (renaming would churn the selftests that assert the exact strings for
 no behavioral gain — bounded > tidy). A later version may neutralize the prefix.
 
+## The archive step's two scripts (v2.47.0) — platform scope and lane facts
+
+`scripts/archive-plan.mjs` and `scripts/doctor-orphans.mjs` are `[P]` tools that `init` installs; the archive step they serve is
+`skills/closeout/ARCHIVE.md`. **Neither stops or archives anything.** The doctor is report-only with no stop mode (the kit does not
+decide whose live process may be killed); stopping a leftover broker is the Owner's call.
+- **Platform.** `doctor-orphans.mjs` reads the process table with `/bin/ps`, a broker's environment with `ps -wwE` (macOS) or
+  `/proc/<pid>/environ` (Linux), and a shared-root hint with `lsof -a -d cwd` where `lsof` exists (else the hint says unknown); any
+  other platform reports that it cannot read the table and exits 0. The environment is readable only for processes your user owns. It
+  was measured on macOS; Linux was not exercised. `archive-plan.mjs` needs only `git` (2.31 or later, for `--path-format=absolute`).
+- **The owner** of a broker is the Claude `openai-codex` plugin's `CODEX_COMPANION_SESSION_ID` in its environment; where it is absent
+  the owner is unknown, and an unknown owner is never called a leftover.
+- **Lanes.** The archive call is a Claude Desktop session tool (`list_sessions`, `get_session`, `archive_session`). The Codex lane
+  has no archive tool, and a Claude host without session tools has none either: both REPORT what they would archive, and the step
+  says so. The host archives, and only under the Owner's standing yes (an adopter's Owner must grant it).
+
 ## External tool dependencies (only if you use the shipped runners)
 
 The gate runners are optional (`init --with-gate-runners`). They need tools you provide:
@@ -874,7 +889,7 @@ hidden. The stated threat model is **cooperative-but-fallible agents, not intrus
   `sensor-stop-notice` Stop sensor (v2.40.0; blocks once, fails open), `pre-commit`, `check-doc-size.mjs`, `settings.json`, the gate runners, the `commands/*`
   dual-harness assets (`/thread-restart`), the `skills/*` bodies + `skill-shims/*` (`/humanize`,
   `/frontier-review`, `/architect-build`, `/boot`, `/closeout`, `/lane-declare`, `/sweep`, `/orchestrate`,
-  `/grilling`, `/kill-pass`), the `scripts/worktree-census.mjs` and `scripts/token-report.mjs` report tools, the
+  `/grilling`, `/kill-pass`), the `scripts/worktree-census.mjs` and `scripts/token-report.mjs` report tools, the `scripts/archive-plan.mjs` and `scripts/doctor-orphans.mjs` archive-step tools, the
   `agents/*` reviewer seat
   definitions (→ `.claude/agents/`), and `codex/config.toml` (→ `.codex/config.toml`).
 - `[G]` (generated per repo, never copied): `CLAUDE.md`, `AGENTS.md`, `core/BINDINGS.md`,

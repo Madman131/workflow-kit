@@ -5,6 +5,9 @@
 # leaves the model to you. Fill it with `init --codex-cold-model <name>`, or edit
 # {{CODEX_COLD_MODEL}} by hand and record the choice in core/BINDINGS.md.
 #
+# A Codex seat run FROM Claude goes through scripts/codex-gate.sh (`codex exec`), never the Claude `openai-codex` plugin, whose
+# broker outlives the thread (core/GATES.md § Codex seats and brokers).
+#
 # WHICH SEAT THIS IS: the Codex SAME-FAMILY cold seat. core/GATES.md § Model · effort matrix governs
 # the CROSS-FAMILY gate seat; it does not bind this one, so the two are chosen separately and a repo
 # may legitimately run a different model here.

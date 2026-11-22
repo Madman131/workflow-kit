@@ -19,7 +19,7 @@
 - [PM disposition — riders on a DEFER](#pm-disposition--riders-on-a-defer) — self-contradiction escalates · behavioral defers get a labeled test
 - [Routing — which family gates what](#routing--which-family-gates-what) — pick by WHO BUILT
 - [Model · effort matrix](#model--effort-matrix) — change class → model · effort
-- [Codex gate](#codex-gate) — what it does · how to run · rounds & receipts · retired mechanisms · traps
+- [Codex gate](#codex-gate) — what it does · Codex seats and brokers · how to run · rounds & receipts · retired mechanisms · traps
 - [Retired before shipping: commit-time gate-adjudication records](#retired-before-shipping-commit-time-gate-adjudication-records) —
   why a commit hook cannot count verdicts · do not rebuild
 - [Gemini cross-family gate](#gemini-cross-family-gate) — purpose · commands · delivery vs ingestion ·
@@ -371,6 +371,18 @@ Two roles (pick ONE per artifact — never both for the same review):
   authority). Gemini is the *default* budget-free lens; use Codex here when you want a second family cheaply.
 
 Read-only: run it in a sandbox that cannot write code/git. Its output is a review, not a change.
+
+### Codex seats and brokers
+A Codex gate seat runs ONLY through `scripts/codex-gate.sh` (`codex exec`); the Claude `openai-codex` plugin is **never** used for a
+gate seat. The plugin starts one `app-server-broker.mjs` per `--cwd` (or per git toplevel), always `detached` (so **every broker has
+ppid 1 from birth**), and its SessionEnd hook tears down only the broker keyed to the SESSION's cwd, so a seat run with
+`--cwd <packet dir>` is never found and its broker and `codex app-server` child outlive the thread (measured 2026-11-21: 24
+orphaned broker trees, 3.2 GB, on one host). `codex exec` leaves no resident process; that is the whole cure.
+- **The kit stops nothing.** `node scripts/doctor-orphans.mjs` is report-only: it lists each broker (its `--cwd`, its owner session
+  from `CODEX_COMPANION_SESSION_ID` and whether the owner looks alive, a shared-root hint, its tree RSS) and each Claude process, and
+  flags a **likely leftover** (owner gone and older than `--broker-hours`). It prints no stop command and has no stop flag.
+  Stopping a process is the Owner's call; closeout (`.agents/skills/closeout/ARCHIVE.md` step 4) puts the report in the receipt
+  and surfaces the likely-leftover list to the Owner as an item to decide.
 
 ### How to run
 Two transports:

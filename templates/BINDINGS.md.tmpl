@@ -57,7 +57,7 @@ section names the concrete seats for THIS repo.*
   dies before reading the artifact with an entitlement error that is *not* a verdict
   (`core/GATES.md` § Model · effort matrix).
 - **Cold panel → Codex**, and ⚠ **it MUST run through a guarded site** — `scripts/codex-gate.sh`
-  (fail-closed `claude` shim on PATH + `PIL_BLOCK_CLAUDE_COMPANION=1`) or a hermetic `CODEX_HOME`.
+  (fail-closed `claude` shim on PATH + `PIL_BLOCK_CLAUDE_COMPANION=1`) or a hermetic `CODEX_HOME`. A gate seat NEVER uses the Claude `openai-codex` plugin (`core/GATES.md` § Codex seats and brokers).
   **This is a precondition of the routing above, not a nicety.** A Claude-companion Codex plugin
   hijacks review-shaped prompts in a bare `codex exec` into a real Claude review — non-empty and
   on-topic, so an output check passes it. An unguarded Codex panel plus a Claude code gate is
